@@ -912,7 +912,6 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     Program {
         instructions_and_debug_infos,
         step: DEFAULT_PC_STEP,
-        pc_start: 0,
         pc_base: 0,
     }
 }

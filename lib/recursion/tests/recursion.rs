@@ -57,7 +57,7 @@ where
 
     let vm = VirtualMachine::new(vm_config);
 
-    let mut result = vm.execute_and_generate(fib_program).unwrap();
+    let mut result = vm.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
     ProofInputForTest {

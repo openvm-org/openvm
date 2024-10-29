@@ -8,7 +8,7 @@ use ax_stark_backend::{
 };
 use axvm_instructions::{instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use itertools::zip_eq;
+use itertools::{zip_eq, Itertools};
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
@@ -26,10 +26,6 @@ use crate::{
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
     pub chip_set: VmChipSet<F>,
-
-    // The streams should be mutated in serial without thread-safety,
-    // but the `VmCoreChip` trait requires thread-safety.
-    pub streams: Arc<Mutex<Streams<F>>>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
@@ -68,8 +64,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
     ) -> Self {
-        let mut chip_set = config.create_chip_set(streams.clone());
-        chip_set.program_chip.set_program(program);
+        let mut chip_set = config.create_chip_set();
+        chip_set.set_streams(streams);
+        chip_set.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
             chip_set
@@ -81,7 +78,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         Self {
             config,
             chip_set,
-            streams,
             final_memory: None,
             collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
@@ -254,17 +250,32 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        self.chip_set
-            .memory_controller
-            .borrow()
+        for chip in self.chip_set.chips.iter() {
+            if chip.current_trace_height() > self.config.max_segment_len {
+                tracing::info!(
+                    "Should segment because chip {} has height {}",
+                    chip.air_name(),
+                    chip.current_trace_height()
+                );
+                return true;
+            }
+        }
+        let memory_controller = self.chip_set.memory_controller.borrow();
+        for (height, air_name) in memory_controller
             .current_trace_heights()
-            .iter()
-            .any(|&h| h > self.config.max_segment_len)
-            || self
-                .chip_set
-                .chips
-                .iter()
-                .any(|chip| chip.current_trace_height() > self.config.max_segment_len)
+            .into_iter()
+            .zip_eq(memory_controller.air_names())
+        {
+            if height > self.config.max_segment_len {
+                tracing::info!(
+                    "Should segment because air {} has height {}",
+                    air_name,
+                    height
+                );
+                return true;
+            }
+        }
+        false
     }
 
     fn current_trace_cells(&self) -> BTreeMap<String, usize> {

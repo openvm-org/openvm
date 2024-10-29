@@ -10,12 +10,12 @@ pub fn execute_program_with_config(
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::new(config).with_input_stream(input_stream);
-    vm.execute(program).unwrap();
+    let vm = VirtualMachine::<BabyBear>::new(config);
+    vm.execute(program, input_stream).unwrap();
 }
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::new(
+    let vm = VirtualMachine::<BabyBear>::new(
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,
@@ -29,12 +29,9 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
         .add_executor(ExecutorName::ArithmeticLogicUnit256)
-        .add_canonical_modulus()
-        .add_executor(ExecutorName::Secp256k1AddUnequal)
-        .add_executor(ExecutorName::Secp256k1Double),
-    )
-    .with_input_stream(input_stream);
-    vm.execute(program).unwrap();
+        .add_canonical_modulus(),
+    );
+    vm.execute(program, input_stream).unwrap();
 }
 
 #[cfg(feature = "sdk")]

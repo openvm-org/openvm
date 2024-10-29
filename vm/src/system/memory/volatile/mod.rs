@@ -127,7 +127,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     touched_addresses: HashSet<(F, F)>,

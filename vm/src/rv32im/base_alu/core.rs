@@ -6,8 +6,8 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     utils::not,
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
@@ -37,7 +37,7 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     offset: usize,
 }
 
@@ -121,8 +121,8 @@ where
                 .assert_bool(carry_sub[i].clone());
         }
 
-        // Interaction with XorLookup to range check a for ADD and SUB, and constrain a's
-        // correctness for XOR, OR, and AND. XorLookup expects interaction [x, y, x ^ y].
+        // Interaction with BitwiseOperationLookup to range check a for ADD and SUB, and
+        // constrain a's correctness for XOR, OR, and AND.
         let bitwise = cols.opcode_xor_flag + cols.opcode_or_flag + cols.opcode_and_flag;
         for i in 0..NUM_LIMBS {
             let x = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * b[i];
@@ -130,7 +130,9 @@ where
             let x_xor_y = cols.opcode_xor_flag * a[i]
                 + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i])
                 + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
-            self.bus.send(x, y, x_xor_y).eval(builder, is_valid.clone());
+            self.bus
+                .send_xor(x, y, x_xor_y)
+                .eval(builder, is_valid.clone());
         }
 
         let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
@@ -161,20 +163,23 @@ pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> 
     pub c: [T; NUM_LIMBS],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
+    pub fn new(
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: BaseAluCoreAir {
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -212,11 +217,11 @@ where
 
         if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
             for a_val in a {
-                self.xor_lookup_chip.request(a_val, a_val);
+                self.bitwise_lookup_chip.request_xor(a_val, a_val);
             }
         } else {
             for (b_val, c_val) in b.iter().zip(c.iter()) {
-                self.xor_lookup_chip.request(*b_val, *c_val);
+                self.bitwise_lookup_chip.request_xor(*b_val, *c_val);
             }
         }
 

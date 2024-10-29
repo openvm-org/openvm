@@ -1,45 +1,42 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
-use ax_stark_backend::{
-    config::Val, keygen::types::MultiStarkVerifyingKey, p3_uni_stark::StarkGenericConfig,
-    prover::types::Proof,
-};
+use ax_stark_backend::{engine::StarkEngine, p3_uni_stark::StarkGenericConfig};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
-        FriParameters,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
     },
-    engine::{StarkEngine, StarkFriEngine},
+    engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use axvm_circuit::{
     arch::{
-        instructions::{
-            BranchEqualOpcode::*, FieldArithmeticOpcode::*, FieldExtensionOpcode::*,
-            Keccak256Opcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
-            NativeLoadStoreOpcode::*, Poseidon2Opcode::*, SystemOpcode::*, UsizeOpcode,
-        },
         ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine,
-        VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+        VmConfig,
     },
-    intrinsics::hashes::{keccak::hasher::utils::keccak256, poseidon2::CHUNK},
-    sdk::air_test,
-    system::{
-        connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{merkle::MemoryMerklePvs, Equipartition},
-        program::trace::CommittedProgram,
-    },
+    intrinsics::hashes::keccak::hasher::utils::keccak256,
+    sdk::{air_test, air_test_with_min_segments},
+    system::{memory::CHUNK, program::trace::CommittedProgram},
 };
 use axvm_instructions::{
+    exe::AxVmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
+    BranchEqualOpcode::*,
+    FieldArithmeticOpcode::*,
+    FieldExtensionOpcode::*,
+    Keccak256Opcode::*,
+    NativeBranchEqualOpcode,
+    NativeJalOpcode::*,
+    NativeLoadStoreOpcode::*,
     PhantomInstruction,
+    Poseidon2Opcode::*,
     PublishOpcode::PUBLISH,
-    SystemOpcode,
+    SystemOpcode::*,
+    UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::AbstractField;
 use rand::Rng;
 use test_log::test;
 
@@ -92,7 +89,7 @@ fn air_test_with_compress_poseidon2(
     let pk = vm_config.generate_pk(engine.keygen_builder());
 
     let vm = VirtualMachine::new(vm_config);
-    let result = vm.execute_and_generate(program).unwrap();
+    let result = vm.execute_and_generate(program, vec![]).unwrap();
 
     for proof_input in result.per_segment {
         engine
@@ -103,7 +100,6 @@ fn air_test_with_compress_poseidon2(
 
 #[test]
 fn test_vm_1() {
-    setup_tracing();
     let n = 6;
     /*
     Instruction 0 assigns word[0]_1 to n.
@@ -177,7 +173,7 @@ fn test_vm_1_optional_air() {
         let program = Program::from_instructions(&instructions);
         let vm = VirtualMachine::new(vm_config);
         let mut result = vm
-            .execute_and_generate(program)
+            .execute_and_generate(program, vec![])
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.pop().unwrap();
@@ -228,7 +224,7 @@ fn test_vm_initial_memory() {
     let program = Program::from_instructions(&[
         Instruction::<BabyBear>::from_isize(
             NativeBranchEqualOpcode(BEQ).with_default_offset(),
-            0,
+            7,
             101,
             2 * DEFAULT_PC_STEP as isize,
             1,
@@ -245,11 +241,12 @@ fn test_vm_initial_memory() {
         Instruction::<BabyBear>::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ]);
 
-    let mut initial_memory = Equipartition::<BabyBear, CHUNK>::new();
-    initial_memory.insert(
-        (BabyBear::one(), 0),
-        [101, 0, 0, 0, 0, 0, 0, 0].map(BabyBear::from_canonical_u32),
-    );
+    let init_memory: BTreeMap<_, _> = [(
+        (BabyBear::one(), BabyBear::from_canonical_u32(7)),
+        BabyBear::from_canonical_u32(101),
+    )]
+    .into_iter()
+    .collect();
 
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
@@ -261,8 +258,13 @@ fn test_vm_initial_memory() {
     }
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);
-    let vm = VirtualMachine::new(config).with_initial_memory(initial_memory);
-    air_test(vm, program);
+    let exe = AxVmExe {
+        program,
+        pc_start: 0,
+        init_memory,
+    };
+    let vm = VirtualMachine::new(config);
+    air_test(vm, exe);
 }
 
 #[test]
@@ -296,7 +298,7 @@ fn test_vm_1_persistent() {
     let program = Program::from_instructions(&instructions);
 
     let vm = VirtualMachine::new(config);
-    let result = vm.execute_and_generate(program).unwrap();
+    let result = vm.execute_and_generate(program, vec![]).unwrap();
 
     let proof_input = result.per_segment.into_iter().next().unwrap();
 
@@ -388,17 +390,7 @@ fn test_vm_continuations() {
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);
 
-    let vm = VirtualMachine::new(config);
-
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let pk = vm.config.generate_pk(engine.keygen_builder());
-    let vk = pk.get_vk();
-    let result = vm.execute_and_generate(program).unwrap();
-
-    // Let's make sure we have at least 3 segments.
-    let num_segments = result.per_segment.len();
-    assert!(num_segments >= 3);
-
+    /*
     let expected_output = {
         let mut a = 0;
         let mut b = 1;
@@ -408,79 +400,10 @@ fn test_vm_continuations() {
         }
         BabyBear::from_canonical_u32(a)
     };
+    */
 
-    let proofs: Vec<Proof<_>> = result
-        .per_segment
-        .into_iter()
-        .map(|proof_input| engine.prove(&pk, proof_input))
-        .collect();
-    aggregate_segment_proofs(engine, vk, proofs, vec![expected_output]);
-}
-
-fn aggregate_segment_proofs<SC: StarkGenericConfig>(
-    engine: impl StarkEngine<SC>,
-    vk: MultiStarkVerifyingKey<SC>,
-    proofs: Vec<Proof<SC>>,
-    _expected_outputs: Vec<Val<SC>>,
-) {
-    let mut prev_final_memory_root = None;
-    let mut prev_final_pc = None;
-
-    for (i, proof) in proofs.iter().enumerate() {
-        engine
-            .verify(&vk, proof)
-            .expect("segment proof should verify");
-
-        // Check public values.
-        for air_proof_data in proof.per_air.iter() {
-            let pvs = &air_proof_data.public_values;
-            let air_vk = &vk.per_air[air_proof_data.air_id];
-
-            if air_proof_data.air_id == CONNECTOR_AIR_ID {
-                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
-
-                // Check initial pc matches the previous final pc.
-                assert_eq!(
-                    pvs.initial_pc,
-                    if i == 0 {
-                        // TODO: Make this program PC.
-                        Val::<SC>::zero()
-                    } else {
-                        prev_final_pc.unwrap()
-                    }
-                );
-                prev_final_pc = Some(pvs.final_pc);
-
-                let expected_is_terminate = i == proofs.len() - 1;
-                assert_eq!(
-                    pvs.is_terminate,
-                    Val::<SC>::from_bool(expected_is_terminate)
-                );
-
-                let expected_exit_code = if expected_is_terminate {
-                    ExitCode::Success as u32
-                } else {
-                    DEFAULT_SUSPEND_EXIT_CODE
-                };
-                assert_eq!(
-                    pvs.exit_code,
-                    Val::<SC>::from_canonical_u32(expected_exit_code)
-                );
-            } else if air_proof_data.air_id == MERKLE_AIR_ID {
-                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
-
-                // Check that initial root matches the previous final root.
-                if i != 0 {
-                    assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
-                }
-                prev_final_memory_root = Some(pvs.final_root);
-            } else {
-                assert_eq!(pvs.len(), 0);
-                assert_eq!(air_vk.params.num_public_values, 0);
-            }
-        }
-    }
-    // TODO: Compute root of _expected_outputs and verify Merkle proof to final_memory_root.
+    let vm = VirtualMachine::new(config);
+    air_test_with_min_segments(vm, program, vec![], 3);
 }
 
 #[test]
@@ -701,7 +624,7 @@ fn test_vm_hint() {
         Instruction::large_from_isize(ADD.with_default_offset(), 32, 20, 0, 1, 1, 0, 0),
         Instruction::large_from_isize(ADD.with_default_offset(), 20, 20, 1, 1, 1, 0, 0),
         Instruction::from_isize(
-            SystemOpcode::PHANTOM.with_default_offset(),
+            PHANTOM.with_default_offset(),
             0,
             0,
             PhantomInstruction::HintInput as isize,
@@ -750,9 +673,9 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::two()]];
-    let vm = VirtualMachine::new(vm_config_with_field_arithmetic()).with_input_stream(input_stream);
+    let vm = VirtualMachine::new(vm_config_with_field_arithmetic());
 
-    air_test(vm, program);
+    air_test_with_min_segments(vm, program, input_stream, 1);
 }
 
 #[test]

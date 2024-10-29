@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable};
+use crate::field_expression::{ExprBuilder, FieldVariable, SymbolicExpr};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 #[derive(Clone)]
@@ -48,31 +48,63 @@ impl Fp2 {
     }
 
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
-        let (z0, z1) = {
-            let mut builder = self.c0.builder.borrow_mut();
-            let z0 = builder.new_var();
-            let z1 = builder.new_var();
+        let builder = self.c0.builder.borrow();
+        let prime = builder.prime.clone();
+        let limb_bits = builder.limb_bits;
+        let num_limbs = builder.num_limbs;
+        drop(builder);
 
-            // Constraint 1: x0 = y0*z0 - y1*z1
-            let rhs = &other.c0.expr * &z0 - &other.c1.expr * &z1;
-            let constraint1 = &self.c0.expr - &rhs;
-            builder.add_constraint(constraint1);
-            // Constraint 2: x1 = y1*z0 + y0*z1
-            let rhs = &other.c1.expr * &z0 + &other.c0.expr * &z1;
-            let constraint2 = &self.c1.expr - &rhs;
-            builder.add_constraint(constraint2);
+        // These are dummy variables, will be replaced later so the index within it doesn't matter.
+        // We use these to check if we need to save self/other first.
+        let fake_z0 = SymbolicExpr::Var(0);
+        let fake_z1 = SymbolicExpr::Var(1);
 
-            // Compute z0
-            let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
-            let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
-            let compute_z0 = &compute_z0_nom / &compute_denom;
-            builder.add_compute(compute_z0);
-            // Compute z1
-            let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
-            let compute_z1 = &compute_z1_nom / &compute_denom;
-            builder.add_compute(compute_z1);
-            (z0, z1)
-        };
+        // Compute should not be affected by whether auto save is triggered.
+        // So we must do compute first.
+        // Compute z0
+        let compute_denom = &other.c0.expr * &other.c0.expr + &other.c1.expr * &other.c1.expr;
+        let compute_z0_nom = &self.c0.expr * &other.c0.expr + &self.c1.expr * &other.c1.expr;
+        let compute_z0 = &compute_z0_nom / &compute_denom;
+        // Compute z1
+        let compute_z1_nom = &self.c1.expr * &other.c0.expr - &self.c0.expr * &other.c1.expr;
+        let compute_z1 = &compute_z1_nom / &compute_denom;
+
+        // Constraint 1: x0 = y0*z0 - y1*z1
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
+        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
+        let carry_bits = constraint1.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            other.save();
+        }
+        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
+
+        // Constraint 2: x1 = y1*z0 + y0*z1
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
+        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
+        let carry_bits = constraint2.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.c0.range_checker_bits {
+            other.save();
+        }
+        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
+
+        let mut builder = self.c0.builder.borrow_mut();
+        let (z0_idx, z0) = builder.new_var();
+        let (z1_idx, z1) = builder.new_var();
+        builder.set_compute(z0_idx, compute_z0);
+        builder.set_compute(z1_idx, compute_z1);
+        builder.set_constraint(z0_idx, constraint1);
+        builder.set_constraint(z1_idx, constraint2);
+        drop(builder);
 
         let z0_var = FieldVariable::from_var(self.c0.builder.clone(), z0);
         let z1_var = FieldVariable::from_var(self.c0.builder.clone(), z1);
@@ -89,6 +121,7 @@ impl Fp2 {
         }
     }
 
+    // c is like a Fp2, but with both c0 and c1 being very small numbers.
     pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
         let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
         let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
@@ -103,6 +136,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
+    use axvm_ecc_constants::BN254;
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
@@ -134,7 +168,7 @@ mod tests {
         fq2_fn: impl Fn(&Fq2, &Fq2) -> Fq2,
         save_result: bool,
     ) {
-        let prime = bn254_prime();
+        let prime = BN254.MODULUS.clone();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
@@ -199,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_fp2_div2() {
-        let prime = bn254_prime();
+        let prime = BN254.MODULUS.clone();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());

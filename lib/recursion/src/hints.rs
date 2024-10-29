@@ -9,10 +9,6 @@ use ax_stark_backend::{
     },
 };
 use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use axvm_ecc::types::{
-    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-    ECPointVariable,
-};
 use axvm_native_compiler::ir::{
     unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
     DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
@@ -494,66 +490,6 @@ impl Hintable<InnerConfig> for BigUint {
             .iter()
             .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
             .collect()]
-    }
-}
-
-impl Hintable<InnerConfig> for ECPoint {
-    type HintVariable = ECPointVariable<InnerConfig>;
-
-    // FIXME: should depend on curve for coordinate bits
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.array(2 * NUM_LIMBS);
-        for i in 0..2 * NUM_LIMBS {
-            // FIXME: range check for each element.
-            let v = builder.hint_var();
-            builder.set_value(&ret, i, v);
-        }
-        // ECPointVariable::`new` checks if the point is on the curve.
-        ECPointVariable { affine: ret }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let x = self.x.write().pop().unwrap();
-        let y = self.y.write().pop().unwrap();
-        vec![[x, y].concat()]
-    }
-}
-
-impl Hintable<InnerConfig> for ECDSASignature {
-    type HintVariable = ECDSASignatureVariable<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let r = BigUint::read(builder);
-        let s = BigUint::read(builder);
-        ECDSASignatureVariable { r, s }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.r.write();
-        ret.extend(self.s.write());
-        ret
-    }
-}
-
-impl Hintable<InnerConfig> for ECDSAInput {
-    type HintVariable = ECDSAInputVariable<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let pubkey = ECPoint::read(builder);
-        let sig = ECDSASignature::read(builder);
-        let msg_hash = BigUint::read(builder);
-        Self::HintVariable {
-            pubkey,
-            sig,
-            msg_hash,
-        }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret = self.pubkey.write();
-        ret.extend(self.sig.write());
-        ret.extend(self.msg_hash.write());
-        ret
     }
 }
 

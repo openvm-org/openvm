@@ -35,7 +35,7 @@ use crate::{
 ///   from the heap, starting from the addresses in `rs`
 /// * Writes take the form of `NUM_WRITES` consecutive writes of size `WRITE_SIZE`
 ///   to the heap, starting from the address in `rd`.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeVecHeapAdapterChip<
     F: Field,
     const R: usize,

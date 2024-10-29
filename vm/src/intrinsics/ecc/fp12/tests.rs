@@ -2,7 +2,8 @@ use ax_ecc_primitives::{
     field_expression::FieldExpr,
     test_utils::{bls12381_fq12_random, bn254_fq12_random},
 };
-use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Curve, Fp12Opcode, UsizeOpcode};
+use axvm_ecc_constants::{BLS12381, BN254};
+use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -79,7 +80,7 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 #[test]
 fn test_fp12_add_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bn254Fp12Opcode::modulus();
+    let modulus = BN254.MODULUS.clone();
     let expr = fp12_add_expr(
         modulus,
         BN254_NUM_LIMBS,
@@ -105,7 +106,7 @@ fn test_fp12_add_bn254() {
 #[test]
 fn test_fp12_sub_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bn254Fp12Opcode::modulus();
+    let modulus = BN254.MODULUS.clone();
     let expr = fp12_sub_expr(
         modulus,
         BN254_NUM_LIMBS,
@@ -131,8 +132,8 @@ fn test_fp12_sub_bn254() {
 #[test]
 fn test_fp12_mul_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bn254Fp12Opcode::modulus();
-    let xi = Bn254Fp12Opcode::xi();
+    let modulus = BN254.MODULUS.clone();
+    let xi = BN254.XI;
     let expr = fp12_mul_expr(
         modulus,
         BN254_NUM_LIMBS,
@@ -159,7 +160,7 @@ fn test_fp12_mul_bn254() {
 #[test]
 fn test_fp12_add_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bls12381Fp12Opcode::modulus();
+    let modulus = BLS12381.MODULUS.clone();
     let expr = fp12_add_expr(
         modulus,
         BLS12381_NUM_LIMBS,
@@ -185,7 +186,7 @@ fn test_fp12_add_bls12381() {
 #[test]
 fn test_fp12_sub_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bls12381Fp12Opcode::modulus();
+    let modulus = BLS12381.MODULUS.clone();
     let expr = fp12_sub_expr(
         modulus,
         BLS12381_NUM_LIMBS,
@@ -211,10 +212,11 @@ fn test_fp12_sub_bls12381() {
 // NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
 #[test]
 #[ignore]
+
 fn test_fp12_mul_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = Bls12381Fp12Opcode::modulus();
-    let xi = Bls12381Fp12Opcode::xi();
+    let modulus = BLS12381.MODULUS.clone();
+    let xi = BLS12381.XI;
     let expr = fp12_mul_expr(
         modulus,
         BLS12381_NUM_LIMBS,

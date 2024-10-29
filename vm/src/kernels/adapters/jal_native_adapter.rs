@@ -25,7 +25,7 @@ use crate::{
         program::ProgramBus,
     },
 };
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct JalNativeAdapterChip<F: Field> {
     pub air: JalNativeAdapterAir,
     _marker: PhantomData<F>,

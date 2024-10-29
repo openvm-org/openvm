@@ -1,15 +1,16 @@
 use std::{array, borrow::BorrowMut};
 
-use ax_stark_backend::{
-    utils::disable_debug_builder, verifier::VerificationError, Chip, ChipUsageGetter,
-};
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::{config::setup_tracing, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;
 use num_traits::WrappingSub;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::{
+    dense::{DenseMatrix, RowMajorMatrix},
+    Matrix,
+};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_write_data_sign_extend, LoadSignExtendCoreChip, Rv32LoadSignExtendChip};
@@ -48,12 +49,18 @@ fn set_and_execute(
     chip: &mut Rv32LoadSignExtendChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
+    read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_ext = sign_extend::<IMM_BITS>(imm);
 
+    let alignment = match opcode {
+        LOADB => 0,
+        LOADH => 1,
+        _ => unreachable!(),
+    };
     let ptr_val = rng.gen_range(
         0..(1
             << (tester
@@ -61,8 +68,9 @@ fn set_and_execute(
                 .borrow()
                 .mem_config
                 .pointer_max_bits
-                - 2)),
-    ) << 2;
+                - alignment)),
+    ) << alignment;
+
     let rs1 = rs1
         .unwrap_or(into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
             ptr_val.wrapping_sub(&imm_ext),
@@ -72,14 +80,17 @@ fn set_and_execute(
     let b = gen_pointer(rng, 4);
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
+    let shift_amount = ptr_val % 4;
     tester.write(1, b, rs1);
 
     let some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
-    let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << 8))));
+        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
+    let read_data: [F; RV32_REGISTER_NUM_LIMBS] = read_data
+        .unwrap_or(array::from_fn(|_| rng.gen_range(0..(1 << RV32_CELL_BITS))))
+        .map(F::from_canonical_u32);
+
     tester.write(1, a, some_prev_data);
-    tester.write(2, ptr_val as usize, read_data);
+    tester.write(2, (ptr_val - shift_amount) as usize, read_data);
 
     tester.execute(
         chip,
@@ -93,6 +104,7 @@ fn set_and_execute(
         opcode,
         read_data,
         some_prev_data,
+        shift_amount,
     );
     assert_eq!(write_data, tester.read::<4>(1, a));
 }
@@ -104,7 +116,7 @@ fn set_and_execute(
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test]
-fn rand_loadstore_test() {
+fn rand_load_sign_extend_test() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -120,10 +132,10 @@ fn rand_loadstore_test() {
         LoadSignExtendCoreChip::new(range_checker_chip, Rv32LoadStoreOpcode::default_offset());
     let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
-        // set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None, None);
     }
 
     let tester = tester.build().load(chip).finalize();
@@ -142,8 +154,11 @@ fn rand_loadstore_test() {
 fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    most_sig_bit: Option<u32>,
-    opcodes: Option<[bool; 2]>,
+    data_most_sig_bit: Option<u32>,
+    shift_most_sig_bit: Option<u32>,
+    opcode_flags: Option<[bool; 3]>,
+    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    imm: Option<u32>,
     expected_error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
@@ -163,54 +178,61 @@ fn run_negative_loadstore_test(
     let adapter_width = BaseAir::<F>::width(adapter.air());
     let mut chip = Rv32LoadSignExtendChip::<F>::new(adapter, core, tester.memory_controller());
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        read_data,
+        rs1,
+        imm,
+    );
 
-    let loadstore_trace_width = chip.trace_width();
-    let mut chip_input = chip.generate_air_proof_input();
-    let loadstore_trace = chip_input.raw.common_main.as_mut().unwrap();
-    {
-        let mut trace_row = loadstore_trace.row_slice(0).to_vec();
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
         let core_cols: &mut LoadSignExtendCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
             core_row.borrow_mut();
 
-        if let Some(read_data) = read_data {
-            core_cols.read_data = read_data.map(F::from_canonical_u32);
+        if let Some(shifted_read_data) = read_data {
+            core_cols.shifted_read_data = shifted_read_data.map(F::from_canonical_u32);
         }
 
-        if let Some(most_sig_bit) = most_sig_bit {
-            core_cols.most_sig_bit = F::from_canonical_u32(most_sig_bit);
+        if let Some(data_most_sig_bit) = data_most_sig_bit {
+            core_cols.data_most_sig_bit = F::from_canonical_u32(data_most_sig_bit);
+        }
+        if let Some(shift_most_sig_bit) = shift_most_sig_bit {
+            core_cols.shift_most_sig_bit = F::from_canonical_u32(shift_most_sig_bit);
         }
 
-        if let Some(opcodes) = opcodes {
-            core_cols.opcode_loadb_flag = F::from_bool(opcodes[0]);
-            core_cols.opcode_loadh_flag = F::from_bool(opcodes[1]);
+        if let Some(opcode_flags) = opcode_flags {
+            core_cols.opcode_loadb_flag0 = F::from_bool(opcode_flags[0]);
+            core_cols.opcode_loadb_flag1 = F::from_bool(opcode_flags[1]);
+            core_cols.opcode_loadh_flag = F::from_bool(opcode_flags[2]);
         }
-        *loadstore_trace = RowMajorMatrix::new(trace_row, loadstore_trace_width);
-    }
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
 
     drop(range_checker_chip);
     disable_debug_builder();
-    let tester = tester.build().load_air_proof_input(chip_input).finalize();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .finalize();
     tester.simple_test_with_expected_error(expected_error);
 }
 
 #[test]
-fn negative_loadstore_tests() {
+fn loadstore_negative_tests() {
     run_negative_loadstore_test(
         LOADB,
-        Some([92, 187, 45, 118]),
+        Some([233, 187, 145, 238]),
+        Some(0),
         None,
         None,
-        VerificationError::NonZeroCumulativeSum,
-    );
-
-    run_negative_loadstore_test(
-        LOADB,
-        Some([5, 132, 77, 250]),
-        Some(1),
+        None,
         None,
         VerificationError::NonZeroCumulativeSum,
     );
@@ -219,10 +241,25 @@ fn negative_loadstore_tests() {
         LOADH,
         None,
         None,
-        Some([true, false]),
+        Some(0),
+        None,
+        Some([202, 109, 183, 26]),
+        Some(31212),
+        VerificationError::NonZeroCumulativeSum,
+    );
+
+    run_negative_loadstore_test(
+        LOADB,
+        None,
+        None,
+        None,
+        Some([true, false, false]),
+        Some([250, 132, 77, 5]),
+        Some(47741),
         VerificationError::NonZeroCumulativeSum,
     );
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -246,27 +283,83 @@ fn execute_roundtrip_sanity_test() {
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADB, None, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, LOADH, None, None, None);
     }
 }
 
 #[test]
-fn solve_loadh_sanity_test() {
-    let read_data = [34, 159, 237, 112].map(F::from_canonical_u32);
+fn solve_loadh_extend_sign_sanity_test() {
+    let read_data = [34, 159, 237, 151].map(F::from_canonical_u32);
     let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
-    let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        LOADH, read_data, prev_data,
+    let write_data0 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADH, read_data, prev_data, 0,
     );
-    assert_eq!(write_data, [34, 159, 255, 255].map(F::from_canonical_u32));
+    let write_data2 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADH, read_data, prev_data, 2,
+    );
+
+    assert_eq!(write_data0, [34, 159, 255, 255].map(F::from_canonical_u32));
+    assert_eq!(write_data2, [237, 151, 255, 255].map(F::from_canonical_u32));
 }
 
 #[test]
-fn solve_loadb_sanity_test() {
-    let read_data = [103, 151, 78, 219].map(F::from_canonical_u32);
-    let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
-    let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        LOADB, read_data, prev_data,
+fn solve_loadh_extend_zero_sanity_test() {
+    let read_data = [34, 121, 237, 97].map(F::from_canonical_u32);
+    let prev_data = [94, 183, 56, 241].map(F::from_canonical_u32);
+    let write_data0 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADH, read_data, prev_data, 0,
     );
-    assert_eq!(write_data, [103, 0, 0, 0].map(F::from_canonical_u32));
+    let write_data2 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADH, read_data, prev_data, 2,
+    );
+
+    assert_eq!(write_data0, [34, 121, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data2, [237, 97, 0, 0].map(F::from_canonical_u32));
+}
+
+#[test]
+fn solve_loadb_extend_sign_sanity_test() {
+    let read_data = [45, 82, 99, 127].map(F::from_canonical_u32);
+    let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
+    let write_data0 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 0,
+    );
+    let write_data1 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 1,
+    );
+    let write_data2 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 2,
+    );
+    let write_data3 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 3,
+    );
+
+    assert_eq!(write_data0, [45, 0, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data1, [82, 0, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data2, [99, 0, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data3, [127, 0, 0, 0].map(F::from_canonical_u32));
+}
+
+#[test]
+fn solve_loadb_extend_zero_sanity_test() {
+    let read_data = [173, 210, 227, 255].map(F::from_canonical_u32);
+    let prev_data = [53, 180, 29, 244].map(F::from_canonical_u32);
+    let write_data0 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 0,
+    );
+    let write_data1 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 1,
+    );
+    let write_data2 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 2,
+    );
+    let write_data3 = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        LOADB, read_data, prev_data, 3,
+    );
+
+    assert_eq!(write_data0, [173, 255, 255, 255].map(F::from_canonical_u32));
+    assert_eq!(write_data1, [210, 255, 255, 255].map(F::from_canonical_u32));
+    assert_eq!(write_data2, [227, 255, 255, 255].map(F::from_canonical_u32));
+    assert_eq!(write_data3, [255, 255, 255, 255].map(F::from_canonical_u32));
 }

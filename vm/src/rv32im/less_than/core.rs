@@ -6,8 +6,8 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     utils::not,
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
@@ -32,12 +32,9 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_sltu_flag: T,
 
     // Most significant limb of b and c respectively as a field element, will be range
-    // checked to be within [-128, 127). Field xor_res is the result of (b_msb_f + 128)
-    // ^ (c_msb_f + 128) if signed and b_msb_f ^ c_msb_f else, used to range check
-    // b_msb_f and c_msb_f.
+    // checked to be within [-128, 127) if signed, [0, 256) if unsigned.
     pub b_msb_f: T,
     pub c_msb_f: T,
-    pub xor_res: T,
 
     // 1 at the most significant index i such that b[i] != c[i], otherwise 0. If such
     // an i exists, diff_val = c[i] - b[i] if c[i] > b[i] or b[i] - c[i] else.
@@ -47,7 +44,7 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct LessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     offset: usize,
 }
 
@@ -118,20 +115,15 @@ where
             .assert_zero(cols.cmp_result);
 
         self.bus
-            .send(
+            .send_range(
                 cols.b_msb_f
                     + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
                 cols.c_msb_f
                     + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
-                cols.xor_res,
             )
             .eval(builder, is_valid.clone());
         self.bus
-            .send(
-                cols.diff_val - AB::Expr::one(),
-                cols.diff_val - AB::Expr::one(),
-                AB::F::zero(),
-            )
+            .send_range(cols.diff_val - AB::Expr::one(), AB::F::zero())
             .eval(builder, prefix_sum);
 
         let expected_opcode = flags
@@ -165,7 +157,6 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     pub cmp_result: T,
     pub b_msb_f: T,
     pub c_msb_f: T,
-    pub xor_res: T,
     pub diff_val: T,
     pub diff_idx: usize,
 }
@@ -173,17 +164,20 @@ pub struct LessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 #[derive(Debug)]
 pub struct LessThanCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: LessThanCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
+    pub fn new(
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: LessThanCoreAir {
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -213,9 +207,9 @@ where
         let (cmp_result, diff_idx, b_sign, c_sign) =
             run_less_than::<NUM_LIMBS, LIMB_BITS>(less_than_opcode, &b, &c);
 
-        // xor_res is the result of (b_msb_f + 128) ^ (c_msb_f + 128) if signed,
-        // b_msb_f ^ c_msb_f if not
-        let (b_msb_f, b_msb_xor) = if b_sign {
+        // We range check (b_msb_f + 128) and (c_msb_f + 128) if signed,
+        // b_msb_f and c_msb_f if not
+        let (b_msb_f, b_msb_range) = if b_sign {
             (
                 -F::from_canonical_u32((1 << LIMB_BITS) - b[NUM_LIMBS - 1]),
                 b[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
@@ -227,7 +221,7 @@ where
                     + (((less_than_opcode == LessThanOpcode::SLT) as u32) << (LIMB_BITS - 1)),
             )
         };
-        let (c_msb_f, c_msb_xor) = if c_sign {
+        let (c_msb_f, c_msb_range) = if c_sign {
             (
                 -F::from_canonical_u32((1 << LIMB_BITS) - c[NUM_LIMBS - 1]),
                 c[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
@@ -239,7 +233,8 @@ where
                     + (((less_than_opcode == LessThanOpcode::SLT) as u32) << (LIMB_BITS - 1)),
             )
         };
-        let xor_res = self.xor_lookup_chip.request(b_msb_xor, c_msb_xor);
+        self.bitwise_lookup_chip
+            .request_range(b_msb_range, c_msb_range);
 
         let diff_val = if diff_idx == NUM_LIMBS {
             0
@@ -257,7 +252,7 @@ where
         };
 
         if diff_idx != NUM_LIMBS {
-            self.xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+            self.bitwise_lookup_chip.request_range(diff_val - 1, 0);
         }
 
         let mut writes = [0u32; NUM_LIMBS];
@@ -271,7 +266,6 @@ where
             cmp_result: F::from_bool(cmp_result),
             b_msb_f,
             c_msb_f,
-            xor_res: F::from_canonical_u32(xor_res),
             diff_val: F::from_canonical_u32(diff_val),
             diff_idx,
         };
@@ -290,7 +284,6 @@ where
         row_slice.cmp_result = record.cmp_result;
         row_slice.b_msb_f = record.b_msb_f;
         row_slice.c_msb_f = record.c_msb_f;
-        row_slice.xor_res = record.xor_res;
         row_slice.diff_val = record.diff_val;
         row_slice.opcode_slt_flag = F::from_bool(record.opcode == LessThanOpcode::SLT);
         row_slice.opcode_sltu_flag = F::from_bool(record.opcode == LessThanOpcode::SLTU);

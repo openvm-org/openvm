@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use axvm_instructions::{instruction::Instruction, SystemOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
+use parking_lot::Mutex;
 
 use super::PhantomChip;
 use crate::arch::{instructions::UsizeOpcode, testing::VmChipTestBuilder, ExecutionState};
@@ -13,9 +16,9 @@ fn test_nops_and_terminate() {
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        Default::default(),
         SystemOpcode::default_offset(),
     );
+    chip.set_streams(Arc::new(Mutex::new(Default::default())));
 
     let nop = Instruction::from_isize(SystemOpcode::PHANTOM.with_default_offset(), 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::zero(), F::one());

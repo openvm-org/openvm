@@ -17,17 +17,18 @@
 #![allow(unused_variables)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![feature(asm_const)]
 
 pub mod memory;
-#[macro_use]
-pub mod syscall;
-#[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
-mod getrandom;
+// #[macro_use]
+// pub mod syscall;
+// #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
+// mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
-#[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
+#[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 
 /// Size of a zkVM machine word in bytes.

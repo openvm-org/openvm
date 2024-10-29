@@ -87,8 +87,8 @@ impl KeccakVmAir {
 
             // this should even work when `local` is the last row since
             // `next` becomes row 0 which `is_new_start`
-            self.xor_bus
-                .send(input, pre, post)
+            self.bitwise_lookup_bus
+                .send_xor(input, pre, post)
                 .eval(builder, should_absorb);
         }
         // constrain transition on the state outside rate

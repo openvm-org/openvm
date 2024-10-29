@@ -92,8 +92,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreAir<NUM_LIMBS, LIM
         // Check x_sign & x[NUM_LIMBS - 1] == x_sign using XOR
         let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
         let x_sign_shifted = aux.x_sign * mask;
-        self.xor_bus
-            .send(
+        self.bitwise_lookup_bus
+            .send_xor(
                 io.x.data[NUM_LIMBS - 1],
                 mask,
                 io.x.data[NUM_LIMBS - 1] + mask

@@ -19,6 +19,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }
@@ -61,6 +62,7 @@ test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
 axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-ecc-constants = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]

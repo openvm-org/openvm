@@ -1,8 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    xor::XorLookupChip,
 };
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
@@ -22,7 +22,7 @@ use super::core::run_divrem;
 use crate::{
     arch::{
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
         RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
@@ -90,11 +90,15 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
     const MAX_NUM_LIMBS: u32 = 32;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
+
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
     let mut tester = VmChipTestBuilder::default();
@@ -104,7 +108,7 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        DivRemCoreChip::new(xor_lookup_chip.clone(), range_tuple_checker.clone(), 0),
+        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -172,7 +176,7 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
     let tester = tester
         .build()
         .load(chip)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .load(range_tuple_checker)
         .finalize();
     tester.simple_test().expect("Verification failed");
@@ -228,12 +232,15 @@ fn run_rv32_divrem_negative_test(
 ) {
     // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
     const MAX_NUM_LIMBS: u32 = 32;
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_chip = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
     let mut tester = VmChipTestBuilder::default();
@@ -243,7 +250,7 @@ fn run_rv32_divrem_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        DivRemCoreChip::new(xor_lookup_chip.clone(), range_tuple_chip.clone(), 0),
+        DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -261,7 +268,7 @@ fn run_rv32_divrem_negative_test(
         Instruction::from_usize(rem_opcode as usize, [0, 0, 0, 1, 1]),
     );
 
-    let (q, r, _, _, q_sign, case) =
+    let (q, r, b_sign, c_sign, q_sign, case) =
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(signed, &b, &c);
     let q = prank_vals.q.unwrap_or(q);
     let r = prank_vals.r.unwrap_or(r);
@@ -275,14 +282,17 @@ fn run_rv32_divrem_negative_test(
     }
 
     if let Some(diff_val) = prank_vals.diff_val {
-        xor_lookup_chip.clear();
+        bitwise_chip.clear();
         if signed {
-            let mask = 1 << (RV32_CELL_BITS - 1);
-            xor_lookup_chip.request(b[RV32_REGISTER_NUM_LIMBS - 1], mask);
-            xor_lookup_chip.request(c[RV32_REGISTER_NUM_LIMBS - 1], mask);
+            let b_sign_mask = if b_sign { 1 << (RV32_CELL_BITS - 1) } else { 0 };
+            let c_sign_mask = if c_sign { 1 << (RV32_CELL_BITS - 1) } else { 0 };
+            bitwise_chip.request_range(
+                (b[RV32_REGISTER_NUM_LIMBS - 1] - b_sign_mask) << 1,
+                (c[RV32_REGISTER_NUM_LIMBS - 1] - c_sign_mask) << 1,
+            );
         }
         if case == DivRemCoreSpecialCase::None {
-            xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+            bitwise_chip.request_range(diff_val - 1, 0);
         }
     }
 
@@ -323,7 +333,7 @@ fn run_rv32_divrem_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .load(range_tuple_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt, fmt::Display};
 
 use itertools::Itertools;
+use p3_field::Field;
 
 use crate::instruction::{DebugInfo, Instruction};
 
@@ -18,22 +19,15 @@ pub struct Program<F> {
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
     pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
     pub step: u32,
-
-    // these two are needed to calculate the index for execution_frequencies
-    pub pc_start: u32,
     pub pc_base: u32,
 }
 
-impl<F> Program<F> {
+impl<F: Field> Program<F> {
     pub fn from_instructions_and_step(
         instructions: &[Instruction<F>],
         step: u32,
-        pc_start: u32,
         pc_base: u32,
-    ) -> Self
-    where
-        F: Clone,
-    {
+    ) -> Self {
         assert!(
             instructions.is_empty()
                 || pc_base + (instructions.len() as u32 - 1) * step <= MAX_ALLOWED_PC
@@ -50,7 +44,6 @@ impl<F> Program<F> {
                 })
                 .collect(),
             step,
-            pc_start,
             pc_base,
         }
     }
@@ -60,10 +53,7 @@ impl<F> Program<F> {
     pub fn from_instructions_and_debug_infos(
         instructions: &[Instruction<F>],
         debug_infos: &[Option<DebugInfo>],
-    ) -> Self
-    where
-        F: Clone,
-    {
+    ) -> Self {
         assert!(instructions.is_empty() || instructions.len() as u32 - 1 <= MAX_ALLOWED_PC);
         Self {
             instructions_and_debug_infos: instructions
@@ -78,16 +68,12 @@ impl<F> Program<F> {
                 })
                 .collect(),
             step: DEFAULT_PC_STEP,
-            pc_start: 0,
             pc_base: 0,
         }
     }
 
-    pub fn from_instructions(instructions: &[Instruction<F>]) -> Self
-    where
-        F: Clone,
-    {
-        Self::from_instructions_and_step(instructions, DEFAULT_PC_STEP, 0, 0)
+    pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
+        Self::from_instructions_and_step(instructions, DEFAULT_PC_STEP, 0)
     }
 
     pub fn len(&self) -> usize {
@@ -98,10 +84,7 @@ impl<F> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn instructions(&self) -> Vec<Instruction<F>>
-    where
-        F: Clone,
-    {
+    pub fn instructions(&self) -> Vec<Instruction<F>> {
         self.instructions_and_debug_infos
             .iter()
             .sorted_by_key(|(pc, _)| *pc)
@@ -119,7 +102,7 @@ impl<F> Program<F> {
             .collect()
     }
 }
-impl<F: Copy + Display> Display for Program<F> {
+impl<F: Field> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.instructions().iter() {
             let Instruction {
@@ -143,7 +126,7 @@ impl<F: Copy + Display> Display for Program<F> {
     }
 }
 
-pub fn display_program_with_pc<F: Copy + Display>(program: &Program<F>) {
+pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
     for (pc, instruction) in program.instructions().iter().enumerate() {
         let Instruction {
             opcode,

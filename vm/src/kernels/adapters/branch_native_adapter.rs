@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BranchNativeAdapterChip<F: Field> {
     pub air: BranchNativeAdapterAir,
     _marker: PhantomData<F>,

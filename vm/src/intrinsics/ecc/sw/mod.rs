@@ -6,3 +6,93 @@ pub use double::*;
 
 #[cfg(test)]
 mod tests;
+
+use ax_circuit_derive::{Chip, ChipUsageGetter};
+use axvm_circuit_derive::InstructionExecutor;
+use num_bigint_dig::BigUint;
+use p3_field::PrimeField32;
+
+use crate::{
+    arch::{instructions::EccOpcode, VmChipWrapper},
+    intrinsics::field_expression::FieldExpressionCoreChip,
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    system::memory::MemoryControllerRef,
+};
+
+/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
+/// BLOCKS: how many blocks do we need to represent one input or output
+/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per input EcPoint, BLOCKS = 6.
+/// For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    VmChipWrapper<
+        F,
+        Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        FieldExpressionCoreChip,
+    >,
+);
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
+    EcAddNeChip<F, BLOCKS, BLOCK_SIZE>
+{
+    pub fn new(
+        adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        memory_controller: MemoryControllerRef<F>,
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        offset: usize,
+    ) -> Self {
+        let expr = ec_add_ne_expr(
+            modulus,
+            num_limbs,
+            limb_bits,
+            memory_controller.borrow().range_checker.bus(),
+        );
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            offset,
+            vec![EccOpcode::EC_ADD_NE as usize],
+            memory_controller.borrow().range_checker.clone(),
+            "EcAddNe",
+        );
+        Self(VmChipWrapper::new(adapter, core, memory_controller))
+    }
+}
+
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    VmChipWrapper<
+        F,
+        Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        FieldExpressionCoreChip,
+    >,
+);
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
+    EcDoubleChip<F, BLOCKS, BLOCK_SIZE>
+{
+    pub fn new(
+        adapter: Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        memory_controller: MemoryControllerRef<F>,
+        modulus: BigUint,
+        num_limbs: usize,
+        limb_bits: usize,
+        offset: usize,
+    ) -> Self {
+        let expr = ec_double_expr(
+            modulus,
+            num_limbs,
+            limb_bits,
+            memory_controller.borrow().range_checker.bus(),
+        );
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            offset,
+            vec![EccOpcode::EC_DOUBLE as usize],
+            memory_controller.borrow().range_checker.clone(),
+            "EcDouble",
+        );
+        Self(VmChipWrapper::new(adapter, core, memory_controller))
+    }
+}

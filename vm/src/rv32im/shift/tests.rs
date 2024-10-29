@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
@@ -20,7 +22,7 @@ use crate::{
     arch::{
         instructions::ShiftOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -78,7 +80,11 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     const RV32_TOTAL_BITS: usize = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
     let mut rng = create_seeded_rng();
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32ShiftChip::<F>::new(
         Rv32BaseAluAdapterChip::new(
@@ -87,7 +93,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.memory_controller(),
         ),
         ShiftCoreChip::new(
-            xor_lookup_chip.clone(),
+            bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
             0,
         ),
@@ -111,7 +117,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let c = [(1 << RV32_CELL_BITS) - 1; 4];
     run_rv32_shift_rand_write_execute(&mut tester, &mut chip, opcode, b, c, None, &mut rng);
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -161,7 +167,10 @@ fn run_rv32_shift_negative_test(
     prank_vals: ShiftPrankValues<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     interaction_error: bool,
 ) {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let mut chip = Rv32ShiftTestChip::<F>::new(
@@ -170,7 +179,7 @@ fn run_rv32_shift_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        ShiftCoreChip::new(xor_lookup_chip.clone(), range_checker_chip.clone(), 0),
+        ShiftCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -235,7 +244,7 @@ fn run_rv32_shift_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum

@@ -425,6 +425,6 @@ fn assert_failed_assertion(
 ) {
     let program = builder.compile_isa();
     let vm = VirtualMachine::new(VmConfig::aggregation(4, 3));
-    let result = vm.execute(program);
+    let result = vm.execute(program, vec![]);
     assert!(matches!(result, Err(Fail(_))));
 }

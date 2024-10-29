@@ -1,6 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::xor::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
@@ -20,7 +22,7 @@ use crate::{
     arch::{
         instructions::BaseAluOpcode,
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BYTE_XOR_BUS,
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -76,8 +78,11 @@ fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
 
 fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32BaseAluChip::<F>::new(
         Rv32BaseAluAdapterChip::new(
@@ -85,7 +90,7 @@ fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
+        BaseAluCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -103,7 +108,7 @@ fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         run_rv32_alu_rand_write_execute(&mut tester, &mut chip, opcode, b, c, c_imm, &mut rng);
     }
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -151,7 +156,11 @@ fn run_rv32_alu_negative_test(
     c: [u32; RV32_REGISTER_NUM_LIMBS],
     interaction_error: bool,
 ) {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32BaseAluTestChip::<F>::new(
         TestAdapterChip::new(
@@ -159,7 +168,7 @@ fn run_rv32_alu_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        BaseAluCoreChip::new(xor_lookup_chip.clone(), 0),
+        BaseAluCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -174,9 +183,9 @@ fn run_rv32_alu_negative_test(
     if (opcode == BaseAluOpcode::ADD || opcode == BaseAluOpcode::SUB)
         && a.iter().all(|&a_val| a_val < (1 << RV32_CELL_BITS))
     {
-        xor_lookup_chip.clear();
+        bitwise_chip.clear();
         for a_val in a {
-            xor_lookup_chip.request(a_val, a_val);
+            bitwise_chip.request_xor(a_val, a_val);
         }
     }
 
@@ -192,7 +201,7 @@ fn run_rv32_alu_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum

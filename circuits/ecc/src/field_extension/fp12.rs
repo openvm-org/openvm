@@ -225,6 +225,7 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         utils::create_seeded_rng,
     };
+    use axvm_ecc_constants::BN254;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
@@ -256,7 +257,7 @@ mod tests {
             panic!("Only one of fp12_fn_addsub or fp12_fn_mul must be provided");
         }
 
-        let prime = bn254_prime();
+        let prime = BN254.MODULUS.clone();
         let (subair, range_checker, builder) = setup(&prime);
 
         let mut x_fp12 = Fp12::new(builder.clone());

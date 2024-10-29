@@ -8,9 +8,9 @@ use std::{
 };
 
 use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    xor::XorLookupChip,
 };
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
@@ -20,7 +20,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::*;
+use axvm_instructions::{program::Program, *};
 use itertools::zip_eq;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
@@ -29,12 +29,13 @@ use parking_lot::Mutex;
 use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
-use super::Streams;
+use super::{EcCurve, Streams};
 use crate::{
     arch::{
         AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
     },
     intrinsics::{
+        ecc::sw::{EcAddNeChip, EcDoubleChip},
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -50,7 +51,6 @@ use crate::{
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
-        ecc::{KernelEcAddNeChip, KernelEcDoubleChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
         jal::{JalCoreChip, KernelJalChip},
@@ -85,6 +85,7 @@ pub const MEMORY_BUS: usize = 1;
 pub const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
 pub const BYTE_XOR_BUS: usize = 10;
 //pub const BYTE_XOR_BUS: XorBus = XorBus(8);
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
@@ -115,6 +116,21 @@ pub struct VmChipSet<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
+    pub(crate) fn set_program(&mut self, program: Program<F>) {
+        self.program_chip.set_program(program);
+    }
+    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        for chip in self.chips.iter_mut() {
+            match chip {
+                AxVmChip::LoadStore(chip) => chip.borrow_mut().core.set_streams(streams.clone()),
+                AxVmChip::HintStoreRv32(chip) => {
+                    chip.borrow_mut().core.set_streams(streams.clone())
+                }
+                AxVmChip::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
+                _ => {}
+            }
+        }
+    }
     pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
         iter::once(get_name_and_cells(&self.program_chip))
             .chain([get_name_and_cells(&self.connector_chip)])
@@ -198,17 +214,15 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
-    pub fn create_chip_set<F: PrimeField32>(
-        &self,
-        streams: Arc<Mutex<Streams<F>>>,
-    ) -> VmChipSet<F> {
+    pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
         let memory_bus = MemoryBus(MEMORY_BUS);
         let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let byte_xor_chip = Arc::new(XorLookupChip::new(BYTE_XOR_BUS));
+        let bitwise_lookup_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_lookup_chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lookup_bus));
 
         let memory_controller = match self.memory_config.persistence_type {
             PersistenceType::Volatile => {
@@ -288,7 +302,6 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        streams.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -304,7 +317,7 @@ impl VmConfig {
                             memory_controller.clone(),
                             offset,
                         ),
-                        KernelLoadStoreCoreChip::new(streams.clone(), offset),
+                        KernelLoadStoreCoreChip::new(offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -379,7 +392,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -394,7 +407,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BaseAluCoreChip::new(byte_xor_chip.clone(), offset),
+                        BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -409,7 +422,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -424,7 +437,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        LessThanCoreChip::new(byte_xor_chip.clone(), offset),
+                        LessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -455,7 +468,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         MulHCoreChip::new(
-                            byte_xor_chip.clone(),
+                            bitwise_lookup_chip.clone(),
                             range_tuple_checker.clone(),
                             offset,
                         ),
@@ -487,7 +500,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         DivRemCoreChip::new(
-                            byte_xor_chip.clone(),
+                            bitwise_lookup_chip.clone(),
                             range_tuple_checker.clone(),
                             offset,
                         ),
@@ -505,7 +518,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        ShiftCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        ShiftCoreChip::new(
+                            bitwise_lookup_chip.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -518,7 +535,7 @@ impl VmConfig {
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
-                        byte_xor_chip.clone(),
+                        bitwise_lookup_chip.clone(),
                         offset,
                     )));
                     for opcode in range {
@@ -568,7 +585,7 @@ impl VmConfig {
                             memory_controller.clone(),
                             range_checker.clone(),
                         ),
-                        Rv32HintStoreCoreChip::new(streams.clone(), byte_xor_chip.clone(), offset),
+                        Rv32HintStoreCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -598,7 +615,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        BranchLessThanCoreChip::new(byte_xor_chip.clone(), offset),
+                        BranchLessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -613,7 +630,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32JalLuiCoreChip::new(byte_xor_chip.clone(), offset),
+                        Rv32JalLuiCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -628,7 +645,11 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32JalrCoreChip::new(byte_xor_chip.clone(), range_checker.clone(), offset),
+                        Rv32JalrCoreChip::new(
+                            bitwise_lookup_chip.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -643,7 +664,7 @@ impl VmConfig {
                             program_bus,
                             memory_controller.clone(),
                         ),
-                        Rv32AuipcCoreChip::new(byte_xor_chip.clone(), offset),
+                        Rv32AuipcCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -669,39 +690,6 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::CastF(chip));
                 }
-                // TODO: make these customizable opcode classes
-                ExecutorName::Secp256k1AddUnequal => {
-                    let chip = Rc::new(RefCell::new(KernelEcAddNeChip::new(
-                        NativeVecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        memory_controller.clone(),
-                        8,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1AddUnequal(chip));
-                }
-                ExecutorName::Secp256k1Double => {
-                    let chip = Rc::new(RefCell::new(KernelEcDoubleChip::new(
-                        NativeVecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        memory_controller.clone(),
-                        8,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Secp256k1Double(chip));
-                }
                 _ => {
                     unreachable!("Unsupported executor")
                 }
@@ -724,6 +712,82 @@ impl VmConfig {
             chips.push(AxVmChip::Poseidon2(poseidon_chip));
         }
 
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_ec_executor_tuple(&self.supported_ec_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&local_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            match executor {
+                ExecutorName::EcAddNeRv32_2x32 => {
+                    let chip = Rc::new(RefCell::new(EcAddNeChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        32,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcAddNeRv32_2x32(chip));
+                }
+                ExecutorName::EcDoubleRv32_2x32 => {
+                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        32,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcDoubleRv32_2x32(chip));
+                }
+                ExecutorName::EcAddNeRv32_6x16 => {
+                    let chip = Rc::new(RefCell::new(EcAddNeChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        48,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcAddNeRv32_6x16(chip));
+                }
+                ExecutorName::EcDoubleRv32_6x16 => {
+                    let chip = Rc::new(RefCell::new(EcDoubleChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        48,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcDoubleRv32_6x16(chip));
+                }
+                _ => unreachable!("Unsupported executor"),
+            }
+        }
+
         for (local_range, executor, class_offset, modulus) in
             gen_modular_executor_tuple(self.supported_modulus.clone())
         {
@@ -733,7 +797,6 @@ impl VmConfig {
                     panic!("Attempting to override an executor for opcode {global_opcode_idx}");
                 }
             }
-            assert!(modulus.bits() <= 32 * 8);
             match executor {
                 ExecutorName::ModularAddSub => {
                     let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
@@ -867,8 +930,8 @@ impl VmConfig {
             }
         }
 
-        if Arc::strong_count(&byte_xor_chip) > 1 {
-            chips.push(AxVmChip::ByteXor(byte_xor_chip));
+        if Arc::strong_count(&bitwise_lookup_chip) > 1 {
+            chips.push(AxVmChip::BitwiseOperationLookup(bitwise_lookup_chip));
         }
         if Arc::strong_count(&range_tuple_checker) > 1 {
             chips.push(AxVmChip::RangeTupleChecker(range_tuple_checker));
@@ -886,6 +949,53 @@ impl VmConfig {
             range_checker_chip: range_checker,
         }
     }
+}
+
+// Returns (local_opcode_idx, global offset, executor name, modulus)
+fn gen_ec_executor_tuple(
+    supported_ec_curves: &[EcCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_ec_curves
+        .iter()
+        .enumerate()
+        .flat_map(|(i, curve)| {
+            let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
+            let bytes = curve.prime().bits().div_ceil(8);
+            if bytes <= 32 {
+                vec![
+                    (
+                        EccOpcode::EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_2x32,
+                        curve.prime(),
+                    ),
+                    (
+                        EccOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_2x32,
+                        curve.prime(),
+                    ),
+                ]
+            } else if bytes <= 48 {
+                vec![
+                    (
+                        EccOpcode::EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_6x16,
+                        curve.prime(),
+                    ),
+                    (
+                        EccOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_6x16,
+                        curve.prime(),
+                    ),
+                ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
 }
 
 fn gen_modular_executor_tuple(
@@ -1106,15 +1216,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             CastfOpcode::default_offset(),
             CastfOpcode::COUNT,
             CastfOpcode::default_offset(),
-        ),
-        // TODO: these should be configurable and remove from default executors
-        ExecutorName::Secp256k1AddUnequal => {
-            (EccOpcode::default_offset(), 1, EccOpcode::default_offset())
-        }
-        ExecutorName::Secp256k1Double => (
-            EccOpcode::default_offset() + 1,
-            1,
-            EccOpcode::default_offset(),
         ),
         _ => panic!("Not a default executor"),
     };

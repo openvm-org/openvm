@@ -1,7 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use ax_circuit_derive::AlignedBorrow;
@@ -89,7 +89,7 @@ pub struct PhantomChip<F: Field> {
     pub air: PhantomAir,
     pub rows: Vec<PhantomCols<F>>,
     memory: MemoryControllerRef<F>,
-    streams: Arc<Mutex<Streams<F>>>,
+    streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
 impl<F: Field> PhantomChip<F> {
@@ -97,7 +97,6 @@ impl<F: Field> PhantomChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
-        streams: Arc<Mutex<Streams<F>>>,
         offset: usize,
     ) -> Self {
         Self {
@@ -107,8 +106,11 @@ impl<F: Field> PhantomChip<F> {
             },
             rows: vec![],
             memory: memory_controller,
-            streams,
+            streams: OnceLock::new(),
         }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 }
 
@@ -136,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 println!("{}", value);
             }
             PhantomInstruction::HintInput => {
-                let mut streams = self.streams.lock();
+                let mut streams = self.streams.get().unwrap().lock();
                 let hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
@@ -152,7 +154,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             }
             PhantomInstruction::HintBits => {
                 let addr_space = F::from_canonical_u32(c_u32 >> 16);
-                let mut streams = self.streams.lock();
+                let mut streams = self.streams.get().unwrap().lock();
                 let val = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
                 let mut val = val.as_canonical_u32();
 

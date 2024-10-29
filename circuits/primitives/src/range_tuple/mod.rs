@@ -95,7 +95,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RangeTupleCheckerChip<const N: usize> {
     pub air: RangeTupleCheckerAir<N>,
     count: Vec<Arc<AtomicU32>>,

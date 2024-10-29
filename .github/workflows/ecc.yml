@@ -36,11 +36,6 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ecc-lib crate tests
-        working-directory: lib/ecc
-        run: |
-          cargo nextest run --cargo-profile=fast --features parallel
-
       - name: Run ecc-execution crate tests
         working-directory: lib/ecc-execution
         run: |

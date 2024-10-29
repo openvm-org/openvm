@@ -39,7 +39,7 @@ pub struct UintMultiplicationRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: 
     pub carry: Vec<T>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct UintMultiplicationChip<T: PrimeField32, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: UintMultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
     data: Vec<UintMultiplicationRecord<T, NUM_LIMBS, LIMB_BITS>>,

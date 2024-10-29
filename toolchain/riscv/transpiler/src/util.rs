@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use axvm_circuit::{rv32im::adapters::RV32_REGISTER_NUM_LIMBS, system::memory::Equipartition};
+use axvm_circuit::rv32im::adapters::RV32_REGISTER_NUM_LIMBS;
 use axvm_instructions::{
-    instruction::Instruction, utils::isize_to_field, SystemOpcode, UsizeOpcode,
+    exe::MemoryImage, instruction::Instruction, utils::isize_to_field, SystemOpcode, UsizeOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
@@ -177,16 +177,18 @@ pub fn terminate<F: PrimeField32>(code: u8) -> Instruction<F> {
     }
 }
 
-/// Converts our memory image (u32 -> u32) into the Equipartition for Poseidon ((as, label) -> [F; 8])
-pub fn memory_image_to_equipartition<F: PrimeField32>(
+/// Converts our memory image (u32 -> [u8; 4]) into AxVm memory image ((as, address) -> word)
+pub fn elf_memory_image_to_axvm_memory_image<F: PrimeField32>(
     memory_image: BTreeMap<u32, u32>,
-) -> Equipartition<F, 8> {
-    let mut result = Equipartition::new();
+) -> MemoryImage<F> {
+    let mut result = MemoryImage::new();
     for (addr, word) in memory_image {
-        let key = (F::two(), (addr / 8) as usize);
-        let shift = addr as usize % 8;
-        result.entry(key).or_insert([F::zero(); 8])[shift..shift + 4]
-            .copy_from_slice(&word.to_le_bytes().map(F::from_canonical_u8));
+        for (i, byte) in word.to_le_bytes().into_iter().enumerate() {
+            result.insert(
+                (F::two(), F::from_canonical_u32(addr + i as u32)),
+                F::from_canonical_u8(byte),
+            );
+        }
     }
     result
 }

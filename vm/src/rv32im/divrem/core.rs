@@ -7,9 +7,9 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
     bigint::utils::big_uint_to_num_limbs,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     utils::{not, select},
-    xor::{XorBus, XorLookupChip},
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
@@ -61,7 +61,7 @@ pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct DivRemCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_tuple_bus: RangeTupleCheckerBus<2>,
     offset: usize,
 }
@@ -190,7 +190,6 @@ where
         // is guaranteed to be non-zero if q is non-zero since we've range checked each
         // limb of q to be within [0, 2^LIMB_BITS) already.
         let signed = cols.opcode_div_flag + cols.opcode_rem_flag;
-        let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
 
         builder.assert_bool(cols.b_sign);
         builder.assert_bool(cols.c_sign);
@@ -216,20 +215,12 @@ where
             .when(not(cols.zero_divisor))
             .assert_zero(cols.q_sign);
 
-        self.xor_bus
-            .send(
-                b[NUM_LIMBS - 1],
-                sign_mask,
-                b[NUM_LIMBS - 1] + sign_mask
-                    - cols.b_sign * sign_mask * AB::Expr::from_canonical_u32(2),
-            )
-            .eval(builder, signed.clone());
-        self.xor_bus
-            .send(
-                c[NUM_LIMBS - 1],
-                sign_mask,
-                c[NUM_LIMBS - 1] + sign_mask
-                    - cols.c_sign * sign_mask * AB::Expr::from_canonical_u32(2),
+        // Check that the signs of b and c are correct.
+        let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        self.bitwise_lookup_bus
+            .send_range(
+                AB::Expr::from_canonical_u32(2) * (b[NUM_LIMBS - 1] - cols.b_sign * sign_mask),
+                AB::Expr::from_canonical_u32(2) * (c[NUM_LIMBS - 1] - cols.c_sign * sign_mask),
             )
             .eval(builder, signed.clone());
 
@@ -282,12 +273,8 @@ where
         }
 
         builder.when(is_valid.clone()).assert_one(prefix_sum);
-        self.xor_bus
-            .send(
-                cols.lt_diff - AB::Expr::one(),
-                cols.lt_diff - AB::Expr::one(),
-                AB::F::zero(),
-            )
+        self.bitwise_lookup_bus
+            .send_range(cols.lt_diff - AB::Expr::one(), AB::F::zero())
             .eval(builder, is_valid.clone() - special_case);
 
         // Generate expected opcode and output a to pass to the adapter.
@@ -317,19 +304,19 @@ where
 #[derive(Debug)]
 pub struct DivRemCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: DivRemCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
     pub range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, LIMB_BITS> {
     pub fn new(
-        xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
         range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
         offset: usize,
     ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < 2 * NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1
-        // bytes (with LIMB_BITS bits). XorLookup is used to sign check bytes.
+        // bytes (with LIMB_BITS bits). BitwiseOperationLookup is used to sign check bytes.
         debug_assert!(
             range_tuple_chip.sizes()[0] == 1 << LIMB_BITS,
             "First element of RangeTupleChecker must have size {}",
@@ -343,11 +330,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemCoreChip<NUM_LIMBS, L
 
         Self {
             air: DivRemCoreAir {
-                xor_bus: xor_lookup_chip.bus(),
+                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
                 range_tuple_bus: *range_tuple_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
             range_tuple_chip,
         }
     }
@@ -415,7 +402,6 @@ where
                 .add_count(&[r[i], carries[i + NUM_LIMBS]]);
         }
 
-        let sign_mask = 1 << (LIMB_BITS - 1);
         let sign_xor = b_sign ^ c_sign;
         let r_prime = if sign_xor {
             negate::<NUM_LIMBS, LIMB_BITS>(&r)
@@ -425,8 +411,12 @@ where
         let r_zero = r.iter().all(|&v| v == 0) && case != DivRemCoreSpecialCase::ZeroDivisor;
 
         if is_signed {
-            self.xor_lookup_chip.request(b[NUM_LIMBS - 1], sign_mask);
-            self.xor_lookup_chip.request(c[NUM_LIMBS - 1], sign_mask);
+            let b_sign_mask = if b_sign { 1 << (LIMB_BITS - 1) } else { 0 };
+            let c_sign_mask = if c_sign { 1 << (LIMB_BITS - 1) } else { 0 };
+            self.bitwise_lookup_chip.request_range(
+                (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
+                (c[NUM_LIMBS - 1] - c_sign_mask) << 1,
+            );
         }
 
         let (lt_diff_idx, lt_diff_val) = if case == DivRemCoreSpecialCase::None && !r_zero {
@@ -436,7 +426,7 @@ where
             } else {
                 c[idx] - r_prime[idx]
             };
-            self.xor_lookup_chip.request(val - 1, val - 1);
+            self.bitwise_lookup_chip.request_range(val - 1, 0);
             (idx, val)
         } else {
             (NUM_LIMBS, 0)
