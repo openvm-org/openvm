@@ -1,0 +1,10 @@
+#=======================================================================
+# Makefrag for rv32m tests
+#-----------------------------------------------------------------------
+
+rv32m_sc_tests = \
+	div divu \
+	mul mulh mulhsu mulhu \
+	rem remu \
+
+rv32m_p_tests = $(addprefix rv32m-p-, $(rv32m_sc_tests))

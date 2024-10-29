@@ -1,0 +1,25 @@
+#=======================================================================
+# Makefrag for rv32i tests
+#-----------------------------------------------------------------------
+
+rv32i_sc_tests = \
+	simple \
+	add addi \
+	and andi \
+	auipc \
+	beq bge bgeu blt bltu bne \
+	fence_i \
+	jal jalr \
+	lb lbu lh lhu lw \
+	lui \
+	ma_data \
+	or ori \
+	sb sh sw \
+	sll slli \
+	slt slti sltiu sltu \
+	sra srai \
+	srl srli \
+	sub \
+	xor xori \
+
+rv32i_p_tests = $(addprefix rv32i-p-, $(rv32i_sc_tests))

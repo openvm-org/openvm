@@ -1,0 +1,137 @@
+
+tests/rv32m-p-rem:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <test_2>:
+   0:	00200193          	li	gp,2
+   4:	01400593          	li	a1,20
+   8:	00600613          	li	a2,6
+   c:	02c5e733          	rem	a4,a1,a2
+  10:	00200393          	li	t2,2
+  14:	0c771463          	bne	a4,t2,dc <fail>
+
+00000018 <test_3>:
+  18:	00300193          	li	gp,3
+  1c:	fec00593          	li	a1,-20
+  20:	00600613          	li	a2,6
+  24:	02c5e733          	rem	a4,a1,a2
+  28:	ffe00393          	li	t2,-2
+  2c:	0a771863          	bne	a4,t2,dc <fail>
+
+00000030 <test_4>:
+  30:	00400193          	li	gp,4
+  34:	01400593          	li	a1,20
+  38:	ffa00613          	li	a2,-6
+  3c:	02c5e733          	rem	a4,a1,a2
+  40:	00200393          	li	t2,2
+  44:	08771c63          	bne	a4,t2,dc <fail>
+
+00000048 <test_5>:
+  48:	00500193          	li	gp,5
+  4c:	fec00593          	li	a1,-20
+  50:	ffa00613          	li	a2,-6
+  54:	02c5e733          	rem	a4,a1,a2
+  58:	ffe00393          	li	t2,-2
+  5c:	08771063          	bne	a4,t2,dc <fail>
+
+00000060 <test_6>:
+  60:	00600193          	li	gp,6
+  64:	00000593          	li	a1,0
+  68:	00100613          	li	a2,1
+  6c:	02c5e733          	rem	a4,a1,a2
+  70:	00000393          	li	t2,0
+  74:	06771463          	bne	a4,t2,dc <fail>
+
+00000078 <test_7>:
+  78:	00700193          	li	gp,7
+  7c:	00000593          	li	a1,0
+  80:	fff00613          	li	a2,-1
+  84:	02c5e733          	rem	a4,a1,a2
+  88:	00000393          	li	t2,0
+  8c:	04771863          	bne	a4,t2,dc <fail>
+
+00000090 <test_8>:
+  90:	00800193          	li	gp,8
+  94:	00000593          	li	a1,0
+  98:	00000613          	li	a2,0
+  9c:	02c5e733          	rem	a4,a1,a2
+  a0:	00000393          	li	t2,0
+  a4:	02771c63          	bne	a4,t2,dc <fail>
+
+000000a8 <test_9>:
+  a8:	00900193          	li	gp,9
+  ac:	00100593          	li	a1,1
+  b0:	00000613          	li	a2,0
+  b4:	02c5e733          	rem	a4,a1,a2
+  b8:	00100393          	li	t2,1
+  bc:	02771063          	bne	a4,t2,dc <fail>
+
+000000c0 <test_10>:
+  c0:	00a00193          	li	gp,10
+  c4:	00000593          	li	a1,0
+  c8:	00000613          	li	a2,0
+  cc:	02c5e733          	rem	a4,a1,a2
+  d0:	00000393          	li	t2,0
+  d4:	00771463          	bne	a4,t2,dc <fail>
+  d8:	00301e63          	bne	zero,gp,f4 <pass>
+
+000000dc <fail>:
+  dc:	00018063          	beqz	gp,dc <fail>
+  e0:	00119193          	slli	gp,gp,0x1
+  e4:	0011e193          	ori	gp,gp,1
+  e8:	05d00893          	li	a7,93
+  ec:	00018513          	mv	a0,gp
+  f0:	0010000b          	.insn	4, 0x0010000b
+
+000000f4 <pass>:
+  f4:	00100193          	li	gp,1
+  f8:	05d00893          	li	a7,93
+  fc:	00000513          	li	a0,0
+ 100:	0000000b          	.insn	4, 0x000b
+
+Disassembly of section .tohost:
+
+00001000 <tohost>:
+	...
+
+00001040 <fromhost>:
+	...
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+   0:	5e41                	.insn	2, 0x5e41
+   2:	0000                	.insn	2, 0x
+   4:	7200                	.insn	2, 0x7200
+   6:	7369                	.insn	2, 0x7369
+   8:	01007663          	bgeu	zero,a6,14 <test_2+0x14>
+   c:	0054                	.insn	2, 0x0054
+   e:	0000                	.insn	2, 0x
+  10:	7205                	.insn	2, 0x7205
+  12:	3376                	.insn	2, 0x3376
+  14:	6932                	.insn	2, 0x6932
+  16:	7032                	.insn	2, 0x7032
+  18:	5f31                	.insn	2, 0x5f31
+  1a:	326d                	.insn	2, 0x326d
+  1c:	3070                	.insn	2, 0x3070
+  1e:	615f 7032 5f31      	.insn	6, 0x5f317032615f
+  24:	3266                	.insn	2, 0x3266
+  26:	3270                	.insn	2, 0x3270
+  28:	645f 7032 5f32      	.insn	6, 0x5f327032645f
+  2e:	697a                	.insn	2, 0x697a
+  30:	32727363          	bgeu	tp,t2,356 <pass+0x262>
+  34:	3070                	.insn	2, 0x3070
+  36:	7a5f 6669 6e65      	.insn	6, 0x6e6566697a5f
+  3c:	32696563          	bltu	s2,t1,366 <pass+0x272>
+  40:	3070                	.insn	2, 0x3070
+  42:	7a5f 6d6d 6c75      	.insn	6, 0x6c756d6d7a5f
+  48:	7031                	.insn	2, 0x7031
+  4a:	5f30                	.insn	2, 0x5f30
+  4c:	617a                	.insn	2, 0x617a
+  4e:	6d61                	.insn	2, 0x6d61
+  50:	3070316f          	jal	sp,3b56 <_end+0x1b56>
+  54:	7a5f 6c61 7372      	.insn	6, 0x73726c617a5f
+  5a:	30703163          	.insn	4, 0x30703163
+	...

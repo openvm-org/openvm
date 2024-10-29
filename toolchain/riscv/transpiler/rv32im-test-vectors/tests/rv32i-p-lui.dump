@@ -1,0 +1,98 @@
+
+tests/rv32i-p-lui:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <test_2>:
+   0:	00200193          	li	gp,2
+   4:	000000b7          	lui	ra,0x0
+   8:	00000393          	li	t2,0
+   c:	04709a63          	bne	ra,t2,60 <fail>
+
+00000010 <test_3>:
+  10:	00300193          	li	gp,3
+  14:	fffff0b7          	lui	ra,0xfffff
+  18:	4010d093          	srai	ra,ra,0x1
+  1c:	80000393          	li	t2,-2048
+  20:	04709063          	bne	ra,t2,60 <fail>
+
+00000024 <test_4>:
+  24:	00400193          	li	gp,4
+  28:	7ffff0b7          	lui	ra,0x7ffff
+  2c:	4140d093          	srai	ra,ra,0x14
+  30:	7ff00393          	li	t2,2047
+  34:	02709663          	bne	ra,t2,60 <fail>
+
+00000038 <test_5>:
+  38:	00500193          	li	gp,5
+  3c:	800000b7          	lui	ra,0x80000
+  40:	4140d093          	srai	ra,ra,0x14
+  44:	80000393          	li	t2,-2048
+  48:	00709c63          	bne	ra,t2,60 <fail>
+
+0000004c <test_6>:
+  4c:	00600193          	li	gp,6
+  50:	80000037          	lui	zero,0x80000
+  54:	00000393          	li	t2,0
+  58:	00701463          	bne	zero,t2,60 <fail>
+  5c:	00301e63          	bne	zero,gp,78 <pass>
+
+00000060 <fail>:
+  60:	00018063          	beqz	gp,60 <fail>
+  64:	00119193          	slli	gp,gp,0x1
+  68:	0011e193          	ori	gp,gp,1
+  6c:	05d00893          	li	a7,93
+  70:	00018513          	mv	a0,gp
+  74:	0010000b          	.insn	4, 0x0010000b
+
+00000078 <pass>:
+  78:	00100193          	li	gp,1
+  7c:	05d00893          	li	a7,93
+  80:	00000513          	li	a0,0
+  84:	0000000b          	.insn	4, 0x000b
+
+Disassembly of section .tohost:
+
+00001000 <tohost>:
+	...
+
+00001040 <fromhost>:
+	...
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+   0:	5e41                	.insn	2, 0x5e41
+   2:	0000                	.insn	2, 0x
+   4:	7200                	.insn	2, 0x7200
+   6:	7369                	.insn	2, 0x7369
+   8:	01007663          	bgeu	zero,a6,14 <test_3+0x4>
+   c:	0054                	.insn	2, 0x0054
+   e:	0000                	.insn	2, 0x
+  10:	7205                	.insn	2, 0x7205
+  12:	3376                	.insn	2, 0x3376
+  14:	6932                	.insn	2, 0x6932
+  16:	7032                	.insn	2, 0x7032
+  18:	5f31                	.insn	2, 0x5f31
+  1a:	326d                	.insn	2, 0x326d
+  1c:	3070                	.insn	2, 0x3070
+  1e:	615f 7032 5f31      	.insn	6, 0x5f317032615f
+  24:	3266                	.insn	2, 0x3266
+  26:	3270                	.insn	2, 0x3270
+  28:	645f 7032 5f32      	.insn	6, 0x5f327032645f
+  2e:	697a                	.insn	2, 0x697a
+  30:	32727363          	bgeu	tp,t2,356 <pass+0x2de>
+  34:	3070                	.insn	2, 0x3070
+  36:	7a5f 6669 6e65      	.insn	6, 0x6e6566697a5f
+  3c:	32696563          	bltu	s2,t1,366 <pass+0x2ee>
+  40:	3070                	.insn	2, 0x3070
+  42:	7a5f 6d6d 6c75      	.insn	6, 0x6c756d6d7a5f
+  48:	7031                	.insn	2, 0x7031
+  4a:	5f30                	.insn	2, 0x5f30
+  4c:	617a                	.insn	2, 0x617a
+  4e:	6d61                	.insn	2, 0x6d61
+  50:	3070316f          	jal	sp,3b56 <_end+0x1b56>
+  54:	7a5f 6c61 7372      	.insn	6, 0x73726c617a5f
+  5a:	30703163          	.insn	4, 0x30703163
+	...
