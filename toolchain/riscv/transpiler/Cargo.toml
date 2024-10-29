@@ -20,7 +20,9 @@ rrs-lib = "0.1.0"
 p3-baby-bear.workspace = true
 test-case.workspace = true
 axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-build.workspace = true
 ax-stark-sdk.workspace = true
+tempfile.workspace = true
 
 [features]
 parallel = ["axvm-circuit/parallel"]

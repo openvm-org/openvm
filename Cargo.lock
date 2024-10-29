@@ -789,6 +789,7 @@ name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
  "ax-stark-sdk",
+ "axvm-build",
  "axvm-circuit",
  "axvm-instructions",
  "axvm-platform",
@@ -798,6 +799,7 @@ dependencies = [
  "p3-field",
  "rrs-lib",
  "strum",
+ "tempfile",
  "test-case",
 ]
 

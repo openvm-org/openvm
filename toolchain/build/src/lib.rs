@@ -87,6 +87,33 @@ fn get_env_var(name: &str) -> String {
     env::var(name).unwrap_or_default()
 }
 
+/// Returns all target ELF paths associated with the given guest crate.
+pub fn guest_methods(
+    pkg: &Package,
+    target_dir: impl AsRef<Path>,
+    guest_features: &[String],
+) -> Vec<PathBuf> {
+    let profile = if is_debug() { "debug" } else { "release" };
+    pkg.targets
+        .iter()
+        .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
+        .filter(|target| {
+            target
+                .required_features
+                .iter()
+                .all(|required_feature| guest_features.contains(required_feature))
+        })
+        .map(|target| {
+            target_dir
+                .as_ref()
+                .join("riscv32im-risc0-zkvm-elf")
+                .join(profile)
+                .join(&target.name)
+                .to_path_buf()
+        })
+        .collect()
+}
+
 /// Build a [Command] with CARGO and RUSTUP_TOOLCHAIN environment variables
 /// removed.
 fn sanitized_cmd(tool: &str) -> Command {
@@ -111,7 +138,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = rustc.trim();
     println!("Using rustc: {rustc}");
 
-    let mut cmd = sanitized_cmd("cargo");
+    let mut cmd = sanitized_cmd("cargo +nightly"); // +nightly is temporary
     let mut args = vec![subcmd, "--target", "riscv32im-risc0-zkvm-elf"];
 
     if std::env::var("AXIOM_BUILD_LOCKED").is_ok() {
@@ -229,6 +256,7 @@ pub fn build_guest_package<P>(
         "--target-dir",
         target_dir.as_ref().to_str().unwrap(),
     ]);
+    tty_println(&format!("cargo command: {:?}", cmd));
 
     if !is_debug() {
         cmd.args(["--release"]);
