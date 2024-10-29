@@ -23,17 +23,17 @@
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
+#[cfg(target_os = "zkvm")]
+use crate::intrinsics::{custom_insn_i, custom_insn_r};
+
 extern crate alloc;
 
 #[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
-    unsafe {
-        asm!(".insn i 0x0b, 0, x0, x0, {ec}", ec = const EXIT_CODE)
-    };
+    custom_insn_i!(0x0b, 0, "x0", "x0", EXIT_CODE);
     #[cfg(not(target_os = "zkvm"))]
     {
-        core::hint::black_box(());
         unimplemented!()
     }
 }

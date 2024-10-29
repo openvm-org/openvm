@@ -31,6 +31,8 @@ mod libm_extern;
 #[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 
+pub mod intrinsics;
+
 /// Size of a zkVM machine word in bytes.
 /// 4 bytes (i.e. 32 bits) as the zkVM is an implementation of the rv32im ISA.
 pub const WORD_SIZE: usize = core::mem::size_of::<u32>();
