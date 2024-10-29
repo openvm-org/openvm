@@ -58,7 +58,6 @@ mod tests {
     use axvm_instructions::UsizeOpcode;
     // use halo2curves_axiom::bls12_381::{Fq, Fq2, G2Affine};
     use halo2curves_axiom::bn256::{Fq, Fq2, G2Affine};
-    use num_traits::{FromPrimitive, Pow, Zero};
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
@@ -71,14 +70,9 @@ mod tests {
         utils::{biguint_to_limbs, rv32_write_heap_default},
     };
 
+    // Only for testing, not the most performant
     fn fq_to_biguint(fq: Fq) -> BigUint {
-        let base: u128 = 1 << 64;
-        let base = BigUint::from_u128(base).unwrap();
-        let mut result = BigUint::zero();
-        for (i, &n) in fq.0.iter().enumerate() {
-            result += BigUint::from_u64(n).unwrap() * base.pow(i as u32);
-        }
-        result
+        BigUint::from_bytes_le(&fq.to_bytes())
     }
 
     type F = BabyBear;
@@ -120,8 +114,7 @@ mod tests {
         let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
         let result = chip
             .core
-            .air
-            .expr
+            .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
         assert_eq!(result.len(), 8); // EcPoint<Fp2> and two Fp2 coefficients
         println!("{} v.s. {}", result[0], fq_to_biguint(Q_acc_init.x.c0));
