@@ -39,5 +39,5 @@ jobs:
       - name: Run transpiler tests
         working-directory: toolchain/riscv/transpiler
         run: |
-          # rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo nextest run --cargo-profile=fast
