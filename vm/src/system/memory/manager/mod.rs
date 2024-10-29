@@ -34,7 +34,7 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig, RANGE_CHECKER_BUS},
     system::memory::{
         adapter::AccessAdapterAir,
-        manager::memory::{AccessAdapterRecord, Memory},
+        manager::memory::AccessAdapterRecord,
         offline_checker::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
             MemoryWriteAuxCols, AUX_LEN,
@@ -49,7 +49,7 @@ mod trace;
 
 use crate::system::memory::{
     dimensions::MemoryDimensions,
-    manager::memory::INITIAL_TIMESTAMP,
+    manager::memory::{Memory, INITIAL_TIMESTAMP},
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     tree::MemoryNode,
@@ -123,7 +123,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(&Equipartition::<_, 1>::new(), mem_config.pointer_max_bits),
+            memory: Memory::new(&Equipartition::<_, 1>::new()),
             adapter_records: HashMap::new(),
             range_checker,
             result: None,
@@ -142,7 +142,7 @@ impl<F: PrimeField32> MemoryController<F> {
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
-        let memory = Memory::new(&initial_memory, mem_config.pointer_max_bits);
+        let memory = Memory::new(&initial_memory);
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(memory_dims, memory_bus, merkle_bus),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus),
@@ -171,7 +171,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
-                self.memory = Memory::new(initial_memory, self.mem_config.pointer_max_bits);
+                self.memory = Memory::new(initial_memory);
             }
         }
     }
@@ -233,13 +233,8 @@ impl<F: PrimeField32> MemoryController<F> {
     ///
     /// Any value returned is unconstrained.
     pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
-        match self
-            .memory
+        self.memory
             .get(addr_space, pointer.as_canonical_u32() as usize)
-        {
-            Some((_, &value)) => value,
-            None => F::zero(),
-        }
     }
 
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
