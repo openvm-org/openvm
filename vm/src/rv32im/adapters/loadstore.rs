@@ -338,6 +338,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             ..
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
+        debug_assert!(e.as_canonical_u32() != 0);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
