@@ -9,6 +9,8 @@ use super::{
 pub const NUM_LIMBS: usize = 32;
 pub const LIMB_BITS: usize = 8;
 
+pub type BigUintVar<C> = Array<C, Var<<C as Config>::N>>;
+
 /// Converts a prime field element to a usize.
 pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
     let bu = x.as_canonical_biguint();
@@ -259,5 +261,9 @@ impl<C: Config> Builder<C> {
         self.operations
             .push(DslIr::CircuitExt2Felt([a, b, c, d], value));
         [a, b, c, d]
+    }
+
+    pub fn uninit_biguint(&mut self) -> BigUintVar<C> {
+        self.dyn_array(NUM_LIMBS)
     }
 }
