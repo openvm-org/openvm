@@ -33,7 +33,7 @@ impl<F> Streams<F> {
 }
 
 /// Parent struct that holds all execution segments, program, config.
-pub struct VirtualMachine<F: PrimeField32> {
+pub struct VmExecutor<F: PrimeField32> {
     pub config: VmConfig,
     _marker: PhantomData<F>,
 }
@@ -45,11 +45,11 @@ pub enum ExitCode {
     Suspended = -1, // Continuations
 }
 
-pub struct VirtualMachineResult<SC: StarkGenericConfig> {
+pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
 }
 
-impl<F: PrimeField32> VirtualMachine<F> {
+impl<F: PrimeField32> VmExecutor<F> {
     /// Create a new VM with a given config, program, and input stream.
     ///
     /// The VM will start with a single segment, which is created from the initial state of the Core.
@@ -132,13 +132,13 @@ impl<F: PrimeField32> VirtualMachine<F> {
         mut self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let segments = self.execute_segments(exe, input)?;
 
-        Ok(VirtualMachineResult {
+        Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(None))
@@ -149,13 +149,13 @@ impl<F: PrimeField32> VirtualMachine<F> {
         mut self,
         committed_program: Arc<CommittedProgram<SC>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let segments = self.execute_segments(committed_program.program.clone(), input)?;
 
-        Ok(VirtualMachineResult {
+        Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| {

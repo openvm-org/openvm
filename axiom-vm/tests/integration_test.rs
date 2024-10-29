@@ -11,7 +11,7 @@ use ax_stark_sdk::{
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use axvm_circuit::{
     arch::{
-        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VmExecutor, VmConfig,
     },
     system::program::trace::CommittedProgram,
 };
@@ -64,7 +64,7 @@ fn test_1() {
     };
     let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
 
-    let app_vm = VirtualMachine::new(axiom_vm_pk.app_vm_config.clone());
+    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(committed_program, vec![])
         .unwrap();

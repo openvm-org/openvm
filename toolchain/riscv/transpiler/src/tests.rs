@@ -6,7 +6,7 @@ use std::{
 use ax_stark_sdk::config::setup_tracing;
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
-    arch::{VirtualMachine, VmConfig},
+    arch::{VmConfig, VmExecutor},
     sdk::{air_test, air_test_with_min_segments},
 };
 use axvm_platform::memory::MEM_SIZE;
@@ -22,12 +22,12 @@ type F = BabyBear;
 fn setup_vm_from_elf(
     elf_path: impl AsRef<Path>,
     config: VmConfig,
-) -> Result<(VirtualMachine<F>, AxVmExe<F>)> {
+) -> Result<(VmExecutor<F>, AxVmExe<F>)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let vm = VirtualMachine::new(config);
-    Ok((vm, elf.into()))
+    let executor = VmExecutor::new(config);
+    Ok((executor, elf.into()))
 }
 
 fn get_examples_dir() -> PathBuf {

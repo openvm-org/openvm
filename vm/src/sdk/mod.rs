@@ -15,19 +15,19 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 
 use crate::{
-    arch::{ExitCode, PersistenceType, VirtualMachine, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID},
+    arch::{ExitCode, PersistenceType, VmConfig, VmExecutor, CONNECTOR_AIR_ID, MERKLE_AIR_ID},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{merkle::MemoryMerklePvs, CHUNK},
     },
 };
 
-pub fn air_test(vm: VirtualMachine<BabyBear>, exe: impl Into<AxVmExe<BabyBear>>) {
+pub fn air_test(vm: VmExecutor<BabyBear>, exe: impl Into<AxVmExe<BabyBear>>) {
     air_test_with_min_segments(vm, exe, vec![], 1);
 }
 
 pub fn air_test_with_min_segments(
-    vm: VirtualMachine<BabyBear>,
+    vm: VmExecutor<BabyBear>,
     exe: impl Into<AxVmExe<BabyBear>>,
     input: Vec<Vec<BabyBear>>,
     min_segments: usize,
@@ -140,7 +140,7 @@ where
             let mut config = config;
             config.collect_metrics = true;
             {
-                let vm = VirtualMachine::<Val<SC>>::new(config.clone());
+                let vm = VmExecutor::<Val<SC>>::new(config.clone());
                 vm.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
@@ -149,7 +149,7 @@ where
         }
     }
 
-    let vm = VirtualMachine::<Val<SC>>::new(config);
+    let vm = VmExecutor::<Val<SC>>::new(config);
 
     let mut result = vm.execute_and_generate(program, input_stream).unwrap();
     assert_eq!(

@@ -3,19 +3,19 @@ use p3_baby_bear::BabyBear;
 #[cfg(feature = "sdk")]
 pub use sdk::*;
 
-use crate::arch::{ExecutorName, VirtualMachine, VmConfig};
+use crate::arch::{ExecutorName, VmConfig, VmExecutor};
 
 pub fn execute_program_with_config(
     config: VmConfig,
     program: Program<BabyBear>,
     input_stream: Vec<Vec<BabyBear>>,
 ) {
-    let vm = VirtualMachine::<BabyBear>::new(config);
+    let vm = VmExecutor::<BabyBear>::new(config);
     vm.execute(program, input_stream).unwrap();
 }
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBear>>) {
-    let vm = VirtualMachine::<BabyBear>::new(
+    let vm = VmExecutor::<BabyBear>::new(
         VmConfig {
             num_public_values: 4,
             max_segment_len: (1 << 25) - 100,

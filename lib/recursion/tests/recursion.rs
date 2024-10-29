@@ -2,7 +2,7 @@ use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
 };
-use axvm_circuit::arch::{instructions::program::Program, ExecutorName, VirtualMachine, VmConfig};
+use axvm_circuit::arch::{instructions::program::Program, ExecutorName, VmExecutor, VmConfig};
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use axvm_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
@@ -55,7 +55,7 @@ where
     .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::Jal);
 
-    let vm = VirtualMachine::new(vm_config);
+    let vm = VmExecutor::new(vm_config);
 
     let mut result = vm.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
