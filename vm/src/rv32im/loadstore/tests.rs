@@ -11,7 +11,7 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::{rngs::StdRng, Rng};
+use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
 use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
 use crate::{
@@ -69,6 +69,7 @@ fn set_and_execute(
         .map(F::from_canonical_u32);
     let a = gen_pointer(rng, 4);
     let b = gen_pointer(rng, 4);
+    let mem_as = *[2, 3].choose(rng).unwrap();
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
     let shift_amount = ptr_val % 4;
@@ -82,9 +83,9 @@ fn set_and_execute(
 
     if is_load {
         tester.write(1, a, some_prev_data);
-        tester.write(2, (ptr_val - shift_amount) as usize, read_data);
+        tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
-        tester.write(2, (ptr_val - shift_amount) as usize, some_prev_data);
+        tester.write(mem_as, (ptr_val - shift_amount) as usize, some_prev_data);
         tester.write(1, a, read_data);
     }
 
@@ -92,7 +93,7 @@ fn set_and_execute(
         chip,
         Instruction::from_usize(
             opcode as usize + Rv32LoadStoreOpcode::default_offset(),
-            [a, b, imm as usize, 1, 2],
+            [a, b, imm as usize, 1, mem_as],
         ),
     );
 
@@ -102,7 +103,7 @@ fn set_and_execute(
     } else {
         assert_eq!(
             write_data,
-            tester.read::<4>(2, (ptr_val - shift_amount) as usize)
+            tester.read::<4>(mem_as, (ptr_val - shift_amount) as usize)
         );
     }
 }
