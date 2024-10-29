@@ -31,14 +31,14 @@ pub fn miller_double_expr(
     let mut s_x = Fp2::new(builder.clone());
     let mut s_y = Fp2::new(builder.clone());
 
-    let mut three_x_square = s_x.square().int_mul([3, 3]);
-    let mut lambda = three_x_square.div(&mut s_y.int_mul([2, 2]));
-    let mut x_2s = lambda.square().sub(&mut s_x.int_mul([2, 2]));
+    let mut three_x_square = s_x.square().int_mul([3, 0]);
+    let mut lambda = three_x_square.div(&mut s_y.int_mul([2, 0]));
+    let mut x_2s = lambda.square().sub(&mut s_x.int_mul([2, 0]));
     let mut y_2s = lambda.mul(&mut (s_x.sub(&mut x_2s))).sub(&mut s_y);
     x_2s.save_output();
     y_2s.save_output();
 
-    let mut b = lambda.int_mul([-1, -1]);
+    let mut b = lambda.int_mul([-1, 0]);
     let mut c = lambda.mul(&mut s_x).sub(&mut s_y);
     b.save_output();
     c.save_output();
@@ -110,12 +110,37 @@ mod tests {
 
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
+        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(fq_to_biguint);
+        println!(
+            "inputs: {} {} {} {}",
+            inputs[0], inputs[1], inputs[2], inputs[3]
+        );
+
         let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
         let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
+        let result = chip
+            .core
+            .air
+            .expr
+            .execute_with_output(inputs.to_vec(), vec![]);
+        assert_eq!(result.len(), 8); // EcPoint<Fp2> and two Fp2 coefficients
+        println!("{} v.s. {}", result[0], fq_to_biguint(Q_acc_init.x.c0));
+        println!("{} v.s. {}", result[1], fq_to_biguint(Q_acc_init.x.c1));
+        println!("{} v.s. {}", result[2], fq_to_biguint(Q_acc_init.y.c0));
+        println!("{} v.s. {}", result[3], fq_to_biguint(Q_acc_init.y.c1));
+        println!("{} v.s. {}", result[4], fq_to_biguint(l_init.b.c0));
+        println!("{} v.s. {}", result[5], fq_to_biguint(l_init.b.c1));
+        println!("{} v.s. {}", result[6], fq_to_biguint(l_init.c.c0));
+        println!("{} v.s. {}", result[7], fq_to_biguint(l_init.c.c1));
 
-        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(fq_to_biguint);
-        let result = chip.core.air.expr.execute(inputs.to_vec(), vec![]);
-        // check result
+        assert_eq!(result[0], fq_to_biguint(Q_acc_init.x.c0));
+        assert_eq!(result[1], fq_to_biguint(Q_acc_init.x.c1));
+        assert_eq!(result[2], fq_to_biguint(Q_acc_init.y.c0));
+        assert_eq!(result[3], fq_to_biguint(Q_acc_init.y.c1));
+        assert_eq!(result[4], fq_to_biguint(l_init.b.c0));
+        assert_eq!(result[5], fq_to_biguint(l_init.b.c1));
+        assert_eq!(result[6], fq_to_biguint(l_init.c.c0));
+        assert_eq!(result[7], fq_to_biguint(l_init.c.c1));
 
         let input_limbs = inputs
             .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));

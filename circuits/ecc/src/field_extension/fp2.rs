@@ -87,7 +87,6 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
 
         // Constraint 2: x1 = y1*z0 + y0*z1
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
@@ -101,11 +100,12 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
 
         let mut builder = self.c0.builder.borrow_mut();
         let (z0_idx, z0) = builder.new_var();
         let (z1_idx, z1) = builder.new_var();
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
         builder.set_compute(z0_idx, compute_z0);
         builder.set_compute(z1_idx, compute_z1);
         builder.set_constraint(z0_idx, constraint1);
