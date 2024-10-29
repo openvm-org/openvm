@@ -85,8 +85,10 @@ fn test_impl(
 
         let program = Program::from_instructions(&instructions);
         let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
-        let vm = SingleSegmentVmExecutor::new(vm_config);
-        let mut proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
+        let executor = SingleSegmentVmExecutor::new(vm_config);
+        let mut proof_input = executor
+            .execute_and_generate(committed_program, vec![])
+            .unwrap();
         let connector_air_input = proof_input
             .per_air
             .iter_mut()

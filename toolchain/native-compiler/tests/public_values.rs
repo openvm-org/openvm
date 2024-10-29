@@ -30,7 +30,7 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let vm = SingleSegmentVmExecutor::new(
+    let executor = SingleSegmentVmExecutor::new(
         VmConfig {
             num_public_values: 2,
             ..Default::default()
@@ -40,7 +40,7 @@ fn test_compiler_public_values() {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual),
     );
-    let pvs = vm.execute(program, vec![]).unwrap();
+    let pvs = executor.execute(program, vec![]).unwrap();
     assert_eq!(
         pvs.into_iter().flatten().collect::<Vec<_>>(),
         vec![public_value_0, public_value_1]

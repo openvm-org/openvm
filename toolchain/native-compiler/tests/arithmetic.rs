@@ -1,5 +1,5 @@
 use axvm_circuit::{
-    arch::{VmExecutor, VmConfig},
+    arch::{VmConfig, VmExecutor},
     system::program::{util::execute_program, ExecutionError::Fail},
 };
 use axvm_native_compiler::{
@@ -424,7 +424,7 @@ fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa();
-    let vm = VmExecutor::new(VmConfig::aggregation(4, 3));
-    let result = vm.execute(program, vec![]);
+    let executor = VmExecutor::new(VmConfig::aggregation(4, 3));
+    let result = executor.execute(program, vec![]);
     assert!(matches!(result, Err(Fail(_))));
 }
