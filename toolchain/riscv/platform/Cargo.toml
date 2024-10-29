@@ -27,7 +27,6 @@ features = [
     "rust-runtime",
     "panic-handler",
     "entrypoint",
-    "export-syscalls",
     "export-libm",
     "export-getrandom",
     "getrandom",
@@ -40,7 +39,6 @@ entrypoint = []
 # exports a `getrandom` implementation that panics
 export-getrandom = ["dep:bytemuck", "dep:getrandom"]
 export-libm = ["dep:libm"]
-export-syscalls = []
 # exports a `getrandom` implementation that uses sys_random
 getrandom = ["export-getrandom"]
 heap-embedded-alloc = [
@@ -50,5 +48,5 @@ heap-embedded-alloc = [
 ]
 panic-handler = []
 # Build a rust runtime
-rust-runtime = ["export-libm", "export-syscalls"]
+rust-runtime = ["export-libm"]
 unstable = []

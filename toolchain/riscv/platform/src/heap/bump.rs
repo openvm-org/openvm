@@ -14,7 +14,7 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 
-use crate::syscall::sys_alloc_aligned;
+use crate::memory::sys_alloc_aligned;
 
 #[global_allocator]
 pub static HEAP: BumpPointerAlloc = BumpPointerAlloc;

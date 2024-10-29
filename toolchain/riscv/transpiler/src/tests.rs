@@ -18,7 +18,6 @@ fn setup_vm_from_elf(elf_path: &str, config: VmConfig) -> Result<(VirtualMachine
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    dbg!(&elf.instructions);
     let vm = VirtualMachine::new(config);
     Ok((vm, elf.into()))
 }
