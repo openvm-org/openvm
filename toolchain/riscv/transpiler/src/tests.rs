@@ -6,7 +6,7 @@ use axvm_circuit::{
     sdk::{air_test, air_test_with_min_segments},
 };
 use axvm_platform::memory::MEM_SIZE;
-use color_eyre::eyre::Result;
+use eyre::Result;
 use p3_baby_bear::BabyBear;
 use test_case::test_case;
 

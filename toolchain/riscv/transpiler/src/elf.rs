@@ -3,13 +3,13 @@
 use std::{cmp::min, collections::BTreeMap};
 
 use axvm_platform::WORD_SIZE;
-use color_eyre::eyre::{self, bail, ContextCompat};
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
     endian::LittleEndian,
     file::Class,
     ElfBytes,
 };
+use eyre::{self, bail, ContextCompat};
 
 /// RISC-V 32IM ELF (Executable and Linkable Format) File.
 ///
