@@ -4,6 +4,7 @@ use std::{
     collections::{
         BTreeMap,
         Bound::{Included, Unbounded},
+        HashMap,
     },
     fmt::Debug,
 };
@@ -91,7 +92,7 @@ impl<F: PartialEq> Block<F> {
 #[derive(Debug)]
 pub struct Memory<F> {
     blocks: BTreeMap<BlockKey<F>, Block<F>>,
-    data: BTreeMap<BlockKey<F>, F>,
+    data: HashMap<BlockKey<F>, F>,
     initial_block_size: usize,
     timestamp: u32,
 }
@@ -104,7 +105,7 @@ impl<F: PrimeField> Memory<F> {
         assert!(N.is_power_of_two());
 
         let mut blocks = BTreeMap::new();
-        let mut data = BTreeMap::new();
+        let mut data = HashMap::new();
         for (&(address_space, block_idx), values) in initial_memory {
             let pointer = block_idx * N;
             blocks.insert(
@@ -195,18 +196,14 @@ impl<F: PrimeField> Memory<F> {
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let data = self
-            .get_range(address_space, pointer, N)
-            .try_into()
-            .unwrap();
-
         let record = MemoryReadRecord {
             address_space,
             pointer: F::from_canonical_usize(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
-            data,
+            data: self.get_range_array::<N>(address_space, pointer),
         };
+
         self.increment_timestamp();
         (record, adapter_records)
     }
@@ -240,10 +237,7 @@ impl<F: PrimeField> Memory<F> {
                 (address_space, pointer / N),
                 TimestampedValues {
                     timestamp: block.timestamp,
-                    values: self
-                        .get_range(address_space, pointer, N)
-                        .try_into()
-                        .unwrap(),
+                    values: self.get_range_array::<N>(address_space, pointer),
                 },
             );
         }
@@ -413,6 +407,15 @@ impl<F: PrimeField> Memory<F> {
             .data
             .get(&(address_space, pointer))
             .unwrap_or(&F::zero())
+    }
+
+    fn get_range_array<const N: usize>(&self, address_space: F, pointer: usize) -> [F; N] {
+        array::from_fn(|i| {
+            *self
+                .data
+                .get(&(address_space, pointer + i))
+                .unwrap_or(&F::zero())
+        })
     }
 
     fn get_range(&self, address_space: F, pointer: usize, len: usize) -> Vec<F> {
