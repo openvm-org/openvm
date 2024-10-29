@@ -1,3 +1,6 @@
+pub const CUSTOM_0: u32 = 0x0b;
+pub const CUSTOM_1: u32 = 0x2b;
+
 #[macro_export]
 macro_rules! custom_insn_i {
     ($opcode:expr, $funct3:expr, $rd:literal, $rs1:literal, $imm:expr) => {
@@ -18,7 +21,7 @@ macro_rules! custom_insn_r {
     ($opcode:expr, $funct3:expr, $rd:literal, $rs1:literal, $rs2:literal) => {
         unsafe {
             asm!(concat!(
-                ".insn i {opcode}, {funct3}, ",
+                ".insn r {opcode}, {funct3}, ",
                 $rd,
                 ", ",
                 $rs1,

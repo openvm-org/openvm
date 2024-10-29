@@ -9,7 +9,8 @@ use axvm_circuit::{
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
 };
 use axvm_instructions::{
-    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode,
+    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, Rv32HintStoreOpcode,
+    Rv32ModularArithmeticOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::{
@@ -247,23 +248,25 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
     let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R- or I-type
 
     match opcode {
-        0x0b => {
-            match funct3 {
-                0b000 => {
-                    let imm = (instruction_u32 >> 20) & 0xfff;
-                    Some(terminate(imm.try_into().expect("exit code must be byte")))
-                }
-                0b001 => {
-                    // keccak or poseidon
-                    None
-                }
-                0b010 => {
-                    // u256
-                    todo!("Implement u256 transpiler");
-                }
-                _ => None,
+        0x0b => match funct3 {
+            0b000 => {
+                let imm = (instruction_u32 >> 20) & 0xfff;
+                Some(terminate(imm.try_into().expect("exit code must be byte")))
             }
-        }
+            0b001 => {
+                let rd = (instruction_u32 >> 7) & 0x1f;
+                let imm = (instruction_u32 >> 20) & 0xfff;
+                Some(Instruction::from_isize(
+                    Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
+                    (RV32_REGISTER_NUM_LIMBS * rd as usize) as isize,
+                    0,
+                    imm as isize,
+                    0,
+                    0,
+                ))
+            }
+            _ => unimplemented!(),
+        },
         0x2b => {
             match funct3 {
                 Rv32ModularArithmeticOpcode::FUNCT3 => {

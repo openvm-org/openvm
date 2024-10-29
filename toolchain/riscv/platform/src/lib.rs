@@ -26,12 +26,12 @@ pub mod memory;
 // mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
+#[cfg(feature = "rust-runtime")]
+pub mod intrinsics;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
 #[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
-
-pub mod intrinsics;
 
 /// Size of a zkVM machine word in bytes.
 /// 4 bytes (i.e. 32 bits) as the zkVM is an implementation of the rv32im ISA.
