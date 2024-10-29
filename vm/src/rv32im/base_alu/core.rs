@@ -15,10 +15,13 @@ use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::arch::{
-    instructions::{BaseAluOpcode, UsizeOpcode},
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use crate::{
+    arch::{
+        instructions::{BaseAluOpcode, UsizeOpcode},
+        AdapterAirContext, AdapterRuntimeContext, DynArray, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip,
+    },
+    rv32im::adapters::Rv32AluCoreInterface,
 };
 
 #[repr(C)]
@@ -58,9 +61,8 @@ impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
-    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
+    AdapterAirContext<AB::Expr, I>:
+        From<AdapterAirContext<AB::Expr, Rv32AluCoreInterface<AB::Expr, NUM_LIMBS>>>,
 {
     fn eval(
         &self,
@@ -142,16 +144,16 @@ where
             },
         ) + AB::Expr::from_canonical_usize(self.offset);
 
-        AdapterAirContext {
+        AdapterAirContext::<AB::Expr, Rv32AluCoreInterface<AB::Expr, NUM_LIMBS>> {
             to_pc: None,
-            reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
-            writes: [cols.a.map(Into::into)].into(),
+            reads: [cols.b.map(Into::into), cols.c.map(Into::into)],
+            writes: [cols.a.map(Into::into)],
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
-            }
-            .into(),
+            },
         }
+        .into()
     }
 }
 
@@ -189,8 +191,8 @@ impl<F, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreChip<F, I>
 where
     F: PrimeField32,
     I: VmAdapterInterface<F>,
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
+    I::Reads: Into<DynArray<F>>,
+    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, Rv32AluCoreInterface<F, NUM_LIMBS>>>,
 {
     type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>;
@@ -205,14 +207,14 @@ where
         let Instruction { opcode, .. } = instruction;
         let local_opcode_index = BaseAluOpcode::from_usize(opcode - self.air.offset);
 
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
+        let data: [[F; NUM_LIMBS]; 2] = reads.into().into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
+        let output = AdapterRuntimeContext::<F, Rv32AluCoreInterface<F, NUM_LIMBS>> {
             to_pc: None,
-            writes: [a.map(F::from_canonical_u32)].into(),
+            writes: [a.map(F::from_canonical_u32)],
         };
 
         if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
@@ -232,7 +234,7 @@ where
             c: data[1],
         };
 
-        Ok((output, record))
+        Ok((output.into(), record))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

@@ -15,20 +15,25 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
 
-use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};
+use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAlu256Chip, Rv32BaseAluChip};
 use crate::{
     arch::{
         instructions::BaseAluOpcode,
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
-        adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        adapters::{
+            Rv32BaseAluAdapterChip, Rv32VecHeapAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        },
         base_alu::BaseAluCoreCols,
     },
-    utils::{generate_long_number, generate_rv32_is_type_immediate},
+    utils::{
+        generate_long_number, generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm,
+        rv32_write_heap_default,
+    },
 };
 
 type F = BabyBear;
@@ -39,42 +44,6 @@ type F = BabyBear;
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_alu_rand_write_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    opcode: BaseAluOpcode,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    c_imm: Option<usize>,
-    rng: &mut StdRng,
-) {
-    let is_imm = c_imm.is_some();
-
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 4));
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-    }
-
-    let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-    tester.execute(
-        chip,
-        Instruction::from_usize(
-            opcode as usize,
-            [rd, rs1, rs2, 1, if is_imm { 0 } else { 1 }],
-        ),
-    );
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
 
 fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
@@ -105,7 +74,14 @@ fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
             (Some(imm), c)
         };
-        run_rv32_alu_rand_write_execute(&mut tester, &mut chip, opcode, b, c, c_imm, &mut rng);
+
+        let (instruction, rd) =
+            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        tester.execute(&mut chip, instruction);
+
+        let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
+            .map(F::from_canonical_u32);
+        assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -135,6 +111,61 @@ fn rv32_alu_or_rand_test() {
 #[test]
 fn rv32_alu_and_rand_test() {
     run_rv32_alu_rand_test(BaseAluOpcode::AND, 100);
+}
+
+fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = Rv32BaseAlu256Chip::<F>::new(
+        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+        ),
+        BaseAluCoreChip::new(bitwise_chip.clone(), 0),
+        tester.memory_controller(),
+    );
+
+    for _ in 0..num_ops {
+        let b = generate_long_number::<32, RV32_CELL_BITS>(&mut rng);
+        let c = generate_long_number::<32, RV32_CELL_BITS>(&mut rng);
+        let instruction = rv32_write_heap_default(
+            &mut tester,
+            vec![b.map(F::from_canonical_u32)],
+            vec![c.map(F::from_canonical_u32)],
+            opcode as usize,
+        );
+        tester.execute(&mut chip, instruction);
+    }
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn rv32_alu_256_add_rand_test() {
+    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 12);
+}
+#[test]
+fn rv32_alu_256_sub_rand_test() {
+    run_rv32_alu_256_rand_test(BaseAluOpcode::SUB, 12);
+}
+#[test]
+fn rv32_alu_256_xor_rand_test() {
+    run_rv32_alu_256_rand_test(BaseAluOpcode::XOR, 12);
+}
+#[test]
+fn rv32_alu_256_or_rand_test() {
+    run_rv32_alu_256_rand_test(BaseAluOpcode::OR, 12);
+}
+#[test]
+fn rv32_alu_256_and_rand_test() {
+    run_rv32_alu_256_rand_test(BaseAluOpcode::AND, 12);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

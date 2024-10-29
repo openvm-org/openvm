@@ -565,6 +565,81 @@ mod conversions {
         }
     }
 
+    // AdapterRuntimeContext: BasicInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            PI,
+            const R: usize,
+            const BASIC_R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, PI, BASIC_R, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        >
+        for AdapterRuntimeContext<
+            T,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(
+            ctx: AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<T, PI, BASIC_R, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes,
+            }
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            PI: Into<MinimalInstruction<T>>,
+            const R: usize,
+            const BASIC_R: usize,
+            const NUM_READS: usize,
+            const NUM_WRITES: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, PI, BASIC_R, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        >
+        for AdapterAirContext<
+            T,
+            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+        >
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, PI, BASIC_R, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            >,
+        ) -> Self {
+            assert_eq!(BASIC_R, R * NUM_READS);
+            let mut reads_it = ctx.reads.into_iter();
+            let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads,
+                writes: ctx.writes,
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
     // AdapterAirContext: FlatInterface -> BasicInterface
     impl<
             T,

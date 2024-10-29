@@ -17,6 +17,9 @@ pub use mul::*;
 pub use rdwrite::*;
 pub use vec_heap::*;
 
+/// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
+pub const RV32_INT256_NUM_LIMBS: usize = 32;
+
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 
@@ -27,7 +30,13 @@ pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 use p3_field::PrimeField32;
 
-use crate::system::memory::{MemoryController, MemoryReadRecord};
+use crate::{
+    arch::{BasicAdapterInterface, MinimalInstruction},
+    system::memory::{MemoryController, MemoryReadRecord},
+};
+
+pub type Rv32AluCoreInterface<T, const NUM_LIMBS: usize> =
+    BasicAdapterInterface<T, MinimalInstruction<T>, 2, 1, NUM_LIMBS, NUM_LIMBS>;
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.

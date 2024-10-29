@@ -32,9 +32,7 @@ use crate::{
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::PublicValuesChip,
     },
-    old::{
-        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
-    },
+    old::{shift::ShiftChip, uint_multiplication::UintMultiplicationChip},
     rv32im::*,
     system::{phantom::PhantomChip, program::ExecutionError},
 };
@@ -85,7 +83,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
     MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
@@ -135,7 +133,7 @@ pub enum AxVmChip<F: PrimeField32> {
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    ArithmeticLogicUnit256(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
     MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),

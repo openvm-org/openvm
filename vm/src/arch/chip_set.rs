@@ -62,9 +62,7 @@ use crate::{
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
-    old::{
-        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
-    },
+    old::{shift::ShiftChip, uint_multiplication::UintMultiplicationChip},
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
@@ -422,12 +420,14 @@ impl VmConfig {
                 ExecutorName::ArithmeticLogicUnit256 => {
                     // We probably must include this chip if we include any modular arithmetic,
                     // not sure if we need to enforce this here.
-                    let chip = Rc::new(RefCell::new(ArithmeticLogicChip::new(
-                        execution_bus,
-                        program_bus,
+                    let chip = Rc::new(RefCell::new(Rv32BaseAlu256Chip::new(
+                        Rv32VecHeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
-                        bitwise_lookup_chip.clone(),
-                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
@@ -1248,9 +1248,9 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32AuipcOpcode::default_offset(),
         ),
         ExecutorName::ArithmeticLogicUnit256 => (
-            U256Opcode::default_offset(),
-            8,
-            U256Opcode::default_offset(),
+            Rv32BaseAlu256Opcode::default_offset(),
+            BaseAluOpcode::COUNT,
+            Rv32BaseAlu256Opcode::default_offset(),
         ),
         ExecutorName::LessThanRv32 => (
             LessThanOpcode::default_offset(),

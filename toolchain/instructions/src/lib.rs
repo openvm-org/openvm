@@ -151,6 +151,7 @@ pub enum ModularArithmeticOpcode {
 }
 
 // to be deleted and replaced by Rv32Alu256Opcodes below
+// TODO (stephen): will delete these this PR
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
