@@ -67,7 +67,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
 
     fn execute_segments(
-        &mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
@@ -125,7 +125,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
 
     pub fn execute(
-        mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<(), ExecutionError> {
@@ -135,7 +135,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
-        mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
@@ -152,7 +152,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         })
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
-        mut self,
+        &self,
         committed_program: Arc<CommittedProgram<SC>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
