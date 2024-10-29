@@ -9,7 +9,7 @@ pub type MemoryImage<F> = BTreeMap<(F, F), F>;
 
 /// Executable program for AxVM.
 #[derive(Clone, Debug, Default)]
-pub struct AxVmExe<F: Field> {
+pub struct AxVmExe<F> {
     /// Program to execute.
     pub program: Program<F>,
     /// Start address of pc.
@@ -18,7 +18,7 @@ pub struct AxVmExe<F: Field> {
     pub init_memory: MemoryImage<F>,
 }
 
-impl<F: Field> AxVmExe<F> {
+impl<F> AxVmExe<F> {
     pub fn new(program: Program<F>, pc_start: u32, init_memory: MemoryImage<F>) -> Self {
         Self {
             program,
