@@ -126,7 +126,12 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 
 #[test]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
-    let skip_list = ["rv32i-p-ma_data", "rv32i-p-fence_i", "rv32i-p-lui", "rv32i-p-sra"];
+    let skip_list = [
+        "rv32i-p-ma_data",
+        "rv32i-p-fence_i",
+        "rv32i-p-lui",
+        "rv32i-p-sra",
+    ];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
