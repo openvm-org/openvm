@@ -211,9 +211,10 @@ impl<F: PrimeField32> MemoryController<F> {
             };
         }
 
-        let (record, adapter_records) = self
-            .memory
-            .read::<N>(address_space, pointer.as_canonical_u32() as usize);
+        let (record, adapter_records) = self.memory.read::<N>(
+            address_space.as_canonical_u32() as usize,
+            pointer.as_canonical_u32() as usize,
+        );
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -233,8 +234,10 @@ impl<F: PrimeField32> MemoryController<F> {
     ///
     /// Any value returned is unconstrained.
     pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
-        self.memory
-            .get(addr_space, pointer.as_canonical_u32() as usize)
+        self.memory.get(
+            addr_space.as_canonical_u32() as usize,
+            pointer.as_canonical_u32() as usize,
+        )
     }
 
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
@@ -254,9 +257,11 @@ impl<F: PrimeField32> MemoryController<F> {
             pointer.as_canonical_u32()
         );
 
-        let (record, adapter_records) =
-            self.memory
-                .write(address_space, pointer.as_canonical_u32() as usize, data);
+        let (record, adapter_records) = self.memory.write(
+            address_space.as_canonical_u32() as usize,
+            pointer.as_canonical_u32() as usize,
+            data,
+        );
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())

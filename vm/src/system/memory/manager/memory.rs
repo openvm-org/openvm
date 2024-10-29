@@ -9,7 +9,7 @@ use std::{
     fmt::Debug,
 };
 
-use p3_field::PrimeField;
+use p3_field::PrimeField32;
 
 use crate::system::memory::{Equipartition, TimestampedEquipartition, TimestampedValues};
 
@@ -70,34 +70,34 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-type BlockKey<F> = (F, usize);
+/// (address_space, pointer)
+type Address = (usize, usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Block<F> {
-    address_space: F,
+struct Block {
+    address_space: usize,
     pointer: usize,
     size: usize,
     timestamp: u32,
 }
 
-impl<F: PartialEq> Block<F> {
-    pub fn contains(&self, address_space: F, pointer: usize) -> bool {
+impl Block {
+    pub fn contains(&self, address_space: usize, pointer: usize) -> bool {
         self.address_space == address_space
-            && self.pointer <= pointer
-            && pointer < self.pointer + self.size
+            && (self.pointer..self.pointer + self.size).contains(&pointer)
     }
 }
 
 /// A partition of data into blocks where each block has size a power of two.
 #[derive(Debug)]
 pub struct Memory<F> {
-    blocks: BTreeMap<BlockKey<F>, Block<F>>,
-    data: HashMap<BlockKey<F>, F>,
+    blocks: BTreeMap<Address, Block>,
+    data: HashMap<Address, F>,
     initial_block_size: usize,
     timestamp: u32,
 }
 
-impl<F: PrimeField> Memory<F> {
+impl<F: PrimeField32> Memory<F> {
     /// Creates a new partition with the given initial block size.
     ///
     /// Panics if the initial block size is not a power of two.
@@ -107,18 +107,19 @@ impl<F: PrimeField> Memory<F> {
         let mut blocks = BTreeMap::new();
         let mut data = HashMap::new();
         for (&(address_space, block_idx), values) in initial_memory {
+            let address_space_usize = address_space.as_canonical_u32() as usize;
             let pointer = block_idx * N;
             blocks.insert(
-                (address_space, pointer),
+                (address_space_usize, pointer),
                 Block {
-                    address_space,
+                    address_space: address_space_usize,
                     pointer,
                     size: N,
                     timestamp: INITIAL_TIMESTAMP,
                 },
             );
             for (i, value) in values.iter().enumerate() {
-                data.insert((address_space, pointer + i), *value);
+                data.insert((address_space_usize, pointer + i), *value);
             }
         }
         Self {
@@ -146,7 +147,7 @@ impl<F: PrimeField> Memory<F> {
     /// Writes an array of values to the memory at the specified address space and start index.
     pub fn write<const N: usize>(
         &mut self,
-        address_space: F,
+        address_space: usize,
         pointer: usize,
         values: [F; N],
     ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
@@ -168,7 +169,7 @@ impl<F: PrimeField> Memory<F> {
         });
 
         let record = MemoryWriteRecord {
-            address_space,
+            address_space: F::from_canonical_usize(address_space),
             pointer: F::from_canonical_usize(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
@@ -182,7 +183,7 @@ impl<F: PrimeField> Memory<F> {
     /// Reads an array of values from the memory at the specified address space and start index.
     pub fn read<const N: usize>(
         &mut self,
-        address_space: F,
+        address_space: usize,
         pointer: usize,
     ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         assert!(N.is_power_of_two());
@@ -197,11 +198,11 @@ impl<F: PrimeField> Memory<F> {
         debug_assert!(prev_timestamp < self.timestamp);
 
         let record = MemoryReadRecord {
-            address_space,
+            address_space: F::from_canonical_usize(address_space),
             pointer: F::from_canonical_usize(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
-            data: self.get_range_array::<N>(address_space, pointer),
+            data: self.range_array::<N>(address_space, pointer),
         };
 
         self.increment_timestamp();
@@ -234,10 +235,10 @@ impl<F: PrimeField> Memory<F> {
             debug_assert_eq!(block.size, N);
 
             equipartition.insert(
-                (address_space, pointer / N),
+                (F::from_canonical_usize(address_space), pointer / N),
                 TimestampedValues {
                     timestamp: block.timestamp,
-                    values: self.get_range_array::<N>(address_space, pointer),
+                    values: self.range_array::<N>(address_space, pointer),
                 },
             );
         }
@@ -248,7 +249,7 @@ impl<F: PrimeField> Memory<F> {
     // Modifies the partition to ensure that there is a block starting at (address_space, pointer).
     fn split_to_make_boundary(
         &mut self,
-        address_space: F,
+        address_space: usize,
         query: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
@@ -265,9 +266,9 @@ impl<F: PrimeField> Memory<F> {
             // Split.
             records.push(AccessAdapterRecord {
                 timestamp: original_block.timestamp,
-                address_space,
+                address_space: F::from_canonical_usize(address_space),
                 start_index: F::from_canonical_usize(cur_ptr),
-                data: self.get_range(address_space, cur_ptr, cur_size),
+                data: self.range_vec(address_space, cur_ptr, cur_size),
                 kind: AccessAdapterRecordKind::Split,
             });
 
@@ -311,7 +312,7 @@ impl<F: PrimeField> Memory<F> {
 
     fn access(
         &mut self,
-        address_space: F,
+        address_space: usize,
         pointer: usize,
         size: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
@@ -347,7 +348,7 @@ impl<F: PrimeField> Memory<F> {
     /// do not have the same size.
     fn merge_block_with_next(
         &mut self,
-        address_space: F,
+        address_space: usize,
         pointer: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
@@ -374,9 +375,9 @@ impl<F: PrimeField> Memory<F> {
         );
         records.push(AccessAdapterRecord {
             timestamp,
-            address_space,
+            address_space: F::from_canonical_usize(address_space),
             start_index: F::from_canonical_usize(pointer),
-            data: self.get_range(address_space, pointer, 2 * size),
+            data: self.range_vec(address_space, pointer, 2 * size),
             kind: AccessAdapterRecordKind::Merge {
                 left_timestamp: left.timestamp,
                 right_timestamp: right.timestamp,
@@ -384,7 +385,7 @@ impl<F: PrimeField> Memory<F> {
         });
     }
 
-    fn block_containing(&mut self, address_space: F, pointer: usize) -> Block<F> {
+    fn block_containing(&mut self, address_space: usize, pointer: usize) -> Block {
         // Look for the block with the largest key <= (address_space, pointer)
         let key = (address_space, pointer);
 
@@ -397,7 +398,7 @@ impl<F: PrimeField> Memory<F> {
         self.initial_block(address_space, aligned_pointer)
     }
 
-    fn initial_block(&self, address_space: F, pointer: usize) -> Block<F> {
+    fn initial_block(&self, address_space: usize, pointer: usize) -> Block {
         Block {
             address_space,
             pointer,
@@ -406,30 +407,20 @@ impl<F: PrimeField> Memory<F> {
         }
     }
 
-    pub fn get(&self, address_space: F, pointer: usize) -> F {
+    pub fn get(&self, address_space: usize, pointer: usize) -> F {
         *self
             .data
             .get(&(address_space, pointer))
             .unwrap_or(&F::zero())
     }
 
-    fn get_range_array<const N: usize>(&self, address_space: F, pointer: usize) -> [F; N] {
-        array::from_fn(|i| {
-            *self
-                .data
-                .get(&(address_space, pointer + i))
-                .unwrap_or(&F::zero())
-        })
+    fn range_array<const N: usize>(&self, address_space: usize, pointer: usize) -> [F; N] {
+        array::from_fn(|i| self.get(address_space, pointer + i))
     }
 
-    fn get_range(&self, address_space: F, pointer: usize, len: usize) -> Vec<F> {
+    fn range_vec(&self, address_space: usize, pointer: usize, len: usize) -> Vec<F> {
         (0..len)
-            .map(|i| {
-                *self
-                    .data
-                    .get(&(address_space, pointer + i))
-                    .unwrap_or(&F::zero())
-            })
+            .map(|i| self.get(address_space, pointer + i))
             .collect()
     }
 }
@@ -469,9 +460,9 @@ mod tests {
 
         let mut partition = Memory::<F>::new(&Equipartition::<F, 8>::new());
         assert_eq!(
-            partition.block_containing(F::zero(), 13),
+            partition.block_containing(0, 13),
             Block {
-                address_space: F::zero(),
+                address_space: 0,
                 pointer: 8,
                 size: 8,
                 timestamp: 0,
@@ -479,9 +470,9 @@ mod tests {
         );
 
         assert_eq!(
-            partition.block_containing(F::zero(), 13),
+            partition.block_containing(0, 8),
             Block {
-                address_space: F::zero(),
+                address_space: 0,
                 pointer: 8,
                 size: 8,
                 timestamp: 0,
@@ -489,9 +480,9 @@ mod tests {
         );
 
         assert_eq!(
-            partition.block_containing(F::zero(), 8),
+            partition.block_containing(0, 15),
             Block {
-                address_space: F::zero(),
+                address_space: 0,
                 pointer: 8,
                 size: 8,
                 timestamp: 0,
@@ -499,19 +490,9 @@ mod tests {
         );
 
         assert_eq!(
-            partition.block_containing(F::zero(), 15),
+            partition.block_containing(0, 16),
             Block {
-                address_space: F::zero(),
-                pointer: 8,
-                size: 8,
-                timestamp: 0,
-            }
-        );
-
-        assert_eq!(
-            partition.block_containing(F::zero(), 16),
-            Block {
-                address_space: F::zero(),
+                address_space: 0,
                 pointer: 16,
                 size: 8,
                 timestamp: 0,
@@ -523,7 +504,7 @@ mod tests {
     fn test_write_read_initial_block_len_1() {
         let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
-        let address_space = BabyBear::one();
+        let address_space = 1;
 
         memory.write(address_space, 0, bba![1, 2, 3, 4]);
 
@@ -540,7 +521,7 @@ mod tests {
     fn test_write_read_initial_block_len_8() {
         let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
-        let address_space = BabyBear::one();
+        let address_space = 1;
 
         memory.write(address_space, 0, bba![1, 2, 3, 4]);
 
@@ -558,7 +539,7 @@ mod tests {
         let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
 
-        let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
+        let (write_record, adapter_records) = memory.write(1, 0, bba![1, 2, 3, 4]);
 
         // Above write first causes merge of [0:1] and [1:2] into [0:2].
         assert_eq!(
@@ -616,7 +597,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 2);
 
-        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(1, 0);
         // At time 2 we read [0:4].
         assert_eq!(adapter_records.len(), 0);
         assert_eq!(
@@ -631,7 +612,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 3);
 
-        let (read_record, adapter_records) = memory.write::<2>(bb!(1), 0, bba![10, 11]);
+        let (read_record, adapter_records) = memory.write::<2>(1, 0, bba![10, 11]);
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
@@ -658,7 +639,7 @@ mod tests {
             }
         );
 
-        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(1, 0);
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
             adapter_records[0],
@@ -691,7 +672,7 @@ mod tests {
         let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
 
-        let (write_record, adapter_records) = memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
+        let (write_record, adapter_records) = memory.write(1, 0, bba![1, 2, 3, 4]);
 
         // Above write first causes split of [0:8] into [0:4] and [4:8].
         assert_eq!(adapter_records.len(), 1);
@@ -719,7 +700,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 2);
 
-        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(1, 0);
         // At time 2 we read [0:4].
         assert_eq!(adapter_records.len(), 0);
         assert_eq!(
@@ -734,7 +715,7 @@ mod tests {
         );
         assert_eq!(memory.timestamp(), 3);
 
-        let (read_record, adapter_records) = memory.write::<2>(bb!(1), 0, bba![10, 11]);
+        let (read_record, adapter_records) = memory.write::<2>(1, 0, bba![10, 11]);
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
@@ -761,7 +742,7 @@ mod tests {
             }
         );
 
-        let (read_record, adapter_records) = memory.read::<4>(bb!(1), 0);
+        let (read_record, adapter_records) = memory.read::<4>(1, 0);
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
             adapter_records[0],
@@ -794,15 +775,15 @@ mod tests {
         let initial_memory = Equipartition::<BabyBear, 1>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
 
-        memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
+        memory.write(1, 0, bba![4, 3, 2, 1]);
 
-        assert_eq!(memory.get(bb!(1), 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(bb!(1), 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(bb!(1), 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(bb!(1), 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(bb!(1), 5), BabyBear::zero());
+        assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
+        assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
+        assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
+        assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
+        assert_eq!(memory.get(1, 5), BabyBear::zero());
 
-        assert_eq!(memory.get(bb!(0), 0), BabyBear::zero());
+        assert_eq!(memory.get(0, 0), BabyBear::zero());
     }
 
     #[test]
@@ -810,15 +791,15 @@ mod tests {
         let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
 
-        memory.write(bb!(1), 0, bba![4, 3, 2, 1]);
+        memory.write(1, 0, bba![4, 3, 2, 1]);
 
-        assert_eq!(memory.get(bb!(1), 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(bb!(1), 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(bb!(1), 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(bb!(1), 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(bb!(1), 5), BabyBear::zero());
-        assert_eq!(memory.get(bb!(1), 9), BabyBear::zero());
-        assert_eq!(memory.get(bb!(0), 0), BabyBear::zero());
+        assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
+        assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
+        assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
+        assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
+        assert_eq!(memory.get(1, 5), BabyBear::zero());
+        assert_eq!(memory.get(1, 9), BabyBear::zero());
+        assert_eq!(memory.get(0, 0), BabyBear::zero());
     }
 
     #[test]
@@ -836,17 +817,13 @@ mod tests {
         let initial_memory = Equipartition::<BabyBear, 8>::new();
         let mut memory = Memory::<BabyBear>::new(&initial_memory);
         // Make block 0:4 in address space 1 active.
-        memory.write(bb!(1), 0, bba![1, 2, 3, 4]);
+        memory.write(1, 0, bba![1, 2, 3, 4]);
 
         // Make block 16:32 in address space 1 active.
-        memory.write(
-            bb!(1),
-            16,
-            bba![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        );
+        memory.write(1, 16, bba![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
 
         // Make block 64:72 in address space 2 active.
-        memory.write(bb!(2), 64, bba![8, 7, 6, 5, 4, 3, 2, 1]);
+        memory.write(2, 64, bba![8, 7, 6, 5, 4, 3, 2, 1]);
 
         // Finalize to a partition of size 8.
         let (final_memory, records) = memory.finalize::<8>();
@@ -885,5 +862,61 @@ mod tests {
 
         // We need to do 1 + 1 + 0 = 2 adapters.
         assert_eq!(records.len(), 2);
+    }
+
+    #[test]
+    fn test_write_read_initial_block_len_8_initial_memory() {
+        type F = BabyBear;
+
+        // Initialize initial memory with blocks at indices 0 and 2
+        let mut initial_memory = Equipartition::<F, 8>::new();
+        initial_memory.insert((F::one(), 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
+        initial_memory.insert((F::one(), 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
+
+        let mut memory = Memory::new(&initial_memory);
+
+        // Verify initial state of block 0 (pointers 0–8)
+        let (initial_read_record_0, _) = memory.read::<8>(1, 0);
+        assert_eq!(initial_read_record_0.data, bba![1, 2, 3, 4, 5, 6, 7, 8]);
+
+        // Verify initial state of block 2 (pointers 16–24)
+        let (initial_read_record_2, _) = memory.read::<8>(1, 16);
+        assert_eq!(initial_read_record_2.data, bba![1, 2, 3, 4, 5, 6, 7, 8]);
+
+        // Test: Write a partial block to block 0 (pointer 0) and read back partially and fully
+        memory.write(1, 0, bba![9, 9, 9, 9]);
+        let (partial_read_record, _) = memory.read::<2>(1, 0);
+        assert_eq!(partial_read_record.data, bba![9, 9]);
+
+        let (full_read_record_0, _) = memory.read::<8>(1, 0);
+        assert_eq!(full_read_record_0.data, bba![9, 9, 9, 9, 5, 6, 7, 8]);
+
+        // Test: Write a single element to pointer 2 and verify read in different lengths
+        memory.write(1, 2, bba![100]);
+        let (read_record_4, _) = memory.read::<4>(1, 1);
+        assert_eq!(read_record_4.data, bba![9, 100, 9, 5]);
+
+        let (full_read_record_2, _) = memory.read::<8>(1, 2);
+        assert_eq!(full_read_record_2.data, bba![100, 9, 5, 6, 7, 8, 0, 0]);
+
+        // Test: Write and read at the last pointer in block 2 (pointer 23, part of key (1, 2))
+        memory.write(1, 23, bba![77]);
+        let (boundary_read_record, _) = memory.read::<2>(1, 23);
+        assert_eq!(boundary_read_record.data, bba![77, 0]); // Last byte modified, ensuring boundary check
+
+        // Test: Reading from an uninitialized block (should default to 0)
+        let (default_read_record, _) = memory.read::<4>(1, 10);
+        assert_eq!(default_read_record.data, bba![0, 0, 0, 0]);
+
+        let (default_read_record, _) = memory.read::<4>(1, 100);
+        assert_eq!(default_read_record.data, bba![0, 0, 0, 0]);
+
+        // Test: Overwrite entire memory pointer 16–24 and verify
+        memory.write(1, 16, bba![50, 50, 50, 50, 50, 50, 50, 50]);
+        let (overwrite_read_record, _) = memory.read::<8>(1, 16);
+        assert_eq!(
+            overwrite_read_record.data,
+            bba![50, 50, 50, 50, 50, 50, 50, 50]
+        ); // Verify entire block overwrite
     }
 }
