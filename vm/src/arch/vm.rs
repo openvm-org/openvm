@@ -167,12 +167,12 @@ impl<F: PrimeField32> VmExecutor<F> {
 }
 
 /// A single segment VM.
-pub struct SingleSegmentVM<F: PrimeField32> {
+pub struct SingleSegmentVmExecutor<F: PrimeField32> {
     pub config: VmConfig,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> SingleSegmentVM<F> {
+impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn new(config: VmConfig) -> Self {
         assert_eq!(
             config.memory_config.persistence_type,

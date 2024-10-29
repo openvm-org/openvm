@@ -11,8 +11,8 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VmExecutor,
-        VmConfig,
+        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVmExecutor, VmConfig,
+        VmExecutor,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
     sdk::{air_test, air_test_with_min_segments},
@@ -138,10 +138,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VmExecutor::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(VmExecutor::new(vm_config_with_field_arithmetic()), program);
 }
 
 #[test]
@@ -205,7 +202,7 @@ fn test_vm_public_values() {
 
         let program = Program::from_instructions(&instructions);
         let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
-        let vm = SingleSegmentVM::new(vm_config);
+        let vm = SingleSegmentVmExecutor::new(vm_config);
         let pvs = vm.execute(program.clone(), vec![]).unwrap();
         assert_eq!(
             pvs,
@@ -496,10 +493,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VmExecutor::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(VmExecutor::new(vm_config_with_field_arithmetic()), program);
 }
 
 #[test]
@@ -545,10 +539,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VmExecutor::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(VmExecutor::new(vm_config_with_field_arithmetic()), program);
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use axvm_circuit::{
-    arch::{ExecutorName, SingleSegmentVM, VmConfig},
+    arch::{ExecutorName, SingleSegmentVmExecutor, VmConfig},
     system::program::util::execute_program,
 };
 use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
@@ -30,7 +30,7 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let vm = SingleSegmentVM::new(
+    let vm = SingleSegmentVmExecutor::new(
         VmConfig {
             num_public_values: 2,
             ..Default::default()
