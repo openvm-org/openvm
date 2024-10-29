@@ -246,18 +246,66 @@ impl<F: PrimeField> Memory<F> {
     }
 
     // Modifies the partition to ensure that there is a block starting at (address_space, pointer).
-    fn make_boundary(
+    fn split_to_make_boundary(
         &mut self,
         address_space: F,
-        pointer: usize,
+        query: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
-        loop {
-            let b = self.block_containing(address_space, pointer);
-            if b.pointer == pointer {
+        let original_block = self.block_containing(address_space, query);
+        if original_block.pointer == query {
+            return;
+        }
+
+        self.blocks.remove(&(address_space, original_block.pointer));
+
+        let mut cur_ptr = original_block.pointer;
+        let mut cur_size = original_block.size;
+        while cur_size > 0 {
+            // Split.
+            records.push(AccessAdapterRecord {
+                timestamp: original_block.timestamp,
+                address_space,
+                start_index: F::from_canonical_usize(cur_ptr),
+                data: self.get_range(address_space, cur_ptr, cur_size),
+                kind: AccessAdapterRecordKind::Split,
+            });
+
+            let half_size = cur_size / 2;
+
+            if query <= cur_ptr + half_size {
+                // The right is finalized; add it to the partition.
+                self.blocks.insert(
+                    (address_space, cur_ptr + half_size),
+                    Block {
+                        address_space,
+                        pointer: cur_ptr + half_size,
+                        size: half_size,
+                        timestamp: original_block.timestamp,
+                    },
+                );
+            }
+            if query >= cur_ptr + half_size {
+                // The left is finalized; add it to the partition.
+                self.blocks.insert(
+                    (address_space, cur_ptr),
+                    Block {
+                        address_space,
+                        pointer: cur_ptr,
+                        size: half_size,
+                        timestamp: original_block.timestamp,
+                    },
+                );
+            }
+
+            if cur_ptr + half_size <= query {
+                cur_ptr += half_size;
+            }
+
+            if cur_ptr == query {
                 break;
             }
-            self.split_block(address_space, b.pointer, records);
+            cur_size = half_size;
         }
     }
 
@@ -268,8 +316,8 @@ impl<F: PrimeField> Memory<F> {
         size: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
-        self.make_boundary(address_space, pointer, records);
-        self.make_boundary(address_space, pointer + size, records);
+        self.split_to_make_boundary(address_space, pointer, records);
+        self.split_to_make_boundary(address_space, pointer + size, records);
 
         let b = self
             .blocks
@@ -291,50 +339,6 @@ impl<F: PrimeField> Memory<F> {
         self.access(address_space, pointer + half_size, half_size, records);
 
         self.merge_block_with_next(address_space, pointer, records);
-    }
-
-    // Splits the block starting at (address_space, pointer) into two blocks.
-    //
-    // Panics if there is no block starting at (address_space, pointer).
-    fn split_block(
-        &mut self,
-        address_space: F,
-        pointer: usize,
-        records: &mut Vec<AccessAdapterRecord<F>>,
-    ) {
-        let block = self
-            .blocks
-            .remove(&(address_space, pointer))
-            .unwrap_or(self.initial_block(address_space, pointer));
-
-        assert!(block.size >= 2);
-
-        let half_size = block.size / 2;
-        self.blocks.insert(
-            (address_space, pointer),
-            Block {
-                address_space,
-                pointer,
-                size: half_size,
-                timestamp: block.timestamp,
-            },
-        );
-        self.blocks.insert(
-            (address_space, pointer + half_size),
-            Block {
-                address_space,
-                pointer: pointer + half_size,
-                size: half_size,
-                timestamp: block.timestamp,
-            },
-        );
-        records.push(AccessAdapterRecord {
-            timestamp: block.timestamp,
-            address_space,
-            start_index: F::from_canonical_usize(pointer),
-            data: self.get_range(address_space, pointer, block.size),
-            kind: AccessAdapterRecordKind::Split,
-        });
     }
 
     /// Merges the two adjacent blocks starting at (address_space, pointer).
