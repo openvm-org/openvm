@@ -138,8 +138,9 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = rustc.trim();
     println!("Using rustc: {rustc}");
 
-    let mut cmd = sanitized_cmd("cargo +nightly"); // +nightly is temporary
-    let mut args = vec![subcmd, "--target", "riscv32im-risc0-zkvm-elf"];
+    let mut cmd = sanitized_cmd("cargo");
+    // TODO[jpw]: remove +nightly
+    let mut args = vec!["+nightly", subcmd, "--target", "riscv32im-risc0-zkvm-elf"];
 
     if std::env::var("AXIOM_BUILD_LOCKED").is_ok() {
         args.push("--locked");
@@ -173,7 +174,7 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
         &[
             // Replace atomic ops with nonatomic versions since the guest is single threaded.
             "-C",
-            "passes=loweratomic",
+            "passes=lower-atomic",
             // Specify where to start loading the program in
             // memory.  The clang linker understands the same
             // command line arguments as the GNU linker does; see
