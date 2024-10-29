@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
-use axvm_circuit::{arch::VmConfig, system::program::trace::CommittedProgram};
+use axvm_circuit::{arch::VmConfig, system::program::trace::AxVmCommittedExe};
 use axvm_native_compiler::conversion::CompilerOptions;
 
 use crate::verifier::leaf::LeafVmVerifierConfig;
@@ -28,7 +28,7 @@ pub struct AxiomVmProvingKey {
     pub app_vm_pk: MultiStarkProvingKey<BabyBearPoseidon2Config>,
     pub leaf_vm_config: VmConfig,
     pub leaf_verifier_pk: MultiStarkProvingKey<BabyBearPoseidon2Config>,
-    pub committed_leaf_program: Arc<CommittedProgram<BabyBearPoseidon2Config>>,
+    pub committed_leaf_program: Arc<AxVmCommittedExe<BabyBearPoseidon2Config>>,
 }
 
 impl AxiomVmProvingKey {
@@ -46,8 +46,10 @@ impl AxiomVmProvingKey {
             compiler_options: config.compiler_options.clone(),
         }
         .build_program(app_vm_pk.get_vk());
-        let committed_leaf_program =
-            Arc::new(CommittedProgram::commit(&leaf_program, engine.config.pcs()));
+        let committed_leaf_program = Arc::new(AxVmCommittedExe::commit(
+            leaf_program.into(),
+            engine.config.pcs(),
+        ));
         Self {
             fri_params: config.fri_params,
             app_vm_config: config.app_vm_config,

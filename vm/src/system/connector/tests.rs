@@ -23,7 +23,7 @@ use p3_field::AbstractField;
 use super::VmConnectorPvs;
 use crate::{
     arch::{SingleSegmentVmExecutor, VmConfig, CONNECTOR_AIR_ID},
-    system::program::trace::CommittedProgram,
+    system::program::trace::AxVmCommittedExe,
 };
 
 type F = BabyBear;
@@ -84,11 +84,12 @@ fn test_impl(
         )];
 
         let program = Program::from_instructions(&instructions);
-        let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
-        let executor = SingleSegmentVmExecutor::new(vm_config);
-        let mut proof_input = executor
-            .execute_and_generate(committed_program, vec![])
-            .unwrap();
+        let committed_exe = Arc::new(AxVmCommittedExe::commit(
+            program.into(),
+            engine.config.pcs(),
+        ));
+        let vm = SingleSegmentVmExecutor::new(vm_config);
+        let mut proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
         let connector_air_input = proof_input
             .per_air
             .iter_mut()
