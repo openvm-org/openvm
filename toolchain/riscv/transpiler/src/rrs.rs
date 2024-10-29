@@ -178,6 +178,9 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
+        if dec_insn.rd == 0 {
+            return nop();
+        }
         // we need to set f to 1 because this is handled by the same chip as jal
         let mut result = from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn);
         result.f = F::one();
@@ -234,13 +237,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
         eprintln!("trying to transpile fence ({:?})", dec_insn);
-        // unimplemented!()
-        Instruction {
-            debug: format!("fence({:?})", dec_insn),
-            ..unimp()
-        }
+        nop()
     }
 }
 
