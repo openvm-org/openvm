@@ -1,6 +1,6 @@
 // use crate::custom_insn_i;
 
-use alloc::vec::Vec;
+use alloc::{alloc::Layout, vec::Vec};
 
 use axvm_platform::{custom_insn_i, intrinsics::CUSTOM_0};
 
@@ -21,11 +21,21 @@ pub fn read_u32() -> u32 {
 
 /// Read the next `len` bytes from the hint stream into a vector.
 pub fn read_vec(len: usize) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(len);
-    // we probably need to enforce len % 4 == 0 somewhere
-    for _ in 0..len / 4 {
-        vec.extend(read_u32().to_le_bytes());
+    let layout = Layout::from_size_align(len, 4).expect("vec is too large");
+    let ptr = unsafe { alloc::alloc::alloc(layout) };
+    let mut vec = unsafe { Vec::from_raw_parts(ptr, 0, len) };
+    let mut x: u32 = 0;
+    // Note: if len % 4 != 0, this will discard some last bytes
+    for i in 0..len {
+        if i % 4 == 0 {
+            x = read_u32();
+        }
+        unsafe {
+            ptr.add(i).write_volatile((x & 255) as u8);
+        }
+        x >>= 8;
     }
+    unsafe { vec.set_len(len) };
     vec
 }
 
