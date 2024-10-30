@@ -17,6 +17,3 @@ pub mod rv32im;
 pub mod system;
 /// Utility functions and test utils
 pub mod utils;
-
-// To be deleted:
-pub mod old;
