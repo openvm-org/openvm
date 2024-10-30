@@ -23,20 +23,13 @@ pub fn setup(
     Arc<VariableRangeCheckerChip>,
     Rc<RefCell<ExprBuilder>>,
 ) {
-    let field_element_bits = 30;
     let range_bus = 1;
     let range_decomp = 17; // double needs 17, rests need 16.
     let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
         range_bus,
         range_decomp,
     )));
-    let subair = CheckCarryModToZeroSubAir::new(
-        prime.clone(),
-        LIMB_BITS,
-        range_bus,
-        range_decomp,
-        field_element_bits,
-    );
+    let subair = CheckCarryModToZeroSubAir::new(prime.clone(), LIMB_BITS, range_bus, range_decomp);
     let config = ExprBuilderConfig {
         modulus: prime.clone(),
         limb_bits: LIMB_BITS,

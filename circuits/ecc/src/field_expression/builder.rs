@@ -21,10 +21,17 @@ use p3_field::{Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
 
+#[derive(Clone)]
 pub struct ExprBuilderConfig {
     pub modulus: BigUint,
     pub num_limbs: usize,
     pub limb_bits: usize,
+}
+
+impl ExprBuilderConfig {
+    pub fn check_valid(&self) {
+        assert!(self.modulus.bits() <= self.num_limbs * self.limb_bits);
+    }
 }
 
 #[derive(Clone)]
@@ -139,6 +146,26 @@ pub struct FieldExpr {
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
 
     pub range_bus: VariableRangeCheckerBus,
+}
+
+impl FieldExpr {
+    pub fn new(
+        config: ExprBuilderConfig,
+        builder: ExprBuilder,
+        range_bus: VariableRangeCheckerBus,
+    ) -> Self {
+        let subair = CheckCarryModToZeroSubAir::new(
+            config.modulus.clone(),
+            config.limb_bits,
+            range_bus.index,
+            range_bus.range_max_bits,
+        );
+        FieldExpr {
+            builder,
+            check_carry_mod_to_zero: subair,
+            range_bus,
+        }
+    }
 }
 
 impl Deref for FieldExpr {

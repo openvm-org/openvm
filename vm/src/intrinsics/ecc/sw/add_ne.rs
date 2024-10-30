@@ -5,21 +5,12 @@ use ax_circuit_primitives::{
 };
 use ax_ecc_primitives::field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr};
 
-use super::super::FIELD_ELEMENT_BITS;
-
 pub fn ec_add_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
 ) -> FieldExpr {
-    assert!(config.modulus.bits() <= config.num_limbs * config.limb_bits);
-    let subair = CheckCarryModToZeroSubAir::new(
-        config.modulus.clone(),
-        config.limb_bits,
-        range_bus.index,
-        range_bus.range_max_bits,
-        FIELD_ELEMENT_BITS,
-    );
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    config.check_valid();
+    let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x1 = ExprBuilder::new_input(builder.clone());
@@ -33,9 +24,5 @@ pub fn ec_add_ne_expr(
     y3.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr {
-        builder,
-        check_carry_mod_to_zero: subair,
-        range_bus,
-    }
+    FieldExpr::new(config, builder, range_bus)
 }

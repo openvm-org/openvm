@@ -15,7 +15,6 @@ use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
@@ -38,15 +37,9 @@ impl ModularMulDivCoreAir {
         range_bus: VariableRangeCheckerBus,
         offset: usize,
     ) -> Self {
-        assert!(config.modulus.bits() <= config.num_limbs * config.limb_bits);
-        let subair = CheckCarryModToZeroSubAir::new(
-            config.modulus.clone(),
-            config.limb_bits,
-            range_bus.index,
-            range_bus.range_max_bits,
-            FIELD_ELEMENT_BITS,
-        );
-        let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+        config.check_valid();
+
+        let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x = ExprBuilder::new_input(builder.clone());
         let y = ExprBuilder::new_input(builder.clone());
@@ -67,11 +60,7 @@ impl ModularMulDivCoreAir {
 
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr {
-            builder,
-            check_carry_mod_to_zero: subair,
-            range_bus,
-        };
+        let expr = FieldExpr::new(config, builder, range_bus);
         Self { expr, offset }
     }
 }
