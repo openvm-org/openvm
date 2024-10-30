@@ -61,12 +61,12 @@ fn test_mul_013_by_013() {
     };
     let line0 = point_to_013::<Fq, Fq2>(ec_pt_0);
     let line1 = point_to_013::<Fq, Fq2>(ec_pt_1);
-    let input_line0 = vec![
+    let input_line0 = [
         bn254_fq2_to_biguint_vec(&line0.b),
         bn254_fq2_to_biguint_vec(&line0.c),
     ]
     .concat();
-    let input_line1 = vec![
+    let input_line1 = [
         bn254_fq2_to_biguint_vec(&line1.b),
         bn254_fq2_to_biguint_vec(&line1.c),
     ]

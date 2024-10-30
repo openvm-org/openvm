@@ -142,10 +142,9 @@ mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
     use ax_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        utils::create_seeded_rng,
     };
     use axvm_ecc_constants::BN254;
-    use halo2curves_axiom::{bn256::Fq2, ff::Field};
+    use halo2curves_axiom::bn256::Fq2;
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;

@@ -793,8 +793,8 @@ impl VmConfig {
                 ExecutorName::EcLineMul013By013 => {
                     let chip = Rc::new(RefCell::new(EcLineMul013By013Chip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
-                            execution_bus.clone(),
-                            program_bus.clone(),
+                            execution_bus,
+                            program_bus,
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
