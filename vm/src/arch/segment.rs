@@ -155,14 +155,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     PhantomInstruction::CtStart => {
                         self.update_chip_metrics();
                         // hack to remove "CT-" prefix
-                        self.cycle_tracker
-                            .start(dsl_instr.clone().unwrap()[3..].to_string())
+                        self.cycle_tracker.start(
+                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
+                        )
                     }
                     PhantomInstruction::CtEnd => {
                         self.update_chip_metrics();
                         // hack to remove "CT-" prefix
-                        self.cycle_tracker
-                            .end(dsl_instr.clone().unwrap()[3..].to_string())
+                        self.cycle_tracker.end(
+                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
+                        )
                     }
                     _ => {}
                 }
