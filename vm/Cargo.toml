@@ -19,6 +19,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+ax-ecc-execution = { workspace = true }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 ax-stark-sdk = { workspace = true, optional = true }
@@ -44,6 +45,7 @@ once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git" }
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }

@@ -5,7 +5,7 @@ use ax_circuit_primitives::{
 };
 use ax_ecc_primitives::{
     field_expression::{ExprBuilder, FieldExpr},
-    field_extension::{mul_013_by_013, Fp12, Fp2},
+    field_extension::Fp12,
 };
 use num_bigint_dig::BigUint;
 
