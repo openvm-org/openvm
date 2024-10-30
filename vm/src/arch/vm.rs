@@ -13,6 +13,7 @@ use ax_stark_sdk::engine::StarkEngine;
 use axvm_instructions::exe::AxVmExe;
 use p3_field::{AbstractField, PrimeField32};
 use parking_lot::Mutex;
+use thiserror::Error;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
@@ -238,6 +239,30 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum VmVerificationError {
+    #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
+    InitialPcMismatch { initial: u32, prev_final: u32 },
+
+    #[error("initial memory root mismatch")]
+    InitialMemoryRootMismatch,
+
+    #[error("is terminate mismatch (expected: {expected}, actual: {actual})")]
+    IsTerminateMismatch { expected: bool, actual: bool },
+
+    #[error("exit code mismatch")]
+    ExitCodeMismatch { expected: u32, actual: u32 },
+
+    #[error("unexpected public values (expected: {expected}, actual: {actual})")]
+    UnexpectedPvs { expected: usize, actual: usize },
+
+    #[error("number of public values mismatch (expected: {expected}, actual: {actual})")]
+    NumPublicValuesMismatch { expected: usize, actual: usize },
+
+    #[error("stark verification error: {0}")]
+    StarkError(#[from] VerificationError),
+}
+
 pub struct VirtualMachine<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> {
     pub engine: E,
     pub config: VmConfig,
@@ -341,7 +366,10 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<(), VmVerificationError>
+    where
+        Val<SC>: PrimeField32,
+    {
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
 
@@ -349,7 +377,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
             let res = self.engine.verify(vk, proof);
             match res {
                 Ok(_) => (),
-                Err(e) => return Err(e),
+                Err(e) => return Err(VmVerificationError::StarkError(e)),
             };
 
             // Check public values.
@@ -363,11 +391,10 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
                     if i != 0 {
                         // Check initial pc matches the previous final pc.
                         if pvs.initial_pc != prev_final_pc.unwrap() {
-                            return Err(VerificationError::InitialPcMismatch(format!(
-                                "expected initial pc: {}, actual initial pc: {}",
-                                prev_final_pc.unwrap(),
-                                pvs.initial_pc
-                            )));
+                            return Err(VmVerificationError::InitialPcMismatch {
+                                initial: pvs.initial_pc.as_canonical_u32(),
+                                prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                            });
                         }
                     } else {
                         // TODO: Fetch initial pc from program
@@ -377,10 +404,10 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
 
                     let expected_is_terminate = i == proofs.len() - 1;
                     if pvs.is_terminate != Val::<SC>::from_bool(expected_is_terminate) {
-                        return Err(VerificationError::IsTerminateMismatch(format!(
-                            "expected is_terminate: {}, actual is_terminate: {}",
-                            expected_is_terminate, pvs.is_terminate
-                        )));
+                        return Err(VmVerificationError::IsTerminateMismatch {
+                            expected: expected_is_terminate,
+                            actual: pvs.is_terminate.as_canonical_u32() != 0,
+                        });
                     }
 
                     let expected_exit_code = if expected_is_terminate {
@@ -389,31 +416,31 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
                         DEFAULT_SUSPEND_EXIT_CODE
                     };
                     if pvs.exit_code != Val::<SC>::from_canonical_u32(expected_exit_code) {
-                        return Err(VerificationError::ExitCodeMismatch(format!(
-                            "expected exit code: {}, actual exit code: {}",
-                            expected_exit_code, pvs.exit_code
-                        )));
+                        return Err(VmVerificationError::ExitCodeMismatch {
+                            expected: expected_exit_code,
+                            actual: pvs.exit_code.as_canonical_u32(),
+                        });
                     }
                 } else if air_proof_data.air_id == MERKLE_AIR_ID {
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
                     if i != 0 && pvs.initial_root != prev_final_memory_root.unwrap() {
-                        return Err(VerificationError::InitialMemoryRootMismatch);
+                        return Err(VmVerificationError::InitialMemoryRootMismatch);
                     }
                     prev_final_memory_root = Some(pvs.final_root);
                 } else {
                     if !pvs.is_empty() {
-                        return Err(VerificationError::UnexpectedPvs(format!(
-                            "expected 0 public values, actual: {}",
-                            pvs.len()
-                        )));
+                        return Err(VmVerificationError::UnexpectedPvs {
+                            expected: 0,
+                            actual: pvs.len(),
+                        });
                     }
                     if air_vk.params.num_public_values != 0 {
-                        return Err(VerificationError::NumPublicValuesMismatch(format!(
-                            "expected 0 public values, actual: {}",
-                            air_vk.params.num_public_values
-                        )));
+                        return Err(VmVerificationError::NumPublicValuesMismatch {
+                            expected: 0,
+                            actual: air_vk.params.num_public_values,
+                        });
                     }
                 }
             }
