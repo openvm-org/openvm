@@ -203,35 +203,35 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulOpcode::MUL.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulOpcode::MUL.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULH.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULH.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHU.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULHU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIV.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::DIV.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REM.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::REM.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REMU.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::REMU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
