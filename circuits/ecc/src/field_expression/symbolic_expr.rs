@@ -378,9 +378,7 @@ impl SymbolicExpr {
                 // lhs.evaluate_overflow_isize(inputs, variables, flags)
                 //     + OverflowInt::from_vec(vec![*s], 8)
                 let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
-                for limb in left.limbs.iter_mut() {
-                    *limb += *s;
-                }
+                left.limbs[0] += *s;
                 left.limb_max_abs += s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left
@@ -436,9 +434,7 @@ impl SymbolicExpr {
                 } else {
                     -AB::Expr::from_canonical_usize(s.unsigned_abs())
                 };
-                for limb in left.limbs.iter_mut() {
-                    *limb += scalar.clone();
-                }
+                left.limbs[0] += scalar.clone();
                 left.limb_max_abs += s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left
