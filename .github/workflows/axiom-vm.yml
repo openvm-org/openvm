@@ -2,7 +2,7 @@ name: Axiom VM Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
     branches: ["main"]
     paths:

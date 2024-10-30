@@ -2,7 +2,7 @@ name: eDSL Compiler Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
     branches: ["main"]
     paths:
