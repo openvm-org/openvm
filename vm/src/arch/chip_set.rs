@@ -798,9 +798,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        32,
-                        8,
+                        config32,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -814,9 +812,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        48,
-                        8,
+                        config48,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
