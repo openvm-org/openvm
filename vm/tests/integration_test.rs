@@ -872,7 +872,7 @@ fn test_vm_keccak() {
     );
 }
 
-// This test dones one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
+// This test does one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
 #[test]
 fn test_vm_keccak_non_full_round() {
     let inputs = [[[0u8; 32], [1u8; 32]].concat()];

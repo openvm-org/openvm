@@ -356,7 +356,23 @@ where
         self.engine.verify(vk, proof)
     }
 
+    /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
     pub fn verify(
+        &self,
+        vk: &MultiStarkVerifyingKey<SC>,
+        proofs: Vec<Proof<SC>>,
+    ) -> Result<(), VerificationError> {
+        match self.config.memory_config.persistence_type {
+            PersistenceType::Volatile => {
+                assert_eq!(proofs.len(), 1);
+                self.verify_single(vk, &proofs.into_iter().next().unwrap())
+            }
+            PersistenceType::Persistent => self.verify_segments(vk, proofs),
+        }
+    }
+
+    /// Verify segment proofs with boundary condition checks for continuation between segments
+    fn verify_segments(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,

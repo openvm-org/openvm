@@ -33,12 +33,8 @@ def run_cargo_command(bin_name, feature_flags):
     ]
     print(" ".join(command))
 
-    try:
-        # Run the subprocess with the updated environment
-        subprocess.run(command, check=True, env=env)
-
-    except subprocess.CalledProcessError as e:
-        print(f"Subprocess failed with error: {e}")
+    # Run the subprocess with the updated environment
+    subprocess.run(command, check=False, env=env)
 
     print(f"Output metrics written to {git_root}/{output_path}")
 

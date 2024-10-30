@@ -26,8 +26,8 @@ fn main() -> Result<()> {
             })?;
 
         // Leaf aggregation: 1->1 proof "aggregation"
-        // TODO[jpw]: put real user public values number, placeholder=4
-        let config = VmConfig::aggregation(4, (1 << agg_log_blowup) - 1);
+        // TODO[jpw]: put real user public values number, placeholder=0
+        let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
