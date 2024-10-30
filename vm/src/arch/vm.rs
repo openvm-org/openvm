@@ -371,6 +371,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
                         }
                     } else {
                         // TODO: Fetch initial pc from program
+                        todo!()
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
@@ -397,14 +398,12 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
-                    if i != 0 {
-                        if pvs.initial_root != prev_final_memory_root.unwrap() {
-                            return Err(VerificationError::InitialMemoryRootMismatch);
-                        }
+                    if i != 0 && pvs.initial_root != prev_final_memory_root.unwrap() {
+                        return Err(VerificationError::InitialMemoryRootMismatch);
                     }
                     prev_final_memory_root = Some(pvs.final_root);
                 } else {
-                    if pvs.len() != 0 {
+                    if !pvs.is_empty() {
                         return Err(VerificationError::UnexpectedPvs(format!(
                             "expected 0 public values, actual: {}",
                             pvs.len()
