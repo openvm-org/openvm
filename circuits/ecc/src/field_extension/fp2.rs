@@ -145,6 +145,13 @@ impl Fp2 {
     pub fn neg(&mut self) -> Fp2 {
         self.int_mul([-1, 0])
     }
+
+    pub fn select(flag_id: usize, a: &Fp2, b: &Fp2) -> Fp2 {
+        Fp2 {
+            c0: FieldVariable::select(flag_id, &a.c0, &b.c0),
+            c1: FieldVariable::select(flag_id, &a.c1, &b.c1),
+        }
+    }
 }
 
 #[cfg(test)]

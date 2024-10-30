@@ -14,8 +14,6 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-pub const FIELD_ELEMENT_BITS: usize = 30;
-
 /// Each prime field element will be represented as `NUM_LANES * LANE_SIZE` cells in memory.
 /// The `LANE_SIZE` must be a power of 2 and determines the size of the batch memory read/writes.
 pub type ModularAddSubAir<const NUM_LANES: usize, const LANE_SIZE: usize> = VmAirWrapper<
