@@ -216,7 +216,7 @@ impl FieldVariable {
     }
 
     pub fn int_add(&mut self, scalar: isize) -> FieldVariable {
-        let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
+        let limb_max_abs = self.limb_max_abs + scalar.unsigned_abs();
         FieldVariable::save_if_overflow(
             self,
             SymbolicExpr::IntAdd(Box::new(self.expr.clone()), scalar),

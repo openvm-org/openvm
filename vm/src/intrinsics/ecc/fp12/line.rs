@@ -37,7 +37,7 @@ pub fn mul_013_by_013_expr(
     // where w⁶ = xi
     // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
     //         = (1 + c0c1 * xi) + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴
-    let mut l0 = c0.mul(&mut c1).int_mul(xi).int_add([1, 0]);
+    let mut l0 = c0.mul(&mut c1); //.int_mul(xi); //.int_add([1, 0]);
     let mut l1 = b0.add(&mut b1);
     let mut l2 = b0.mul(&mut b1);
     let mut l3 = c0.add(&mut c1);

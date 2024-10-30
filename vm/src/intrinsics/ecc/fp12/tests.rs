@@ -303,28 +303,44 @@ fn test_mul_013_by_013() {
 
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
 
-    let result = chip
+    let vars = chip
         .core
         .air
         .expr
         .execute([input_line0.clone(), input_line1.clone()].concat(), vec![]);
-    assert_eq!(result.len(), 12); // result = 12 is also weird
+    let output_indices = chip.core.air.expr.builder.output_indices.clone();
+    let output = output_indices
+        .iter()
+        .map(|i| vars[*i].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(output.len(), 10);
 
     let r_cmp = ax_ecc_execution::curves::bn254::mul_013_by_013::<Fq, Fq2>(
         line0,
         line1,
         Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::zero()),
     );
-    assert_eq!(result[2], bn254_fq_to_biguint(&r_cmp[0].c0));
-    assert_eq!(result[1], bn254_fq_to_biguint(&r_cmp[0].c1)); // why is the result out of order?
-    assert_eq!(result[4], bn254_fq_to_biguint(&r_cmp[1].c0));
-    assert_eq!(result[5], bn254_fq_to_biguint(&r_cmp[1].c1));
-    assert_eq!(result[6], bn254_fq_to_biguint(&r_cmp[2].c0));
-    assert_eq!(result[7], bn254_fq_to_biguint(&r_cmp[2].c1));
-    assert_eq!(result[8], bn254_fq_to_biguint(&r_cmp[3].c0));
-    assert_eq!(result[9], bn254_fq_to_biguint(&r_cmp[3].c1));
-    assert_eq!(result[10], bn254_fq_to_biguint(&r_cmp[4].c0));
-    assert_eq!(result[11], bn254_fq_to_biguint(&r_cmp[4].c1));
+    let r_cmp_bigint = r_cmp
+        .map(|x| [bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)])
+        .concat();
+
+    println!("{:#?}", output);
+    println!("{:#?}", r_cmp);
+
+    for i in 0..10 {
+        assert_eq!(output[i], r_cmp_bigint[i]);
+    }
+
+    // assert_eq!(output[0], bn254_fq_to_biguint(&r_cmp[0].c0));
+    // assert_eq!(output[1], bn254_fq_to_biguint(&r_cmp[0].c1));
+    // assert_eq!(output[2], bn254_fq_to_biguint(&r_cmp[1].c0));
+    // assert_eq!(output[3], bn254_fq_to_biguint(&r_cmp[1].c1));
+    // assert_eq!(output[4], bn254_fq_to_biguint(&r_cmp[2].c0));
+    // assert_eq!(output[5], bn254_fq_to_biguint(&r_cmp[2].c1));
+    // assert_eq!(output[6], bn254_fq_to_biguint(&r_cmp[3].c0));
+    // assert_eq!(output[7], bn254_fq_to_biguint(&r_cmp[3].c1));
+    // assert_eq!(output[8], bn254_fq_to_biguint(&r_cmp[4].c0));
+    // assert_eq!(output[9], bn254_fq_to_biguint(&r_cmp[4].c1));
 
     let input_line0_limbs = input_line0
         .iter()
