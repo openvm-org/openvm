@@ -37,7 +37,7 @@ use crate::{
     },
     intrinsics::{
         ecc::{
-            pairing::{EcLineMul013By013Chip, MillerDoubleStepChip},
+            pairing::{EcLineMul013By013Chip, MillerDoubleAndAddStepChip, MillerDoubleStepChip},
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -854,6 +854,34 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleStepRv32_48(chip));
                 }
+                ExecutorName::MillerDoubleAndAddStepRv32_32 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleAndAddStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleAndAddStepRv32_32(chip));
+                }
+                ExecutorName::MillerDoubleAndAddStepRv32_48 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleAndAddStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleAndAddStepRv32_48(chip));
+                }
                 _ => unreachable!("Unsupported executor"),
             }
         }
@@ -1077,19 +1105,35 @@ fn gen_pairing_executor_tuple(
             let class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
-                vec![(
-                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                    class_offset,
-                    ExecutorName::MillerDoubleStepRv32_32,
-                    curve.prime(),
-                )]
+                vec![
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleStepRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleAndAddStepRv32_32,
+                        curve.prime(),
+                    ),
+                ]
             } else if bytes <= 48 {
-                vec![(
-                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                    class_offset,
-                    ExecutorName::MillerDoubleStepRv32_48,
-                    curve.prime(),
-                )]
+                vec![
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleStepRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleAndAddStepRv32_48,
+                        curve.prime(),
+                    ),
+                ]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }

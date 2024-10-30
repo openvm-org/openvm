@@ -16,46 +16,47 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
-// Input: two EcPoint<Fp2>: 8 field elements
-// Output: (EcPoint<Fp2>, Fp2, Fp2) -> 8 field elements
-// #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-// pub struct MillerDoubleAndAddStepChip<
-//     F: PrimeField32,
-//     const INPUT_BLOCKS: usize,
-//     const OUTPUT_BLOCKS: usize,
-//     const BLOCK_SIZE: usize,
-// >(
-//     VmChipWrapper<
-//         F,
-//         Rv32VecHeapAdapterChip<F, 1, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-//         FieldExpressionCoreChip,
-//     >,
-// );
+// Input: two EcPoint<Fp2>: 4 field elements each
+// Output: (EcPoint<Fp2>, Fp2, Fp2, Fp2, Fp2) -> 12 field elements
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+pub struct MillerDoubleAndAddStepChip<
+    F: PrimeField32,
+    const INPUT_BLOCKS: usize,
+    const OUTPUT_BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(
+    VmChipWrapper<
+        F,
+        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        FieldExpressionCoreChip,
+    >,
+);
 
-// impl<
-//         F: PrimeField32,
-//         const INPUT_BLOCKS: usize,
-//         const OUTPUT_BLOCKS: usize,
-//         const BLOCK_SIZE: usize,
-//     > MillerDoubleStepChip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
-// {
-//     pub fn new(
-//         adapter: Rv32VecHeapAdapterChip<F, 1, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-//         memory_controller: MemoryControllerRef<F>,
-//         config: ExprBuilderConfig,
-//         offset: usize,
-//     ) -> Self {
-//         let expr = miller_double_step_expr(config, memory_controller.borrow().range_checker.bus());
-//         let core = FieldExpressionCoreChip::new(
-//             expr,
-//             offset,
-//             vec![PairingOpcode::MILLER_DOUBLE_STEP as usize],
-//             memory_controller.borrow().range_checker.clone(),
-//             "MillerDoubleStep",
-//         );
-//         Self(VmChipWrapper::new(adapter, core, memory_controller))
-//     }
-// }
+impl<
+        F: PrimeField32,
+        const INPUT_BLOCKS: usize,
+        const OUTPUT_BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+    > MillerDoubleAndAddStepChip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
+{
+    pub fn new(
+        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        memory_controller: MemoryControllerRef<F>,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> Self {
+        let expr =
+            miller_double_and_add_step_expr(config, memory_controller.borrow().range_checker.bus());
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            offset,
+            vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
+            memory_controller.borrow().range_checker.clone(),
+            "MillerDoubleAndAddStep",
+        );
+        Self(VmChipWrapper::new(adapter, core, memory_controller))
+    }
+}
 
 // Ref: https://github.com/axiom-crypto/afs-prototype/blob/043968891d596acdc82c8e3a9126a555fe178d43/lib/ecc-execution/src/common/miller_step.rs#L72
 pub fn miller_double_and_add_step_expr(
