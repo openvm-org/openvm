@@ -1,7 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
