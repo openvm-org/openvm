@@ -92,7 +92,7 @@ fn air_test_with_compress_poseidon2(
     let result = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
-        vm.verify(&pk.get_vk(), &proof)
+        vm.verify_single(&pk.get_vk(), &proof)
             .expect("Verification failed");
     }
 }
@@ -178,7 +178,7 @@ fn test_vm_1_optional_air() {
             "Expect less used AIRs"
         );
         let proofs = vm.prove(&pk, result);
-        vm.verify_segments(&pk.get_vk(), proofs)
+        vm.verify(&pk.get_vk(), proofs)
             .expect("Verification failed");
     }
 }
@@ -323,7 +323,7 @@ fn test_vm_1_persistent() {
 
     let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
-    vm.verify_segments(&pk.get_vk(), proofs)
+    vm.verify(&pk.get_vk(), proofs)
         .expect("Verification failed");
 }
 

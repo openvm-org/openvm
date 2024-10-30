@@ -33,11 +33,11 @@ pub fn air_test_with_min_segments(
     match persistence_type {
         PersistenceType::Volatile => {
             assert_eq!(proofs.len(), 1);
-            vm.verify(&pk.get_vk(), &proofs.into_iter().next().unwrap())
+            vm.verify_single(&pk.get_vk(), &proofs.into_iter().next().unwrap())
                 .expect("segment proof should verify");
         }
         PersistenceType::Persistent => {
-            vm.verify_segments(&pk.get_vk(), proofs)
+            vm.verify(&pk.get_vk(), proofs)
                 .expect("segment proofs should verify");
         }
     }

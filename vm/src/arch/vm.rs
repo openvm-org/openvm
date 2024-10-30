@@ -295,6 +295,22 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         executor.execute_and_generate_with_cached_program(committed_program, input)
     }
 
+    pub fn prove_single(
+        &self,
+        pk: &MultiStarkProvingKey<SC>,
+        proof_input: ProofInput<SC>,
+    ) -> Proof<SC>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        self.engine.prove(pk, proof_input)
+    }
+
     pub fn prove(
         &self,
         pk: &MultiStarkProvingKey<SC>,
@@ -315,7 +331,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
             .collect()
     }
 
-    pub fn verify(
+    pub fn verify_single(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proof: &Proof<SC>,
@@ -323,7 +339,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         self.engine.verify(vk, proof)
     }
 
-    pub fn verify_segments(
+    pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
