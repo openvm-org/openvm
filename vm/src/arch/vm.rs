@@ -11,7 +11,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use axvm_instructions::exe::AxVmExe;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
@@ -71,6 +71,9 @@ impl<F: PrimeField32> VmExecutor<F> {
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
         let exe = exe.into();
         let streams = Arc::new(Mutex::new(Streams::new(input)));
         let mut segments = vec![];
@@ -120,6 +123,8 @@ impl<F: PrimeField32> VmExecutor<F> {
         }
         segments.push(segment);
         tracing::debug!("Number of continuation segments: {}", segments.len());
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
 
         Ok(segments)
     }

@@ -16,10 +16,7 @@ use p3_field::PrimeField32;
 use tempfile::tempdir;
 
 fn get_programs_dir() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     dir.push("programs");
     dir
 }
@@ -68,7 +65,8 @@ where
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).
     config.collect_metrics = true;
     let executor = VmExecutor::<Val<SC>>::new(config.clone());
-    executor.execute(exe.clone(), input_stream.clone())?;
+    tracing::info_span!("execute_with_metrics", collect_metrics = true)
+        .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
     // 2. Generate proving key from config.
     config.collect_metrics = false;
     let vm = VirtualMachine::new(engine, config);
@@ -76,7 +74,7 @@ where
     // 3. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || vm.commit_exe(exe));
     // 4. Executes runtime again without metric collection and generate trace.
-    let results = time(gauge!("trace_gen_time_ms"), || {
+    let results = time(gauge!("execute_and_trace_gen_time_ms"), || {
         vm.execute_and_generate_with_cached_program(committed_exe, input_stream)
     })?;
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.

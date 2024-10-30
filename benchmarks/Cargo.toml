@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-axvm-circuit = { workspace = true, features = ["bench-metrics"] }
+axvm-circuit = { workspace = true }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
 ax-stark-sdk.workspace = true
@@ -20,7 +20,8 @@ tracing.workspace = true
 [dev-dependencies]
 
 [features]
-default = ["parallel", "mimalloc"]
+default = ["parallel", "mimalloc", "bench-metrics"]
+bench-metrics = ["axvm-circuit/bench-metrics"]
 parallel = ["axvm-circuit/parallel"]
 mimalloc = ["axvm-circuit/mimalloc"]
 jemalloc = ["axvm-circuit/jemalloc"]
