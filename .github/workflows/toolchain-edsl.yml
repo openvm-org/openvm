@@ -2,9 +2,9 @@ name: eDSL Compiler Tests
 
 on:
   push:
-    branches: ["**"]
-  pull_request:
     branches: ["main"]
+  pull_request:
+    branches: ["**"]
     paths:
       - "vm/**"
       - "toolchain/native-compiler/**"

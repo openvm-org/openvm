@@ -2,9 +2,9 @@ name: VM STARK and Compiler Tests
 
 on:
   push:
-    branches: ["**"]
-  pull_request:
     branches: ["main"]
+  pull_request:
+    branches: ["**"]
     paths:
       - "stark-backend/**"
       - "circuits/primitives/**"
