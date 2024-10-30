@@ -10,7 +10,7 @@ on:
         options:
           - vm_verify_fibair
           - halo2_static_verify_fibair
-          - tiny_e2e
+          - fibonacci
           - alu256_e2e
           - small_e2e
       instance_type:
@@ -71,11 +71,11 @@ jobs:
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'tiny_e2e'
-        working-directory: lib/recursion
+        if: inputs.benchmark_name == 'fibonacci'
+        working-directory: benchmarks
         run: |
-          BIN_NAME="tiny_e2e"
-          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+          BIN_NAME="fibonacci"
+          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark

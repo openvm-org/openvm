@@ -53,9 +53,6 @@ ax-circuit-primitives.workspace = true
 name = "verify_fibair"
 
 [[bin]]
-name = "tiny_e2e"
-
-[[bin]]
 name = "alu256_e2e"
 
 [[bin]]
