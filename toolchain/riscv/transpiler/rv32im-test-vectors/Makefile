@@ -4,11 +4,12 @@
 
 XLEN ?= 64
 
-src_dir := .
+src_dir := ./riscv-tests/isa
 out_dir := ./tests
+env_dir := ./env
 
-include $(src_dir)/rv32i/Makefrag
-include $(src_dir)/rv32m/Makefrag
+include $(src_dir)/rv32ui/Makefrag
+include $(src_dir)/rv32um/Makefrag
 
 default: all
 
@@ -19,8 +20,7 @@ default: all
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
 RISCV_GCC_OPTS ?= -static -mcmodel=medany -fvisibility=hidden -nostdlib -nostartfiles
-RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump 
-RISCV_SIM ?= spike
+RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump
 
 vpath %.S $(src_dir)
 
@@ -30,13 +30,10 @@ vpath %.S $(src_dir)
 %.dump: %
 	$(RISCV_OBJDUMP) -D $< > $@
 
-%.out32: %
-	$(RISCV_SIM) --isa=rv32gc_zfh_zicboz_svnapot_zicntr_zba_zbb_zbc_zbs --misaligned $< 2> $@
-
 define compile_template
 
-$$($(1)_p_tests): $(1)-p-%: $(1)/%.S
-	$$(RISCV_GCC) $(2) $$(RISCV_GCC_OPTS) -I$(src_dir)/utils -T$(src_dir)/utils/link.ld $$< -o $(out_dir)/$$@
+$$($(1)_p_tests): $(1)-p-%: $(src_dir)/$(1)/%.S
+	$$(RISCV_GCC) $(2) $$(RISCV_GCC_OPTS) -I$(env_dir) -I$(src_dir)/macros/scalar -T$(env_dir)/link.ld  $$< -o $(out_dir)/$$@
 $(1)_tests += $$($(1)_p_tests)
 
 $(1)_tests_dump = $$(addsuffix .dump, $$($(1)_tests))
@@ -51,22 +48,19 @@ endif
 
 endef
 
-$(eval $(call compile_template,rv32i,-march=rv32g -mabi=ilp32))
-$(eval $(call compile_template,rv32m,-march=rv32g -mabi=ilp32))
+$(eval $(call compile_template,rv32ui,-march=rv32g -mabi=ilp32))
+$(eval $(call compile_template,rv32um,-march=rv32g -mabi=ilp32))
 
 tests_dump = $(addsuffix .dump, $(tests))
 tests_hex = $(addsuffix .hex, $(tests))
-tests32_out = $(addsuffix .out32, $(filter rv32%, $(tests)))
 
-run: $(tests_out) $(tests32_out)
-
-junk += $(addprefix $(out_dir)/, $(tests) $(tests_dump) $(tests_hex) $(tests32_out))
+junk += $(addprefix $(out_dir)/, $(tests) $(tests_dump) $(tests_hex))
 
 #------------------------------------------------------------
 # Default
 
-rv32i: $(rv32i_tests)
-rv32m: $(rv32m_tests)
+rv32i: $(rv32ui_tests)
+rv32m: $(rv32um_tests)
 
 all: $(tests)
 
