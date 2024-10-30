@@ -41,7 +41,11 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      [runs-on, "runner=${{ inputs.instance_type }}", image=arm64-rust-dev-32gb]
+      - runs-on
+      - runner=${{ inputs.instance_type }}
+      - image=arm64-rust-dev-32gb
+      - run-id=${{ github.run_id }}
+      - tag=bench-${{ inputs.benchmark_name }}
     steps:
       - uses: actions/checkout@v4
         with:
