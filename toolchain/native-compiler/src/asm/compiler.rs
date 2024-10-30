@@ -678,10 +678,22 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(AsmInstruction::Publish(val.fp(), index.fp()), debug_info);
                 }
                 DslIr::CycleTrackerStart(name) => {
-                    self.push(AsmInstruction::CycleTrackerStart(name.clone()), debug_info);
+                    self.push(
+                        AsmInstruction::CycleTrackerStart(),
+                        Some(DebugInfo {
+                            dsl_instruction: format!("CT-{}", name),
+                            trace: None,
+                        }),
+                    );
                 }
                 DslIr::CycleTrackerEnd(name) => {
-                    self.push(AsmInstruction::CycleTrackerEnd(name.clone()), debug_info);
+                    self.push(
+                        AsmInstruction::CycleTrackerEnd(),
+                        Some(DebugInfo {
+                            dsl_instruction: format!("CT-{}", name),
+                            trace: None,
+                        }),
+                    );
                 }
                 DslIr::Halt => {
                     self.push(AsmInstruction::Halt, debug_info);
