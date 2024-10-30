@@ -168,11 +168,11 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let mut result = vm
+        let result = vm
             .execute_and_generate(program, vec![])
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
-        let proof_input = result.per_segment.pop().unwrap();
+        let proof_input = result.per_segment.last().unwrap();
         assert!(
             proof_input.per_air.len() < num_airs,
             "Expect less used AIRs"

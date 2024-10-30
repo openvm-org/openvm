@@ -55,6 +55,10 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Install rust src
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+
       - name: Setup halo2
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
