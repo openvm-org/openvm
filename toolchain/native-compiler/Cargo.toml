@@ -41,6 +41,7 @@ p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 rand = "0.8.5"
+axvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel"]
