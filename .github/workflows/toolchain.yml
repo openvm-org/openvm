@@ -24,6 +24,9 @@ jobs:
       - runner=64cpu-linux-arm64
 
     steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
@@ -31,6 +34,11 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Run Makefile
+        working-directory: toolchain/riscv/transpiler/rv32im-test-vectors
+        run: |
+          make
+          
       - name: Run axvm-instructions tests
         working-directory: toolchain/instructions
         run: |

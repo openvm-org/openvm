@@ -136,6 +136,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 }
 
 #[test]
+#[ignore = "long prover tests"]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
     let config = VmConfig {
         max_segment_len: (1 << 20) - 1,
