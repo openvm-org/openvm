@@ -21,6 +21,12 @@ use p3_field::{Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
 
+pub struct ExprBuilderConfig {
+    pub modulus: BigUint,
+    pub num_limbs: usize,
+    pub limb_bits: usize,
+}
+
 #[derive(Clone)]
 pub struct ExprBuilder {
     // The prime field.
@@ -56,20 +62,15 @@ pub struct ExprBuilder {
 }
 
 impl ExprBuilder {
-    pub fn new(
-        prime: BigUint,
-        limb_bits: usize,
-        num_limbs: usize,
-        range_checker_bits: usize,
-    ) -> Self {
-        let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
+    pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
+        let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         Self {
-            prime,
+            prime: config.modulus,
             prime_bigint,
             num_input: 0,
             num_flags: 0,
-            limb_bits,
-            num_limbs,
+            limb_bits: config.limb_bits,
+            num_limbs: config.num_limbs,
             range_checker_bits,
             num_variables: 0,
             q_limbs: vec![],

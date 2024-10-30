@@ -1,6 +1,7 @@
 use ax_circuit_primitives::bigint::utils::{
     big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime,
 };
+use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
@@ -40,10 +41,13 @@ fn test_scalar_addsub() {
 
 fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let config = ExprBuilderConfig {
+        modulus: modulus.clone(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
     let core = ModularAddSubCoreChip::new(
-        modulus.clone(),
-        NUM_LIMBS,
-        LIMB_BITS,
+        config,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
@@ -156,10 +160,13 @@ fn test_scalar_muldiv() {
 
 fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let config = ExprBuilderConfig {
+        modulus: modulus.clone(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
     let core = ModularMulDivCoreChip::new(
-        modulus.clone(),
-        NUM_LIMBS,
-        LIMB_BITS,
+        config,
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );

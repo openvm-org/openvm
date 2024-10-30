@@ -12,7 +12,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField64;
 use rand::RngCore;
 
-use super::field_expression::ExprBuilder;
+use super::field_expression::{ExprBuilder, ExprBuilderConfig};
 
 pub const LIMB_BITS: usize = 8;
 
@@ -37,7 +37,12 @@ pub fn setup(
         range_decomp,
         field_element_bits,
     );
-    let builder = ExprBuilder::new(prime.clone(), LIMB_BITS, 32, range_checker.range_max_bits());
+    let config = ExprBuilderConfig {
+        modulus: prime.clone(),
+        limb_bits: LIMB_BITS,
+        num_limbs: 32,
+    };
+    let builder = ExprBuilder::new(config, range_checker.range_max_bits());
     (subair, range_checker, Rc::new(RefCell::new(builder)))
 }
 

@@ -5,7 +5,9 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr, FieldExprCols, FieldVariable};
+use ax_ecc_primitives::field_expression::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
+};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode};
 use itertools::Itertools;
@@ -31,22 +33,19 @@ pub struct ModularAddSubCoreAir {
 
 impl ModularAddSubCoreAir {
     pub fn new(
-        modulus: BigUint,
-        num_limbs: usize,
-        limb_bits: usize,
-        range_bus: usize,
-        range_max_bits: usize,
+        config: ExprBuilderConfig,
+        range_bus: VariableRangeCheckerBus,
         offset: usize,
     ) -> Self {
-        assert!(modulus.bits() <= num_limbs * limb_bits);
+        assert!(config.modulus.bits() <= config.num_limbs * config.limb_bits);
         let subair = CheckCarryModToZeroSubAir::new(
-            modulus.clone(),
-            limb_bits,
-            range_bus,
-            range_max_bits,
+            config.modulus.clone(),
+            config.limb_bits,
+            range_bus.index,
+            range_bus.range_max_bits,
             FIELD_ELEMENT_BITS,
         );
-        let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits);
+        let builder = ExprBuilder::new(config, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x1 = ExprBuilder::new_input(builder.clone());
         let x2 = ExprBuilder::new_input(builder.clone());
@@ -60,7 +59,7 @@ impl ModularAddSubCoreAir {
         let expr = FieldExpr {
             builder,
             check_carry_mod_to_zero: subair,
-            range_bus: VariableRangeCheckerBus::new(range_bus, range_max_bits),
+            range_bus,
         };
         Self { expr, offset }
     }
@@ -127,20 +126,11 @@ pub struct ModularAddSubCoreChip {
 
 impl ModularAddSubCoreChip {
     pub fn new(
-        modulus: BigUint,
-        num_limbs: usize,
-        limb_bits: usize,
+        config: ExprBuilderConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
     ) -> Self {
-        let air = ModularAddSubCoreAir::new(
-            modulus,
-            num_limbs,
-            limb_bits,
-            range_checker.bus().index,
-            range_checker.range_max_bits(),
-            offset,
-        );
+        let air = ModularAddSubCoreAir::new(config, range_checker.bus(), offset);
         Self { air, range_checker }
     }
 }
