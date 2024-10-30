@@ -98,6 +98,20 @@ The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height
 > A memory cell in any address space is always a field element, but the VM _may_ later impose additional bit size
 > constraints on certain address spaces (e.g., everything in address space `2` must be a byte).
 
+## Constants and Configuration Parameters
+
+axVM depends on the following parameters, some of which are fixed and some of which are configurable:
+
+| Name               | Description                                                        | Constraints                                                           |
+| ------------------ | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `F`                | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
+| `PC_BITS`          | The number of bits in the program counter.                         | Fixed to 30.                                                          |
+| `DEFAULT_PC_STEP`  | The default program counter step size.                             | Fixed to 4.                                                           |
+| `LIMB_BITS`        | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                           |
+| `as_offset`        | The index of the first writable address space.                     | Fixed to 1.                                                           |
+| `as_height`        | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
+| `pointer_max_bits` | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
+
 # axVM Instruction Set
 
 All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU instructions, U256 instructions, Modular arithmetic instructions, etc).

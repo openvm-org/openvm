@@ -1,19 +1,26 @@
-use std::{collections::VecDeque, marker::PhantomData, mem, sync::Arc};
+use std::{
+    borrow::Borrow, cell::RefCell, collections::VecDeque, marker::PhantomData, mem, sync::Arc,
+};
 
 use ax_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
-    prover::types::ProofInput,
+    prover::types::{Proof, ProofInput},
+    verifier::VerificationError,
 };
+use ax_stark_sdk::engine::StarkEngine;
 use axvm_instructions::exe::AxVmExe;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 use parking_lot::Mutex;
 
+use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::{ExecutionSegment, PersistenceType, VmConfig},
     system::{
-        memory::memory_image_to_equipartition,
-        program::{trace::CommittedProgram, ExecutionError},
+        connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
+        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, CHUNK},
+        program::{trace::AxVmCommittedExe, ExecutionError},
     },
 };
 
@@ -32,8 +39,7 @@ impl<F> Streams<F> {
     }
 }
 
-/// Parent struct that holds all execution segments, program, config.
-pub struct VirtualMachine<F: PrimeField32> {
+pub struct VmExecutor<F: PrimeField32> {
     pub config: VmConfig,
     _marker: PhantomData<F>,
 }
@@ -45,14 +51,14 @@ pub enum ExitCode {
     Suspended = -1, // Continuations
 }
 
-pub struct VirtualMachineResult<SC: StarkGenericConfig> {
+pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
 }
 
-impl<F: PrimeField32> VirtualMachine<F> {
-    /// Create a new VM with a given config, program, and input stream.
+impl<F: PrimeField32> VmExecutor<F> {
+    /// Create a new VM executor with a given config.
     ///
-    /// The VM will start with a single segment, which is created from the initial state of the Core.
+    /// The VM will start with a single segment, which is created from the initial state.
     pub fn new(config: VmConfig) -> Self {
         Self {
             config,
@@ -61,7 +67,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
     }
 
     fn execute_segments(
-        &mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
@@ -119,7 +125,7 @@ impl<F: PrimeField32> VirtualMachine<F> {
     }
 
     pub fn execute(
-        mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<(), ExecutionError> {
@@ -129,16 +135,16 @@ impl<F: PrimeField32> VirtualMachine<F> {
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
-        mut self,
+        &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let segments = self.execute_segments(exe, input)?;
 
-        Ok(VirtualMachineResult {
+        Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(None))
@@ -146,33 +152,31 @@ impl<F: PrimeField32> VirtualMachine<F> {
         })
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
-        mut self,
-        committed_program: Arc<CommittedProgram<SC>>,
+        &self,
+        commited_exe: Arc<AxVmCommittedExe<SC>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VirtualMachineResult<SC>, ExecutionError>
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(committed_program.program.clone(), input)?;
+        let segments = self.execute_segments(commited_exe.exe.clone(), input)?;
 
-        Ok(VirtualMachineResult {
+        Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
-                .map(|seg| {
-                    seg.generate_proof_input(Some(committed_program.committed_trace_data.clone()))
-                })
+                .map(|seg| seg.generate_proof_input(Some(commited_exe.committed_program.clone())))
                 .collect(),
         })
     }
 }
 
 /// A single segment VM.
-pub struct SingleSegmentVM<F: PrimeField32> {
+pub struct SingleSegmentVmExecutor<F: PrimeField32> {
     pub config: VmConfig,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> SingleSegmentVM<F> {
+impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn new(config: VmConfig) -> Self {
         assert_eq!(
             config.memory_config.persistence_type,
@@ -193,7 +197,7 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     ) -> Result<Vec<Option<F>>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
         let pvs = if let Some(pv_chip) = segment.chip_set.public_values_chip {
-            let borrowed_pv_chip = pv_chip.borrow();
+            let borrowed_pv_chip = RefCell::borrow(&pv_chip);
             borrowed_pv_chip.core.get_custom_public_values()
         } else {
             vec![]
@@ -204,14 +208,14 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        commited_program: Arc<CommittedProgram<SC>>,
+        commited_exe: Arc<AxVmCommittedExe<SC>>,
         input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(commited_program.program.clone().into(), input.into())?;
-        Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
+        let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
+        Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
     }
 
     fn execute_impl(
@@ -231,5 +235,168 @@ impl<F: PrimeField32> SingleSegmentVM<F> {
         );
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
+    }
+}
+
+pub struct VirtualMachine<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> {
+    pub engine: E,
+    pub config: VmConfig,
+    _marker: PhantomData<(F, SC)>,
+}
+
+impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine<F, E, SC> {
+    pub fn new(engine: E, config: VmConfig) -> Self {
+        Self {
+            engine,
+            config,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn keygen(&self) -> MultiStarkProvingKey<SC>
+    where
+        Val<SC>: PrimeField32,
+    {
+        self.config.generate_pk(self.engine.keygen_builder())
+    }
+
+    pub fn execute(
+        &self,
+        exe: impl Into<AxVmExe<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
+    ) -> Result<(), ExecutionError> {
+        let executor = VmExecutor::new(self.config.clone());
+        executor.execute(exe, input)
+    }
+
+    pub fn execute_and_generate(
+        &self,
+        exe: impl Into<AxVmExe<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let executor = VmExecutor::new(self.config.clone());
+        executor.execute_and_generate(exe, input)
+    }
+
+    pub fn execute_and_generate_with_cached_program(
+        &self,
+        committed_exe: Arc<AxVmCommittedExe<SC>>,
+        input: impl Into<VecDeque<Vec<F>>>,
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let executor = VmExecutor::new(self.config.clone());
+        executor.execute_and_generate_with_cached_program(committed_exe, input)
+    }
+
+    pub fn prove_single(
+        &self,
+        pk: &MultiStarkProvingKey<SC>,
+        proof_input: ProofInput<SC>,
+    ) -> Proof<SC>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        self.engine.prove(pk, proof_input)
+    }
+
+    pub fn prove(
+        &self,
+        pk: &MultiStarkProvingKey<SC>,
+        results: VmExecutorResult<SC>,
+    ) -> Vec<Proof<SC>>
+    where
+        SC::Pcs: Sync,
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        results
+            .per_segment
+            .into_iter()
+            .map(|proof_input| self.engine.prove(pk, proof_input))
+            .collect()
+    }
+
+    pub fn verify_single(
+        &self,
+        vk: &MultiStarkVerifyingKey<SC>,
+        proof: &Proof<SC>,
+    ) -> Result<(), VerificationError> {
+        self.engine.verify(vk, proof)
+    }
+
+    pub fn verify(
+        &self,
+        vk: &MultiStarkVerifyingKey<SC>,
+        proofs: Vec<Proof<SC>>,
+    ) -> Result<(), VerificationError> {
+        let mut prev_final_memory_root = None;
+        let mut prev_final_pc = None;
+
+        for (i, proof) in proofs.iter().enumerate() {
+            let res = self.engine.verify(vk, proof);
+            match res {
+                Ok(_) => (),
+                Err(e) => return Err(e),
+            };
+
+            // Check public values.
+            for air_proof_data in proof.per_air.iter() {
+                let pvs = &air_proof_data.public_values;
+                let air_vk = &vk.per_air[air_proof_data.air_id];
+
+                if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                    let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
+
+                    if i != 0 {
+                        // Check initial pc matches the previous final pc.
+                        assert_eq!(pvs.initial_pc, prev_final_pc.unwrap());
+                    } else {
+                        // TODO: Fetch initial pc from program
+                    }
+                    prev_final_pc = Some(pvs.final_pc);
+
+                    let expected_is_terminate = i == proofs.len() - 1;
+                    assert_eq!(
+                        pvs.is_terminate,
+                        Val::<SC>::from_bool(expected_is_terminate)
+                    );
+
+                    let expected_exit_code = if expected_is_terminate {
+                        ExitCode::Success as u32
+                    } else {
+                        DEFAULT_SUSPEND_EXIT_CODE
+                    };
+                    assert_eq!(
+                        pvs.exit_code,
+                        Val::<SC>::from_canonical_u32(expected_exit_code)
+                    );
+                } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                    let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+
+                    // Check that initial root matches the previous final root.
+                    if i != 0 {
+                        assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
+                    }
+                    prev_final_memory_root = Some(pvs.final_root);
+                } else {
+                    assert_eq!(pvs.len(), 0);
+                    assert_eq!(air_vk.params.num_public_values, 0);
+                }
+            }
+        }
+        Ok(())
     }
 }

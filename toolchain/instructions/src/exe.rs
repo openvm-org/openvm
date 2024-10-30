@@ -14,7 +14,7 @@ pub struct AxVmExe<F> {
     pub program: Program<F>,
     /// Start address of pc.
     pub pc_start: u32,
-    /// Initial memory image in address space 2.
+    /// Initial memory image.
     pub init_memory: MemoryImage<F>,
 }
 

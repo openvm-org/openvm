@@ -8,7 +8,7 @@ use ax_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{program::Program, SystemOpcode, UsizeOpcode};
+use axvm_instructions::{exe::AxVmExe, program::Program, SystemOpcode, UsizeOpcode};
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
@@ -16,24 +16,25 @@ use p3_maybe_rayon::prelude::*;
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
-/// A program with a committed cached trace.
-pub struct CommittedProgram<SC: StarkGenericConfig> {
-    pub committed_trace_data: CommittedTraceData<SC>,
-    pub program: Program<Val<SC>>,
+pub struct AxVmCommittedExe<SC: StarkGenericConfig> {
+    /// Raw executable.
+    pub exe: AxVmExe<Val<SC>>,
+    /// Committed program trace.
+    pub committed_program: CommittedTraceData<SC>,
 }
 
-impl<SC: StarkGenericConfig> CommittedProgram<SC>
+impl<SC: StarkGenericConfig> AxVmCommittedExe<SC>
 where
     Val<SC>: PrimeField64,
 {
-    pub fn commit(program: &Program<Val<SC>>, pcs: &SC::Pcs) -> CommittedProgram<SC> {
-        let cached_trace = generate_cached_trace(program);
-        CommittedProgram {
-            committed_trace_data: CommittedTraceData {
+    pub fn commit(exe: AxVmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
+        let cached_trace = generate_cached_trace(&exe.program);
+        Self {
+            committed_program: CommittedTraceData {
                 raw_data: Arc::new(cached_trace.clone()),
                 prover_data: TraceCommitter::new(pcs).commit(vec![cached_trace]),
             },
-            program: program.clone(),
+            exe,
         }
     }
 }
@@ -73,7 +74,7 @@ impl<F: PrimeField64> ProgramChip<F> {
     }
 }
 
-fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
+pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
     let mut instructions = program
         .instructions_and_debug_infos

@@ -11,9 +11,9 @@ use ax_stark_sdk::{
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use axvm_circuit::{
     arch::{
-        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVmExecutor, VmConfig, VmExecutor,
     },
-    system::program::trace::CommittedProgram,
+    system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{hints::Hintable, types::InnerConfig};
@@ -62,11 +62,14 @@ fn test_1() {
         builder.halt();
         builder.compile_isa()
     };
-    let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
+    let committed_exe = Arc::new(AxVmCommittedExe::commit(
+        program.into(),
+        engine.config.pcs(),
+    ));
 
-    let app_vm = VirtualMachine::new(axiom_vm_pk.app_vm_config.clone());
+    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(committed_program, vec![])
+        .execute_and_generate_with_cached_program(committed_exe, vec![])
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 1);
     let app_vm_seg_proofs: Vec<_> = app_vm_result
@@ -75,10 +78,10 @@ fn test_1() {
         .map(|proof_input| engine.prove(&axiom_vm_pk.app_vm_pk, proof_input))
         .collect();
 
-    let leaf_vm = SingleSegmentVM::new(axiom_vm_pk.leaf_vm_config);
+    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_config);
     leaf_vm
         .execute(
-            axiom_vm_pk.committed_leaf_program.program.clone(),
+            axiom_vm_pk.committed_leaf_program.exe.clone(),
             app_vm_seg_proofs.write(),
         )
         .unwrap();

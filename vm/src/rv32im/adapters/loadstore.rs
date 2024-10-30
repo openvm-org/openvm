@@ -131,6 +131,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
     pub imm: F,
     pub imm_sign: bool,
     pub mem_ptr_limbs: [F; 2],
+    pub mem_as: F,
 }
 
 #[derive(Debug, Clone)]
@@ -156,7 +157,7 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub imm_sign: T,
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr_limbs: [T; 2],
-
+    pub mem_as: T,
     /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_base_aux: MemoryBaseAuxCols<T>,
 }
@@ -248,7 +249,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // read_as is 2 for loads and 1 for stores
-        let read_as = select::<AB::Expr>(is_load.clone(), AB::Expr::two(), AB::Expr::one());
+        let read_as = select::<AB::Expr>(is_load.clone(), local_cols.mem_as, AB::Expr::one());
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
         // Note: shift_amount is expected to have degree 2, thus we can't put it in the select clause
@@ -269,7 +270,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
         // write_as is 1 for loads and 2 for stores
-        let write_as = select::<AB::Expr>(is_load.clone(), AB::Expr::one(), AB::Expr::two());
+        let write_as = select::<AB::Expr>(is_load.clone(), AB::Expr::one(), local_cols.mem_as);
 
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
         let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
@@ -295,7 +296,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
                     AB::Expr::one(),
-                    AB::Expr::two(),
+                    local_cols.mem_as.into(),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -337,7 +338,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             ..
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert!(e.as_canonical_u32() != 0);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
@@ -392,6 +393,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
                 imm: c,
                 imm_sign: imm_sign == 1,
                 mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
+                mem_as: e,
             },
         ))
     }
@@ -457,6 +459,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         adapter_cols.write_base_aux = aux_cols_factory
             .make_write_aux_cols(write_record.write)
             .get_base();
+        adapter_cols.mem_as = read_record.mem_as;
     }
 
     fn air(&self) -> &Self::Air {

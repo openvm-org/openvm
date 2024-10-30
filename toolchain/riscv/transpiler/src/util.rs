@@ -29,7 +29,6 @@ pub fn from_r_type<F: PrimeField32>(
         F::from_canonical_usize(e_as), // rs2 can be mem (eg modular arith)
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -47,7 +46,6 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
         F::zero(), // rs2 is an immediate
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -65,7 +63,6 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         F::two(), // we load from memory
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -84,7 +81,6 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
         F::zero(), // rs2 is an immediate
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -99,7 +95,6 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         F::two(),
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -116,7 +111,6 @@ pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruct
         F::one(), // rs2 is a register
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -131,7 +125,6 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
         F::zero(),
         F::from_bool(dec_insn.rd != 0), // we may need to use this flag in the operation
         F::zero(),
-        String::new(),
     )
 }
 
@@ -149,7 +142,6 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
         F::zero(),
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 

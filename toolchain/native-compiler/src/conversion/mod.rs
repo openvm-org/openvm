@@ -68,7 +68,6 @@ fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instr
         e: e.to_field(),
         f: F::zero(),
         g: F::zero(),
-        debug: String::new(),
     }
 }
 
@@ -91,7 +90,6 @@ fn inst_med<F: PrimeField64>(
         e: e.to_field(),
         f: f.to_field(),
         g: F::zero(),
-        debug: String::new(),
     }
 }
 
@@ -115,7 +113,6 @@ fn inst_large<F: PrimeField64>(
         e: e.to_field(),
         f,
         g,
-        debug: String::new(),
     }
 }
 
@@ -821,16 +818,16 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::CycleTrackerStart(name) => {
+        AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtStart, &name)]
+                vec![Instruction::debug(PhantomInstruction::CtStart)]
             } else {
                 vec![]
             }
         }
-        AsmInstruction::CycleTrackerEnd(name) => {
+        AsmInstruction::CycleTrackerEnd() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtEnd, &name)]
+                vec![Instruction::debug(PhantomInstruction::CtEnd)]
             } else {
                 vec![]
             }
