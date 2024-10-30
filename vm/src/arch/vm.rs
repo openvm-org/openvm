@@ -398,7 +398,6 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
                         }
                     } else {
                         // TODO: Fetch initial pc from program
-                        todo!()
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
