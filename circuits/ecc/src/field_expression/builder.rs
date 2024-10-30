@@ -149,14 +149,10 @@ pub struct FieldExpr {
 }
 
 impl FieldExpr {
-    pub fn new(
-        config: ExprBuilderConfig,
-        builder: ExprBuilder,
-        range_bus: VariableRangeCheckerBus,
-    ) -> Self {
+    pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
         let subair = CheckCarryModToZeroSubAir::new(
-            config.modulus.clone(),
-            config.limb_bits,
+            builder.prime.clone(),
+            builder.limb_bits,
             range_bus.index,
             range_bus.range_max_bits,
         );

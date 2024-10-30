@@ -36,7 +36,7 @@ impl ModularAddSubCoreAir {
         offset: usize,
     ) -> Self {
         config.check_valid();
-        let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
+        let builder = ExprBuilder::new(config, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x1 = ExprBuilder::new_input(builder.clone());
         let x2 = ExprBuilder::new_input(builder.clone());
@@ -47,7 +47,7 @@ impl ModularAddSubCoreAir {
         x5.save();
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr::new(config, builder, range_bus);
+        let expr = FieldExpr::new(builder, range_bus);
         Self { expr, offset }
     }
 }

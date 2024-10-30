@@ -38,7 +38,7 @@ impl ModularMulDivCoreAir {
     ) -> Self {
         config.check_valid();
 
-        let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
+        let builder = ExprBuilder::new(config, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x = ExprBuilder::new_input(builder.clone());
         let y = ExprBuilder::new_input(builder.clone());
@@ -59,7 +59,7 @@ impl ModularMulDivCoreAir {
 
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr::new(config, builder, range_bus);
+        let expr = FieldExpr::new(builder, range_bus);
         Self { expr, offset }
     }
 }

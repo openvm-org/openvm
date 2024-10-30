@@ -8,7 +8,7 @@ pub fn ec_add_ne_expr(
     range_bus: VariableRangeCheckerBus,
 ) -> FieldExpr {
     config.check_valid();
-    let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x1 = ExprBuilder::new_input(builder.clone());
@@ -22,5 +22,5 @@ pub fn ec_add_ne_expr(
     y3.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(config, builder, range_bus)
+    FieldExpr::new(builder, range_bus)
 }
