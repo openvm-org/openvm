@@ -12,6 +12,7 @@ use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
+use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -722,6 +723,16 @@ impl VmConfig {
             if executors.contains_key(&local_opcode_idx) {
                 panic!("Attempting to override an executor for opcode {global_opcode_idx}");
             }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
             match executor {
                 ExecutorName::EcAddNeRv32_2x32 => {
                     let chip = Rc::new(RefCell::new(EcAddNeChip::new(
@@ -731,9 +742,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        32,
-                        8,
+                        config32,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -747,9 +756,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        32,
-                        8,
+                        config32,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -763,9 +770,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        48,
-                        8,
+                        config48,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -779,9 +784,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        modulus,
-                        48,
-                        8,
+                        config48,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -814,6 +817,16 @@ impl VmConfig {
                     panic!("Attempting to override an executor for opcode {global_opcode_idx}");
                 }
             }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
             match executor {
                 ExecutorName::ModularAddSub => {
                     let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
@@ -823,9 +836,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularAddSubCoreChip::new(
-                            modulus.clone(),
-                            32,
-                            8,
+                            config32,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),
@@ -844,9 +855,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularMulDivCoreChip::new(
-                            modulus.clone(),
-                            32,
-                            8,
+                            config32,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),
@@ -865,9 +874,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularAddSubCoreChip::new(
-                            modulus.clone(),
-                            32,
-                            8,
+                            config32,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),
@@ -886,9 +893,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularMulDivCoreChip::new(
-                            modulus.clone(),
-                            32,
-                            8,
+                            config32,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),
@@ -907,9 +912,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularAddSubCoreChip::new(
-                            modulus.clone(),
-                            48,
-                            8,
+                            config48,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),
@@ -928,9 +931,7 @@ impl VmConfig {
                             memory_controller.clone(),
                         ),
                         ModularMulDivCoreChip::new(
-                            modulus.clone(),
-                            48,
-                            8,
+                            config48,
                             memory_controller.borrow().range_checker.clone(),
                             class_offset,
                         ),

@@ -172,7 +172,7 @@ mod tests {
         save_result: bool,
     ) {
         let prime = BN254.MODULUS.clone();
-        let (subair, range_checker, builder) = setup(&prime);
+        let (range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
         let mut y_fp2 = Fp2::new(builder.clone());
@@ -182,11 +182,7 @@ mod tests {
         }
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr {
-            builder,
-            check_carry_mod_to_zero: subair,
-            range_bus: range_checker.bus(),
-        };
+        let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(1);
@@ -237,7 +233,7 @@ mod tests {
     #[test]
     fn test_fp2_div2() {
         let prime = BN254.MODULUS.clone();
-        let (subair, range_checker, builder) = setup(&prime);
+        let (range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
         let mut y_fp2 = Fp2::new(builder.clone());
@@ -247,11 +243,7 @@ mod tests {
         // no need to save as div auto save.
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr {
-            builder: builder.clone(),
-            check_carry_mod_to_zero: subair,
-            range_bus: range_checker.bus(),
-        };
+        let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(5);
