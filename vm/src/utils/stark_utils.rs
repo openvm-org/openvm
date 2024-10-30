@@ -27,7 +27,7 @@ pub fn air_test_with_min_segments(
     let persistence_type = config.memory_config.persistence_type;
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::<BabyBear, _, _>::new(engine, config);
+    let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let result = vm.execute_and_generate(exe, input).unwrap();
     let proofs = vm.prove(&pk, result);

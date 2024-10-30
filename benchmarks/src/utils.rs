@@ -1,7 +1,10 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
 use ax_stark_sdk::{
-    ax_stark_backend::config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    ax_stark_backend::{
+        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        engine::VerificationData,
+    },
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
@@ -36,16 +39,19 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 
 /// 0. Transpile ELF to axVM executable.
 /// 1. Executes runtime once with full metric collection for flamegraphs (slow).
-/// 2. Generate proving key from config and generate committed exe.
-/// 3. Executes runtime again without metric collection and generate trace.
-/// 4. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
-/// 5. Verify STARK proofs.
+/// 2. Generate proving key from config.
+/// 3. Commit to the exe by generating cached trace for program.
+/// 4. Executes runtime again without metric collection and generate trace.
+/// 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
+/// 6. Verify STARK proofs.
+///
+/// Returns the data necessary for proof aggregation.
 pub fn bench_from_elf<SC, E>(
     engine: E,
     mut config: VmConfig,
     elf: Elf,
     input_stream: Vec<Vec<Val<SC>>>,
-) -> Result<VerificationDataWithFriParams<SC>>
+) -> Result<Vec<VerificationDataWithFriParams<SC>>>
 where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
@@ -67,13 +73,29 @@ where
     config.collect_metrics = false;
     let vm = VirtualMachine::new(engine, config);
     let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
-    // 3. Executes runtime again without metric collection and generate trace.
+    // 3. Commit to the exe by generating cached trace for program.
+    let committed_exe = time(gauge!("commit_exe_time_ms"), || vm.commit_exe(exe));
+    // 4. Executes runtime again without metric collection and generate trace.
     let results = time(gauge!("trace_gen_time_ms"), || {
-        vm.execute_and(exe, input_stream)
+        vm.execute_and_generate_with_cached_program(committed_exe, input_stream)
     })?;
-    // 4. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
+    // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
+    // vm.prove will emit metrics for proof time of each segment
     let proofs = vm.prove(&pk, results);
-    todo!()
+    // 6. Verify STARK proofs.
+    let vk = pk.get_vk();
+    vm.verify(&vk, proofs.clone()).expect("Verification failed");
+    let vdata = proofs
+        .into_iter()
+        .map(|proof| VerificationDataWithFriParams {
+            data: VerificationData {
+                vk: vk.clone(),
+                proof,
+            },
+            fri_params: vm.engine.fri_params(),
+        })
+        .collect();
+    Ok(vdata)
 }
 
 fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {

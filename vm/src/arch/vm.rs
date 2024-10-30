@@ -238,13 +238,19 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     }
 }
 
-pub struct VirtualMachine<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> {
+pub struct VirtualMachine<SC, E> {
     pub engine: E,
     pub config: VmConfig,
-    _marker: PhantomData<(F, SC)>,
+    _marker: PhantomData<SC>,
 }
 
-impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine<F, E, SC> {
+impl<F, SC, E> VirtualMachine<SC, E>
+where
+    F: PrimeField32,
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+    Domain<SC>: PolynomialSpace<Val = F>,
+{
     pub fn new(engine: E, config: VmConfig) -> Self {
         Self {
             engine,
@@ -260,6 +266,11 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         self.config.generate_pk(self.engine.keygen_builder())
     }
 
+    pub fn commit_exe(&self, exe: impl Into<AxVmExe<F>>) -> Arc<AxVmCommittedExe<SC>> {
+        let exe = exe.into();
+        Arc::new(AxVmCommittedExe::commit(exe, self.engine.config().pcs()))
+    }
+
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
@@ -273,10 +284,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
+    ) -> Result<VmExecutorResult<SC>, ExecutionError> {
         let executor = VmExecutor::new(self.config.clone());
         executor.execute_and_generate(exe, input)
     }
@@ -322,10 +330,16 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
+        #[cfg(feature = "bench-metrics")]
+        metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results
             .per_segment
             .into_iter()
-            .map(|proof_input| self.engine.prove(pk, proof_input))
+            .enumerate()
+            .map(|(seg_idx, proof_input)| {
+                tracing::info_span!("prove_segment", segment = seg_idx)
+                    .in_scope(|| self.engine.prove(pk, proof_input))
+            })
             .collect()
     }
 
