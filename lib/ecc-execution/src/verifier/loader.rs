@@ -1,13 +1,22 @@
 //! `Loader` implementation in native rust.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use ax_ecc_lib::ec_msm::msm_axvm_C;
-use halo2curves_axiom::{ff::PrimeField, CurveAffine};
+use halo2curves_axiom::{
+    ff::{Field, PrimeField},
+    group::ScalarMul,
+    CurveAffine,
+};
 use lazy_static::lazy_static;
-use snark_verifier_sdk::snark_verifier::{util::arithmetic::fe_to_big, Error};
+use snark_verifier_sdk::snark_verifier::{
+    loader::{EcPointLoader, Loader, ScalarLoader},
+    pcs::AccumulationDecider,
+    Error,
+};
 
-use super::traits::{EcPointLoader, LoadedEcPoint, LoadedScalar, Loader, ScalarLoader};
+use super::traits::{AxVmEcPoint, AxVmScalar};
+use crate::common::{AffineCoords, FieldExtension, MultiMillerLoop};
 
 lazy_static! {
     /// NativeLoader instance for [`LoadedEcPoint::loader`] and
@@ -15,17 +24,19 @@ lazy_static! {
     pub static ref LOADER: AxVmLoader = AxVmLoader;
 }
 
+pub trait AxVmCurve: CurveAffine + AffineCoords<Self::Base> + ScalarMul<Self> {}
+
 /// `Loader` implementation in native rust.
 #[derive(Clone, Debug)]
 pub struct AxVmLoader;
 
-impl<C: CurveAffine> LoadedEcPoint<C> for C {
-    type Loader = AxVmLoader;
+// impl<C: CurveAffine> LoadedEcPoint<C> for AxVmCurve<C> {
+//     type Loader = AxVmLoader;
 
-    fn loader(&self) -> &AxVmLoader {
-        &LOADER
-    }
-}
+//     fn loader(&self) -> &AxVmLoader<C> {
+//         &LOADER
+//     }
+// }
 
 // impl<F: PrimeField> FieldOps for F {
 //     fn invert(&self) -> Option<F> {
@@ -33,24 +44,11 @@ impl<C: CurveAffine> LoadedEcPoint<C> for C {
 //     }
 // }
 
-impl<F: PrimeField> LoadedScalar<F> for F {
-    type Loader = AxVmLoader;
-
-    fn loader(&self) -> &AxVmLoader {
-        &LOADER
-    }
-
-    fn pow_var(&self, exp: &Self, _: usize) -> Self {
-        let exp = fe_to_big(*exp).to_u64_digits();
-        self.pow_vartime(exp)
-    }
-}
-
-impl<C: CurveAffine> EcPointLoader<C> for AxVmLoader {
-    type LoadedEcPoint = C;
+impl<C: AxVmCurve> EcPointLoader<C> for AxVmLoader {
+    type LoadedEcPoint = AxVmEcPoint<C>;
 
     fn ec_point_load_const(&self, value: &C) -> Self::LoadedEcPoint {
-        *value
+        AxVmEcPoint(value.clone())
     }
 
     fn ec_point_assert_eq(
@@ -65,23 +63,26 @@ impl<C: CurveAffine> EcPointLoader<C> for AxVmLoader {
     }
 
     fn multi_scalar_multiplication(
-        pairs: &[(&<Self as ScalarLoader<C::Scalar>>::LoadedScalar, &C)],
-    ) -> C {
+        pairs: &[(
+            &<Self as ScalarLoader<C::Scalar>>::LoadedScalar,
+            &Self::LoadedEcPoint,
+        )],
+    ) -> Self::LoadedEcPoint {
         let mut scalars = Vec::with_capacity(pairs.len());
         let mut base = Vec::with_capacity(pairs.len());
         for (scalar, point) in pairs {
-            scalars.push(**scalar);
-            base.push(**point);
+            scalars.push(scalar.0);
+            base.push(point.0);
         }
-        msm_axvm_C(base, scalars)
+        AxVmEcPoint(msm_axvm_C(base, scalars))
     }
 }
 
 impl<F: PrimeField> ScalarLoader<F> for AxVmLoader {
-    type LoadedScalar = F;
+    type LoadedScalar = AxVmScalar<F>;
 
     fn load_const(&self, value: &F) -> Self::LoadedScalar {
-        *value
+        AxVmScalar(*value)
     }
 
     fn assert_eq(&self, annotation: &str, lhs: &Self::LoadedScalar, rhs: &Self::LoadedScalar) {
@@ -91,4 +92,48 @@ impl<F: PrimeField> ScalarLoader<F> for AxVmLoader {
     }
 }
 
-impl<C: CurveAffine> Loader<C> for AxVmLoader {}
+impl<C: AxVmCurve> Loader<C> for AxVmLoader {}
+
+/// KZG accumulation scheme. The second generic `MOS` stands for different kind
+/// of multi-open scheme.
+#[derive(Clone, Debug)]
+pub struct AxVmKzgAs<M, MOS>(PhantomData<(M, MOS)>);
+
+impl<M, MOS, C: AxVmCurve, Fp, Fp2, Fp12, const BITS: usize> AccumulationDecider<C, AxVmLoader>
+    for AxVmKzgAs<M, MOS>
+where
+    M: MultiMillerLoop<Fp, Fp2, Fp12, BITS>,
+    C: CurveAffine<ScalarExt = Fp>,
+    MOS: Clone + Debug,
+    Fp: Field,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
+{
+    type DecidingKey = KzgDecidingKey<M>;
+
+    fn decide(
+        dk: &Self::DecidingKey,
+        KzgAccumulator { lhs, rhs }: KzgAccumulator<M::G1Affine, NativeLoader>,
+    ) -> Result<(), Error> {
+        let terms = [(&lhs, &dk.g2.into()), (&rhs, &(-dk.s_g2).into())];
+        bool::from(
+            M::multi_miller_loop(&terms)
+                .final_exponentiation()
+                .is_identity(),
+        )
+        .then_some(())
+        .ok_or_else(|| Error::AssertionFailure("e(lhs, g2)·e(rhs, -s_g2) == O".to_string()))
+    }
+
+    fn decide_all(
+        dk: &Self::DecidingKey,
+        accumulators: Vec<KzgAccumulator<M::G1Affine, NativeLoader>>,
+    ) -> Result<(), Error> {
+        assert!(!accumulators.is_empty());
+        accumulators
+            .into_iter()
+            .map(|accumulator| Self::decide(dk, accumulator))
+            .try_collect::<_, Vec<_>, _>()?;
+        Ok(())
+    }
+}
