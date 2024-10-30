@@ -45,7 +45,7 @@ once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git" }
+halo2curves-axiom = { workspace = true }
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }

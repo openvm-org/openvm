@@ -406,7 +406,30 @@ pub enum Fp12Opcode {
     ADD,
     SUB,
     MUL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x720]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum EcLineDTypeOpcode {
     MUL_013_BY_013,
+    MUL_BY_013,
+    MUL_BY_01234,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x730]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum EcLineMTypeOpcode {
+    MUL_023_BY_023,
+    MUL_BY_023,
+    MUL_BY_02345,
 }
 
 // =================================================================================================

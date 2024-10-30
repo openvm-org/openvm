@@ -1,4 +1,5 @@
 pub mod fp12;
+pub mod line;
 pub mod sw;
 
 // Babybear

@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
+use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerBus,
 };
@@ -7,9 +8,58 @@ use ax_ecc_primitives::{
     field_expression::{ExprBuilder, FieldExpr},
     field_extension::Fp2,
 };
+use axvm_circuit_derive::InstructionExecutor;
+use axvm_instructions::EcLineDTypeOpcode;
 use num_bigint_dig::BigUint;
+use p3_field::PrimeField32;
 
-use crate::intrinsics::ecc::FIELD_ELEMENT_BITS;
+use crate::{
+    arch::VmChipWrapper,
+    intrinsics::{ecc::FIELD_ELEMENT_BITS, field_expression::FieldExpressionCoreChip},
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    system::memory::MemoryControllerRef,
+};
+
+// Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
+// Output: 5 Fp2 coefficients -> 10 field elements
+#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+pub struct EcLineMul013By013Chip<
+    F: PrimeField32,
+    const INPUT_LANES: usize,
+    const OUTPUT_LANES: usize,
+    const LANE_SIZE: usize,
+>(
+    VmChipWrapper<
+        F,
+        Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        FieldExpressionCoreChip,
+    >,
+);
+
+impl<
+        F: PrimeField32,
+        const INPUT_LANES: usize,
+        const OUTPUT_LANES: usize,
+        const LANE_SIZE: usize,
+    > EcLineMul013By013Chip<F, INPUT_LANES, OUTPUT_LANES, LANE_SIZE>
+{
+    pub fn new(
+        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        memory_controller: MemoryControllerRef<F>,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> Self {
+        let expr = mul_013_by_013_expr(config, memory_controller.borrow().range_checker.bus());
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            offset,
+            vec![EcLineDTypeOpcode::MUL_013_BY_013 as usize],
+            memory_controller.borrow().range_checker.clone(),
+            "Mul013By013",
+        );
+        Self(VmChipWrapper::new(adapter, core, memory_controller))
+    }
+}
 
 pub fn mul_013_by_013_expr(
     modulus: BigUint,
