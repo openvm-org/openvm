@@ -15,7 +15,7 @@ use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::hints::InnerVal;
 
@@ -98,7 +98,7 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
     compiler_options: CompilerOptions,
     vm_config: VmConfig,
     engine: &E,
-) -> Result<(VerificationDataWithFriParams<AggSC>, Vec<Vec<Val<AggSC>>>), VerificationError>
+) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
 where
     Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
     AggSC::Pcs: Sync,

@@ -96,8 +96,7 @@ where
     }
 }
 
-type ExecuteAndProveResult<SC> =
-    Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>;
+type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
 
 /// Executes program and runs simple STARK prover test (keygen, prove, verify).
 pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
@@ -117,12 +116,7 @@ where
 {
     let span = tracing::info_span!("execute_and_prove_program").entered();
     let test_proof_input = gen_vm_program_test_proof_input(program, input_stream, config);
-    let pvs = test_proof_input
-        .per_air
-        .iter()
-        .map(|air| air.raw.public_values.clone())
-        .collect();
     let vparams = test_proof_input.run_test(engine)?;
     span.exit();
-    Ok((vparams, pvs))
+    Ok(vparams)
 }

@@ -537,8 +537,10 @@ dependencies = [
  "axvm-circuit",
  "axvm-transpiler",
  "eyre",
+ "metrics",
  "p3-field",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
