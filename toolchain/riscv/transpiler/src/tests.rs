@@ -53,6 +53,7 @@ fn test_decode_elf() -> Result<()> {
 // riscv64-unknown-elf-gcc supports rv32im if you set -march target
 #[test_case("data/rv32im-fib-from-as")]
 #[test_case("data/rv32im-intrin-from-as")]
+#[test_case("data/rv32im-hint-program-elf-release")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
