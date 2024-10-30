@@ -196,8 +196,8 @@ pub enum AsmInstruction<F, EF> {
     /// Publish(val, index).
     Publish(i32, i32),
 
-    CycleTrackerStart(String),
-    CycleTrackerEnd(String),
+    CycleTrackerStart(),
+    CycleTrackerEnd(),
 }
 
 impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
@@ -408,11 +408,11 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::Publish(val, index) => {
                 write!(f, "commit ({})fp ({})fp", val, index)
             }
-            AsmInstruction::CycleTrackerStart(name) => {
-                write!(f, "cycle_tracker_start {}", name)
+            AsmInstruction::CycleTrackerStart() => {
+                write!(f, "cycle_tracker_start")
             }
-            AsmInstruction::CycleTrackerEnd(name) => {
-                write!(f, "cycle_tracker_end {}", name)
+            AsmInstruction::CycleTrackerEnd() => {
+                write!(f, "cycle_tracker_end")
             }
             AsmInstruction::ModularAdd(modulus, dst, src1, src2) => {
                 write!(

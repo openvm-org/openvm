@@ -17,7 +17,6 @@ pub struct Instruction<F> {
     pub e: F,
     pub f: F,
     pub g: F,
-    pub debug: String,
 }
 
 impl<F: Field> Instruction<F> {
@@ -32,7 +31,6 @@ impl<F: Field> Instruction<F> {
             e: isize_to_field::<F>(e),
             f: isize_to_field::<F>(0),
             g: isize_to_field::<F>(0),
-            debug: String::new(),
         }
     }
 
@@ -48,7 +46,6 @@ impl<F: Field> Instruction<F> {
             e: operands[4],
             f: operands[5],
             g: operands[6],
-            debug: String::new(),
         }
     }
 
@@ -72,7 +69,6 @@ impl<F: Field> Instruction<F> {
             e: isize_to_field::<F>(e),
             f: isize_to_field::<F>(f),
             g: isize_to_field::<F>(g),
-            debug: String::new(),
         }
     }
 
@@ -86,11 +82,10 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn debug(phantom: PhantomInstruction, debug: &str) -> Self {
+    pub fn debug(phantom: PhantomInstruction) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.with_default_offset(),
             c: F::from_canonical_usize(phantom as usize),
-            debug: String::from(debug),
             ..Default::default()
         }
     }
@@ -107,7 +102,6 @@ impl<T: Default> Default for Instruction<T> {
             e: T::default(),
             f: T::default(),
             g: T::default(),
-            debug: String::new(),
         }
     }
 }

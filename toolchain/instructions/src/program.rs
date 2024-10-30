@@ -114,12 +114,11 @@ impl<F: Field> Display for Program<F> {
                 e,
                 f,
                 g,
-                debug,
             } = instruction;
             write!(
                 formatter,
-                "{:?} {} {} {} {} {} {} {} {}",
-                opcode, a, b, c, d, e, f, g, debug,
+                "{:?} {} {} {} {} {} {} {}",
+                opcode, a, b, c, d, e, f, g,
             )?;
         }
         Ok(())
@@ -137,11 +136,10 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
             e,
             f,
             g,
-            debug,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {} {} {} {}",
-            pc, opcode, a, b, c, d, e, f, g, debug
+            "{} | {:?} {} {} {} {} {} {} {}",
+            pc, opcode, a, b, c, d, e, f, g
         );
     }
 }

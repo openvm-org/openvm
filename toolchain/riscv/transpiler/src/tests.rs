@@ -6,7 +6,7 @@ use std::{
 use ax_stark_sdk::config::setup_tracing;
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
-    arch::{VirtualMachine, VmConfig},
+    arch::{VmConfig, VmExecutor},
     sdk::{air_test, air_test_with_min_segments},
 };
 use axvm_platform::memory::MEM_SIZE;
@@ -19,15 +19,15 @@ use crate::{elf::Elf, rrs::transpile, AxVmExe};
 
 type F = BabyBear;
 
-fn setup_vm_from_elf(
+fn setup_executor_from_elf(
     elf_path: impl AsRef<Path>,
     config: VmConfig,
-) -> Result<(VirtualMachine<F>, AxVmExe<F>)> {
+) -> Result<(VmExecutor<F>, AxVmExe<F>)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let vm = VirtualMachine::new(config);
-    Ok((vm, elf.into()))
+    let executor = VmExecutor::new(config);
+    Ok((executor, elf.into()))
 }
 
 fn get_examples_dir() -> PathBuf {
@@ -69,8 +69,8 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32im();
-    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(exe, vec![])?;
+    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
@@ -86,8 +86,8 @@ fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
         max_segment_len: (1 << 18) - 1,
         ..VmConfig::rv32i()
     };
-    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
-    air_test_with_min_segments(vm, exe, vec![], min_segments);
+    let (_, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    air_test_with_min_segments(config, exe, vec![], min_segments);
     Ok(())
 }
 
@@ -95,8 +95,8 @@ fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32im().add_canonical_modulus();
-    let (vm, exe) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(exe, vec![])?;
+    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
@@ -104,7 +104,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 fn test_terminate_runtime() -> Result<()> {
     setup_tracing();
     let config = VmConfig::rv32i();
-    let (vm, exe) = setup_vm_from_elf("data/rv32im-terminate-from-as", config)?;
-    air_test(vm, exe);
+    let (_, exe) = setup_executor_from_elf("data/rv32im-terminate-from-as", config.clone())?;
+    air_test(config, exe);
     Ok(())
 }
