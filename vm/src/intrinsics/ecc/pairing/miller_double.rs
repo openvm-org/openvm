@@ -105,10 +105,6 @@ mod tests {
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
         let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(fq_to_biguint);
-        println!(
-            "inputs: {} {} {} {}",
-            inputs[0], inputs[1], inputs[2], inputs[3]
-        );
 
         let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
         let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
@@ -117,15 +113,6 @@ mod tests {
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
         assert_eq!(result.len(), 8); // EcPoint<Fp2> and two Fp2 coefficients
-        println!("{} v.s. {}", result[0], fq_to_biguint(Q_acc_init.x.c0));
-        println!("{} v.s. {}", result[1], fq_to_biguint(Q_acc_init.x.c1));
-        println!("{} v.s. {}", result[2], fq_to_biguint(Q_acc_init.y.c0));
-        println!("{} v.s. {}", result[3], fq_to_biguint(Q_acc_init.y.c1));
-        println!("{} v.s. {}", result[4], fq_to_biguint(l_init.b.c0));
-        println!("{} v.s. {}", result[5], fq_to_biguint(l_init.b.c1));
-        println!("{} v.s. {}", result[6], fq_to_biguint(l_init.c.c0));
-        println!("{} v.s. {}", result[7], fq_to_biguint(l_init.c.c1));
-
         assert_eq!(result[0], fq_to_biguint(Q_acc_init.x.c0));
         assert_eq!(result[1], fq_to_biguint(Q_acc_init.x.c1));
         assert_eq!(result[2], fq_to_biguint(Q_acc_init.y.c0));
