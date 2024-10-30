@@ -318,29 +318,15 @@ fn test_mul_013_by_013() {
     let r_cmp = ax_ecc_execution::curves::bn254::mul_013_by_013::<Fq, Fq2>(
         line0,
         line1,
-        Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::zero()),
+        Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one()),
     );
     let r_cmp_bigint = r_cmp
         .map(|x| [bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)])
         .concat();
 
-    println!("{:#?}", output);
-    println!("{:#?}", r_cmp);
-
     for i in 0..10 {
         assert_eq!(output[i], r_cmp_bigint[i]);
     }
-
-    // assert_eq!(output[0], bn254_fq_to_biguint(&r_cmp[0].c0));
-    // assert_eq!(output[1], bn254_fq_to_biguint(&r_cmp[0].c1));
-    // assert_eq!(output[2], bn254_fq_to_biguint(&r_cmp[1].c0));
-    // assert_eq!(output[3], bn254_fq_to_biguint(&r_cmp[1].c1));
-    // assert_eq!(output[4], bn254_fq_to_biguint(&r_cmp[2].c0));
-    // assert_eq!(output[5], bn254_fq_to_biguint(&r_cmp[2].c1));
-    // assert_eq!(output[6], bn254_fq_to_biguint(&r_cmp[3].c0));
-    // assert_eq!(output[7], bn254_fq_to_biguint(&r_cmp[3].c1));
-    // assert_eq!(output[8], bn254_fq_to_biguint(&r_cmp[4].c0));
-    // assert_eq!(output[9], bn254_fq_to_biguint(&r_cmp[4].c1));
 
     let input_line0_limbs = input_line0
         .iter()
