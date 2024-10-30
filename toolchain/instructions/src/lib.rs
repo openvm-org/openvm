@@ -415,7 +415,7 @@ pub enum Fp12Opcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {
-    MILLER_DOUBLE,
+    MILLER_DOUBLE_STEP,
 }
 
 // =================================================================================================

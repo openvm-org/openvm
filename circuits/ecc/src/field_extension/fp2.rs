@@ -133,6 +133,10 @@ impl Fp2 {
         let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
         Fp2 { c0, c1 }
     }
+
+    pub fn neg(&mut self) -> Fp2 {
+        self.int_mul([-1, 0])
+    }
 }
 
 #[cfg(test)]

@@ -11,7 +11,8 @@ use num_bigint_dig::BigUint;
 
 use super::super::FIELD_ELEMENT_BITS;
 
-pub fn miller_double_expr(
+// Ref: https://github.com/axiom-crypto/afs-prototype/blob/f7d6fa7b8ef247e579740eb652fcdf5a04259c28/lib/ecc-execution/src/common/miller_step.rs#L7
+pub fn miller_double_step_expr(
     modulus: BigUint,
     num_limbs: usize,
     limb_bits: usize,
@@ -28,18 +29,18 @@ pub fn miller_double_expr(
     let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
-    let mut s_x = Fp2::new(builder.clone());
-    let mut s_y = Fp2::new(builder.clone());
+    let mut x_s = Fp2::new(builder.clone());
+    let mut y_s = Fp2::new(builder.clone());
 
-    let mut three_x_square = s_x.square().int_mul([3, 0]);
-    let mut lambda = three_x_square.div(&mut s_y.int_mul([2, 0]));
-    let mut x_2s = lambda.square().sub(&mut s_x.int_mul([2, 0]));
-    let mut y_2s = lambda.mul(&mut (s_x.sub(&mut x_2s))).sub(&mut s_y);
+    let mut three_x_square = x_s.square().int_mul([3, 0]);
+    let mut lambda = three_x_square.div(&mut y_s.int_mul([2, 0]));
+    let mut x_2s = lambda.square().sub(&mut x_s.int_mul([2, 0]));
+    let mut y_2s = lambda.mul(&mut (x_s.sub(&mut x_2s))).sub(&mut y_s);
     x_2s.save_output();
     y_2s.save_output();
 
-    let mut b = lambda.int_mul([-1, 0]);
-    let mut c = lambda.mul(&mut s_x).sub(&mut s_y);
+    let mut b = lambda.neg();
+    let mut c = lambda.mul(&mut x_s).sub(&mut y_s);
     b.save_output();
     c.save_output();
 
@@ -82,7 +83,7 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_miller_double() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let expr = miller_double_expr(
+        let expr = miller_double_step_expr(
             BN254.MODULUS.clone(),
             NUM_LIMBS,
             LIMB_BITS,
@@ -91,7 +92,7 @@ mod tests {
         let core = FieldExpressionCoreChip::new(
             expr,
             PairingOpcode::default_offset(),
-            vec![PairingOpcode::MILLER_DOUBLE as usize],
+            vec![PairingOpcode::MILLER_DOUBLE_STEP as usize],
             tester.memory_controller().borrow().range_checker.clone(),
             "MillerDouble",
         );
@@ -129,7 +130,7 @@ mod tests {
             &mut tester,
             input_limbs.to_vec(),
             vec![],
-            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE as usize,
+            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
         );
 
         tester.execute(&mut chip, instruction);
