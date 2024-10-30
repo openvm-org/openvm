@@ -39,4 +39,15 @@ macro_rules! custom_insn_r {
             ), opcode = const $opcode, funct3 = const $funct3)
         }
     };
+    ($opcode:expr, $funct3:expr, $x:ident, $rs1:literal, $rs2:literal) => {
+        unsafe {
+            core::arch::asm!(concat!(
+                ".insn r {opcode}, {funct3}, {rd}, ",
+                $rs1,
+                ", ",
+                $rs2,
+            ), opcode = const $opcode, funct3 = const $funct3, rd = out(reg) $x)
+        }
+    };
+    // TODO: implement more variants with like rs1 = in(reg) $y etc
 }

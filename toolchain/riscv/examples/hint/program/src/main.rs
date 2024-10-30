@@ -8,4 +8,8 @@ pub fn main() {
     if x == 0 {
         loop {}
     }
+    let vec = axvm::intrinsics::io::read_size_and_vec();
+    if vec.iter().sum::<u8>() == 0 {
+        loop {}
+    }
 }
