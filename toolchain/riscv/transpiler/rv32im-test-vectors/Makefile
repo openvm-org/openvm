@@ -34,17 +34,13 @@ define compile_template
 
 $$($(1)_p_tests): $(1)-p-%: $(src_dir)/$(1)/%.S
 	$$(RISCV_GCC) $(2) $$(RISCV_GCC_OPTS) -I$(env_dir) -I$(src_dir)/macros/scalar -T$(env_dir)/link.ld  $$< -o $(out_dir)/$$@
-$(1)_tests += $$($(1)_p_tests)
 
+$(1)_tests += $$($(1)_p_tests)
 $(1)_tests_dump = $$(addsuffix .dump, $$($(1)_tests))
+tests += $$($(1)_tests)
 
 .PHONY: $(1)
 
-COMPILER_SUPPORTS_$(1) := $$(shell $$(RISCV_GCC) $(2) -c -x c /dev/null -o /dev/null 2> /dev/null; echo $$$$?)
-
-ifeq ($$(COMPILER_SUPPORTS_$(1)),0)
-tests += $$($(1)_tests)
-endif
 
 endef
 
