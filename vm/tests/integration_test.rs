@@ -15,7 +15,7 @@ use axvm_circuit::{
         VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
-    system::{memory::CHUNK, program::trace::CommittedProgram},
+    system::{memory::CHUNK, program::trace::AxVmCommittedExe},
     utils::{air_test, air_test_with_min_segments},
 };
 use axvm_instructions::{
@@ -200,14 +200,17 @@ fn test_vm_public_values() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
+        let committed_exe = Arc::new(AxVmCommittedExe::commit(
+            program.clone().into(),
+            engine.config.pcs(),
+        ));
         let vm = SingleSegmentVmExecutor::new(vm_config);
-        let pvs = vm.execute(program.clone(), vec![]).unwrap();
+        let pvs = vm.execute(program, vec![]).unwrap();
         assert_eq!(
             pvs,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
-        let proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
+        let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
         engine
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");

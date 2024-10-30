@@ -20,7 +20,7 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, CHUNK},
-        program::{trace::CommittedProgram, ExecutionError},
+        program::{trace::AxVmCommittedExe, ExecutionError},
     },
 };
 
@@ -153,20 +153,18 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
-        committed_program: Arc<CommittedProgram<SC>>,
+        commited_exe: Arc<AxVmCommittedExe<SC>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(committed_program.program.clone(), input)?;
+        let segments = self.execute_segments(commited_exe.exe.clone(), input)?;
 
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
-                .map(|seg| {
-                    seg.generate_proof_input(Some(committed_program.committed_trace_data.clone()))
-                })
+                .map(|seg| seg.generate_proof_input(Some(commited_exe.committed_program.clone())))
                 .collect(),
         })
     }
@@ -210,14 +208,14 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        commited_program: Arc<CommittedProgram<SC>>,
+        commited_exe: Arc<AxVmCommittedExe<SC>>,
         input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segment = self.execute_impl(commited_program.program.clone().into(), input.into())?;
-        Ok(segment.generate_proof_input(Some(commited_program.committed_trace_data.clone())))
+        let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
+        Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
     }
 
     fn execute_impl(
@@ -285,14 +283,14 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
 
     pub fn execute_and_generate_with_cached_program(
         &self,
-        committed_program: Arc<CommittedProgram<SC>>,
+        committed_exe: Arc<AxVmCommittedExe<SC>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let executor = VmExecutor::new(self.config.clone());
-        executor.execute_and_generate_with_cached_program(committed_program, input)
+        executor.execute_and_generate_with_cached_program(committed_exe, input)
     }
 
     pub fn prove_single(
