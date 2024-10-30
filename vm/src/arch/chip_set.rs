@@ -36,7 +36,10 @@ use crate::{
         AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
     },
     intrinsics::{
-        ecc::sw::{EcAddNeChip, EcDoubleChip},
+        ecc::{
+            pairing::MillerDoubleStepChip,
+            sw::{EcAddNeChip, EcDoubleChip},
+        },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -787,6 +790,38 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::EcDoubleRv32_6x16(chip));
                 }
+                ExecutorName::MillerDoubleStepRv32_32 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        32,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleStepRv32_32(chip));
+                }
+                ExecutorName::MillerDoubleStepRv32_48 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 12, 24, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        modulus,
+                        48,
+                        8,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleStepRv32_48(chip));
+                }
                 _ => unreachable!("Unsupported executor"),
             }
         }
@@ -960,20 +995,27 @@ fn gen_ec_executor_tuple(
         .iter()
         .enumerate()
         .flat_map(|(i, curve)| {
-            let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
+            let ec_class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
+            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
                     (
                         EccOpcode::EC_ADD_NE as usize,
-                        class_offset,
+                        ec_class_offset,
                         ExecutorName::EcAddNeRv32_2x32,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
-                        class_offset,
+                        ec_class_offset,
                         ExecutorName::EcDoubleRv32_2x32,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        pairing_class_offset,
+                        ExecutorName::MillerDoubleStepRv32_32,
                         curve.prime(),
                     ),
                 ]
@@ -981,14 +1023,20 @@ fn gen_ec_executor_tuple(
                 vec![
                     (
                         EccOpcode::EC_ADD_NE as usize,
-                        class_offset,
+                        ec_class_offset,
                         ExecutorName::EcAddNeRv32_6x16,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
-                        class_offset,
+                        ec_class_offset,
                         ExecutorName::EcDoubleRv32_6x16,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        pairing_class_offset,
+                        ExecutorName::MillerDoubleStepRv32_48,
                         curve.prime(),
                     ),
                 ]
