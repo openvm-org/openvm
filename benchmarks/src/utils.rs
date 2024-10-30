@@ -34,7 +34,6 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     Elf::decode(&data, MEM_SIZE as u32)
 }
 
-/// 0. Transpile ELF to axVM executable.
 /// 1. Executes runtime once with full metric collection for flamegraphs (slow).
 /// 2. Generate proving key from config.
 /// 3. Commit to the exe by generating cached trace for program.
@@ -43,10 +42,10 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_elf<SC, E>(
+pub fn bench_from_exe<SC, E>(
     engine: E,
     mut config: VmConfig,
-    elf: Elf,
+    exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
 where
@@ -60,8 +59,7 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    // 0. Transpile ELF to axVM executable.
-    let exe = AxVmExe::<Val<SC>>::from(elf);
+    let exe = exe.into();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).
     config.collect_metrics = true;
     let executor = VmExecutor::<Val<SC>>::new(config.clone());

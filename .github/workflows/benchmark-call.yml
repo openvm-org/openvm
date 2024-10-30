@@ -67,7 +67,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="verify_fibair"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -75,7 +75,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="tiny_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -83,7 +83,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="alu256_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
@@ -91,7 +91,7 @@ jobs:
         working-directory: lib/recursion
         run: |
           BIN_NAME="small_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
           echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       ######################################################
@@ -112,10 +112,10 @@ jobs:
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
-              python3 stark-sdk/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json stark-sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
-              python3 stark-sdk/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json stark-sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
@@ -129,7 +129,7 @@ jobs:
       - name: Generate flamegraphs
         run: |
           if [[ -f $METRIC_PATH ]]; then
-            python3 stark-sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi

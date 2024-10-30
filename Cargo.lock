@@ -535,6 +535,8 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
  "axvm-transpiler",
  "eyre",
  "metrics",

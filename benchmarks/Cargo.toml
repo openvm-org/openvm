@@ -10,6 +10,8 @@ repository.workspace = true
 axvm-circuit = { workspace = true }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
+axvm-native-compiler.workspace = true
+axvm-recursion = { workspace = true, features = ["test-utils"] }
 ax-stark-sdk.workspace = true
 p3-field.workspace = true
 eyre.workspace = true
@@ -21,8 +23,9 @@ tracing.workspace = true
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
-bench-metrics = ["axvm-circuit/bench-metrics"]
-parallel = ["axvm-circuit/parallel"]
+bench-metrics = ["axvm-recursion/bench-metrics"]
+static-verifier = ["axvm-recursion/static-verifier"]
+parallel = ["axvm-recursion/parallel"]
 mimalloc = ["axvm-circuit/mimalloc"]
 jemalloc = ["axvm-circuit/jemalloc"]
 jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
