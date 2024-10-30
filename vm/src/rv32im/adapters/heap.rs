@@ -30,13 +30,11 @@ use crate::{
     },
 };
 
-/// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
+/// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers
 ///   are read from registers (address space 1).
-/// * Reads take the form of `NUM_READS` consecutive reads of size `READ_SIZE`
-///   from the heap, starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
-/// * Writes take the form of `NUM_WRITES` consecutive writes of size `WRITE_SIZE`
-///   to the heap, starting from the address in `rd`.
+/// * Reads are from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
+/// * Writes are from the address in `rd`.
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
