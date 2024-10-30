@@ -375,8 +375,6 @@ impl SymbolicExpr {
     ) -> OverflowInt<isize> {
         match self {
             SymbolicExpr::IntAdd(lhs, s) => {
-                // lhs.evaluate_overflow_isize(inputs, variables, flags)
-                //     + OverflowInt::from_vec(vec![*s], 8)
                 let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
                 left.limbs[0] += *s;
                 left.limb_max_abs += s.unsigned_abs();
@@ -426,8 +424,6 @@ impl SymbolicExpr {
     ) -> OverflowInt<AB::Expr> {
         match self {
             SymbolicExpr::IntAdd(lhs, s) => {
-                // lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
-
                 let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
                 let scalar = if *s >= 0 {
                     AB::Expr::from_canonical_usize(*s as usize)
