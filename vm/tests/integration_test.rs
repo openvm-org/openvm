@@ -500,15 +500,15 @@ fn test_vm_fibonacci_old() {
 fn test_vm_fibonacci_old_cycle_tracker() {
     // NOTE: Instructions commented until cycle tracker instructions are not counted as additional assembly Instructions
     let instructions = vec![
-        Instruction::debug(PhantomInstruction::CtStart, "full program"),
-        Instruction::debug(PhantomInstruction::CtStart, "store"),
+        Instruction::debug(PhantomInstruction::CtStart),
+        Instruction::debug(PhantomInstruction::CtStart),
         Instruction::from_isize(STOREW.with_default_offset(), 9, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 2, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 3, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 0, 0, 0, 0, 2),
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 1, 0, 2),
-        Instruction::debug(PhantomInstruction::CtEnd, "store"),
-        Instruction::debug(PhantomInstruction::CtStart, "total loop"),
+        Instruction::debug(PhantomInstruction::CtEnd),
+        Instruction::debug(PhantomInstruction::CtStart),
         Instruction::from_isize(
             NativeBranchEqualOpcode(BEQ).with_default_offset(),
             2,
@@ -518,12 +518,12 @@ fn test_vm_fibonacci_old_cycle_tracker() {
             1,
         ), // Instruction::from_isize(BEQ.with_default_offset(), 2, 0, 7, 1, 1),
         Instruction::large_from_isize(ADD.with_default_offset(), 2, 2, 3, 1, 1, 1, 0),
-        Instruction::debug(PhantomInstruction::CtStart, "inner loop"),
+        Instruction::debug(PhantomInstruction::CtStart),
         Instruction::from_isize(LOADW.with_default_offset(), 4, -2, 2, 1, 2),
         Instruction::from_isize(LOADW.with_default_offset(), 5, -1, 2, 1, 2),
         Instruction::large_from_isize(ADD.with_default_offset(), 6, 4, 5, 1, 1, 1, 0),
         Instruction::from_isize(STOREW.with_default_offset(), 6, 0, 2, 1, 2),
-        Instruction::debug(PhantomInstruction::CtEnd, "inner loop"),
+        Instruction::debug(PhantomInstruction::CtEnd),
         Instruction::from_isize(
             JAL.with_default_offset(),
             7,
@@ -532,8 +532,8 @@ fn test_vm_fibonacci_old_cycle_tracker() {
             1,
             0,
         ),
-        Instruction::debug(PhantomInstruction::CtEnd, "total loop"),
-        Instruction::debug(PhantomInstruction::CtEnd, "full program"),
+        Instruction::debug(PhantomInstruction::CtEnd),
+        Instruction::debug(PhantomInstruction::CtEnd),
         Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
     ];
 

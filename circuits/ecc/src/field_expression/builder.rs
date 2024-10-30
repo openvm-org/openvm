@@ -22,6 +22,19 @@ use p3_field::{Field, PrimeField64};
 use super::{FieldVariable, SymbolicExpr};
 
 #[derive(Clone)]
+pub struct ExprBuilderConfig {
+    pub modulus: BigUint,
+    pub num_limbs: usize,
+    pub limb_bits: usize,
+}
+
+impl ExprBuilderConfig {
+    pub fn check_valid(&self) {
+        assert!(self.modulus.bits() <= self.num_limbs * self.limb_bits);
+    }
+}
+
+#[derive(Clone)]
 pub struct ExprBuilder {
     // The prime field.
     pub prime: BigUint,
@@ -56,20 +69,15 @@ pub struct ExprBuilder {
 }
 
 impl ExprBuilder {
-    pub fn new(
-        prime: BigUint,
-        limb_bits: usize,
-        num_limbs: usize,
-        range_checker_bits: usize,
-    ) -> Self {
-        let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
+    pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
+        let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         Self {
-            prime,
+            prime: config.modulus,
             prime_bigint,
             num_input: 0,
             num_flags: 0,
-            limb_bits,
-            num_limbs,
+            limb_bits: config.limb_bits,
+            num_limbs: config.num_limbs,
             range_checker_bits,
             num_variables: 0,
             q_limbs: vec![],
@@ -138,6 +146,22 @@ pub struct FieldExpr {
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
 
     pub range_bus: VariableRangeCheckerBus,
+}
+
+impl FieldExpr {
+    pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+        let subair = CheckCarryModToZeroSubAir::new(
+            builder.prime.clone(),
+            builder.limb_bits,
+            range_bus.index,
+            range_bus.range_max_bits,
+        );
+        FieldExpr {
+            builder,
+            check_carry_mod_to_zero: subair,
+            range_bus,
+        }
+    }
 }
 
 impl Deref for FieldExpr {

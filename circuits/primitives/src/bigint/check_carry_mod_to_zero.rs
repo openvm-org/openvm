@@ -33,10 +33,8 @@ impl CheckCarryModToZeroSubAir {
         limb_bits: usize,
         range_checker_bus: usize,
         decomp: usize,
-        field_element_bits: usize,
     ) -> Self {
-        let check_carry_to_zero =
-            CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp, field_element_bits);
+        let check_carry_to_zero = CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp);
         let modulus_limbs = big_uint_to_limbs(&modulus, limb_bits);
         Self {
             modulus_limbs,
@@ -77,10 +75,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
                 is_valid,
             );
         }
-        let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
-            quotient,
-            self.check_carry_to_zero.limb_bits,
-        );
+        let limb_bits = self.check_carry_to_zero.limb_bits;
+        let overflow_q = OverflowInt::<AB::Expr> {
+            limbs: quotient.iter().map(|&x| x.into()).collect(),
+            max_overflow_bits: limb_bits + 1, // q can be negative, so this is the constraint we have when range check.
+            limb_max_abs: 1 << limb_bits,
+        };
         let p_limbs = self
             .modulus_limbs
             .iter()

@@ -169,7 +169,6 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::zero(),
             F::from_bool(dec_insn.rd != 0),
             F::zero(),
-            String::new(),
         )
     }
 
@@ -196,7 +195,6 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::zero(),
             F::zero(),
             F::zero(),
-            String::new(),
         )
     }
 
