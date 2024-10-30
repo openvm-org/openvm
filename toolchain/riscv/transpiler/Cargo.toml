@@ -12,8 +12,7 @@ axvm-platform.workspace = true
 axvm-instructions.workspace = true
 axvm-circuit.workspace = true      # TODO: remove this dependency
 strum.workspace = true
-
-color-eyre = { git = "https://github.com/eyre-rs/eyre.git", rev = "7706273" }
+eyre.workspace = true
 elf = "0.7.4"
 rrs-lib = "0.1.0"
 
@@ -21,7 +20,9 @@ rrs-lib = "0.1.0"
 p3-baby-bear.workspace = true
 test-case.workspace = true
 axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-build.workspace = true
 ax-stark-sdk.workspace = true
+tempfile.workspace = true
 
 [features]
 parallel = ["axvm-circuit/parallel"]

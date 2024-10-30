@@ -1,0 +1,22 @@
+[package]
+name = "axvm-build"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "axVM build tool"
+
+[dependencies]
+axvm-platform = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+eyre.workspace = true
+cargo_metadata = "0.18"
+dirs = "5.0"
+hex = "0.4"
+tempfile = "3.13.0"
+
+[dev-dependencies]
+
+[features]
