@@ -16,6 +16,13 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn zero(builder: Rc<RefCell<ExprBuilder>>) -> Self {
+        Fp2 {
+            c0: FieldVariable::from_var(builder.clone(), SymbolicExpr::Var(0)),
+            c1: FieldVariable::from_var(builder.clone(), SymbolicExpr::Var(0)),
+        }
+    }
+
     pub fn save(&mut self) -> [usize; 2] {
         let c0_idx = self.c0.save();
         let c1_idx = self.c1.save();
