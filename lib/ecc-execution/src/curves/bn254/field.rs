@@ -179,7 +179,3 @@ impl FeltPrint<Fq12> for Fq12 {
         self.c1.c2.c1.felt_print("");
     }
 }
-
-pub struct FieldExtFq12(pub Fq12);
-pub struct FieldExtFq2(pub Fq2);
-pub struct FieldExtFq(pub Fq);
