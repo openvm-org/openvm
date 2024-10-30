@@ -13,6 +13,8 @@ pub enum PhantomInstruction {
     PrintF,
     /// Prepare the next input vector for hinting.
     HintInput,
+    /// Prepare the next input vector for hinting, but prepend it with a 4-byte decomposition of its length instead of one field element.
+    HintInputRv32,
     /// Prepare the little-endian bit decomposition of a variable for hinting.
     HintBits,
     /// Start tracing

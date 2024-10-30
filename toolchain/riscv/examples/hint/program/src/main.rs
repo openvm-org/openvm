@@ -4,7 +4,8 @@
 axvm::entry!(main);
 
 pub fn main() {
-    let x = axvm::intrinsics::io::read_byte();
+    axvm::intrinsics::io::hint_input();
+    let x = axvm::intrinsics::io::read_u32();
     if x == 0 {
         loop {}
     }

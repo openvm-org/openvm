@@ -9,8 +9,8 @@ use axvm_circuit::{
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
 };
 use axvm_instructions::{
-    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, Rv32HintStoreOpcode,
-    Rv32ModularArithmeticOpcode,
+    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, PhantomInstruction,
+    Rv32HintStoreOpcode, Rv32ModularArithmeticOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::{
@@ -265,6 +265,12 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     0,
                 ))
             }
+            0b011 => Some(Instruction::phantom(
+                PhantomInstruction::HintInputRv32,
+                F::zero(),
+                F::zero(),
+                0,
+            )),
             _ => unimplemented!(),
         },
         0x2b => {
