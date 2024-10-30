@@ -6,13 +6,13 @@ use core::hint::black_box;
 axvm::entry!(main);
 
 pub fn main() {
-    let n = 1 << 20;
-    let mut a: u32 = black_box(0);
-    let mut b: u32 = black_box(1);
-    for _ in 1..n {
-        let sum = a.wrapping_add(b);
+    let n: u64 = black_box(100000);
+    let mut a: u64 = 0;
+    let mut b: u64 = 1;
+    for _ in 0..n {
+        let c: u64 = a.wrapping_add(b);
         a = b;
-        b = sum;
+        b = c;
     }
-    let _ = black_box(b);
+    let _ = black_box(a);
 }
