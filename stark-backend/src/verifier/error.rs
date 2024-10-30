@@ -7,4 +7,10 @@ pub enum VerificationError {
     /// `quotient(zeta) Z_H(zeta)`.
     OodEvaluationMismatch,
     NonZeroCumulativeSum,
+    InitialPcMismatch(String),
+    InitialMemoryRootMismatch,
+    IsTerminateMismatch(String),
+    ExitCodeMismatch(String),
+    UnexpectedPvs(String),
+    NumPublicValuesMismatch(String),
 }

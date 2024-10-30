@@ -362,38 +362,60 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
 
                     if i != 0 {
                         // Check initial pc matches the previous final pc.
-                        assert_eq!(pvs.initial_pc, prev_final_pc.unwrap());
+                        if pvs.initial_pc != prev_final_pc.unwrap() {
+                            return Err(VerificationError::InitialPcMismatch(format!(
+                                "expected initial pc: {}, actual initial pc: {}",
+                                prev_final_pc.unwrap(),
+                                pvs.initial_pc
+                            )));
+                        }
                     } else {
                         // TODO: Fetch initial pc from program
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
                     let expected_is_terminate = i == proofs.len() - 1;
-                    assert_eq!(
-                        pvs.is_terminate,
-                        Val::<SC>::from_bool(expected_is_terminate)
-                    );
+                    if pvs.is_terminate != Val::<SC>::from_bool(expected_is_terminate) {
+                        return Err(VerificationError::IsTerminateMismatch(format!(
+                            "expected is_terminate: {}, actual is_terminate: {}",
+                            expected_is_terminate, pvs.is_terminate
+                        )));
+                    }
 
                     let expected_exit_code = if expected_is_terminate {
                         ExitCode::Success as u32
                     } else {
                         DEFAULT_SUSPEND_EXIT_CODE
                     };
-                    assert_eq!(
-                        pvs.exit_code,
-                        Val::<SC>::from_canonical_u32(expected_exit_code)
-                    );
+                    if pvs.exit_code != Val::<SC>::from_canonical_u32(expected_exit_code) {
+                        return Err(VerificationError::ExitCodeMismatch(format!(
+                            "expected exit code: {}, actual exit code: {}",
+                            expected_exit_code, pvs.exit_code
+                        )));
+                    }
                 } else if air_proof_data.air_id == MERKLE_AIR_ID {
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
                     if i != 0 {
-                        assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
+                        if pvs.initial_root != prev_final_memory_root.unwrap() {
+                            return Err(VerificationError::InitialMemoryRootMismatch);
+                        }
                     }
                     prev_final_memory_root = Some(pvs.final_root);
                 } else {
-                    assert_eq!(pvs.len(), 0);
-                    assert_eq!(air_vk.params.num_public_values, 0);
+                    if pvs.len() != 0 {
+                        return Err(VerificationError::UnexpectedPvs(format!(
+                            "expected 0 public values, actual: {}",
+                            pvs.len()
+                        )));
+                    }
+                    if air_vk.params.num_public_values != 0 {
+                        return Err(VerificationError::NumPublicValuesMismatch(format!(
+                            "expected 0 public values, actual: {}",
+                            air_vk.params.num_public_values
+                        )));
+                    }
                 }
             }
         }
