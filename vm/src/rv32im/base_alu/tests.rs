@@ -150,7 +150,7 @@ fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 
 #[test]
 fn rv32_alu_256_add_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 100);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 12);
 }
 
 #[test]

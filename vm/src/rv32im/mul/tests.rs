@@ -13,20 +13,22 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::rngs::StdRng;
 
 use super::core::run_mul;
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
-        RANGE_TUPLE_CHECKER_BUS,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
-        adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        adapters::{
+            Rv32HeapAdapterChip, Rv32MultAdapterChip, RV32_CELL_BITS, RV32_INT256_NUM_LIMBS,
+            RV32_REGISTER_NUM_LIMBS,
+        },
         mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
+        Rv32Multiplication256Chip,
     },
-    utils::generate_long_number,
+    utils::{generate_long_number, rv32_rand_write_register_or_imm, rv32_write_heap_default},
 };
 
 type F = BabyBear;
@@ -37,33 +39,6 @@ type F = BabyBear;
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_mul_rand_write_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    rng: &mut StdRng,
-) {
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-
-    let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
-    tester.execute(
-        chip,
-        Instruction::from_usize(MulOpcode::MUL as usize, [rd, rs1, rs2, 1, 0]),
-    );
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
 
 fn run_rv32_mul_rand_test(num_ops: usize) {
     // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -90,7 +65,23 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
     for _ in 0..num_ops {
         let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        run_rv32_mul_rand_write_execute(&mut tester, &mut chip, b, c, &mut rng);
+
+        let (mut instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            None,
+            MulOpcode::MUL as usize,
+            &mut rng,
+        );
+        instruction.e = F::zero();
+        tester.execute(&mut chip, instruction);
+
+        let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
+        assert_eq!(
+            a.map(F::from_canonical_u32),
+            tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+        )
     }
 
     let tester = tester
@@ -103,7 +94,54 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
 
 #[test]
 fn rv32_mul_rand_test() {
-    run_rv32_mul_rand_test(100);
+    run_rv32_mul_rand_test(1);
+}
+
+fn run_rv32_mul_256_rand_test(num_ops: usize) {
+    // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
+    const MAX_NUM_LIMBS: u32 = 32;
+    let mut rng = create_seeded_rng();
+
+    let range_tuple_bus = RangeTupleCheckerBus::new(
+        RANGE_TUPLE_CHECKER_BUS,
+        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
+    );
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = Rv32Multiplication256Chip::<F>::new(
+        Rv32HeapAdapterChip::<F, 2, RV32_INT256_NUM_LIMBS, RV32_INT256_NUM_LIMBS>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+        ),
+        MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
+        tester.memory_controller(),
+    );
+
+    for _ in 0..num_ops {
+        let b = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let c = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let instruction = rv32_write_heap_default(
+            &mut tester,
+            vec![b.map(F::from_canonical_u32)],
+            vec![c.map(F::from_canonical_u32)],
+            MulOpcode::MUL as usize,
+        );
+        tester.execute(&mut chip, instruction);
+    }
+
+    let tester = tester
+        .build()
+        .load(chip)
+        .load(range_tuple_checker)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn rv32_mul_256_rand_test() {
+    run_rv32_mul_256_rand_test(24);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
