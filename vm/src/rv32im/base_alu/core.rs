@@ -15,13 +15,10 @@ use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{BaseAluOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    rv32im::adapters::Rv32AluCoreInterface,
+use crate::arch::{
+    instructions::{BaseAluOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -61,8 +58,9 @@ impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    AdapterAirContext<AB::Expr, I>:
-        From<AdapterAirContext<AB::Expr, Rv32AluCoreInterface<AB::Expr, NUM_LIMBS>>>,
+    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
+    I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
+    I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -144,16 +142,16 @@ where
             },
         ) + AB::Expr::from_canonical_usize(self.offset);
 
-        AdapterAirContext::<AB::Expr, Rv32AluCoreInterface<AB::Expr, NUM_LIMBS>> {
+        AdapterAirContext {
             to_pc: None,
-            reads: [cols.b.map(Into::into), cols.c.map(Into::into)],
-            writes: [cols.a.map(Into::into)],
+            reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
+            writes: [cols.a.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
-            },
+            }
+            .into(),
         }
-        .into()
     }
 }
 
@@ -192,7 +190,7 @@ where
     F: PrimeField32,
     I: VmAdapterInterface<F>,
     I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, Rv32AluCoreInterface<F, NUM_LIMBS>>>,
+    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
 {
     type Record = BaseAluCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
     type Air = BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>;
@@ -212,9 +210,9 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        let output = AdapterRuntimeContext::<F, Rv32AluCoreInterface<F, NUM_LIMBS>> {
+        let output = AdapterRuntimeContext {
             to_pc: None,
-            writes: [a.map(F::from_canonical_u32)],
+            writes: [a.map(F::from_canonical_u32)].into(),
         };
 
         if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
@@ -234,7 +232,7 @@ where
             c: data[1],
         };
 
-        Ok((output.into(), record))
+        Ok((output, record))
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
