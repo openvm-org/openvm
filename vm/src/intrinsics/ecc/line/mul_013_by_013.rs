@@ -5,19 +5,17 @@ use ax_circuit_primitives::{
     bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerBus,
 };
 use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, FieldExpr},
+    field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr},
     field_extension::Fp2,
 };
 use axvm_circuit_derive::InstructionExecutor;
+use axvm_ecc_constants::BN254;
 use axvm_instructions::EcLineDTypeOpcode;
-use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::VmChipWrapper,
-    intrinsics::{ecc::FIELD_ELEMENT_BITS, field_expression::FieldExpressionCoreChip},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    system::memory::MemoryControllerRef,
+    arch::VmChipWrapper, intrinsics::field_expression::FieldExpressionCoreChip,
+    rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
 };
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
@@ -49,7 +47,11 @@ impl<
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let expr = mul_013_by_013_expr(config, memory_controller.borrow().range_checker.bus());
+        let expr = mul_013_by_013_expr(
+            config,
+            memory_controller.borrow().range_checker.bus(),
+            BN254.XI,
+        );
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -62,22 +64,19 @@ impl<
 }
 
 pub fn mul_013_by_013_expr(
-    modulus: BigUint,
-    num_limbs: usize,
-    limb_bits: usize,
+    config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
     xi: [isize; 2],
 ) -> FieldExpr {
-    assert!(modulus.bits() <= num_limbs * limb_bits);
+    config.check_valid();
+    let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
+    let builder = Rc::new(RefCell::new(builder));
     let subair = CheckCarryModToZeroSubAir::new(
-        modulus.clone(),
-        limb_bits,
+        config.modulus,
+        config.limb_bits,
         range_bus.index,
         range_bus.range_max_bits,
-        FIELD_ELEMENT_BITS,
     );
-    let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
-    let builder = Rc::new(RefCell::new(builder));
 
     let mut b0 = Fp2::new(builder.clone()); // x1
     let mut c0 = Fp2::new(builder.clone()); // x3
