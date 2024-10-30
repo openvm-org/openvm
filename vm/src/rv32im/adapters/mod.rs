@@ -8,6 +8,7 @@ mod rdwrite;
 mod vec_heap;
 
 pub use alu::*;
+pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
 pub use hintstore::*;
 pub use jalr::*;
@@ -15,10 +16,6 @@ pub use loadstore::*;
 pub use mul::*;
 pub use rdwrite::*;
 pub use vec_heap::*;
-
-/// 32-bit register stored as 4 bytes (4 limbs of 8-bits)
-pub const RV32_REGISTER_NUM_LIMBS: usize = 4;
-pub const RV32_CELL_BITS: usize = 8;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;

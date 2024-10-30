@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use axvm_circuit::rv32im::adapters::RV32_REGISTER_NUM_LIMBS;
 use axvm_instructions::{
-    exe::MemoryImage, instruction::Instruction, utils::isize_to_field, SystemOpcode, UsizeOpcode,
+    exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
+    utils::isize_to_field, SystemOpcode, UsizeOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};

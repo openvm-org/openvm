@@ -20,6 +20,7 @@ members = [
     "lib/ecc-execution",
     "lib/recursion",
     "axiom-vm",
+    "benchmarks",
 ]
 resolver = "2"
 

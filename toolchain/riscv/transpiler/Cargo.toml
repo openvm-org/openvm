@@ -10,7 +10,6 @@ repository.workspace = true
 p3-field.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
-axvm-circuit.workspace = true      # TODO: remove this dependency
 strum.workspace = true
 eyre.workspace = true
 elf = "0.7.4"

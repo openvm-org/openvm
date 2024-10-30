@@ -1,15 +1,11 @@
 use std::marker::PhantomData;
 
-use axvm_circuit::{
-    arch::instructions::{
-        BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-        MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-        Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
-    },
-    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-};
 use axvm_instructions::{
-    instruction::Instruction, riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode,
+    instruction::Instruction,
+    riscv::{RvIntrinsic, RV32_REGISTER_NUM_LIMBS},
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode,
+    LessThanOpcode, MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
+    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::{

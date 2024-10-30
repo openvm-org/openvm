@@ -75,7 +75,6 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 }
 
 #[test_case("fibonacci/program", 1)]
-#[test_case("fibonacci-large/program", 3)]
 fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
     let pkg = get_package(get_examples_dir().join(examples_path));
     let target_dir = tempdir()?;
