@@ -137,6 +137,10 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 
 #[test]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
+    let config = VmConfig {
+        max_segment_len: (1 << 19) - 1,
+        ..VmConfig::rv32im()
+    };
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i", "rv32ui-p-auipc"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
     for entry in read_dir(dir)? {
@@ -148,11 +152,14 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
                 continue;
             }
             println!("Running: {}", file_name);
-            let result = std::panic::catch_unwind(|| test_rv32i_prove(path.to_str().unwrap(), 1));
+
+            let (_, exe) = setup_executor_from_elf(path.to_str().unwrap(), config.clone())?;
+            let result = std::panic::catch_unwind(|| {
+                air_test(config.clone(), exe);
+            });
 
             match result {
-                Ok(Ok(_)) => println!("Passed!: {}", file_name),
-                Ok(Err(e)) => println!("Failed: {} with error: {}", file_name, e),
+                Ok(_) => println!("Passed!: {}", file_name),
                 Err(_) => println!("Panic occurred while running: {}", file_name),
             }
         }

@@ -14,7 +14,7 @@
 
 #define RVTEST_CODE_BEGIN
 
-#define RVTEST_CODE_END
+#define RVTEST_CODE_END terminate 1;
 
 //-----------------------------------------------------------------------
 // Pass/Fail Macro

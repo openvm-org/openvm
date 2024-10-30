@@ -59,8 +59,8 @@ junk += $(addprefix $(out_dir)/, $(tests) $(tests_dump) $(tests_hex))
 #------------------------------------------------------------
 # Default
 
-rv32i: $(rv32ui_tests)
-rv32m: $(rv32um_tests)
+rv32ui: $(rv32ui_tests)
+rv32um: $(rv32um_tests)
 
 all: $(tests)
 
