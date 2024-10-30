@@ -4,12 +4,12 @@ use std::{
 
 use ax_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     prover::types::{Proof, ProofInput},
     verifier::VerificationError,
 };
-use ax_stark_sdk::engine::StarkEngine;
 use axvm_instructions::exe::AxVmExe;
 use p3_field::{AbstractField, PrimeField32};
 use parking_lot::Mutex;

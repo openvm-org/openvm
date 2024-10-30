@@ -9,7 +9,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{instructions::program::Program, VmConfig},
-    system::program::util::execute_and_prove_program,
+    utils::execute_and_prove_program,
 };
 use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;

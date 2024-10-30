@@ -7,7 +7,7 @@ use ax_stark_sdk::config::setup_tracing;
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
     arch::{VmConfig, VmExecutor},
-    sdk::{air_test, air_test_with_min_segments},
+    utils::{air_test, air_test_with_min_segments},
 };
 use axvm_platform::memory::MEM_SIZE;
 use eyre::Result;

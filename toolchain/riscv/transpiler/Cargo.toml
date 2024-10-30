@@ -18,7 +18,7 @@ rrs-lib = "0.1.0"
 [dev-dependencies]
 p3-baby-bear.workspace = true
 test-case.workspace = true
-axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-build.workspace = true
 ax-stark-sdk.workspace = true
 tempfile.workspace = true

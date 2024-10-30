@@ -671,7 +671,6 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
- "axvm-native-compiler",
  "axvm-native-compiler-derive",
  "backtrace",
  "cfg-if",

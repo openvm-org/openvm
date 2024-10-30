@@ -8,7 +8,6 @@ mod helper;
 pub mod hints;
 mod outer_poseidon2;
 pub mod stark;
-pub mod testing_utils;
 pub mod types;
 pub mod utils;
 pub mod vars;
@@ -18,6 +17,8 @@ pub mod witness;
 #[cfg(feature = "static-verifier")]
 pub mod halo2;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub mod testing_utils;
 #[cfg(test)]
 mod tests;
 

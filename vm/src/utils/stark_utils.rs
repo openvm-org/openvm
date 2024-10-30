@@ -1,7 +1,10 @@
-use ax_stark_backend::config::{StarkGenericConfig, Val};
 use ax_stark_sdk::{
+    ax_stark_backend::{
+        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        verifier::VerificationError,
+    },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
-    engine::{ProofInputForTest, StarkFriEngine},
+    engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
@@ -43,6 +46,7 @@ pub fn air_test_with_min_segments(
     }
 }
 
+// TODO[jpw]: this should be deleted once tests switch to new API
 /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
 /// do any proving. Output is the payload of everything the prover needs.
 ///
@@ -90,4 +94,35 @@ where
     ProofInputForTest {
         per_air: result.into_air_proof_input_vec(),
     }
+}
+
+type ExecuteAndProveResult<SC> =
+    Result<(VerificationDataWithFriParams<SC>, Vec<Vec<Val<SC>>>), VerificationError>;
+
+/// Executes program and runs simple STARK prover test (keygen, prove, verify).
+pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
+    program: Program<Val<SC>>,
+    input_stream: Vec<Vec<Val<SC>>>,
+    config: VmConfig,
+    engine: &E,
+) -> ExecuteAndProveResult<SC>
+where
+    Val<SC>: PrimeField32,
+    SC::Pcs: Sync,
+    Domain<SC>: Send + Sync,
+    PcsProverData<SC>: Send + Sync,
+    Com<SC>: Send + Sync,
+    SC::Challenge: Send + Sync,
+    PcsProof<SC>: Send + Sync,
+{
+    let span = tracing::info_span!("execute_and_prove_program").entered();
+    let test_proof_input = gen_vm_program_test_proof_input(program, input_stream, config);
+    let pvs = test_proof_input
+        .per_air
+        .iter()
+        .map(|air| air.raw.public_values.clone())
+        .collect();
+    let vparams = test_proof_input.run_test(engine)?;
+    span.exit();
+    Ok((vparams, pvs))
 }

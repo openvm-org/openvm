@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
 ax-stark-sdk.workspace = true

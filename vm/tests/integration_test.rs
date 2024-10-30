@@ -15,8 +15,8 @@ use axvm_circuit::{
         VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
-    sdk::{air_test, air_test_with_min_segments},
     system::{memory::CHUNK, program::trace::CommittedProgram},
+    utils::{air_test, air_test_with_min_segments},
 };
 use axvm_instructions::{
     exe::AxVmExe,
