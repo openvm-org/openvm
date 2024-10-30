@@ -11,7 +11,7 @@ use ax_stark_sdk::{
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use axvm_circuit::{
     arch::{
-        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine, VmConfig,
+        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVmExecutor, VmConfig, VmExecutor,
     },
     system::program::trace::CommittedProgram,
 };
@@ -64,7 +64,7 @@ fn test_1() {
     };
     let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
 
-    let app_vm = VirtualMachine::new(axiom_vm_pk.app_vm_config.clone());
+    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(committed_program, vec![])
         .unwrap();
@@ -75,7 +75,7 @@ fn test_1() {
         .map(|proof_input| engine.prove(&axiom_vm_pk.app_vm_pk, proof_input))
         .collect();
 
-    let leaf_vm = SingleSegmentVM::new(axiom_vm_pk.leaf_vm_config);
+    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_config);
     leaf_vm
         .execute(
             axiom_vm_pk.committed_leaf_program.program.clone(),

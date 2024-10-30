@@ -11,8 +11,8 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVM, VirtualMachine,
-        VmConfig,
+        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVmExecutor,
+        VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
     sdk::{air_test, air_test_with_min_segments},
@@ -86,14 +86,13 @@ fn air_test_with_compress_poseidon2(
     }
     .add_executor(ExecutorName::LoadStore)
     .add_executor(ExecutorName::Poseidon2);
-    let pk = vm_config.generate_pk(engine.keygen_builder());
+    let vm = VirtualMachine::new(engine, vm_config);
 
-    let vm = VirtualMachine::new(vm_config);
+    let pk = vm.keygen();
     let result = vm.execute_and_generate(program, vec![]).unwrap();
-
-    for proof_input in result.per_segment {
-        engine
-            .prove_then_verify(&pk, proof_input)
+    let proofs = vm.prove(&pk, result);
+    for proof in proofs {
+        vm.verify_single(&pk.get_vk(), &proof)
             .expect("Verification failed");
     }
 }
@@ -138,10 +137,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VirtualMachine::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(vm_config_with_field_arithmetic(), program);
 }
 
 #[test]
@@ -151,7 +147,8 @@ fn test_vm_1_optional_air() {
     let vm_config = VmConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let pk = vm_config.generate_pk(engine.keygen_builder());
+    let vm = VirtualMachine::new(engine, vm_config);
+    let pk = vm.keygen();
     let num_airs = pk.per_air.len();
 
     {
@@ -171,7 +168,6 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let vm = VirtualMachine::new(vm_config);
         let mut result = vm
             .execute_and_generate(program, vec![])
             .expect("Failed to execute VM");
@@ -181,8 +177,8 @@ fn test_vm_1_optional_air() {
             proof_input.per_air.len() < num_airs,
             "Expect less used AIRs"
         );
-        engine
-            .prove_then_verify(&pk, proof_input)
+        let proofs = vm.prove(&pk, result);
+        vm.verify(&pk.get_vk(), proofs)
             .expect("Verification failed");
     }
 }
@@ -205,7 +201,7 @@ fn test_vm_public_values() {
 
         let program = Program::from_instructions(&instructions);
         let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
-        let vm = SingleSegmentVM::new(vm_config);
+        let vm = SingleSegmentVmExecutor::new(vm_config);
         let pvs = vm.execute(program.clone(), vec![]).unwrap();
         assert_eq!(
             pvs,
@@ -263,8 +259,7 @@ fn test_vm_initial_memory() {
         pc_start: 0,
         init_memory,
     };
-    let vm = VirtualMachine::new(config);
-    air_test(vm, exe);
+    air_test(config, exe);
 }
 
 #[test]
@@ -297,36 +292,38 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let vm = VirtualMachine::new(config);
-    let result = vm.execute_and_generate(program, vec![]).unwrap();
+    let vm = VirtualMachine::new(engine, config);
+    let result = vm.execute_and_generate(program.clone(), vec![]).unwrap();
+    {
+        let proof_input = result.per_segment.into_iter().next().unwrap();
 
-    let proof_input = result.per_segment.into_iter().next().unwrap();
+        let merkle_air_proof_input = &proof_input
+            .per_air
+            .iter()
+            .find(|(_, info)| info.air.name() == "MemoryMerkleAir<8>")
+            .unwrap()
+            .1;
+        assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
+        assert_eq!(
+            merkle_air_proof_input.raw.public_values[..8],
+            merkle_air_proof_input.raw.public_values[8..]
+        );
+        assert_eq!(
+            merkle_air_proof_input.raw.public_values[..8],
+            // The value when you start with zeros and repeatedly hash the value with itself
+            // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
+            // so the height of the tree is 1 + 16 - 3 = 14.
+            [
+                1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
+                350327606
+            ]
+            .map(BabyBear::from_canonical_u32)
+        );
+    }
 
-    let merkle_air_proof_input = &proof_input
-        .per_air
-        .iter()
-        .find(|(_, info)| info.air.name() == "MemoryMerkleAir<8>")
-        .unwrap()
-        .1;
-    assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
-    assert_eq!(
-        merkle_air_proof_input.raw.public_values[..8],
-        merkle_air_proof_input.raw.public_values[8..]
-    );
-    assert_eq!(
-        merkle_air_proof_input.raw.public_values[..8],
-        // The value when you start with zeros and repeatedly hash the value with itself
-        // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
-        // so the height of the tree is 1 + 16 - 3 = 14.
-        [
-            1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
-            350327606
-        ]
-        .map(BabyBear::from_canonical_u32)
-    );
-
-    engine
-        .prove_then_verify(&pk, proof_input)
+    let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
+    let proofs = vm.prove(&pk, result_for_proof);
+    vm.verify(&pk.get_vk(), proofs)
         .expect("Verification failed");
 }
 
@@ -402,8 +399,7 @@ fn test_vm_continuations() {
     };
     */
 
-    let vm = VirtualMachine::new(config);
-    air_test_with_min_segments(vm, program, vec![], 3);
+    air_test_with_min_segments(config, program, vec![], 3);
 }
 
 #[test]
@@ -452,12 +448,10 @@ fn test_vm_without_field_arithmetic() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(
-            VmConfig::default()
-                .add_executor(ExecutorName::LoadStore)
-                .add_executor(ExecutorName::BranchEqual)
-                .add_executor(ExecutorName::Jal),
-        ),
+        VmConfig::default()
+            .add_executor(ExecutorName::LoadStore)
+            .add_executor(ExecutorName::BranchEqual)
+            .add_executor(ExecutorName::Jal),
         program,
     );
 }
@@ -496,10 +490,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VirtualMachine::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(vm_config_with_field_arithmetic(), program);
 }
 
 #[test]
@@ -545,10 +536,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VirtualMachine::new(vm_config_with_field_arithmetic()),
-        program,
-    );
+    air_test(vm_config_with_field_arithmetic(), program);
 }
 
 #[test]
@@ -572,14 +560,11 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    let vm = VirtualMachine::new(
-        VmConfig::default()
-            .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::FieldArithmetic)
-            .add_executor(ExecutorName::FieldExtension),
-    );
-
-    air_test(vm, program);
+    let config = VmConfig::default()
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::FieldExtension);
+    air_test(config, program);
 }
 
 #[test]
@@ -602,18 +587,15 @@ fn test_vm_field_extension_arithmetic_persistent() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let vm = VirtualMachine::new(
-        VmConfig {
-            poseidon2_max_constraint_degree: 3,
-            memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
-            ..VmConfig::default()
-        }
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::FieldExtension),
-    );
-
-    air_test(vm, program);
+    let config = VmConfig {
+        poseidon2_max_constraint_degree: 3,
+        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        ..VmConfig::default()
+    }
+    .add_executor(ExecutorName::LoadStore)
+    .add_executor(ExecutorName::FieldArithmetic)
+    .add_executor(ExecutorName::FieldExtension);
+    air_test(config, program);
 }
 
 #[test]
@@ -673,9 +655,8 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::two()]];
-    let vm = VirtualMachine::new(vm_config_with_field_arithmetic());
-
-    air_test_with_min_segments(vm, program, input_stream, 1);
+    let config = vm_config_with_field_arithmetic();
+    air_test_with_min_segments(config, program, input_stream, 1);
 }
 
 #[test]
@@ -879,13 +860,11 @@ fn test_vm_keccak() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(
-            VmConfig::default()
-                .add_executor(ExecutorName::LoadStore)
-                .add_executor(ExecutorName::Keccak256)
-                .add_executor(ExecutorName::BranchEqual)
-                .add_executor(ExecutorName::Jal),
-        ),
+        VmConfig::default()
+            .add_executor(ExecutorName::LoadStore)
+            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::BranchEqual)
+            .add_executor(ExecutorName::Jal),
         program,
     );
 }
@@ -910,13 +889,11 @@ fn test_vm_keccak_non_full_round() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        VirtualMachine::new(
-            VmConfig::default()
-                .add_executor(ExecutorName::LoadStore)
-                .add_executor(ExecutorName::Keccak256)
-                .add_executor(ExecutorName::BranchEqual)
-                .add_executor(ExecutorName::Jal),
-        ),
+        VmConfig::default()
+            .add_executor(ExecutorName::LoadStore)
+            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::BranchEqual)
+            .add_executor(ExecutorName::Jal),
         program,
     );
 }
