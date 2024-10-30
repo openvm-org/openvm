@@ -55,11 +55,6 @@ pub enum AsmInstruction<F, EF> {
     /// Divide value from immediate, dst = lhs / rhs.
     DivFIN(i32, F, i32),
 
-    /// U256 equal, dst = lhs == rhs.
-    /// (a, b, c) are memory pointers to (*z, *x, *y), which are
-    /// themselves memory pointers to (z, x, y) where z = (x == y ? 1 : 0)
-    EqU256(i32, i32, i32),
-
     /// Add extension, dst = lhs + rhs.
     AddE(i32, i32, i32),
 
@@ -221,9 +216,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::DivFIN(dst, lhs, rhs) => {
                 write!(f, "divi  ({})fp, {}, ({})fp", dst, lhs, rhs)
-            }
-            AsmInstruction::EqU256(dst, lhs, rhs) => {
-                write!(f, "eq  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
                 write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)

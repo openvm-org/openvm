@@ -145,28 +145,6 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
-    instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
-) -> Vec<Instruction<F>> {
-    match instruction {
-        AsmInstruction::EqU256(a, b, c) => vec![inst_large(
-            options.opcode_with_offset(U256Opcode::EQ),
-            i32_f(a),
-            i32_f(b),
-            i32_f(c),
-            AS::Memory,
-            AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
-        )],
-        _ => panic!(
-            "Illegal argument to convert_comparison_instruction: {:?}",
-            instruction
-        ),
-    }
-}
-
 fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     options: &CompilerOptions,
@@ -622,7 +600,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 )
             }
         }
-        AsmInstruction::EqU256(..) => convert_comparison_instruction(instruction, options),
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
