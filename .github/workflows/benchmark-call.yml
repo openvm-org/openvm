@@ -179,7 +179,7 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("${{ inputs.benchmark_name }}")) {
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--${{ inputs.benchmark_name }}-->")) {
                 console.log("collapse comment ", comment.id);
                 const resp = await github.graphql(`
                   mutation {
@@ -205,7 +205,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${{ inputs.benchmark_name }}\n\n${newBenchmark}`
+              body: `<!--${{ inputs.benchmark_name }}-->\n${newBenchmark}`
             });
 
       - name: Update latest main result in s3
