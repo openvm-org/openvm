@@ -37,11 +37,7 @@ use crate::{
     },
     intrinsics::{
         ecc::{
-<<<<<<< HEAD
-            pairing::{EcLineMul013By013Chip, MillerDoubleStepChip},
-=======
-            line::{EcLineMul013By013Chip, EcLineMulBy01234Chip},
->>>>>>> c0432cd2 (Add chip items)
+            pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleStepChip},
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
