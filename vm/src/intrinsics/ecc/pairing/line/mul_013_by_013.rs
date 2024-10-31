@@ -56,6 +56,7 @@ impl<
             expr,
             offset,
             vec![PairingOpcode::MUL_013_BY_013 as usize],
+            vec![],
             memory_controller.borrow().range_checker.clone(),
             "Mul013By013",
         );
@@ -86,13 +87,13 @@ pub fn mul_013_by_013_expr(
     // where w⁶ = xi
     // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
     //         = (1 + c0c1 * xi) + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴
-    let mut l0 = c0.mul(&mut c1).int_mul(xi).int_add([1, 0]);
-    let mut l1 = b0.add(&mut b1);
-    let mut l2 = b0.mul(&mut b1);
-    let mut l3 = c0.add(&mut c1);
-    let mut l4 = b0.mul(&mut c1).add(&mut b1.mul(&mut c0));
+    let l0 = c0.mul(&mut c1).int_mul(xi).int_add([1, 0]);
+    let l1 = b0.add(&mut b1);
+    let l2 = b0.mul(&mut b1);
+    let l3 = c0.add(&mut c1);
+    let l4 = b0.mul(&mut c1).add(&mut b1.mul(&mut c0));
 
-    [l0, l1, l2, l3, l4].map(|mut l| (&l).save_output());
+    [l0, l1, l2, l3, l4].map(|mut l| l.save_output());
 
     let builder = builder.borrow().clone();
     FieldExpr {

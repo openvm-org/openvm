@@ -12,7 +12,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::{testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::{ecc::line::mul_013_by_013_expr, field_expression::FieldExpressionCoreChip},
+    intrinsics::{ecc::pairing::mul_013_by_013_expr, field_expression::FieldExpressionCoreChip},
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
 };
@@ -28,8 +28,8 @@ fn test_mul_013_by_013() {
     let expr = mul_013_by_013_expr(
         ExprBuilderConfig {
             modulus: BN254.MODULUS.clone(),
-            num_limbs: 32,
-            limb_bits: 8,
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
         },
         tester.memory_controller().borrow().range_checker.bus(),
         BN254.XI,
@@ -38,6 +38,7 @@ fn test_mul_013_by_013() {
         expr,
         PairingOpcode::default_offset(),
         vec![PairingOpcode::MUL_013_BY_013 as usize],
+        vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul013By013",
     );

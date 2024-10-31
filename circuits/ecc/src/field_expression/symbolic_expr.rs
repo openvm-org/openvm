@@ -213,6 +213,7 @@ impl SymbolicExpr {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
+                // TODO[jpw]: since `s` is a constant, we can likely do better than this bound.
                 (lhs_max_pos + &scalar, lhs_max_neg + &scalar)
             }
             SymbolicExpr::IntMul(lhs, s) => {
@@ -377,7 +378,7 @@ impl SymbolicExpr {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
                 left.limbs[0] += *s;
-                debug_assert!(s < (1 << self.limb_bits));
+                // TODO[jpw]: add some debug_assert!(*s < (1 << self.limb_bits)); since this is the only case it is used for
                 left.limb_max_abs += s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left

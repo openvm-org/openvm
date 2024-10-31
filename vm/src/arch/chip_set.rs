@@ -37,8 +37,7 @@ use crate::{
     },
     intrinsics::{
         ecc::{
-            line::EcLineMul013By013Chip,
-            pairing::MillerDoubleStepChip,
+            pairing::{EcLineMul013By013Chip, MillerDoubleStepChip},
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
