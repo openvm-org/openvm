@@ -85,6 +85,7 @@ extern crate alloc;
 
 pub mod env;
 pub mod intrinsics;
+pub mod process;
 pub mod serde;
 
 #[cfg(target_os = "zkvm")]
