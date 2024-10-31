@@ -145,28 +145,6 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
     }
 }
 
-fn convert_comparison_instruction<F: PrimeField32, EF: ExtensionField<F>>(
-    instruction: AsmInstruction<F, EF>,
-    options: &CompilerOptions,
-) -> Vec<Instruction<F>> {
-    match instruction {
-        AsmInstruction::EqU256(a, b, c) => vec![inst_large(
-            options.opcode_with_offset(U256Opcode::EQ),
-            i32_f(a),
-            i32_f(b),
-            i32_f(c),
-            AS::Memory,
-            AS::Memory,
-            AS::Memory.to_field(),
-            AS::Memory.to_field(),
-        )],
-        _ => panic!(
-            "Illegal argument to convert_comparison_instruction: {:?}",
-            instruction
-        ),
-    }
-}
-
 fn convert_base_arithmetic_instruction<F: PrimeField32, EF: ExtensionField<F>>(
     instruction: AsmInstruction<F, EF>,
     options: &CompilerOptions,
@@ -622,7 +600,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 )
             }
         }
-        AsmInstruction::EqU256(..) => convert_comparison_instruction(instruction, options),
         AsmInstruction::AddE(..)
         | AsmInstruction::SubE(..)
         | AsmInstruction::MulE(..)
@@ -652,134 +629,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::ModularAdd(modulus, dst, src1, src2) => vec![inst(
-            options.modular_opcode_with_offset(ModularArithmeticOpcode::ADD, modulus),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ModularSub(modulus, dst, src1, src2) => vec![inst(
-            options.modular_opcode_with_offset(ModularArithmeticOpcode::SUB, modulus),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ModularMul(modulus, dst, src1, src2) => vec![inst(
-            options.modular_opcode_with_offset(ModularArithmeticOpcode::MUL, modulus),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ModularDiv(modulus, dst, src1, src2) => vec![inst(
-            options.modular_opcode_with_offset(ModularArithmeticOpcode::DIV, modulus),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Add256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::ADD),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Sub256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::SUB),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Mul256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::MUL),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::LessThanU256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::LT),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::EqualTo256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::EQ),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Xor256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::XOR),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::And256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::AND),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Or256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::OR),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::LessThanI256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::SLT),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ShiftLeft256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::SLL),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ShiftRightLogic256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::SRL),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::ShiftRightArith256(dst, src1, src2) => vec![inst(
-            options.opcode_with_offset(U256Opcode::SRA),
-            i32_f(dst),
-            i32_f(src1),
-            i32_f(src2),
-            AS::Memory,
-            AS::Memory,
-        )],
         AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
             options.opcode_with_offset(Keccak256Opcode::KECCAK256),
             i32_f(dst),
@@ -801,23 +650,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             //     AS::Immediate,
             // )
         }
-        AsmInstruction::Secp256k1AddUnequal(dst_ptr_ptr, p_ptr_ptr, q_ptr_ptr) => vec![inst_med(
-            options.opcode_with_offset(EccOpcode::EC_ADD_NE),
-            i32_f(dst_ptr_ptr),
-            i32_f(p_ptr_ptr),
-            i32_f(q_ptr_ptr),
-            AS::Memory,
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Secp256k1Double(dst_ptr_ptr, p_ptr_ptr) => vec![inst(
-            options.opcode_with_offset(EccOpcode::EC_DOUBLE),
-            i32_f(dst_ptr_ptr),
-            i32_f(p_ptr_ptr),
-            F::zero(),
-            AS::Memory,
-            AS::Memory,
-        )],
         AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
                 vec![Instruction::debug(PhantomInstruction::CtStart)]
