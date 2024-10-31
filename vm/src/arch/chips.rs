@@ -16,7 +16,7 @@ use crate::{
     arch::ExecutionState,
     intrinsics::{
         ecc::{
-            pairing::{EcLineMul013By013Chip, MillerDoubleStepChip},
+            pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleStepChip},
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},

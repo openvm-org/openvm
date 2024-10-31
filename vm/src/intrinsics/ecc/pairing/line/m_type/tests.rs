@@ -24,15 +24,15 @@ type F = BabyBear;
 
 #[test]
 fn test_mul_023_by_023() {
-    const NUM_LIMBS: usize = 48;
+    const NUM_LIMBS: usize = 64;
     const LIMB_BITS: usize = 8;
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let expr = mul_023_by_023_expr(
         ExprBuilderConfig {
             modulus: BLS12381.MODULUS.clone(),
-            num_limbs: 48,
-            limb_bits: 8,
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
         },
         tester.memory_controller().borrow().range_checker.bus(),
         BLS12381.XI,
@@ -50,8 +50,8 @@ fn test_mul_023_by_023() {
         tester.memory_controller(),
     );
 
-    let mut rng0 = StdRng::seed_from_u64(8);
-    let mut rng1 = StdRng::seed_from_u64(95);
+    let mut rng0 = StdRng::seed_from_u64(55);
+    let mut rng1 = StdRng::seed_from_u64(31);
     let rnd_pt_0 = G1Affine::random(&mut rng0);
     let rnd_pt_1 = G1Affine::random(&mut rng1);
     let ec_pt_0 = EcPoint::<Fq> {
@@ -99,7 +99,12 @@ fn test_mul_023_by_023() {
         .concat();
 
     for i in 0..10 {
-        assert_eq!(output[i], r_cmp_bigint[i]);
+        if i >= 2 {
+            // Skip c1 in 02345 representation
+            assert_eq!(output[i], r_cmp_bigint[i + 2]);
+        } else {
+            assert_eq!(output[i], r_cmp_bigint[i]);
+        }
     }
 
     let input_line0_limbs = input_line0
