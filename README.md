@@ -17,10 +17,8 @@ python ci/scripts/bench.py <name>
 where `<name>` is a benchmark implemented as a rust binary (located in `src/bin` in a crate). Current benchmark options are:
 
 - `verify_fibair`
-- `tiny_e2e`
-- `alu256_e2e`
-- `small_e2e`
-  in the `recursion` crate.
+- `fibonacci`
+  in the `benchmarks` crate.
   The benchmark outputs a JSON of metrics. You can process this into markdown with:
 
 ```bash
