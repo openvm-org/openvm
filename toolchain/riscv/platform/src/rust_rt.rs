@@ -24,7 +24,7 @@
 use core::arch::asm;
 
 #[cfg(target_os = "zkvm")]
-use crate::{custom_insn_i, custom_insn_r, intrinsics::CUSTOM_0};
+use crate::{constants::CUSTOM_0, custom_insn_i, custom_insn_r};
 
 extern crate alloc;
 

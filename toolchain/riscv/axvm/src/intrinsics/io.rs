@@ -6,7 +6,7 @@ use axvm_platform::constants::CUSTOM_0;
 #[macro_export]
 macro_rules! hint_store_u32 {
     ($x:ident, $imm:expr) => {
-        axvm_platform::custom_insn_i!(axvm_platform::intrinsics::CUSTOM_0, 0b001, $x, "x0", $imm)
+        axvm_platform::custom_insn_i!(axvm_platform::constants::CUSTOM_0, 0b001, $x, "x0", $imm)
     };
 }
 
