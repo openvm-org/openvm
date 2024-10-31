@@ -153,11 +153,13 @@ jobs:
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             echo "<details>" >> $RESULT_PATH
             echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
+            echo "" >> $RESULT_PATH
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
               flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
+            echo "" >> $RESULT_PATH
             echo "</details>" >> $RESULT_PATH
             echo "" >> $RESULT_PATH
           fi
