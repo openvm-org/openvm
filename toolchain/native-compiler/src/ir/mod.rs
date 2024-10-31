@@ -8,7 +8,7 @@ pub use ref_ptr::*;
 pub use select::*;
 pub use symbolic::*;
 pub use types::*;
-pub use utils::{BigUintVar, LIMB_BITS, NUM_LIMBS};
+pub use utils::{LIMB_BITS, NUM_LIMBS};
 pub use var::*;
 
 mod bits;

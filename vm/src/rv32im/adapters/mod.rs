@@ -20,7 +20,7 @@ pub use rdwrite::*;
 pub use vec_heap::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
-pub const RV32_INT256_NUM_LIMBS: usize = 32;
+pub const INT256_NUM_LIMBS: usize = 32;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;

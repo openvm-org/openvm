@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, RV32_INT256_NUM_LIMBS,
+            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, INT256_NUM_LIMBS,
             RV32_REGISTER_NUM_LIMBS,
         },
         less_than::LessThanCoreCols,
@@ -121,7 +121,7 @@ fn run_rv32_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32LessThan256Chip::<F>::new(
-        Rv32HeapAdapterChip::<F, 2, RV32_INT256_NUM_LIMBS, RV32_INT256_NUM_LIMBS>::new(
+        Rv32HeapAdapterChip::<F, 2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
@@ -131,8 +131,8 @@ fn run_rv32_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     );
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let c = generate_long_number::<RV32_INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let b = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
+        let c = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let instruction = rv32_write_heap_default(
             &mut tester,
             vec![b.map(F::from_canonical_u32)],

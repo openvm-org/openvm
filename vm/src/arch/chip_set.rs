@@ -418,8 +418,6 @@ impl VmConfig {
                     chips.push(AxVmChip::BaseAluRv32(chip));
                 }
                 ExecutorName::BaseAlu256Rv32 => {
-                    // We probably must include this chip if we include any modular arithmetic,
-                    // not sure if we need to enforce this here.
                     let chip = Rc::new(RefCell::new(Rv32BaseAlu256Chip::new(
                         Rv32HeapAdapterChip::new(
                             execution_bus,

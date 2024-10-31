@@ -81,6 +81,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    /// Rv32 is for standard 32-bit integers, while 256Rv32 is for 256-bit.
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),

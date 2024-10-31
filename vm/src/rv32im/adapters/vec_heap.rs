@@ -118,11 +118,11 @@ pub struct Rv32VecHeapAdapterCols<
 > {
     pub from_state: ExecutionState<T>,
 
-    pub rd_ptr: T,
     pub rs_ptr: [T; NUM_READS],
+    pub rd_ptr: T,
 
-    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
     pub rs_val: [[T; RV32_REGISTER_NUM_LIMBS]; NUM_READS],
+    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
@@ -226,22 +226,15 @@ impl<
 
         // Compose the u32 register value into single field element, with
         // a range check on the highest limb.
-        let mut reg_val_f: Vec<_> = cols
-            .rs_val
-            .iter()
-            .chain(once(&cols.rd_val))
-            .map(|&decomp| {
-                // TODO: range check
-                decomp
-                    .into_iter()
-                    .enumerate()
-                    .fold(AB::Expr::zero(), |acc, (i, limb)| {
-                        acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
-                    })
-            })
-            .collect();
-        let rd_val_f = reg_val_f.pop().unwrap();
-        let rs_val_f = reg_val_f;
+        let register_to_field = |r: [AB::Var; RV32_REGISTER_NUM_LIMBS]| {
+            r.into_iter()
+                .enumerate()
+                .fold(AB::Expr::zero(), |acc, (i, limb)| {
+                    acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
+                })
+        };
+        let rd_val_f = register_to_field(cols.rd_val);
+        let rs_val_f = cols.rs_val.map(register_to_field);
 
         let e = AB::F::from_canonical_usize(2);
         // Reads from heap
@@ -418,35 +411,51 @@ impl<
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
-        let row_slice: &mut Rv32VecHeapAdapterCols<
-            F,
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        > = row_slice.borrow_mut();
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-
-        row_slice.rd_ptr = read_record.rd.pointer;
-        row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
-
-        row_slice.rd_val = read_record.rd.data;
-        row_slice.rs_val = read_record.rs.map(|r| r.data);
-
-        row_slice.rs_read_aux = read_record
-            .rs
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
-        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
-        row_slice.reads_aux = read_record
-            .reads
-            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(x)));
-        row_slice.writes_aux = write_record
-            .writes
-            .map(|w| aux_cols_factory.make_write_aux_cols(w));
+        vec_heap_generate_trace_row_impl(row_slice, &read_record, &write_record, aux_cols_factory)
     }
 
     fn air(&self) -> &Self::Air {
         &self.air
     }
+}
+
+pub(super) fn vec_heap_generate_trace_row_impl<
+    F: PrimeField32,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(
+    row_slice: &mut [F],
+    read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+    write_record: &Rv32VecHeapWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>,
+    aux_cols_factory: &MemoryAuxColsFactory<F>,
+) {
+    let row_slice: &mut Rv32VecHeapAdapterCols<
+        F,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    > = row_slice.borrow_mut();
+    row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+
+    row_slice.rd_ptr = read_record.rd.pointer;
+    row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
+
+    row_slice.rd_val = read_record.rd.data;
+    row_slice.rs_val = read_record.rs.map(|r| r.data);
+
+    row_slice.rs_read_aux = read_record
+        .rs
+        .map(|r| aux_cols_factory.make_read_aux_cols(r));
+    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
+    row_slice.reads_aux = read_record
+        .reads
+        .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(x)));
+    row_slice.writes_aux = write_record
+        .writes
+        .map(|w| aux_cols_factory.make_write_aux_cols(w));
 }
