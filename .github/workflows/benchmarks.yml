@@ -28,7 +28,7 @@ jobs:
   benchmark-verify-fibair:
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: verify-fibair
+      benchmark_name: verify_fibair
     secrets: inherit
 
   benchmark-fibonacci:
