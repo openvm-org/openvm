@@ -21,8 +21,8 @@ ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
-ax-stark-sdk = { workspace = true, optional = true }
 axvm-instructions = { workspace = true }
+ax-stark-sdk = { workspace = true, optional = true }
 
 parking_lot.workspace = true
 enum-utils.workspace = true
@@ -61,19 +61,14 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-circuit = { workspace = true, features = ["sdk"] }
 axvm-ecc-constants = { workspace = true }
+axvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-sdk = ["dep:ax-stark-sdk"]
-bench-metrics = [
-    "sdk",
-    "dep:metrics",
-    "dep:inferno",
-    "ax-stark-backend/bench-metrics",
-]
+test-utils = ["dep:ax-stark-sdk"]
+bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
 jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]

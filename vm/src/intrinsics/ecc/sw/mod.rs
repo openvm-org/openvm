@@ -8,8 +8,8 @@ pub use double::*;
 mod tests;
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use axvm_circuit_derive::InstructionExecutor;
-use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -38,17 +38,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
-        modulus: BigUint,
-        num_limbs: usize,
-        limb_bits: usize,
+        config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let expr = ec_add_ne_expr(
-            modulus,
-            num_limbs,
-            limb_bits,
-            memory_controller.borrow().range_checker.bus(),
-        );
+        let expr = ec_add_ne_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -75,17 +68,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
-        modulus: BigUint,
-        num_limbs: usize,
-        limb_bits: usize,
+        config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let expr = ec_double_expr(
-            modulus,
-            num_limbs,
-            limb_bits,
-            memory_controller.borrow().range_checker.bus(),
-        );
+        let expr = ec_double_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,

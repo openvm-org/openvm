@@ -78,7 +78,6 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryModToZeroSubAir,
     pub modulus: BigUint,
-    pub field_element_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
@@ -178,7 +177,6 @@ const N: usize = 16;
 fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let limb_bits = 8;
     let num_limbs = N;
-    let field_element_bits = 30;
 
     let range_bus = 1;
     let range_decomp = 16;
@@ -186,17 +184,11 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
         range_bus,
         range_decomp,
     )));
-    let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
-        prime.clone(),
-        limb_bits,
-        range_bus,
-        range_decomp,
-        field_element_bits,
-    );
+    let check_carry_sub_air =
+        CheckCarryModToZeroSubAir::new(prime.clone(), limb_bits, range_bus, range_decomp);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
         modulus: prime,
-        field_element_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,

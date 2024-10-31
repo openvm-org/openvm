@@ -258,7 +258,7 @@ mod tests {
         }
 
         let prime = BN254.MODULUS.clone();
-        let (subair, range_checker, builder) = setup(&prime);
+        let (range_checker, builder) = setup(&prime);
 
         let mut x_fp12 = Fp12::new(builder.clone());
         let mut y_fp12 = Fp12::new(builder.clone());
@@ -271,11 +271,7 @@ mod tests {
         let indices = r.save();
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr {
-            builder,
-            check_carry_mod_to_zero: subair,
-            range_bus: range_checker.bus(),
-        };
+        let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fq12 = x;

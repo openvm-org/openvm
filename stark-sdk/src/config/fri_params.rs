@@ -21,6 +21,10 @@ impl FriParameters {
     pub fn standard_fast() -> FriParameters {
         standard_fri_params_with_100_bits_conjectured_security(1)
     }
+
+    pub fn standard_with_100_bits_conjectured_security(log_blowup: usize) -> FriParameters {
+        standard_fri_params_with_100_bits_conjectured_security(log_blowup)
+    }
 }
 
 /// Pre-defined FRI parameters with 100 bits of conjectured security.

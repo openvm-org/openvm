@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use ax_circuit_primitives::bigint::utils::secp256k1_coord_prime;
+use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use axvm_instructions::UsizeOpcode;
 use num_bigint_dig::BigUint;
 use num_traits::FromPrimitive;
@@ -22,11 +23,13 @@ type F = BabyBear;
 #[test]
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = secp256k1_coord_prime();
+    let config = ExprBuilderConfig {
+        modulus: secp256k1_coord_prime(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
     let expr = ec_add_ne_expr(
-        modulus,
-        NUM_LIMBS,
-        LIMB_BITS,
+        config,
         tester.memory_controller().borrow().range_checker.bus(),
     );
     let core = FieldExpressionCoreChip::new(
@@ -82,11 +85,13 @@ fn test_add_ne() {
 #[test]
 fn test_double() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let modulus = secp256k1_coord_prime();
+    let config = ExprBuilderConfig {
+        modulus: secp256k1_coord_prime(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
     let expr = ec_double_expr(
-        modulus,
-        NUM_LIMBS,
-        LIMB_BITS,
+        config,
         tester.memory_controller().borrow().range_checker.bus(),
     );
     let core = FieldExpressionCoreChip::new(

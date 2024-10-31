@@ -4,14 +4,14 @@ use std::{
 
 use ax_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     prover::types::{Proof, ProofInput},
     verifier::VerificationError,
 };
-use ax_stark_sdk::engine::StarkEngine;
 use axvm_instructions::exe::AxVmExe;
-use p3_field::{AbstractField, PrimeField32};
+use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
@@ -71,6 +71,9 @@ impl<F: PrimeField32> VmExecutor<F> {
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
         let exe = exe.into();
         let streams = Arc::new(Mutex::new(Streams::new(input)));
         let mut segments = vec![];
@@ -120,6 +123,8 @@ impl<F: PrimeField32> VmExecutor<F> {
         }
         segments.push(segment);
         tracing::debug!("Number of continuation segments: {}", segments.len());
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
 
         Ok(segments)
     }
@@ -238,13 +243,19 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     }
 }
 
-pub struct VirtualMachine<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> {
+pub struct VirtualMachine<SC, E> {
     pub engine: E,
     pub config: VmConfig,
-    _marker: PhantomData<(F, SC)>,
+    _marker: PhantomData<SC>,
 }
 
-impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine<F, E, SC> {
+impl<F, SC, E> VirtualMachine<SC, E>
+where
+    F: PrimeField32,
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC>,
+    Domain<SC>: PolynomialSpace<Val = F>,
+{
     pub fn new(engine: E, config: VmConfig) -> Self {
         Self {
             engine,
@@ -260,6 +271,11 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         self.config.generate_pk(self.engine.keygen_builder())
     }
 
+    pub fn commit_exe(&self, exe: impl Into<AxVmExe<F>>) -> Arc<AxVmCommittedExe<SC>> {
+        let exe = exe.into();
+        Arc::new(AxVmCommittedExe::commit(exe, self.engine.config().pcs()))
+    }
+
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
@@ -273,10 +289,7 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<VmExecutorResult<SC>, ExecutionError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
+    ) -> Result<VmExecutorResult<SC>, ExecutionError> {
         let executor = VmExecutor::new(self.config.clone());
         executor.execute_and_generate(exe, input)
     }
@@ -322,10 +335,16 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
+        #[cfg(feature = "bench-metrics")]
+        metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results
             .per_segment
             .into_iter()
-            .map(|proof_input| self.engine.prove(pk, proof_input))
+            .enumerate()
+            .map(|(seg_idx, proof_input)| {
+                tracing::info_span!("prove_segment", segment = seg_idx)
+                    .in_scope(|| self.engine.prove(pk, proof_input))
+            })
             .collect()
     }
 
@@ -337,7 +356,23 @@ impl<F: PrimeField32, E: StarkEngine<SC>, SC: StarkGenericConfig> VirtualMachine
         self.engine.verify(vk, proof)
     }
 
+    /// Verify segment proofs, checking continuation boundary conditions between segments if VM memory is persistent
     pub fn verify(
+        &self,
+        vk: &MultiStarkVerifyingKey<SC>,
+        proofs: Vec<Proof<SC>>,
+    ) -> Result<(), VerificationError> {
+        match self.config.memory_config.persistence_type {
+            PersistenceType::Volatile => {
+                assert_eq!(proofs.len(), 1);
+                self.verify_single(vk, &proofs.into_iter().next().unwrap())
+            }
+            PersistenceType::Persistent => self.verify_segments(vk, proofs),
+        }
+    }
+
+    /// Verify segment proofs with boundary condition checks for continuation between segments
+    fn verify_segments(
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,

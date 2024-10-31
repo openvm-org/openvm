@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
     paths:
       - "stark-backend/**"
       - "circuits/primitives/**"
@@ -24,33 +24,6 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  benchmark:
-    uses: ./.github/workflows/benchmark-call.yml
-    # run on pull request with label 'run-benchmark'
-    # and always run on push to main
-    if: |
-      (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    with:
-      benchmark_name: vm_verify_fibair
-    secrets: inherit
-
-  benchmark_tiny_e2e:
-    uses: ./.github/workflows/benchmark-call.yml
-    # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'
-    # and always run on push to main
-    # only run-benchmark-e2e will run halo2 verifier
-    if: |
-      (github.event_name == 'pull_request' &&
-      (contains(github.event.pull_request.labels.*.name, 'run-benchmark') ||
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e'))) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    with:
-      instance_type: 64cpu-linux-arm64
-      benchmark_name: tiny_e2e
-    secrets: inherit
-
   benchmark_alu256_e2e:
     uses: ./.github/workflows/benchmark-call.yml
     # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'

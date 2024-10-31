@@ -15,8 +15,8 @@ use axvm_circuit::{
         VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
-    sdk::{air_test, air_test_with_min_segments},
     system::{memory::CHUNK, program::trace::AxVmCommittedExe},
+    utils::{air_test, air_test_with_min_segments},
 };
 use axvm_instructions::{
     exe::AxVmExe,
@@ -168,11 +168,11 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
-        let mut result = vm
+        let result = vm
             .execute_and_generate(program, vec![])
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
-        let proof_input = result.per_segment.pop().unwrap();
+        let proof_input = result.per_segment.last().unwrap();
         assert!(
             proof_input.per_air.len() < num_airs,
             "Expect less used AIRs"
@@ -872,7 +872,7 @@ fn test_vm_keccak() {
     );
 }
 
-// This test dones one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
+// This test does one keccak in 24 rows, and then there are 8 dummy padding rows which don't make up a full round
 #[test]
 fn test_vm_keccak_non_full_round() {
     let inputs = [[[0u8; 32], [1u8; 32]].concat()];

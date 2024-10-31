@@ -529,6 +529,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-benchmarks"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-sdk",
+ "axvm-build",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "axvm-transpiler",
+ "eyre",
+ "metrics",
+ "p3-field",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-build"
 version = "0.1.0"
 dependencies = [
@@ -658,7 +675,6 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
- "axvm-native-compiler",
  "axvm-native-compiler-derive",
  "backtrace",
  "cfg-if",

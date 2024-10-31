@@ -16,7 +16,7 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
     utils::to_field_vec,
 };
-use axvm_circuit::{arch::VmConfig, sdk::gen_vm_program_test_proof_input};
+use axvm_circuit::{arch::VmConfig, utils::gen_vm_program_test_proof_input};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_uni_stark::{StarkGenericConfig, Val};

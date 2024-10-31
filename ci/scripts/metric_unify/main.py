@@ -25,19 +25,19 @@ def custom_sort_label_keys(label_key):
 
 class Aggregation:
     name = ""
-    labels = []
+    group_by = [] # Label keys to group by
     metrics = []
     operation = ""
 
-    def __init__(self, name, labels, metrics, operation):
+    def __init__(self, name, group_by, metrics, operation):
         self.name = name
-        self.labels = labels
+        self.group_by = group_by
         self.metrics = metrics
         self.operation = operation
 
     def __str__(self):
-        return f"Aggregation(name={self.name}, labels={self.labels}, metrics={self.metrics}, operation={self.operation})"
-    
+        return f"Aggregation(name={self.name}, group_by={self.group_by}, metrics={self.metrics}, operation={self.operation})"
+
     def __repr__(self):
         return self.__str__()
 
@@ -97,16 +97,9 @@ class MetricDb:
             label_values = tuple([label_dict[key] for key in label_keys])
             if label_keys not in self.dict_by_label_types:
                 self.dict_by_label_types[label_keys] = {}
-            self.dict_by_label_types[label_keys][label_values] = metrics
-
-    def add_sum(self, labels, name, metrics):
-        existing_metrics = self.flat_dict[labels]
-        new_value = 0
-        for metric in existing_metrics:
-            if metric.name in metrics:
-                new_value += metric.value
-        new_metric = Metric(name, new_value)
-        self.flat_dict[labels].append(new_metric)
+            if label_values not in self.dict_by_label_types[label_keys]:
+                self.dict_by_label_types[label_keys][label_values] = []
+            self.dict_by_label_types[label_keys][label_values].extend(metrics)
 
 # mutates db so metric dict has fields "diff_value" and "diff_percent"
 def diff_metrics(db: MetricDb, db_old: MetricDb):
@@ -122,9 +115,8 @@ def diff_metrics(db: MetricDb, db_old: MetricDb):
     db.separate_by_label_types()
 
 # separated_dict is dict by label types
-def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"], summary_labels=["dsl_ir"]):
+def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"]):
     markdown_output = ""
-
     # Loop through each set of tuple_keys
     for tuple_keys, metrics_dict in separated_dict.items():
         tuple_keys = list(tuple_keys)
@@ -132,10 +124,6 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
         if exclude:
             continue
 
-        # Check if the current tuple_keys contains any of the summary labels
-        should_summarize = any(label in tuple_keys for label in summary_labels)
-        if should_summarize:
-            markdown_output += "<details>\n<summary>Click to expand</summary>\n\n"
         # Get all unique metric names
         metric_names = set()
         for metric_list in metrics_dict.values():
@@ -163,9 +151,6 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
-        if should_summarize:
-            markdown_output += "</details>\n\n"
-
     return markdown_output
 
 def read_aggregations(aggregation_json):
@@ -173,31 +158,54 @@ def read_aggregations(aggregation_json):
         aggregation_data = json.load(f)
     aggregations = []
     for aggregation in aggregation_data['aggregations']:
-        aggregations.append(Aggregation(aggregation['name'], aggregation['labels'], aggregation['metrics'], aggregation['operation']))
+        aggregations.append(Aggregation(aggregation['name'], aggregation['group_by'], aggregation['metrics'], aggregation['operation']))
     return aggregations
 
 def apply_aggregations(db: MetricDb, aggregations):
-    for tuple_keys, metrics_dict in db.dict_by_label_types.items():
-        for tuple_values, metrics in metrics_dict.items():
-            metric_row = list(zip(tuple_keys, tuple_values))
-            metric_row = [[x[0], x[1]] for x in metric_row]
-            for aggregation in aggregations:
-                if aggregation.labels == metric_row:
-                    if aggregation.operation == "sum":
-                        db.add_sum(labels_to_tuple(aggregation.labels), aggregation.name, aggregation.metrics)
-                    else:
-                        raise ValueError(f"Unknown operation: {aggregation.operation}")
+    for aggregation in aggregations:
+        # group_by_values => aggregation metric
+        group_by_dict = {}
+        if aggregation.operation == "sum":
+            for tuple_keys, metrics_dict in db.dict_by_label_types.items():
+                if not set(aggregation.group_by).issubset(set(tuple_keys)):
+                    continue
+                for tuple_values, metrics in metrics_dict.items():
+                    label_dict = dict(zip(tuple_keys, tuple_values))
+                    group_by_values = tuple([label_dict[key] for key in aggregation.group_by])
+                    for metric in metrics:
+                        if metric.name in aggregation.metrics:
+                            if group_by_values not in group_by_dict:
+                                group_by_dict[group_by_values] = 0
+                            group_by_dict[group_by_values] += metric.value
+
+            for group_by_values, sum in group_by_dict.items():
+                aggregation_label = labels_to_tuple([(k,v) for k,v in zip(aggregation.group_by, group_by_values)])
+                if aggregation_label not in db.flat_dict:
+                    db.flat_dict[aggregation_label] = []
+                overwrite = False
+                for metric in db.flat_dict[aggregation_label]:
+                    if metric.name == aggregation.name:
+                        if metric.value != sum:
+                            print(f"[WARN] Overwriting {metric.name}: previous value = {metric.value}, new value = {sum}")
+                        metric.value = sum
+                        overwrite = True
+                        break
+                if not overwrite:
+                    db.flat_dict[aggregation_label].append(Metric(aggregation.name, sum))
+        else:
+            raise ValueError(f"Unknown operation: {aggregation.operation}")
+    db.separate_by_label_types()
 
 # old_metrics_json is optional
 def generate_displayable_metrics(
-        metrics_json, 
-        old_metrics_json, 
-        excluded_labels=["cycle_tracker_span"], 
-        summary_labels=["dsl_ir"], 
+        metrics_json,
+        old_metrics_json,
+        excluded_labels=["cycle_tracker_span"],
         aggregation_json=None
     ):
     db = MetricDb(metrics_json)
 
+    aggregations = []
     if aggregation_json:
         aggregations = read_aggregations(aggregation_json)
         apply_aggregations(db, aggregations)
@@ -210,7 +218,29 @@ def generate_displayable_metrics(
 
         diff_metrics(db, db_old)
 
-    markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels, summary_labels)
+    detailed_markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels)
+
+    # Hacky way to get top level aggregate metrics grouped by "group" label
+    group_to_metrics = {}
+    group_tuple = tuple(["group"])
+    for (group_name, metrics) in db.dict_by_label_types.get(group_tuple, {}).items():
+        agg_metrics = []
+        for metric in metrics:
+            if metric.name in [a.name for a in aggregations]:
+                agg_metrics.append(metric)
+        if len(agg_metrics) == 0:
+            continue
+        if group_name not in group_to_metrics:
+            group_to_metrics[group_name] = []
+        group_to_metrics[group_name].extend(agg_metrics)
+
+    markdown_output = generate_markdown_tables({ group_tuple: group_to_metrics })
+
+    markdown_output += "\n"
+    markdown_output += "<details>\n<summary>Detailed Metrics</summary>\n\n"
+    markdown_output += detailed_markdown_output
+    markdown_output += "</details>\n\n"
+
     return markdown_output
 
 def main():
@@ -218,15 +248,14 @@ def main():
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")
     argparser.add_argument('--prev', type=str, required=False, help="Path to the previous metrics JSON for diff generation")
     argparser.add_argument('--excluded-labels', type=str, required=False, help="Comma-separated list of labels to exclude from the table")
-    argparser.add_argument('--summary-labels', type=str, required=False, help="Comma-separated list of labels to include in summary rows")
+    argparser.add_argument('--top-labels', type=str, required=False, help="Comma-separated list of labels to include in summary rows")
     argparser.add_argument('--aggregation-json', type=str, required=False, help="Path to a JSON file with metrics to aggregate")
     args = argparser.parse_args()
 
     markdown_output = generate_displayable_metrics(
-        args.metrics_json, 
-        args.prev, 
-        excluded_labels=args.excluded_labels.split(",") if args.excluded_labels else ["cycle_tracker_span"], 
-        summary_labels=args.summary_labels.split(",") if args.summary_labels else ["dsl_ir"], 
+        args.metrics_json,
+        args.prev,
+        excluded_labels=args.excluded_labels.split(",") if args.excluded_labels else ["cycle_tracker_span"],
         aggregation_json=args.aggregation_json
     )
     print(markdown_output)

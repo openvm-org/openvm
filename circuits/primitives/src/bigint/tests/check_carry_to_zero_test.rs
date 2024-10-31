@@ -72,7 +72,6 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryToZeroSubAir,
-    pub field_element_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
@@ -162,12 +161,9 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
         range_bus,
         range_decomp,
     )));
-    let field_element_bits = 30;
-    let check_carry_sub_air =
-        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, field_element_bits);
+    let check_carry_sub_air = CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
-        field_element_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,

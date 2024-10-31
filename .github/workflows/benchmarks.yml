@@ -1,0 +1,38 @@
+name: axVM Benchmarks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: ["**"]
+    paths:
+      - "stark-backend/**"
+      - "stark-sdk/**"
+      - "circuits/**"
+      - "vm/**"
+      - "toolchain/**"
+      - "lib/recursion/**"
+      - ".github/workflows/benchmark-call.yml"
+      - ".github/workflows/benchmarks.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  benchmark-verify-fibair:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: verify_fibair
+    secrets: inherit
+
+  benchmark-fibonacci:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: fibonacci
+    secrets: inherit
