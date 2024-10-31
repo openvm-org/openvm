@@ -1,12 +1,13 @@
 #![no_main]
 #![no_std]
+use axvm::intrinsics::io::read_vec;
 
 axvm::entry!(main);
 
 pub fn main() {
-    axvm::intrinsics::io::hint_input();
-    let vec = axvm::intrinsics::io::read_vec();
-    if vec.iter().sum::<u8>() == 0 {
-        axvm::process::panic();
+    let vec = read_vec();
+    assert_eq!(vec.len(), 4);
+    for i in 0..4 {
+        assert_eq!(vec[i], i as u8);
     }
 }

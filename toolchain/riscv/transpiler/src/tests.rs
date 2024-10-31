@@ -107,10 +107,7 @@ fn test_rv32i_prove_with_hint() -> Result<()> {
     air_test_with_min_segments(
         config,
         exe,
-        vec![[1, 0, 0, 0]
-            .iter()
-            .map(|x| F::from_canonical_u32(*x))
-            .collect()],
+        vec![[0, 1, 2, 3].map(F::from_canonical_u32).to_vec()],
         1,
     );
     Ok(())
