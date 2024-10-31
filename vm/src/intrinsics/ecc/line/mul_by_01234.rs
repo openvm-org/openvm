@@ -89,7 +89,7 @@ pub fn mul_by_01234_expr(
     let mut x4 = Fp2::new(builder.clone());
     let mut x5 = Fp2::new(builder.clone());
 
-    let mut r = f.mul_by_01234(&mut x0, &mut x1, &mut x2, &mut x3, &mut x4, xi);
+    let mut r = f.mul_by_01234(&mut x0, &mut x2, &mut x4, &mut x1, &mut x3, xi);
     r.save_output();
 
     let builder = builder.borrow().clone();

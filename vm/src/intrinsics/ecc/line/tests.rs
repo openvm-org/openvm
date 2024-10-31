@@ -195,15 +195,9 @@ fn test_mul_by_01234() {
         .map(|i| vars[*i].clone())
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
-    // c0: c0
-    // c1: c2,
-    // c2: c4,
-    // c3: c1,
-    // c4: c3,
-    // c5: c5
 
     let r_cmp =
-        ax_ecc_execution::curves::bn254::mul_by_01234::<Fq, Fq2, Fq12>(f, [x0, x3, x1, x4, x2]);
+        ax_ecc_execution::curves::bn254::mul_by_01234::<Fq, Fq2, Fq12>(f, [x0, x1, x2, x3, x4]);
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(&r_cmp);
 
     println!(
