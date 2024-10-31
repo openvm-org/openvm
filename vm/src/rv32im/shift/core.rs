@@ -34,7 +34,6 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_sra_flag: T,
 
     // bit_multiplier = 2^bit_shift
-    pub bit_shift: T,
     pub bit_multiplier_left: T,
     pub bit_multiplier_right: T,
 
@@ -102,46 +101,38 @@ where
         let right_shift = cols.opcode_srl_flag + cols.opcode_sra_flag;
 
         // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
-        // 1 << bit_shift. We check that bit_shift is correct below if c < NUM_LIMBS * LIMB_BITS,
-        // otherwise we don't really care what its value is. Note that bit_shift < LIMB_BITS is
-        // constrained in bridge.rs via the range checker.
-        builder
-            .when(cols.opcode_sll_flag)
-            .assert_zero(cols.bit_multiplier_right);
-        builder
-            .when(right_shift.clone())
-            .assert_zero(cols.bit_multiplier_left);
+        // 1 << bit_shift. Because the sum of all bit_shift_marker[i] is constrained to be
+        // 1, bit_shift is guaranteed to be in range.
+        let mut bit_marker_sum = AB::Expr::zero();
+        let mut bit_shift = AB::Expr::zero();
 
         for i in 0..LIMB_BITS {
+            builder.assert_bool(cols.bit_shift_marker[i]);
+            bit_marker_sum += cols.bit_shift_marker[i].into();
+            bit_shift += AB::Expr::from_canonical_usize(i) * cols.bit_shift_marker[i];
+
             let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
-            when_bit_shift.assert_eq(cols.bit_shift, AB::F::from_canonical_usize(i));
-            when_bit_shift.when(cols.opcode_sll_flag).assert_eq(
+            when_bit_shift.assert_eq(
                 cols.bit_multiplier_left,
-                AB::F::from_canonical_usize(1 << i),
+                AB::Expr::from_canonical_usize(1 << i) * cols.opcode_sll_flag,
             );
-            when_bit_shift.when(right_shift.clone()).assert_eq(
+            when_bit_shift.assert_eq(
                 cols.bit_multiplier_right,
-                AB::F::from_canonical_usize(1 << i),
+                AB::Expr::from_canonical_usize(1 << i) * right_shift.clone(),
             );
         }
-
-        builder.assert_bool(cols.b_sign);
-        builder
-            .when(not(cols.opcode_sra_flag))
-            .assert_zero(cols.b_sign);
+        builder.when(is_valid.clone()).assert_one(bit_marker_sum);
 
         // Check that a[i] = b[i] <</>> c[i] both on the bit and limb shift level if c <
         // NUM_LIMBS * LIMB_BITS.
-        let mut marker_sum = AB::Expr::zero();
+        let mut limb_marker_sum = AB::Expr::zero();
+        let mut limb_shift = AB::Expr::zero();
         for i in 0..NUM_LIMBS {
-            marker_sum += cols.limb_shift_marker[i].into();
             builder.assert_bool(cols.limb_shift_marker[i]);
+            limb_marker_sum += cols.limb_shift_marker[i].into();
+            limb_shift += AB::Expr::from_canonical_usize(i) * cols.limb_shift_marker[i];
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
-            when_limb_shift.assert_eq(
-                c[1] * AB::F::from_canonical_usize(1 << LIMB_BITS) + c[0] - cols.bit_shift,
-                AB::F::from_canonical_usize(i * LIMB_BITS),
-            );
 
             for j in 0..NUM_LIMBS {
                 // SLL constraints
@@ -174,27 +165,26 @@ where
                         + right_shift.clone() * (b[j + i] - cols.bit_shift_carry[j + i]);
                     when_limb_shift.assert_eq(a[j] * cols.bit_multiplier_right, expected_a_right);
                 }
-
-                // Ensure c is defined entirely within c[0] and c[1] if limb shifting
-                if j > 1 {
-                    when_limb_shift.assert_zero(c[j]);
-                }
             }
         }
+        builder.when(is_valid.clone()).assert_one(limb_marker_sum);
 
-        for a_val in a {
-            builder.when(not::<AB::Expr>(marker_sum.clone())).assert_eq(
-                *a_val,
-                cols.b_sign * AB::F::from_canonical_usize((1 << LIMB_BITS) - 1),
-            );
-        }
-
-        // Check that bit_shift < LIMB_BITS
+        // Check that bit_shift and limb_shift are correct.
+        let num_bits = AB::F::from_canonical_usize(NUM_LIMBS * LIMB_BITS);
         self.range_bus
-            .range_check(cols.bit_shift, LIMB_BITS.ilog2() as usize)
+            .range_check(
+                (c[0] - limb_shift * AB::F::from_canonical_usize(LIMB_BITS) - bit_shift.clone())
+                    * num_bits.inverse(),
+                LIMB_BITS - ((NUM_LIMBS * LIMB_BITS) as u32).ilog2() as usize,
+            )
             .eval(builder, is_valid.clone());
 
-        // Check x_sign & x[NUM_LIMBS - 1] == x_sign using XOR
+        // Check b_sign & b[NUM_LIMBS - 1] == b_sign using XOR
+        builder.assert_bool(cols.b_sign);
+        builder
+            .when(not(cols.opcode_sra_flag))
+            .assert_zero(cols.b_sign);
+
         let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
         let b_sign_shifted = cols.b_sign * mask;
         self.bitwise_lookup_bus
@@ -213,7 +203,7 @@ where
 
         for carry in cols.bit_shift_carry {
             self.range_bus
-                .send(carry, cols.bit_shift)
+                .send(carry, bit_shift.clone())
                 .eval(builder, is_valid.clone());
         }
 
@@ -312,13 +302,16 @@ where
                 .request_xor(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
         }
 
+        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
+        self.range_checker_chip.add_count(
+            (((c[0] as usize) - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
+            LIMB_BITS - num_bits_log as usize,
+        );
+
         for i in 0..(NUM_LIMBS / 2) {
             self.bitwise_lookup_chip
                 .request_range(a[i * 2], a[i * 2 + 1]);
         }
-
-        self.range_checker_chip
-            .add_count(bit_shift as u32, LIMB_BITS.ilog2() as usize);
         for carry_val in bit_shift_carry {
             self.range_checker_chip.add_count(carry_val, bit_shift);
         }
@@ -347,7 +340,6 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;
-        row_slice.bit_shift = F::from_canonical_usize(record.bit_shift);
         row_slice.bit_multiplier_left = match record.opcode {
             ShiftOpcode::SLL => F::from_canonical_usize(1 << record.bit_shift),
             _ => F::zero(),
@@ -388,10 +380,7 @@ fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 ) -> ([u32; NUM_LIMBS], usize, usize) {
     let mut result = [0u32; NUM_LIMBS];
 
-    let (is_zero, limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
-    if is_zero {
-        return (result, limb_shift, bit_shift);
-    }
+    let (limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
 
     for i in limb_shift..NUM_LIMBS {
         result[i] = if i > limb_shift {
@@ -416,10 +405,7 @@ fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     };
     let mut result = [fill; NUM_LIMBS];
 
-    let (is_zero, limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
-    if is_zero {
-        return (result, limb_shift, bit_shift);
-    }
+    let (limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
 
     for i in 0..(NUM_LIMBS - limb_shift) {
         result[i] = if i + limb_shift + 1 < NUM_LIMBS {
@@ -433,14 +419,9 @@ fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
-fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (bool, usize, usize) {
-    // We assume `NUM_LIMBS * LIMB_BITS < 2^(2*LIMB_BITS)` so if there are any higher limbs,
-    // the shifted value is zero.
-    // TODO: revisit this, may be able to get away with defining the shift only in y[0]
-    let shift = (y[0] + (y[1] * (1 << LIMB_BITS))) as usize;
-    if shift < NUM_LIMBS * LIMB_BITS && y[2..].iter().all(|&val| val == 0) {
-        (false, shift / LIMB_BITS, shift % LIMB_BITS)
-    } else {
-        (true, NUM_LIMBS, shift % LIMB_BITS)
-    }
+fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u32]) -> (usize, usize) {
+    // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so so the shift is defined
+    // entirely in y[0].
+    let shift = (y[0] as usize) % (NUM_LIMBS * LIMB_BITS);
+    (shift / LIMB_BITS, shift % LIMB_BITS)
 }
