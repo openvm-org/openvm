@@ -59,14 +59,26 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
 
+      - name: Feature flags
+        run: |
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark"* ]]; then
+            echo "Adding aggregation feature flag"
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
+          fi
+
       - name: Setup halo2
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
           if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
-            CMD_ARGS="--features static-verifier"
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
             bash trusted_setup_s3.sh
           fi
+
+      - name: Set CMD_ARGS
+        run: |
+          CMD_ARGS="--features ${FEATURE_FLAGS}"
+          echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
 
       ######################################################
       # Run a different benchmark based on benchmark_name:

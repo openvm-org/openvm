@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -25,29 +27,32 @@ fn main() -> Result<()> {
                 bench_from_exe(engine, VmConfig::rv32im(), elf, vec![])
             })?;
 
-        // Leaf aggregation: 1->1 proof "aggregation"
-        // TODO[jpw]: put real user public values number, placeholder=0
-        let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
-        let compiler_options = CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        };
-        for (seg_idx, vdata) in vdata.into_iter().enumerate() {
-            info_span!(
-                "Leaf Aggregation",
-                group = "leaf_aggregation",
-                segment = seg_idx
-            )
-            .in_scope(|| {
-                let (program, input_stream) =
-                    build_verification_program(vdata, compiler_options.clone());
-                let engine = BabyBearPoseidon2Engine::new(
-                    FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
-                );
-                bench_from_exe(engine, config.clone(), program, input_stream).unwrap_or_else(|e| {
-                    panic!("Leaf aggregation failed for segment {}: {e}", seg_idx)
-                })
-            });
+        #[cfg(feature = "aggregation")]
+        {
+            // Leaf aggregation: 1->1 proof "aggregation"
+            // TODO[jpw]: put real user public values number, placeholder=0
+            let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
+            let compiler_options = CompilerOptions {
+                enable_cycle_tracker: true,
+                ..Default::default()
+            };
+            for (seg_idx, vdata) in vdata.into_iter().enumerate() {
+                info_span!(
+                    "Leaf Aggregation",
+                    group = "leaf_aggregation",
+                    segment = seg_idx
+                )
+                .in_scope(|| {
+                    let (program, input_stream) =
+                        build_verification_program(vdata, compiler_options.clone());
+                    let engine = BabyBearPoseidon2Engine::new(
+                        FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
+                    );
+                    bench_from_exe(engine, config.clone(), program, input_stream).unwrap_or_else(
+                        |e| panic!("Leaf aggregation failed for segment {}: {e}", seg_idx),
+                    )
+                });
+            }
         }
         Ok(())
     })

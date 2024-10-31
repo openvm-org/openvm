@@ -24,6 +24,7 @@ tracing.workspace = true
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
 bench-metrics = ["axvm-recursion/bench-metrics"]
+aggregation = []
 static-verifier = ["axvm-recursion/static-verifier"]
 parallel = ["axvm-recursion/parallel"]
 mimalloc = ["axvm-circuit/mimalloc"]
