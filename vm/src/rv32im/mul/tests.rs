@@ -21,14 +21,10 @@ use crate::{
         ExecutionBridge, VmAdapterChip, VmChipWrapper, RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
-        adapters::{
-            Rv32HeapAdapterChip, Rv32MultAdapterChip, INT256_NUM_LIMBS, RV32_CELL_BITS,
-            RV32_REGISTER_NUM_LIMBS,
-        },
+        adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
-        Rv32Multiplication256Chip,
     },
-    utils::{generate_long_number, rv32_rand_write_register_or_imm, rv32_write_heap_default},
+    utils::{generate_long_number, rv32_rand_write_register_or_imm},
 };
 
 type F = BabyBear;
@@ -95,53 +91,6 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
 #[test]
 fn rv32_mul_rand_test() {
     run_rv32_mul_rand_test(1);
-}
-
-fn run_rv32_mul_256_rand_test(num_ops: usize) {
-    // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
-    const MAX_NUM_LIMBS: u32 = 32;
-    let mut rng = create_seeded_rng();
-
-    let range_tuple_bus = RangeTupleCheckerBus::new(
-        RANGE_TUPLE_CHECKER_BUS,
-        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
-    );
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
-
-    let mut tester = VmChipTestBuilder::default();
-    let mut chip = Rv32Multiplication256Chip::<F>::new(
-        Rv32HeapAdapterChip::<F, 2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_controller(),
-        ),
-        MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
-        tester.memory_controller(),
-    );
-
-    for _ in 0..num_ops {
-        let b = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let c = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let instruction = rv32_write_heap_default(
-            &mut tester,
-            vec![b.map(F::from_canonical_u32)],
-            vec![c.map(F::from_canonical_u32)],
-            MulOpcode::MUL as usize,
-        );
-        tester.execute(&mut chip, instruction);
-    }
-
-    let tester = tester
-        .build()
-        .load(chip)
-        .load(range_tuple_checker)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn rv32_mul_256_rand_test() {
-    run_rv32_mul_256_rand_test(24);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
