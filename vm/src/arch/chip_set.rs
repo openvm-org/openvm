@@ -37,6 +37,7 @@ use crate::{
     },
     intrinsics::{
         ecc::{
+            fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
                 EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
@@ -917,6 +918,7 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleAndAddStepRv32_32(chip));
                 }
+
                 ExecutorName::MillerDoubleAndAddStepRv32_48 => {
                     let chip = Rc::new(RefCell::new(MillerDoubleAndAddStepChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
@@ -931,6 +933,66 @@ impl VmConfig {
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleAndAddStepRv32_48(chip));
+                }
+                ExecutorName::Fp2ModularAddSubRv32_32 => {
+                    let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Fp2ModularAddSubRv32_32(chip));
+                }
+                ExecutorName::Fp2ModularMulDivRv32_32 => {
+                    let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Fp2ModularMulDivRv32_32(chip));
+                }
+                ExecutorName::Fp2ModularAddSubRv32_48 => {
+                    let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Fp2ModularAddSubRv32_48(chip));
+                }
+                ExecutorName::Fp2ModularMulDivRv32_48 => {
+                    let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Fp2ModularMulDivRv32_48(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
@@ -1156,20 +1218,45 @@ fn gen_pairing_executor_tuple(
         .iter()
         .enumerate()
         .flat_map(|(i, curve)| {
-            let class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+            let fp2_class_offset = Fp2Opcode::default_offset() + i * Fp2Opcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
                     (
                         PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        class_offset,
+                        pairing_class_offset,
                         ExecutorName::MillerDoubleStepRv32_32,
                         curve.prime(),
                     ),
                     (
                         PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        class_offset,
+                        pairing_class_offset,
                         ExecutorName::MillerDoubleAndAddStepRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::ADD as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularAddSubRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::SUB as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularAddSubRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::MUL as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularMulDivRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::DIV as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularMulDivRv32_32,
                         curve.prime(),
                     ),
                 ]
@@ -1177,14 +1264,38 @@ fn gen_pairing_executor_tuple(
                 vec![
                     (
                         PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        class_offset,
+                        pairing_class_offset,
                         ExecutorName::MillerDoubleStepRv32_48,
                         curve.prime(),
                     ),
                     (
                         PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
-                        class_offset,
+                        pairing_class_offset,
                         ExecutorName::MillerDoubleAndAddStepRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::ADD as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularAddSubRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::SUB as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularAddSubRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::MUL as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularMulDivRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        Fp2Opcode::DIV as usize,
+                        fp2_class_offset,
+                        ExecutorName::Fp2ModularMulDivRv32_48,
                         curve.prime(),
                     ),
                 ]
