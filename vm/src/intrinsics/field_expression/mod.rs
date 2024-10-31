@@ -20,10 +20,11 @@ use crate::{
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
 
-    // The global opcode offset.
+    /// The global opcode offset.
     pub offset: usize,
-    pub local_opcode_indices: Vec<usize>,
-    // Opcode flag idx for all except last local opcode
+    /// All the opcode indices supported by this Air.
+    pub local_opcode_idx: Vec<usize>,
+    /// Opcode flag idx for all except last local opcode
     pub opcode_flag_idx: Vec<usize>,
 }
 
@@ -31,14 +32,14 @@ impl FieldExpressionCoreAir {
     pub fn new(
         expr: FieldExpr,
         offset: usize,
-        local_opcode_indices: Vec<usize>,
+        local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
     ) -> Self {
-        assert_eq!(opcode_flag_idx.len(), local_opcode_indices.len() - 1);
+        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
         Self {
             expr,
             offset,
-            local_opcode_indices,
+            local_opcode_idx,
             opcode_flag_idx,
         }
     }
@@ -113,14 +114,12 @@ where
                 .map(|&v| v.into())
                 .sum::<AB::Expr>();
         builder.assert_bool(last_opcode_flag.clone());
-        let opcode_flags: Vec<AB::Expr> = opcode_flags_except_last
+        let opcode_flags = opcode_flags_except_last
             .into_iter()
             .map(Into::into)
-            .chain(Some(last_opcode_flag))
-            .collect();
+            .chain(Some(last_opcode_flag));
         let expected_opcode = opcode_flags
-            .into_iter()
-            .zip(self.local_opcode_indices.iter().map(|&i| i + self.offset))
+            .zip(self.local_opcode_idx.iter().map(|&i| i + self.offset))
             .map(|(flag, global_idx)| flag * AB::Expr::from_canonical_usize(global_idx))
             .sum();
 
@@ -155,7 +154,7 @@ impl FieldExpressionCoreChip {
     pub fn new(
         expr: FieldExpr,
         offset: usize,
-        local_opcode_indices: Vec<usize>,
+        local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
@@ -163,7 +162,7 @@ impl FieldExpressionCoreChip {
         let air = FieldExpressionCoreAir {
             expr,
             offset,
-            local_opcode_indices,
+            local_opcode_idx,
             opcode_flag_idx,
         };
         Self {
@@ -213,7 +212,7 @@ where
             .iter()
             .enumerate()
             .for_each(|(i, &flag_idx)| {
-                flags[flag_idx] = local_opcode_index == self.air.local_opcode_indices[i]
+                flags[flag_idx] = local_opcode_index == self.air.local_opcode_idx[i]
             });
 
         let vars = self.air.expr.execute(inputs.clone(), flags.clone());
