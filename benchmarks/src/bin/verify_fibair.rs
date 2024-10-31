@@ -25,11 +25,13 @@ fn main() -> Result<()> {
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
     );
-    let vdata = engine
-        .run_test(vec![fib_chip.generate_air_proof_input()])
-        .unwrap();
 
     run_with_metric_collection("OUTPUT_PATH", || {
+        // run_test tries to setup tracing, but it will be ignored since run_with_metric_collection already sets it.
+        let vdata = engine
+            .run_test(vec![fib_chip.generate_air_proof_input()])
+            .unwrap();
+
         let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
