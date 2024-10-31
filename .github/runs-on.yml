@@ -12,3 +12,10 @@ images:
     owner: "912452651013"
     name: "arm64-rust-dev-1024gb"
     ami: "ami-06dd8940c223fd887"
+
+  arm64-rust-riscv-dev-32gb:
+    platform: "linux"
+    arch: "arm64"
+    owner: "912452651013"
+    name: "arm64-rust-riscv-dev-32gb"
+    ami: "ami-0276be31ce0779233"

@@ -22,6 +22,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=64cpu-linux-arm64
+      - image=arm64-rust-riscv-dev-32gb # for riscv-gnu-toolchain
 
     steps:
       - uses: actions/checkout@v4
