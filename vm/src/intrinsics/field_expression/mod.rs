@@ -24,10 +24,12 @@ pub struct FieldExpressionCoreAir {
 
     // The opcodes handled by this air
     // Assumptions:
-    // 1. local_opcode_indices is of size 1 or 2.
+    // 1. local_opcode_indices
     // 2. When it's size 2, there is exactly one flag to tell us which opcode to use.
     //    and otherwise there is no flag.
     pub local_opcode_indices: Vec<usize>,
+    // Opcode flag idx for all except last local opcode
+    pub opcode_flag_idx: Vec<usize>,
 }
 
 impl FieldExpressionCoreAir {
@@ -99,24 +101,12 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // no flags -> local_opcode_indices[0]
-        // flag = 1 -> local_opcode_indices[0]
-        // flag = 0 -> local_opcode_indices[1]
-        let opcode_index_to_use = if flags.is_empty() {
-            AB::Expr::zero()
-        } else {
-            AB::Expr::one() - flags[0]
-        };
-        let second_opcode = if self.local_opcode_indices.len() > 1 {
-            self.local_opcode_indices[1]
-        } else {
-            0 // value doesn't matter as it will times a zero
-        };
-        let opcode_index = AB::Expr::from_canonical_usize(second_opcode)
-            * opcode_index_to_use.clone()
-            + AB::Expr::from_canonical_usize(self.local_opcode_indices[0])
-                * (AB::Expr::one() - opcode_index_to_use);
-        let expected_opcode = AB::Expr::from_canonical_usize(self.offset) + opcode_index;
+        // framework asserted these are bool already
+        let opcode_flags_except_last = self.opcode_flag_idx.iter().map(|&i| flags[i]).collect_vec();
+        let last_opcode_flag = is_valid - opcode_flags_except_last.iter().sum::<AB::Expr>();
+        builder.assert_bool(last_opcode_flag);
+        let opcode_flags: Vec<AB::Expr> = opcode_flags_except_last.into_iter().map(Into::into).chain(Some(last_opcode_flag)).collect();
+        let expected_opcode = opcode_flags.zip(...);
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
