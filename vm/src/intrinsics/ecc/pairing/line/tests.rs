@@ -1,10 +1,10 @@
-use ax_ecc_execution::{common::EcPoint, curves::bn254::point_to_013};
+use ax_ecc_execution::{common::EcPoint, curves::bn254::tangent_line_013};
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc_constants::BN254;
-use axvm_instructions::{EcLineDTypeOpcode, UsizeOpcode};
+use axvm_instructions::{PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -36,8 +36,8 @@ fn test_mul_013_by_013() {
     );
     let core = FieldExpressionCoreChip::new(
         expr,
-        EcLineDTypeOpcode::default_offset(),
-        vec![EcLineDTypeOpcode::MUL_013_BY_013 as usize],
+        PairingOpcode::default_offset(),
+        vec![PairingOpcode::MUL_013_BY_013 as usize],
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul013By013",
     );
@@ -59,8 +59,8 @@ fn test_mul_013_by_013() {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
-    let line0 = point_to_013::<Fq, Fq2>(ec_pt_0);
-    let line1 = point_to_013::<Fq, Fq2>(ec_pt_1);
+    let line0 = tangent_line_013::<Fq, Fq2>(ec_pt_0);
+    let line1 = tangent_line_013::<Fq, Fq2>(ec_pt_1);
     let input_line0 = [
         bn254_fq2_to_biguint_vec(&line0.b),
         bn254_fq2_to_biguint_vec(&line0.c),
@@ -116,7 +116,7 @@ fn test_mul_013_by_013() {
         &mut tester,
         input_line0_limbs,
         input_line1_limbs,
-        chip.core.air.offset + EcLineDTypeOpcode::MUL_013_BY_013 as usize,
+        chip.core.air.offset + PairingOpcode::MUL_013_BY_013 as usize,
     );
 
     tester.execute(&mut chip, instruction);

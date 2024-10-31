@@ -377,6 +377,7 @@ impl SymbolicExpr {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
                 left.limbs[0] += *s;
+                debug_assert!(s < (1 << self.limb_bits));
                 left.limb_max_abs += s.unsigned_abs();
                 left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left

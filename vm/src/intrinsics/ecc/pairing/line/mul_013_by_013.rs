@@ -10,7 +10,7 @@ use ax_ecc_primitives::{
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_ecc_constants::BN254;
-use axvm_instructions::EcLineDTypeOpcode;
+use axvm_instructions::PairingOpcode;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -23,26 +23,26 @@ use crate::{
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcLineMul013By013Chip<
     F: PrimeField32,
-    const INPUT_LANES: usize,
-    const OUTPUT_LANES: usize,
-    const LANE_SIZE: usize,
+    const INPUT_BLOCKS: usize,
+    const OUTPUT_BLOCKS: usize,
+    const BLOCK_SIZE: usize,
 >(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
 impl<
         F: PrimeField32,
-        const INPUT_LANES: usize,
-        const OUTPUT_LANES: usize,
-        const LANE_SIZE: usize,
-    > EcLineMul013By013Chip<F, INPUT_LANES, OUTPUT_LANES, LANE_SIZE>
+        const INPUT_BLOCKS: usize,
+        const OUTPUT_BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+    > EcLineMul013By013Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
@@ -55,7 +55,7 @@ impl<
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![EcLineDTypeOpcode::MUL_013_BY_013 as usize],
+            vec![PairingOpcode::MUL_013_BY_013 as usize],
             memory_controller.borrow().range_checker.clone(),
             "Mul013By013",
         );
@@ -78,10 +78,10 @@ pub fn mul_013_by_013_expr(
         range_bus.range_max_bits,
     );
 
-    let mut b0 = Fp2::new(builder.clone()); // x1
-    let mut c0 = Fp2::new(builder.clone()); // x3
-    let mut b1 = Fp2::new(builder.clone()); // y1
-    let mut c1 = Fp2::new(builder.clone()); // y3
+    let mut b0 = Fp2::new(builder.clone());
+    let mut c0 = Fp2::new(builder.clone());
+    let mut b1 = Fp2::new(builder.clone());
+    let mut c1 = Fp2::new(builder.clone());
 
     // where w⁶ = xi
     // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
@@ -92,13 +92,7 @@ pub fn mul_013_by_013_expr(
     let mut l3 = c0.add(&mut c1);
     let mut l4 = b0.mul(&mut c1).add(&mut b1.mul(&mut c0));
 
-    // let [mut l0, mut l1, mut l2, mut l3, mut l4] =
-    //     mul_013_by_013(&mut b0, &mut c0, &mut b1, &mut c1, xi);
-    l0.save_output();
-    l1.save_output();
-    l2.save_output();
-    l3.save_output();
-    l4.save_output();
+    [l0, l1, l2, l3, l4].map(|mut l| (&l).save_output());
 
     let builder = builder.borrow().clone();
     FieldExpr {
