@@ -88,7 +88,7 @@ where
     let result = result.per_segment.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
     {
-        metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
+        metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
     }
 
     ProofInputForTest {

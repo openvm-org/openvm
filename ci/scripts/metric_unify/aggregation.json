@@ -1,37 +1,25 @@
 {
-    "aggregations": [
-        {
-            "labels": [
-                [
-                    "group",
-                    "bench_program_inner"
-                ]
-            ],
-            "name": "total_proof_time_ms",
-            "metrics": ["stark_prove_excluding_trace_time_ms", "trace_gen_time_ms"],
-            "operation": "sum"
-        },
-        {
-            "labels": [
-                [
-                    "group",
-                    "inner_verifier"
-                ]
-            ],
-            "name": "total_proof_time_ms",
-            "metrics": ["stark_prove_excluding_trace_time_ms", "trace_gen_time_ms"],
-            "operation": "sum"
-        },
-        {
-            "labels": [
-                [
-                    "group",
-                    "fibonacci_program_inner"
-                ]
-            ],
-            "name": "total_proof_time_ms",
-            "metrics": ["stark_prove_excluding_trace_time_ms", "trace_gen_time_ms"],
-            "operation": "sum"
-        }
-    ]
+  "aggregations": [
+    {
+      "group_by": ["group"],
+      "name": "total_proof_time_ms",
+      "metrics": [
+        "stark_prove_excluding_trace_time_ms",
+        "execute_and_trace_gen_time_ms"
+      ],
+      "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "total_cells_used",
+      "metrics": ["total_cells_used"],
+      "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "total_cycles",
+      "metrics": ["total_cycles"],
+      "operation": "sum"
+    }
+  ]
 }

@@ -127,8 +127,6 @@ jobs:
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
-            # Old fallback until we switch all benchmarks to new metrics format:
-            cp benchmark/tmp/_result.md results.md
           fi
 
       - name: Install inferno-flamegraph
@@ -148,14 +146,17 @@ jobs:
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+            echo "<details>" >> $RESULT_PATH
+            echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
               flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
+            echo "</details>" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "AWS Instance Type: [${{ inputs.instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.instance_type }})" >> $RESULT_PATH
+          echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
 

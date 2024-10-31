@@ -36,6 +36,7 @@ mod emit {
 
     impl CycleTracker {
         pub fn increment_opcode(&self, (dsl_ir, opcode): &(Option<String>, String)) {
+            counter!("total_cycles").increment(1u64);
             let labels = [
                 ("opcode", opcode.clone()),
                 ("dsl_ir", dsl_ir.clone().unwrap_or_default()),

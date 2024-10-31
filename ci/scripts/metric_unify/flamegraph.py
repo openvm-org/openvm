@@ -23,9 +23,11 @@ def get_stack_lines(metrics_file, stack_keys, metric_name):
         # list of pairs -> dict
         labels = dict(counter['labels'])
 
-        try:
-            stack_values = [labels[key] for key in stack_keys]
-        except KeyError:
+        stack_values = []
+        for key in stack_keys:
+            if key in labels:
+                stack_values.append(labels[key])
+        if len(stack_values) == 0:
             continue
 
         if counter['metric'] != metric_name:
