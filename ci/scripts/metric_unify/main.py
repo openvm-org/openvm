@@ -116,12 +116,9 @@ def diff_metrics(db: MetricDb, db_old: MetricDb):
 
 # separated_dict is dict by label types
 def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_span"]):
-    top_level_output = ""
-    summarized_output = ""
-
+    markdown_output = ""
     # Loop through each set of tuple_keys
     for tuple_keys, metrics_dict in separated_dict.items():
-        markdown_output = ""
         tuple_keys = list(tuple_keys)
         exclude = any(excluded_label in tuple_keys for excluded_label in excluded_labels)
         if exclude:
@@ -154,18 +151,6 @@ def generate_markdown_tables(separated_dict, excluded_labels=["cycle_tracker_spa
                 row_metrics.append(metric_str)
             markdown_output += "| " + " | ".join(row_values + row_metrics) + " |\n"
         markdown_output += "\n"
-
-        if tuple_keys == ["group"]:
-            top_level_output += markdown_output
-        else:
-            summarized_output += markdown_output
-
-    markdown_output = top_level_output
-    markdown_output += "\n"
-    markdown_output += "<details>\n<summary>Detailed Metrics</summary>\n\n"
-    markdown_output += summarized_output
-    markdown_output += "</details>\n\n"
-
     return markdown_output
 
 def read_aggregations(aggregation_json):
@@ -219,6 +204,7 @@ def generate_displayable_metrics(
     ):
     db = MetricDb(metrics_json)
 
+    aggregations = []
     if aggregation_json:
         aggregations = read_aggregations(aggregation_json)
         apply_aggregations(db, aggregations)
@@ -231,7 +217,29 @@ def generate_displayable_metrics(
 
         diff_metrics(db, db_old)
 
-    markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels)
+    detailed_markdown_output = generate_markdown_tables(db.dict_by_label_types, excluded_labels)
+
+    # Hacky way to get top level aggregate metrics grouped by "group" label
+    group_to_metrics = {}
+    group_tuple = tuple(["group"])
+    for (group_name, metrics) in db.dict_by_label_types.get(group_tuple, {}).items():
+        agg_metrics = []
+        for metric in metrics:
+            if metric.name in [a.name for a in aggregations]:
+                agg_metrics.append(metric)
+        if len(agg_metrics) == 0:
+            continue
+        if group_name not in group_to_metrics:
+            group_to_metrics[group_name] = []
+        group_to_metrics[group_name].extend(agg_metrics)
+
+    markdown_output = generate_markdown_tables({ group_tuple: group_to_metrics })
+
+    markdown_output += "\n"
+    markdown_output += "<details>\n<summary>Detailed Metrics</summary>\n\n"
+    markdown_output += detailed_markdown_output
+    markdown_output += "</details>\n\n"
+
     return markdown_output
 
 def main():

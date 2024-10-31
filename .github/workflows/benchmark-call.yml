@@ -153,7 +153,7 @@ jobs:
               flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
-            echo "</details>" >> $RESULT_PATH
+            echo "</details>\n\n" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
