@@ -35,12 +35,13 @@ fn read_vec_by_len(len: usize) -> Vec<u8> {
     // Note: this expect message doesn't matter until our panic handler actually cares about it
     let layout = Layout::from_size_align(capacity, 4).expect("vec is too large");
     // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the length to `len` and don't care about the extra `capacity - len` bytes stored.
-    let mut ptr = unsafe { alloc::alloc::alloc(layout) };
+    let ptr_start = unsafe { alloc::alloc::alloc(layout) };
+    let mut ptr = ptr_start;
 
     // Note: if len % 4 != 0, this will discard some last bytes
     for _ in 0..num_words {
         hint_store_u32!(ptr, 0);
         ptr = unsafe { ptr.add(4) };
     }
-    unsafe { Vec::from_raw_parts(ptr, len, capacity) }
+    unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
 }
