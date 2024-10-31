@@ -16,7 +16,7 @@ use crate::{
     arch::ExecutionState,
     intrinsics::{
         ecc::{
-            line::EcLineMul013By013Chip,
+            line::{EcLineMul013By013Chip, EcLineMul023By023Chip},
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -111,6 +111,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
     EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
+    EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 4, 10, 64>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
@@ -159,6 +160,7 @@ pub enum AxVmChip<F: PrimeField32> {
     EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
     EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
+    EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 4, 10, 64>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),

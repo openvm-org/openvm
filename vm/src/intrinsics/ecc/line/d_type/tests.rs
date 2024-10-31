@@ -28,8 +28,8 @@ fn test_mul_013_by_013() {
     let expr = mul_013_by_013_expr(
         ExprBuilderConfig {
             modulus: BN254.MODULUS.clone(),
-            num_limbs: 32,
-            limb_bits: 8,
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
         },
         tester.memory_controller().borrow().range_checker.bus(),
         BN254.XI,
