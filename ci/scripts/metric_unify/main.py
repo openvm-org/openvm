@@ -185,7 +185,8 @@ def apply_aggregations(db: MetricDb, aggregations):
                 overwrite = False
                 for metric in db.flat_dict[aggregation_label]:
                     if metric.name == aggregation.name:
-                        print(f"[WARN] Overwriting {metric.name}: previous value = {metric.value}, new value = {sum}")
+                        if metric.value != sum:
+                            print(f"[WARN] Overwriting {metric.name}: previous value = {metric.value}, new value = {sum}")
                         metric.value = sum
                         overwrite = True
                         break
