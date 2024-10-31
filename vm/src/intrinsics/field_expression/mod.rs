@@ -19,25 +19,27 @@ use crate::{
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
-    // global opcode offset
-    pub offset: usize,
 
-    // The opcodes handled by this air
-    // Assumptions:
-    // 1. local_opcode_indices
-    // 2. When it's size 2, there is exactly one flag to tell us which opcode to use.
-    //    and otherwise there is no flag.
+    // The global opcode offset.
+    pub offset: usize,
     pub local_opcode_indices: Vec<usize>,
     // Opcode flag idx for all except last local opcode
     pub opcode_flag_idx: Vec<usize>,
 }
 
 impl FieldExpressionCoreAir {
-    pub fn new(expr: FieldExpr, offset: usize, local_opcode_indices: Vec<usize>) -> Self {
+    pub fn new(
+        expr: FieldExpr,
+        offset: usize,
+        local_opcode_indices: Vec<usize>,
+        opcode_flag_idx: Vec<usize>,
+    ) -> Self {
+        assert_eq!(opcode_flag_idx.len(), local_opcode_indices.len() - 1);
         Self {
             expr,
             offset,
             local_opcode_indices,
+            opcode_flag_idx,
         }
     }
 
@@ -101,12 +103,26 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // framework asserted these are bool already
+        // Currently `flags` from the framework are boolean used in "Select", If true {a} else {b}.
+        // Later we might change it to be generic boolean variables like indicators for opcode flags.
+        // But in both cases, the below logic works.
         let opcode_flags_except_last = self.opcode_flag_idx.iter().map(|&i| flags[i]).collect_vec();
-        let last_opcode_flag = is_valid - opcode_flags_except_last.iter().sum::<AB::Expr>();
-        builder.assert_bool(last_opcode_flag);
-        let opcode_flags: Vec<AB::Expr> = opcode_flags_except_last.into_iter().map(Into::into).chain(Some(last_opcode_flag)).collect();
-        let expected_opcode = opcode_flags.zip(...);
+        let last_opcode_flag = is_valid
+            - opcode_flags_except_last
+                .iter()
+                .map(|&v| v.into())
+                .sum::<AB::Expr>();
+        builder.assert_bool(last_opcode_flag.clone());
+        let opcode_flags: Vec<AB::Expr> = opcode_flags_except_last
+            .into_iter()
+            .map(Into::into)
+            .chain(Some(last_opcode_flag))
+            .collect();
+        let expected_opcode = opcode_flags
+            .into_iter()
+            .zip(self.local_opcode_indices.iter().map(|&i| i + self.offset))
+            .map(|(flag, global_idx)| flag * AB::Expr::from_canonical_usize(global_idx))
+            .sum();
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -125,6 +141,7 @@ where
 
 pub struct FieldExpressionRecord {
     pub inputs: Vec<BigUint>,
+    pub flags: Vec<bool>,
 }
 
 pub struct FieldExpressionCoreChip {
@@ -139,6 +156,7 @@ impl FieldExpressionCoreChip {
         expr: FieldExpr,
         offset: usize,
         local_opcode_indices: Vec<usize>,
+        opcode_flag_idx: Vec<usize>,
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
     ) -> Self {
@@ -146,6 +164,7 @@ impl FieldExpressionCoreChip {
             expr,
             offset,
             local_opcode_indices,
+            opcode_flag_idx,
         };
         Self {
             air,
@@ -188,14 +207,16 @@ where
 
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_index = opcode - self.air.offset;
-        let flags = if self.air.local_opcode_indices.len() == 1 {
-            vec![]
-        } else {
-            vec![local_opcode_index == self.air.local_opcode_indices[0]]
-        };
-        assert_eq!(flags.len(), self.air.num_flags());
+        let mut flags = vec![false; self.air.num_flags()];
+        self.air
+            .opcode_flag_idx
+            .iter()
+            .enumerate()
+            .for_each(|(i, &flag_idx)| {
+                flags[flag_idx] = local_opcode_index == self.air.local_opcode_indices[i]
+            });
 
-        let vars = self.air.expr.execute(inputs.clone(), flags);
+        let vars = self.air.expr.execute(inputs.clone(), flags.clone());
         assert_eq!(vars.len(), self.air.num_vars());
 
         let outputs: Vec<BigUint> = self
@@ -213,7 +234,7 @@ where
             .collect();
 
         let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
-        Ok((ctx.into(), FieldExpressionRecord { inputs }))
+        Ok((ctx.into(), FieldExpressionRecord { inputs, flags }))
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
@@ -221,9 +242,10 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        self.air
-            .expr
-            .generate_subrow((&self.range_checker, record.inputs, vec![]), row_slice);
+        self.air.expr.generate_subrow(
+            (&self.range_checker, record.inputs, record.flags),
+            row_slice,
+        );
     }
 
     fn air(&self) -> &Self::Air {
