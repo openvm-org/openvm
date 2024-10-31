@@ -99,9 +99,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         // representing the entire memory tree.
         let mut memory_modified = BTreeMap::new();
         for (&label, &values) in memory {
-            println!("label {:?}", label);
             let index = memory_dimensions.label_to_index(label);
-            println!("index {}", index);
             memory_modified.insert(index, values);
         }
         Self::from_memory(

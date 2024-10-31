@@ -31,7 +31,7 @@ pub fn air_test_with_min_segments(
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
-    let final_memory = std::mem::take(&mut result.final_memory);
+    let final_memory = result.final_memory.take();
     let proofs = vm.prove(&pk, result);
 
     assert!(proofs.len() >= min_segments);

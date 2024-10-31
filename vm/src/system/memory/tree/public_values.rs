@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use p3_field::PrimeField32;
+use p3_util::log2_strict_usize;
 
 use crate::{
     arch::hasher::Hasher,
@@ -9,25 +10,30 @@ use crate::{
 
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: usize = 2;
 
-/// Merkle proof for public values in the memory state.
-pub struct PublicValuesProof<const CHUNK: usize, F> {
+/// Merkle proof for user public values in the memory state.
+pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of (`bit`, `hash`)
     /// `bit`: If `bit` is true, public values are in the left child, otherwise in the right child.
     /// `hash`: Hash of the sibling node.
     pub proof: Vec<(bool, [F; CHUNK])>,
+    /// Raw public values. Its length should be a power of two * CHUNK.
     pub public_values: Vec<F>,
-    /// Merkle root of public values.
+    /// Merkle root of public values. The computation of this value follows the same logic of
+    /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
+    /// merkle tree is always a full binary tree.
     pub public_values_commit: [F; CHUNK],
 }
 
 /// Computes the proof of the public values from the final memory state.
-pub fn compute_public_values_proof<const CHUNK: usize, F: PrimeField32>(
+/// Assumption:
+/// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
+pub fn compute_user_public_values_proof<const CHUNK: usize, F: PrimeField32>(
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &impl Hasher<CHUNK, F>,
     final_memory: &Equipartition<F, CHUNK>,
-) -> PublicValuesProof<CHUNK, F> {
-    let proof = compute_merkle_proof_to_public_values_root(
+) -> UserPublicValuesProof<CHUNK, F> {
+    let proof = compute_merkle_proof_to_user_public_values_root(
         memory_dimensions,
         num_public_values,
         hasher,
@@ -35,14 +41,14 @@ pub fn compute_public_values_proof<const CHUNK: usize, F: PrimeField32>(
     );
     let public_values = extract_public_values(&memory_dimensions, num_public_values, final_memory);
     let public_values_commit = hasher.merkle_root(&public_values);
-    PublicValuesProof {
+    UserPublicValuesProof {
         proof,
         public_values,
         public_values_commit,
     }
 }
 
-fn compute_merkle_proof_to_public_values_root<const CHUNK: usize, F: PrimeField32>(
+fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeField32>(
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &impl Hasher<CHUNK, F>,
@@ -60,16 +66,15 @@ fn compute_merkle_proof_to_public_values_root<const CHUNK: usize, F: PrimeField3
         num_pv_chunks.is_power_of_two(),
         "pv_height must be a power of two"
     );
-    let pv_height = usize::BITS - num_pv_chunks.leading_zeros() - 1;
-    let address_leading_zeros = memory_dimensions.address_height - pv_height as usize;
-    let address_space = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET;
+    let pv_height = log2_strict_usize(num_pv_chunks);
+    let address_leading_zeros = memory_dimensions.address_height - pv_height;
 
     let mut curr_node = Arc::new(root);
     let mut proof = Vec::with_capacity(memory_dimensions.as_height + address_leading_zeros);
     for i in 0..memory_dimensions.as_height {
         let bit = 1 << (memory_dimensions.as_height - i - 1);
         if let MemoryNode::NonLeaf { left, right, .. } = curr_node.as_ref().clone() {
-            if address_space & bit != 0 {
+            if PUBLIC_VALUES_ADDRESS_SPACE_OFFSET & bit != 0 {
                 curr_node = right;
                 proof.push((true, left.hash()));
             } else {
@@ -132,7 +137,7 @@ mod tests {
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
 
-    use super::{compute_public_values_proof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
+    use super::{compute_user_public_values_proof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
         arch::{
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -160,7 +165,7 @@ mod tests {
 
         let final_memory = memory_image_to_equipartition(memory);
         let hasher = vm_poseidon2_hasher();
-        let pv_proof = compute_public_values_proof::<{ CHUNK }, F>(
+        let pv_proof = compute_user_public_values_proof::<{ CHUNK }, F>(
             memory_dimensions,
             num_public_values,
             &hasher,
