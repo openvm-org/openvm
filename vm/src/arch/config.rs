@@ -47,6 +47,8 @@ pub struct VmConfig {
     pub supported_modulus: Vec<BigUint>,
     /// List of all supported EC curves
     pub supported_ec_curves: Vec<EcCurve>,
+    /// List of all supported pairing curves
+    pub supported_pairing_curves: Vec<EcCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
@@ -58,6 +60,7 @@ pub struct VmConfig {
 }
 
 impl VmConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_parameters(
         poseidon2_max_constraint_degree: usize,
         memory_config: MemoryConfig,
@@ -67,6 +70,7 @@ impl VmConfig {
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
         supported_ec_curves: Vec<EcCurve>,
+        supported_pairing_curves: Vec<EcCurve>,
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
@@ -77,6 +81,7 @@ impl VmConfig {
             collect_metrics,
             supported_modulus,
             supported_ec_curves,
+            supported_pairing_curves,
         }
     }
 
@@ -126,6 +131,7 @@ impl Default for VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
+            vec![],
             vec![],
             vec![],
         )

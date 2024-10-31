@@ -38,6 +38,7 @@ use crate::{
     intrinsics::{
         ecc::{
             line::EcLineMul013By013Chip,
+            pairing::MillerDoubleStepChip,
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -808,6 +809,56 @@ impl VmConfig {
             }
         }
 
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_pairing_executor_tuple(&self.supported_pairing_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&local_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            match executor {
+                ExecutorName::MillerDoubleStepRv32_32 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleStepRv32_32(chip));
+                }
+                ExecutorName::MillerDoubleStepRv32_48 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 1, 12, 24, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleStepRv32_48(chip));
+                }
+                _ => unreachable!("Unsupported executor"),
+            }
+        }
+
         for (local_range, executor, class_offset, modulus) in
             gen_modular_executor_tuple(self.supported_modulus.clone())
         {
@@ -1009,6 +1060,37 @@ fn gen_ec_executor_tuple(
                         curve.prime(),
                     ),
                 ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
+}
+
+// Returns (local_opcode_idx, global offset, executor name, modulus)
+fn gen_pairing_executor_tuple(
+    supported_ec_curves: &[EcCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_ec_curves
+        .iter()
+        .enumerate()
+        .flat_map(|(i, curve)| {
+            let class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+            let bytes = curve.prime().bits().div_ceil(8);
+            if bytes <= 32 {
+                vec![(
+                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                    class_offset,
+                    ExecutorName::MillerDoubleStepRv32_32,
+                    curve.prime(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                    class_offset,
+                    ExecutorName::MillerDoubleStepRv32_48,
+                    curve.prime(),
+                )]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }

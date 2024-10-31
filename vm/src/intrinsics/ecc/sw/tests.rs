@@ -36,6 +36,7 @@ fn test_add_ne() {
         expr,
         EccOpcode::default_offset(),
         vec![EccOpcode::EC_ADD_NE as usize],
+        vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcAddNe",
     );
@@ -98,6 +99,7 @@ fn test_double() {
         expr,
         EccOpcode::default_offset(),
         vec![EccOpcode::EC_DOUBLE as usize],
+        vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcDouble",
     );

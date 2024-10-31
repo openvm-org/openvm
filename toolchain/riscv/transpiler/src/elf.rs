@@ -21,8 +21,7 @@ use eyre::{self, bail, ContextCompat};
 ///
 /// This format is commonly used in embedded systems and is supported by many compilers.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct Elf {
+pub struct Elf {
     /// The instructions of the program encoded as 32-bits.
     pub(crate) instructions: Vec<u32>,
     /// The start address of the program.
@@ -57,8 +56,7 @@ impl Elf {
     /// This function may return an error if the ELF is not valid.
     ///
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
-    #[allow(dead_code)]
-    pub(crate) fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
+    pub fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
         let mut image: BTreeMap<u32, u32> = BTreeMap::new();
 
         // Parse the ELF file assuming that it is little-endian..

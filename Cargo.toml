@@ -20,6 +20,7 @@ members = [
     "lib/ecc-execution",
     "lib/recursion",
     "axiom-vm",
+    "benchmarks",
 ]
 resolver = "2"
 
@@ -84,6 +85,7 @@ axvm-circuit-derive = { path = "vm/derive", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
 ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
+ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }

@@ -7,7 +7,7 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{ExecutorName, VmConfig},
     intrinsics::hashes::keccak::hasher::{utils::keccak256, KECCAK_DIGEST_BYTES},
-    system::program::util::execute_and_prove_program,
+    utils::execute_and_prove_program,
 };
 use axvm_native_compiler::{
     asm::AsmBuilder,

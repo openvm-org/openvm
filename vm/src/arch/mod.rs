@@ -18,7 +18,7 @@ mod vm;
 pub use axvm_instructions as instructions;
 
 /// Testing framework
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
 
 pub use chip_set::*;

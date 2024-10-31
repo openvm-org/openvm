@@ -14,12 +14,12 @@ p3-baby-bear = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
+halo2curves-axiom = { workspace = true, optional = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
-halo2curves-axiom = { workspace = true }
 
 [dev-dependencies]
 ax-circuit-primitives = { path = "../primitives" }
@@ -28,7 +28,9 @@ sha3 = "0.10.8"
 lazy_static.workspace = true
 ax-ecc-execution = { workspace = true }
 axvm-ecc-constants = { workspace = true }
+halo2curves-axiom = { workspace = true }
 
 [features]
 default = []
 parallel = ["ax-stark-backend/parallel"]
+test-utils = ["dep:halo2curves-axiom"]

@@ -1,6 +1,16 @@
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
+#[cfg(any(test, feature = "test-utils"))]
+mod stark_utils;
+#[cfg(any(test, feature = "test-utils"))]
+mod test_utils;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub use stark_utils::*;
+#[cfg(any(test, feature = "test-utils"))]
+pub use test_utils::*;
+
 // little endian.
 pub fn limbs_to_biguint(x: &[u32], limb_size: usize) -> BigUint {
     let mut result = BigUint::zero();
@@ -25,9 +35,3 @@ pub fn biguint_to_limbs_vec(mut x: BigUint, limb_size: usize, num_limbs: usize) 
     assert!(x.is_zero());
     result
 }
-
-#[cfg(test)]
-mod test_utils;
-
-#[cfg(test)]
-pub use test_utils::*;

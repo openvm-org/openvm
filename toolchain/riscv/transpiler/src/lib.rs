@@ -4,6 +4,7 @@ use axvm_instructions::{
     exe::AxVmExe,
     program::{Program, DEFAULT_PC_STEP},
 };
+pub use axvm_platform;
 use elf::Elf;
 use p3_field::PrimeField32;
 use rrs::transpile;

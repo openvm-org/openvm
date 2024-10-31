@@ -47,6 +47,12 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn square(&mut self) -> Fp2 {
+        let c0 = self.c0.square() - self.c1.square();
+        let c1 = (&mut self.c0 * &mut self.c1).int_mul(2);
+        Fp2 { c0, c1 }
+    }
+
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         let builder = self.c0.builder.borrow();
         let prime = builder.prime.clone();
@@ -81,7 +87,6 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
 
         // Constraint 2: x1 = y1*z0 + y0*z1
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
@@ -95,11 +100,12 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
 
         let mut builder = self.c0.builder.borrow_mut();
         let (z0_idx, z0) = builder.new_var();
         let (z1_idx, z1) = builder.new_var();
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
         builder.set_compute(z0_idx, compute_z0);
         builder.set_compute(z1_idx, compute_z1);
         builder.set_constraint(z0_idx, constraint1);
@@ -134,6 +140,10 @@ impl Fp2 {
             c0: self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]),
             c1: self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]),
         }
+    }
+
+    pub fn neg(&mut self) -> Fp2 {
+        self.int_mul([-1, 0])
     }
 }
 

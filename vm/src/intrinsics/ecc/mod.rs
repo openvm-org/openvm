@@ -1,5 +1,6 @@
 pub mod fp12;
 pub mod line;
+pub mod pairing;
 pub mod sw;
 
 use num_bigint_dig::BigUint;
