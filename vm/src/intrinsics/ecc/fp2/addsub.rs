@@ -35,13 +35,8 @@ mod tests {
     };
     use axvm_ecc_constants::BN254;
     use axvm_instructions::UsizeOpcode;
-    use halo2curves_axiom::{
-        bn256::{Fq, Fq2, G2Affine},
-        ff::Field,
-    };
+    use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
-    use num_bigint_dig::BigUint;
-    use num_traits::FromPrimitive;
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
@@ -125,13 +120,20 @@ mod tests {
                     .map(BabyBear::from_canonical_u32)
             })
             .collect_vec();
-        let instruction = rv32_write_heap_default(
+        let instruction1 = rv32_write_heap_default(
+            &mut tester,
+            x_limbs.clone(),
+            y_limbs.clone(),
+            chip.core.air.offset + Fp2Opcode::ADD as usize,
+        );
+        let instruction2 = rv32_write_heap_default(
             &mut tester,
             x_limbs,
             y_limbs,
-            chip.core.air.offset + Fp2Opcode::ADD as usize,
+            chip.core.air.offset + Fp2Opcode::SUB as usize,
         );
-        tester.execute(&mut chip, instruction);
+        tester.execute(&mut chip, instruction1);
+        tester.execute(&mut chip, instruction2);
         let tester = tester.build().load(chip).finalize();
         tester.simple_test().expect("Verification failed");
     }
