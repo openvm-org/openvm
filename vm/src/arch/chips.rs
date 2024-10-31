@@ -81,17 +81,13 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    /// Rv32 is for standard 32-bit integers, while 256Rv32 is for 256-bit.
+    /// Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
-    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
     MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
-    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
@@ -100,6 +96,11 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    /// 256Rv32 (for 256-bit integers):
+    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
+    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
+    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
+    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
     // Intrinsics:
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
     ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),

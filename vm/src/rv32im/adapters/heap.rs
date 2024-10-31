@@ -30,7 +30,6 @@ use crate::{
 /// * Reads are from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes are to the address in `rd`.
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32HeapAdapterAir<
     const NUM_READS: usize,
