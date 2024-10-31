@@ -93,6 +93,7 @@ unsafe extern "C" fn __start() -> ! {
     }
 
     process::exit();
+    unreachable!()
 }
 
 #[cfg(target_os = "zkvm")]
