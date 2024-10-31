@@ -790,6 +790,28 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::EcDoubleRv32_6x16(chip));
                 }
+                _ => unreachable!("Unsupported executor"),
+            }
+        }
+
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_pairing_executor_tuple(&self.supported_pairing_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&local_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            match executor {
                 ExecutorName::MillerDoubleStepRv32_32 => {
                     let chip = Rc::new(RefCell::new(MillerDoubleStepChip::new(
                         Rv32VecHeapAdapterChip::<F, 1, 4, 8, 32, 32>::new(
@@ -991,27 +1013,20 @@ fn gen_ec_executor_tuple(
         .iter()
         .enumerate()
         .flat_map(|(i, curve)| {
-            let ec_class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
-            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+            let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
                     (
                         EccOpcode::EC_ADD_NE as usize,
-                        ec_class_offset,
+                        class_offset,
                         ExecutorName::EcAddNeRv32_2x32,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
-                        ec_class_offset,
+                        class_offset,
                         ExecutorName::EcDoubleRv32_2x32,
-                        curve.prime(),
-                    ),
-                    (
-                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        pairing_class_offset,
-                        ExecutorName::MillerDoubleStepRv32_32,
                         curve.prime(),
                     ),
                 ]
@@ -1019,23 +1034,48 @@ fn gen_ec_executor_tuple(
                 vec![
                     (
                         EccOpcode::EC_ADD_NE as usize,
-                        ec_class_offset,
+                        class_offset,
                         ExecutorName::EcAddNeRv32_6x16,
                         curve.prime(),
                     ),
                     (
                         EccOpcode::EC_DOUBLE as usize,
-                        ec_class_offset,
+                        class_offset,
                         ExecutorName::EcDoubleRv32_6x16,
                         curve.prime(),
                     ),
-                    (
-                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                        pairing_class_offset,
-                        ExecutorName::MillerDoubleStepRv32_48,
-                        curve.prime(),
-                    ),
                 ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
+}
+
+// Returns (local_opcode_idx, global offset, executor name, modulus)
+fn gen_pairing_executor_tuple(
+    supported_ec_curves: &[EcCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_ec_curves
+        .iter()
+        .enumerate()
+        .flat_map(|(i, curve)| {
+            let class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+            let bytes = curve.prime().bits().div_ceil(8);
+            if bytes <= 32 {
+                vec![(
+                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                    class_offset,
+                    ExecutorName::MillerDoubleStepRv32_32,
+                    curve.prime(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                    class_offset,
+                    ExecutorName::MillerDoubleStepRv32_48,
+                    curve.prime(),
+                )]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }

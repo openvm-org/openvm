@@ -16,14 +16,13 @@ p3-util = { workspace = true }
 
 ax-poseidon2-air = { workspace = true }
 ax-stark-backend = { workspace = true }
-ax-circuit-primitives = { workspace = true }
+ax-circuit-primitives = { workspace = true}
 ax-circuit-derive = { workspace = true }
-ax-ecc-primitives = { workspace = true }
+ax-ecc-primitives = { workspace = true, features = ["test-utils"]}
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-stark-sdk = { workspace = true, optional = true }
-halo2curves-axiom = { workspace = true }
 ax-ecc-execution = { workspace = true }
 
 parking_lot.workspace = true
@@ -65,6 +64,7 @@ test-log.workspace = true
 lazy_static.workspace = true
 axvm-ecc-constants = { workspace = true }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+halo2curves-axiom = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]
