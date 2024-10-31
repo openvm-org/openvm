@@ -8,7 +8,7 @@ use axvm_instructions::{
     Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
     Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
 };
-use axvm_platform::intrinsics::{CUSTOM_0, CUSTOM_1};
+use axvm_platform::constants::{CUSTOM_0, CUSTOM_1};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},

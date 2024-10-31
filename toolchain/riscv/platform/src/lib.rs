@@ -20,12 +20,12 @@
 #![feature(asm_const)]
 
 pub mod memory;
-// #[macro_use]
-// pub mod syscall;
 // #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
 // mod getrandom;
+pub mod constants;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
+#[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod intrinsics;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;

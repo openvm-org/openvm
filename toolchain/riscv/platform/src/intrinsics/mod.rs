@@ -1,6 +1,3 @@
-pub const CUSTOM_0: u8 = 0x0b;
-pub const CUSTOM_1: u8 = 0x2b;
-
 #[macro_export]
 macro_rules! custom_insn_i {
     ($opcode:expr, $funct3:expr, $rd:literal, $rs1:literal, $imm:expr) => {
