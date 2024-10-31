@@ -148,7 +148,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 streams.hint_stream.clear();
                 if phantom == PhantomInstruction::HintInputRv32 {
                     streams.hint_stream.extend(
-                        hint.len()
+                        (hint.len() as u32)
                             .to_le_bytes()
                             .iter()
                             .map(|b| F::from_canonical_u8(*b)),

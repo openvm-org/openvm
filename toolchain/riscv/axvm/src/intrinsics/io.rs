@@ -13,21 +13,29 @@ macro_rules! hint_store_u32 {
 }
 
 /// Read the next 4 bytes from the hint stream.
+#[allow(asm_sub_register)]
 pub fn read_u32() -> u32 {
-    let mut x: u32;
-    custom_insn_i!(CUSTOM_0, 0b001, x, "x0", 0);
-    x
+    let ptr = unsafe { alloc::alloc::alloc(Layout::from_size_align(4, 4).unwrap()) };
+    let addr = ptr as u32;
+    hint_store_u32!(addr, 0);
+    let result: u32;
+    unsafe {
+        core::arch::asm!("lw {rd}, ({rs1})", rd = out(reg) result, rs1 = in(reg) addr);
+    }
+    result
 }
 
 /// Read the next `len` bytes from the hint stream into a vector.
-pub fn read_vec(len: usize) -> Vec<u8> {
-    let layout = Layout::from_size_align(len, 4).expect("vec is too large");
+fn read_vec_by_len(len: usize) -> Vec<u8> {
+    // Note: this expect message doesn't matter until our panic handler actually cares about it
+    let layout = Layout::from_size_align((len + 3) / 4 * 4, 4).expect("vec is too large");
     let ptr = unsafe { alloc::alloc::alloc(layout) };
-    let mut vec = unsafe { Vec::from_raw_parts(ptr, 0, len) };
     let mut x: u32 = 0;
     // Note: if len % 4 != 0, this will discard some last bytes
     for i in 0..len {
         if i % 4 == 0 {
+            // TODO: it probably makes sense not to juggle the data between registers and memory here.
+            // On the other hand, maybe it's not a big deal.
             x = read_u32();
         }
         unsafe {
@@ -35,13 +43,12 @@ pub fn read_vec(len: usize) -> Vec<u8> {
         }
         x >>= 8;
     }
-    unsafe { vec.set_len(len) };
-    vec
+    unsafe { Vec::from_raw_parts(ptr, len, len) }
 }
 
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
-pub fn read_size_and_vec() -> Vec<u8> {
-    read_vec(read_u32() as usize)
+pub fn read_vec() -> Vec<u8> {
+    read_vec_by_len(read_u32() as usize)
 }
 
 /// Reset the hint stream with the next hint.

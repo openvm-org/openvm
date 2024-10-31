@@ -12,6 +12,7 @@ use axvm_circuit::{
 use axvm_platform::memory::MEM_SIZE;
 use eyre::Result;
 use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
 use tempfile::tempdir;
 use test_case::test_case;
 
@@ -53,7 +54,6 @@ fn test_decode_elf() -> Result<()> {
 // riscv64-unknown-elf-gcc supports rv32im if you set -march target
 #[test_case("data/rv32im-fib-from-as")]
 #[test_case("data/rv32im-intrin-from-as")]
-#[test_case("data/rv32im-hint-program-elf-release")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
@@ -89,6 +89,30 @@ fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
     };
     let (_, exe) = setup_executor_from_elf(elf_path, config.clone())?;
     air_test_with_min_segments(config, exe, vec![], min_segments);
+    Ok(())
+}
+
+#[test]
+fn test_rv32i_prove_with_hint() -> Result<()> {
+    let pkg = get_package(get_examples_dir().join("hint/program"));
+    let target_dir = tempdir()?;
+    let guest_opts = GuestOptions::default().into();
+    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (_, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    air_test_with_min_segments(
+        config,
+        exe,
+        vec![[1, 0, 0, 0]
+            .iter()
+            .map(|x| F::from_canonical_u32(*x))
+            .collect()],
+        1,
+    );
     Ok(())
 }
 

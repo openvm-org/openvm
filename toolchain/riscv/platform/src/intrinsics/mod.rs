@@ -1,5 +1,5 @@
-pub const CUSTOM_0: u32 = 0x0b;
-pub const CUSTOM_1: u32 = 0x2b;
+pub const CUSTOM_0: u8 = 0x0b;
+pub const CUSTOM_1: u8 = 0x2b;
 
 #[macro_export]
 macro_rules! custom_insn_i {
@@ -20,7 +20,7 @@ macro_rules! custom_insn_i {
                 ".insn i {opcode}, {funct3}, {rd}, ",
                 $rs1,
                 ", {imm}",
-            ), opcode = const $opcode, funct3 = const $funct3, rd = out(reg) $x, imm = const $imm)
+            ), opcode = const $opcode, funct3 = const $funct3, rd = in(reg) $x, imm = const $imm)
         }
     };
 }

@@ -26,7 +26,6 @@ pub mod memory;
 // mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
-#[cfg(feature = "rust-runtime")]
 pub mod intrinsics;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
