@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, INT256_NUM_LIMBS,
+            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, INT256_NUM_LIMBS, RV32_CELL_BITS,
             RV32_REGISTER_NUM_LIMBS,
         },
         base_alu::BaseAluCoreCols,
@@ -150,27 +150,27 @@ fn run_rv32_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
 
 #[test]
 fn rv32_alu_256_add_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::ADD, 24);
 }
 
 #[test]
 fn rv32_alu_256_sub_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::SUB, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::SUB, 24);
 }
 
 #[test]
 fn rv32_alu_256_xor_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::XOR, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::XOR, 24);
 }
 
 #[test]
 fn rv32_alu_256_or_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::OR, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::OR, 24);
 }
 
 #[test]
 fn rv32_alu_256_and_rand_test() {
-    run_rv32_alu_256_rand_test(BaseAluOpcode::AND, 12);
+    run_rv32_alu_256_rand_test(BaseAluOpcode::AND, 24);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

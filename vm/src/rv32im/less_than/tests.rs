@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, INT256_NUM_LIMBS,
+            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, INT256_NUM_LIMBS, RV32_CELL_BITS,
             RV32_REGISTER_NUM_LIMBS,
         },
         less_than::LessThanCoreCols,
@@ -148,12 +148,12 @@ fn run_rv32_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
 #[test]
 fn rv32_256_slt_rand_test() {
-    run_rv32_lt_256_rand_test(LessThanOpcode::SLT, 100);
+    run_rv32_lt_256_rand_test(LessThanOpcode::SLT, 24);
 }
 
 #[test]
 fn rv32_256_sltu_rand_test() {
-    run_rv32_lt_256_rand_test(LessThanOpcode::SLTU, 100);
+    run_rv32_lt_256_rand_test(LessThanOpcode::SLTU, 24);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

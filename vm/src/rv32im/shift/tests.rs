@@ -26,7 +26,7 @@ use crate::{
     },
     rv32im::{
         adapters::{
-            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, RV32_CELL_BITS, INT256_NUM_LIMBS,
+            Rv32BaseAluAdapterChip, Rv32HeapAdapterChip, INT256_NUM_LIMBS, RV32_CELL_BITS,
             RV32_REGISTER_NUM_LIMBS,
         },
         shift::ShiftCoreCols,
