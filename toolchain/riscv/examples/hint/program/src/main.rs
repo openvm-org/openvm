@@ -1,6 +1,6 @@
 #![no_main]
 #![no_std]
-use axvm::intrinsics::io::read_vec;
+use axvm::io::read_vec;
 
 axvm::entry!(main);
 
