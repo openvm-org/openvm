@@ -1,34 +1,18 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
-
-use ax_circuit_primitives::{
-    bigint::utils::*,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
-};
+use ax_circuit_primitives::{bigint::utils::*, SubAir, TraceSubRowGenerator};
 use ax_stark_backend::interaction::InteractionBuilder;
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    utils::create_seeded_rng,
 };
 use num_bigint_dig::BigUint;
 use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use rand::RngCore;
 
-use super::{super::test_utils::*, ExprBuilder, ExprBuilderConfig, FieldExpr, SymbolicExpr};
+use super::{super::test_utils::*, ExprBuilder, FieldExpr, SymbolicExpr};
 use crate::field_expression::{FieldExprCols, FieldVariable};
 
 const LIMB_BITS: usize = 8;
-
-pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
-    let mut rng = create_seeded_rng();
-    let len = 32;
-    let x = (0..len).map(|_| rng.next_u32()).collect();
-    let x = BigUint::new(x);
-    x % prime
-}
 
 impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
     fn eval(&self, builder: &mut AB) {
@@ -36,22 +20,6 @@ impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
         let local = main.row_slice(0);
         SubAir::eval(self, builder, &local);
     }
-}
-
-fn setup(prime: &BigUint) -> (Arc<VariableRangeCheckerChip>, Rc<RefCell<ExprBuilder>>) {
-    let range_bus = 1;
-    let range_decomp = 17; // double needs 17, rests need 16.
-    let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-        range_bus,
-        range_decomp,
-    )));
-    let config = ExprBuilderConfig {
-        modulus: prime.clone(),
-        limb_bits: LIMB_BITS,
-        num_limbs: 32,
-    };
-    let builder = ExprBuilder::new(config, range_checker.range_max_bits());
-    (range_checker, Rc::new(RefCell::new(builder)))
 }
 
 #[test]

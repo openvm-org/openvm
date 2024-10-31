@@ -5,43 +5,9 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, LineMType},
-    curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, Bls12_381},
+    common::{fp12_square, EcPoint, FieldExtension, LineMType},
+    curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, point_to_023, Bls12_381},
 };
-
-/// Returns a line function for a tangent line at the point P
-#[cfg(test)]
-#[allow(non_snake_case)]
-pub fn point_to_023<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    let one = Fp2::ONE;
-    let two = one + one;
-    let three = one + two;
-    let x = Fp2::embed(&P.x);
-    let y = Fp2::embed(&P.y);
-
-    // λ = (3x^2) / (2y)
-    // 1 - λ(x/y)w^-1 + (λx - y)(1/y)w^-3
-    // = (λx - y)(1/y) - λ(x/y)w^2 + w^3
-    //
-    // b = -(λ * x / y)
-    //   = -3x^3 / 2y^2
-    // c = (λ * x - y) / y
-    //   = 3x^3/2y^2 - 1
-    let x_squared = x.square();
-    let x_cubed = x_squared * x;
-    let y_squared = y.square();
-    let three_x_cubed = three * x_cubed;
-    let over_two_y_squared = (two * y_squared).invert().unwrap();
-
-    let b = three_x_cubed.neg() * over_two_y_squared;
-    let c = three_x_cubed * over_two_y_squared - Fp2::ONE;
-
-    EvaluatedLine { b, c }
-}
 
 // TODO[yj]: Probably should refactor these tests so that they don't repeat the ones in BN254
 #[test]

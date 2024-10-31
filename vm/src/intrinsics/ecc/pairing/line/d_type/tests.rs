@@ -63,13 +63,13 @@ fn test_mul_013_by_013() {
     let line0 = tangent_line_013::<Fq, Fq2>(ec_pt_0);
     let line1 = tangent_line_013::<Fq, Fq2>(ec_pt_1);
     let input_line0 = [
-        bn254_fq2_to_biguint_vec(&line0.b),
-        bn254_fq2_to_biguint_vec(&line0.c),
+        bn254_fq2_to_biguint_vec(line0.b),
+        bn254_fq2_to_biguint_vec(line0.c),
     ]
     .concat();
     let input_line1 = [
-        bn254_fq2_to_biguint_vec(&line1.b),
-        bn254_fq2_to_biguint_vec(&line1.c),
+        bn254_fq2_to_biguint_vec(line1.b),
+        bn254_fq2_to_biguint_vec(line1.c),
     ]
     .concat();
 
@@ -93,7 +93,7 @@ fn test_mul_013_by_013() {
         Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one()),
     );
     let r_cmp_bigint = r_cmp
-        .map(|x| [bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)])
+        .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
 
     for i in 0..10 {
