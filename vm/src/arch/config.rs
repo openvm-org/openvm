@@ -92,6 +92,16 @@ impl VmConfig {
         self
     }
 
+    pub fn add_int256_alu(self) -> Self {
+        self.add_executor(ExecutorName::BaseAlu256Rv32)
+            .add_executor(ExecutorName::LessThan256Rv32)
+            .add_executor(ExecutorName::Shift256Rv32)
+    }
+
+    pub fn add_int256_m(self) -> Self {
+        self.add_executor(ExecutorName::Multiplication256Rv32)
+    }
+
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
         res.supported_modulus.extend(enabled_modulus);
@@ -149,7 +159,7 @@ impl VmConfig {
             ..Default::default()
         }
         .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+        .add_executor(ExecutorName::BaseAluRv32)
         .add_executor(ExecutorName::LessThanRv32)
         .add_executor(ExecutorName::ShiftRv32)
         .add_executor(ExecutorName::LoadStoreRv32)

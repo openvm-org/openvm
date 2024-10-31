@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use adapters::Rv32HeapAdapterChip;
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
@@ -41,6 +42,9 @@ use crate::{
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        int256::{
+            Rv32BaseAlu256Chip, Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
+        },
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
         },
@@ -61,9 +65,6 @@ use crate::{
         loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
-    },
-    old::{
-        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::{
         adapters::{
@@ -256,7 +257,7 @@ impl VmConfig {
         let mut required_executors: BTreeSet<_> = self.executors.clone().into_iter().collect();
         let mut chips = vec![];
 
-        let mul_u256_enabled = required_executors.contains(&ExecutorName::U256Multiplication);
+        let mul_u256_enabled = required_executors.contains(&ExecutorName::Multiplication256Rv32);
         let range_tuple_bus = RangeTupleCheckerBus::new(
             RANGE_TUPLE_CHECKER_BUS,
             [(1 << 8), if mul_u256_enabled { 32 } else { 8 } * (1 << 8)],
@@ -404,7 +405,7 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Keccak256(chip));
                 }
-                ExecutorName::ArithmeticLogicUnitRv32 => {
+                ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
                         Rv32BaseAluAdapterChip::new(
                             execution_bus,
@@ -417,22 +418,7 @@ impl VmConfig {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(AxVmChip::ArithmeticLogicUnitRv32(chip));
-                }
-                ExecutorName::ArithmeticLogicUnit256 => {
-                    // We probably must include this chip if we include any modular arithmetic,
-                    // not sure if we need to enforce this here.
-                    let chip = Rc::new(RefCell::new(ArithmeticLogicChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        bitwise_lookup_chip.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::ArithmeticLogicUnit256(chip));
+                    chips.push(AxVmChip::BaseAluRv32(chip));
                 }
                 ExecutorName::LessThanRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
@@ -483,19 +469,6 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::MultiplicationHighRv32(chip));
                 }
-                ExecutorName::U256Multiplication => {
-                    let chip = Rc::new(RefCell::new(UintMultiplicationChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        range_tuple_checker.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::U256Multiplication(chip));
-                }
                 ExecutorName::DivRemRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
                         Rv32MultAdapterChip::new(
@@ -533,19 +506,6 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::ShiftRv32(chip));
-                }
-                ExecutorName::Shift256 => {
-                    let chip = Rc::new(RefCell::new(ShiftChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        bitwise_lookup_chip.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Shift256(chip));
                 }
                 ExecutorName::LoadStoreRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
@@ -675,6 +635,70 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::AuipcRv32(chip));
+                }
+                ExecutorName::BaseAlu256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32BaseAlu256Chip::new(
+                        Rv32HeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BaseAlu256Rv32(chip));
+                }
+                ExecutorName::LessThan256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32LessThan256Chip::new(
+                        Rv32HeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        LessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::LessThan256Rv32(chip));
+                }
+                ExecutorName::Multiplication256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32Multiplication256Chip::new(
+                        Rv32HeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Multiplication256Rv32(chip));
+                }
+                ExecutorName::Shift256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32Shift256Chip::new(
+                        Rv32HeapAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        ShiftCoreChip::new(
+                            bitwise_lookup_chip.clone(),
+                            range_checker.clone(),
+                            offset,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::Shift256Rv32(chip));
                 }
                 ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
@@ -1243,7 +1267,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        ExecutorName::ArithmeticLogicUnitRv32 => (
+        ExecutorName::BaseAluRv32 => (
             BaseAluOpcode::default_offset(),
             BaseAluOpcode::COUNT,
             BaseAluOpcode::default_offset(),
@@ -1280,15 +1304,20 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32AuipcOpcode::COUNT,
             Rv32AuipcOpcode::default_offset(),
         ),
-        ExecutorName::ArithmeticLogicUnit256 => (
-            U256Opcode::default_offset(),
-            8,
-            U256Opcode::default_offset(),
+        ExecutorName::BaseAlu256Rv32 => (
+            Rv32BaseAlu256Opcode::default_offset(),
+            BaseAluOpcode::COUNT,
+            Rv32BaseAlu256Opcode::default_offset(),
         ),
         ExecutorName::LessThanRv32 => (
             LessThanOpcode::default_offset(),
             LessThanOpcode::COUNT,
             LessThanOpcode::default_offset(),
+        ),
+        ExecutorName::LessThan256Rv32 => (
+            Rv32LessThan256Opcode::default_offset(),
+            LessThanOpcode::COUNT,
+            Rv32LessThan256Opcode::default_offset(),
         ),
         ExecutorName::MultiplicationRv32 => (
             MulOpcode::default_offset(),
@@ -1300,10 +1329,10 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             MulHOpcode::COUNT,
             MulHOpcode::default_offset(),
         ),
-        ExecutorName::U256Multiplication => (
-            U256Opcode::default_offset() + 11,
-            1,
-            U256Opcode::default_offset(),
+        ExecutorName::Multiplication256Rv32 => (
+            Rv32Mul256Opcode::default_offset(),
+            MulOpcode::COUNT,
+            Rv32Mul256Opcode::default_offset(),
         ),
         ExecutorName::DivRemRv32 => (
             DivRemOpcode::default_offset(),
@@ -1315,10 +1344,10 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             ShiftOpcode::COUNT,
             ShiftOpcode::default_offset(),
         ),
-        ExecutorName::Shift256 => (
-            U256Opcode::default_offset() + 8,
-            3,
-            U256Opcode::default_offset(),
+        ExecutorName::Shift256Rv32 => (
+            Rv32Shift256Opcode::default_offset(),
+            ShiftOpcode::COUNT,
+            Rv32Shift256Opcode::default_offset(),
         ),
         ExecutorName::BranchEqualRv32 => (
             BranchEqualOpcode::default_offset(),

@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 
-use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
 use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -10,11 +9,9 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use axvm_native_compiler::ir::{
-    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
+    unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -469,27 +466,6 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
         stream.extend(h.write());
 
         stream
-    }
-}
-
-impl Hintable<InnerConfig> for BigUint {
-    type HintVariable = BigUintVar<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.uninit_biguint();
-        for i in 0..NUM_LIMBS {
-            // FIXME: range check for each element.
-            let v = builder.hint_var();
-            builder.set_value(&ret, i, v);
-        }
-        ret
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![big_uint_to_num_limbs(self, LIMB_BITS, NUM_LIMBS)
-            .iter()
-            .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
-            .collect()]
     }
 }
 
