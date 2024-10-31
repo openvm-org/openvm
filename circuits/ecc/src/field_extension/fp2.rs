@@ -16,6 +16,16 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn new_var(builder: Rc<RefCell<ExprBuilder>>) -> ((usize, usize), Fp2) {
+        let (c0_idx, c0) = builder.borrow_mut().new_var();
+        let (c1_idx, c1) = builder.borrow_mut().new_var();
+        let fp2 = Fp2 {
+            c0: FieldVariable::from_var(builder.clone(), c0),
+            c1: FieldVariable::from_var(builder.clone(), c1),
+        };
+        ((c0_idx, c1_idx), fp2)
+    }
+
     pub fn save(&mut self) -> [usize; 2] {
         let c0_idx = self.c0.save();
         let c1_idx = self.c1.save();
