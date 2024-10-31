@@ -51,6 +51,7 @@ impl<
             expr,
             offset,
             vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
+            vec![],
             memory_controller.borrow().range_checker.clone(),
             "MillerDoubleAndAddStep",
         );
@@ -138,6 +139,7 @@ mod tests {
             expr,
             PairingOpcode::default_offset(),
             vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
+            vec![],
             tester.memory_controller().borrow().range_checker.clone(),
             "MillerDoubleAndAdd",
         );
