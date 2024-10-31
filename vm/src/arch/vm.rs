@@ -134,9 +134,17 @@ impl<F: PrimeField32> VmExecutor<F> {
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<(), ExecutionError> {
-        #[cfg(test)]
-        ax_stark_sdk::config::setup_tracing_with_log_level(tracing::Level::WARN);
-        self.execute_segments(exe, input).map(|_| ())
+        let results = self.execute_segments(exe, input)?;
+        let last = results.last().unwrap();
+        let end_state =
+            last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
+        // TODO[jpw]: add these as execution errors
+        assert!(end_state.is_terminate == 1, "program must terminate");
+        assert!(
+            end_state.exit_code == ExitCode::Success as u32,
+            "program did not exit successfully"
+        );
+        Ok(())
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(

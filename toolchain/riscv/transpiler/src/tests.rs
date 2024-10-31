@@ -68,7 +68,6 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 #[test_case("data/rv32im-exp-from-as")]
 #[test_case("data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
-    setup_tracing();
     let config = VmConfig::rv32im();
     let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
     executor.execute(exe, vec![])?;
@@ -131,6 +130,7 @@ fn test_terminate_runtime() -> Result<()> {
 }
 
 #[test]
+#[ignore = "must run makefile"]
 fn test_rv32im_riscv_vector_runtime() -> Result<()> {
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
