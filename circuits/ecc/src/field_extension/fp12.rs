@@ -88,8 +88,8 @@ impl Fp12 {
     }
 
     pub fn mul(&mut self, other: &mut Fp12, xi: [isize; 2]) -> Fp12 {
-        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co5)
-        // c1 = cs0co1 + cs1co0 + cs3co0 + xi(cs2co2 + cs4co5 + cs5co4)
+        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4 + cs5co3)
+        // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs4co5 + cs5co4)
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 +cs4co3 + xi(cs5co5)
         // c3 = cs0co3 + cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
         // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
@@ -109,6 +109,97 @@ impl Fp12 {
         c3.save();
         c4.save();
         c5.save();
+
+        Fp12 {
+            c0,
+            c1,
+            c2,
+            c3,
+            c4,
+            c5,
+        }
+    }
+
+    pub fn mul_by_02345(
+        &mut self,
+        x0: &mut Fp2,
+        x2: &mut Fp2,
+        x3: &mut Fp2,
+        x4: &mut Fp2,
+        x5: &mut Fp2,
+        xi: [isize; 2],
+    ) -> Fp12 {
+        // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
+        // c1 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
+        // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
+        // c3 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
+        // c4 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
+        // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
+        //   where cs*: self.c*
+        let mut o0 = x0.clone();
+        let mut o1 = x2.clone();
+        let mut o2 = x4.clone();
+        let mut o4 = x3.clone();
+        let mut o5 = x5.clone();
+
+        let c0 = self.c0.mul(&mut o0).add(
+            &mut self
+                .c1
+                .mul(&mut o2)
+                .add(&mut self.c2.mul(&mut o1))
+                .add(&mut self.c3.mul(&mut o5))
+                .add(&mut self.c4.mul(&mut o4))
+                .int_mul(xi),
+        );
+
+        let c1 = self.c0.mul(&mut o1).add(&mut self.c1.mul(&mut o0)).add(
+            &mut self
+                .c2
+                .mul(&mut o2)
+                .add(&mut self.c4.mul(&mut o5))
+                .add(&mut self.c5.mul(&mut o4))
+                .int_mul(xi),
+        );
+
+        let c2 = self
+            .c0
+            .mul(&mut o2)
+            .add(&mut self.c1.mul(&mut o1))
+            .add(&mut self.c2.mul(&mut o0))
+            .add(&mut self.c3.mul(&mut o4))
+            .add(&mut self.c5.mul(&mut o5).int_mul(xi));
+
+        let c3 = self.c3.mul(&mut o0).add(
+            &mut self
+                .c1
+                .mul(&mut o5)
+                .add(&mut self.c2.mul(&mut o4))
+                .add(&mut self.c4.mul(&mut o2))
+                .add(&mut self.c5.mul(&mut o1))
+                .int_mul(xi),
+        );
+
+        let c4 = self
+            .c0
+            .mul(&mut o4)
+            .add(&mut self.c3.mul(&mut o1))
+            .add(&mut self.c4.mul(&mut o0))
+            .add(
+                &mut self
+                    .c2
+                    .mul(&mut o5)
+                    .add(&mut self.c5.mul(&mut o2))
+                    .int_mul(xi),
+            );
+
+        // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
+        let c5 = self
+            .c0
+            .mul(&mut o5)
+            .add(&mut self.c1.mul(&mut o4))
+            .add(&mut self.c3.mul(&mut o2))
+            .add(&mut self.c4.mul(&mut o1))
+            .add(&mut self.c5.mul(&mut o0));
 
         Fp12 {
             c0,

@@ -38,7 +38,10 @@ use crate::{
     },
     intrinsics::{
         ecc::{
-            pairing::{EcLineMul013By013Chip, EcLineMul023By023Chip, MillerDoubleStepChip},
+            pairing::{
+                EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy02345Chip,
+                MillerDoubleStepChip,
+            },
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -846,6 +849,20 @@ impl VmConfig {
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::EcLineMul023By023(chip));
+                }
+                ExecutorName::EcLineMulBy02345 => {
+                    let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 64, 64>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config64,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EcLineMulBy02345(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
