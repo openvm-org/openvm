@@ -90,8 +90,8 @@ fn test_fp12_add_bn254() {
         tester.memory_controller().borrow().range_checker.bus(),
     );
 
-    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(1));
-    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(2));
+    let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(1));
+    let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(2));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,
@@ -118,8 +118,8 @@ fn test_fp12_sub_bn254() {
         tester.memory_controller().borrow().range_checker.bus(),
     );
 
-    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(59));
-    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(3));
+    let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(59));
+    let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(3));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,
@@ -148,8 +148,8 @@ fn test_fp12_mul_bn254() {
         xi,
     );
 
-    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(5));
-    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(25));
+    let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(5));
+    let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(25));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,

@@ -277,8 +277,8 @@ mod tests {
         let x_fq12 = x;
         let y_fq12 = y;
         let r_fq12 = fq12_fn(&x_fq12, &y_fq12);
-        let mut inputs = bn254_fq12_to_biguint_vec(&x_fq12);
-        inputs.extend(bn254_fq12_to_biguint_vec(&y_fq12));
+        let mut inputs = bn254_fq12_to_biguint_vec(x_fq12);
+        inputs.extend(bn254_fq12_to_biguint_vec(y_fq12));
 
         let mut row = vec![BabyBear::zero(); width];
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
@@ -298,18 +298,18 @@ mod tests {
         let r_c9 = evaluate_biguint(&vars[indices[9]], LIMB_BITS);
         let r_c10 = evaluate_biguint(&vars[indices[10]], LIMB_BITS);
         let r_c11 = evaluate_biguint(&vars[indices[11]], LIMB_BITS);
-        let exp_r_c0_c0_c0 = bn254_fq_to_biguint(&r_fq12.c0.c0.c0);
-        let exp_r_c0_c0_c1 = bn254_fq_to_biguint(&r_fq12.c0.c0.c1);
-        let exp_r_c0_c1_c0 = bn254_fq_to_biguint(&r_fq12.c0.c1.c0);
-        let exp_r_c0_c1_c1 = bn254_fq_to_biguint(&r_fq12.c0.c1.c1);
-        let exp_r_c0_c2_c0 = bn254_fq_to_biguint(&r_fq12.c0.c2.c0);
-        let exp_r_c0_c2_c1 = bn254_fq_to_biguint(&r_fq12.c0.c2.c1);
-        let exp_r_c1_c0_c0 = bn254_fq_to_biguint(&r_fq12.c1.c0.c0);
-        let exp_r_c1_c0_c1 = bn254_fq_to_biguint(&r_fq12.c1.c0.c1);
-        let exp_r_c1_c1_c0 = bn254_fq_to_biguint(&r_fq12.c1.c1.c0);
-        let exp_r_c1_c1_c1 = bn254_fq_to_biguint(&r_fq12.c1.c1.c1);
-        let exp_r_c1_c2_c0 = bn254_fq_to_biguint(&r_fq12.c1.c2.c0);
-        let exp_r_c1_c2_c1 = bn254_fq_to_biguint(&r_fq12.c1.c2.c1);
+        let exp_r_c0_c0_c0 = bn254_fq_to_biguint(r_fq12.c0.c0.c0);
+        let exp_r_c0_c0_c1 = bn254_fq_to_biguint(r_fq12.c0.c0.c1);
+        let exp_r_c0_c1_c0 = bn254_fq_to_biguint(r_fq12.c0.c1.c0);
+        let exp_r_c0_c1_c1 = bn254_fq_to_biguint(r_fq12.c0.c1.c1);
+        let exp_r_c0_c2_c0 = bn254_fq_to_biguint(r_fq12.c0.c2.c0);
+        let exp_r_c0_c2_c1 = bn254_fq_to_biguint(r_fq12.c0.c2.c1);
+        let exp_r_c1_c0_c0 = bn254_fq_to_biguint(r_fq12.c1.c0.c0);
+        let exp_r_c1_c0_c1 = bn254_fq_to_biguint(r_fq12.c1.c0.c1);
+        let exp_r_c1_c1_c0 = bn254_fq_to_biguint(r_fq12.c1.c1.c0);
+        let exp_r_c1_c1_c1 = bn254_fq_to_biguint(r_fq12.c1.c1.c1);
+        let exp_r_c1_c2_c0 = bn254_fq_to_biguint(r_fq12.c1.c2.c0);
+        let exp_r_c1_c2_c1 = bn254_fq_to_biguint(r_fq12.c1.c2.c1);
 
         assert_eq!(r_c0, exp_r_c0_c0_c0);
         assert_eq!(r_c1, exp_r_c0_c0_c1);
