@@ -137,7 +137,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 let value = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
                 println!("{}", value);
             }
-            PhantomInstruction::HintInput => {
+            PhantomInstruction::HintInput | PhantomInstruction::HintInputRv32 => {
                 let mut streams = self.streams.get().unwrap().lock();
                 let hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
@@ -146,9 +146,18 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     }
                 };
                 streams.hint_stream.clear();
-                streams
-                    .hint_stream
-                    .push_back(F::from_canonical_usize(hint.len()));
+                if phantom == PhantomInstruction::HintInputRv32 {
+                    streams.hint_stream.extend(
+                        (hint.len() as u32)
+                            .to_le_bytes()
+                            .iter()
+                            .map(|b| F::from_canonical_u8(*b)),
+                    );
+                } else {
+                    streams
+                        .hint_stream
+                        .push_back(F::from_canonical_usize(hint.len()));
+                }
                 streams.hint_stream.extend(hint);
                 drop(streams);
             }

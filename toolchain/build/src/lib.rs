@@ -257,11 +257,11 @@ pub fn build_guest_package<P>(
         "--target-dir",
         target_dir.as_ref().to_str().unwrap(),
     ]);
-    tty_println(&format!("cargo command: {:?}", cmd));
 
     if !is_debug() {
         cmd.args(["--release"]);
     }
+    tty_println(&format!("cargo command: {:?}", cmd));
 
     let mut child = cmd
         .stderr(Stdio::piped())

@@ -2,9 +2,9 @@ name: Stark Backend Tests
 
 on:
   push:
-    branches: ["**"]
-  pull_request:
     branches: ["main"]
+  pull_request:
+    branches: ["**"]
     paths:
       - "stark-backend/**"
 
