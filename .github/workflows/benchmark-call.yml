@@ -61,7 +61,8 @@ jobs:
 
       - name: Feature flags
         run: |
-          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark"* ]]; then
+          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark"* ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "Adding aggregation feature flag"
             echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
           fi
