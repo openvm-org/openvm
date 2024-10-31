@@ -50,9 +50,6 @@ cfg-if = { workspace = true }
 ax-circuit-primitives.workspace = true
 
 [[bin]]
-name = "verify_fibair"
-
-[[bin]]
 name = "alu256_e2e"
 
 [[bin]]

@@ -24,7 +24,13 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  benchmark:
+  benchmark-verify-fibair:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: verify-fibair
+    secrets: inherit
+
+  benchmark-fibonacci:
     uses: ./.github/workflows/benchmark-call.yml
     with:
       benchmark_name: fibonacci

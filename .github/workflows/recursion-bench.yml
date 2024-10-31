@@ -24,18 +24,6 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  benchmark:
-    uses: ./.github/workflows/benchmark-call.yml
-    # run on pull request with label 'run-benchmark'
-    # and always run on push to main
-    if: |
-      (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'run-benchmark')) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    with:
-      benchmark_name: vm_verify_fibair
-    secrets: inherit
-
   benchmark_tiny_e2e:
     uses: ./.github/workflows/benchmark-call.yml
     # run on pull request with label 'run-benchmark' or 'run-benchmark-e2e'

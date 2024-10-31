@@ -8,8 +8,7 @@ on:
         required: true
         description: The name of the benchmark to run
         options:
-          - vm_verify_fibair
-          - halo2_static_verify_fibair
+          - verify_fibair
           - fibonacci
           - alu256_e2e
           - small_e2e
@@ -76,44 +75,37 @@ jobs:
             bash trusted_setup_s3.sh
           fi
 
-      - name: Set CMD_ARGS
+      - name: Set BIN_NAME and CMD_ARGS
         run: |
           CMD_ARGS="--features ${FEATURE_FLAGS}"
           echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
+          echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
       ######################################################
       # Run a different benchmark based on benchmark_name:
       - name: Run benchmark
-        if: inputs.benchmark_name == 'vm_verify_fibair'
+        if: inputs.benchmark_name == 'verify_fibair'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="verify_fibair"
           python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'fibonacci'
         working-directory: benchmarks
         run: |
-          BIN_NAME="fibonacci"
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'alu256_e2e'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="alu256_e2e"
           python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="small_e2e"
           python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
 
       ######################################################
       - name: Store metric json and compute diff with previous
