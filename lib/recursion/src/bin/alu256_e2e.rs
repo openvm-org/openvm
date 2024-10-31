@@ -17,7 +17,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{instructions::program::Program, ExecutorName, VmConfig},
-    sdk::gen_vm_program_test_proof_input,
+    utils::gen_vm_program_test_proof_input,
 };
 use axvm_native_compiler::{
     asm::AsmBuilder,

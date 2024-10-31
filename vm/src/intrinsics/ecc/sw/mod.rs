@@ -46,6 +46,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             expr,
             offset,
             vec![EccOpcode::EC_ADD_NE as usize],
+            vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcAddNe",
         );
@@ -76,6 +77,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             expr,
             offset,
             vec![EccOpcode::EC_DOUBLE as usize],
+            vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcDouble",
         );

@@ -15,10 +15,8 @@ pub mod rv32im;
 /// (The [PhantomChip](system::phantom::PhantomChip) is not technically required for a functioning VM,
 /// but there is almost always a need for it.)
 pub mod system;
-
-#[cfg(feature = "sdk")]
-pub mod sdk;
-mod utils;
+/// Utility functions and test utils
+pub mod utils;
 
 // To be deleted:
 pub mod old;

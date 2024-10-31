@@ -6,10 +6,12 @@ edition.workspace = true
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-axvm-native-compiler = { workspace = true, features = ["sdk"] }
+axvm-native-compiler = { workspace = true }
 axvm-native-compiler-derive = { workspace = true }
 ax-stark-sdk = { workspace = true }
-axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true, features = [
+    "test-utils",
+] } # TODO: remove this feature
 ax-circuit-primitives = { workspace = true }
 
 p3-air = { workspace = true }
@@ -48,25 +50,24 @@ cfg-if = { workspace = true }
 ax-circuit-primitives.workspace = true
 
 [[bin]]
-name = "verify_fibair"
-
-[[bin]]
-name = "tiny_e2e"
-
-[[bin]]
 name = "alu256_e2e"
 
 [[bin]]
 name = "small_e2e"
 
 [features]
-default = ["parallel", "mimalloc"]
+default = [
+    "parallel",
+    "mimalloc",
+    "test-utils",
+] # remove test-utils after binaries are moved out
 parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
     "axvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
+test-utils = ["axvm-circuit/test-utils"]
 bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]

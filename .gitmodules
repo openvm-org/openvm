@@ -1,0 +1,3 @@
+[submodule "toolchain/riscv/transpiler/rv32im-test-vectors/riscv-tests"]
+	path = toolchain/riscv/transpiler/rv32im-test-vectors/riscv-tests
+	url = https://github.com/riscv-software-src/riscv-tests.git

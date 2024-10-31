@@ -8,9 +8,8 @@ on:
         required: true
         description: The name of the benchmark to run
         options:
-          - vm_verify_fibair
-          - halo2_static_verify_fibair
-          - tiny_e2e
+          - verify_fibair
+          - fibonacci
           - alu256_e2e
           - small_e2e
       instance_type:
@@ -41,58 +40,70 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      [runs-on, "runner=${{ inputs.instance_type }}", image=arm64-rust-dev-32gb]
+      - runs-on
+      - runner=${{ inputs.instance_type }}
+      - image=arm64-rust-dev-32gb
+      - run-id=${{ github.run_id }}
+      - tag=bench-${{ inputs.benchmark_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install rust src
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+
+      - name: Feature flags
+        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          echo "Adding aggregation feature flag"
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
 
       - name: Setup halo2
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
           if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
-            CMD_ARGS="--features static-verifier"
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
             bash trusted_setup_s3.sh
           fi
+
+      - name: Set BIN_NAME and CMD_ARGS
+        run: |
+          CMD_ARGS="--features ${FEATURE_FLAGS}"
+          echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
+          echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
       ######################################################
       # Run a different benchmark based on benchmark_name:
       - name: Run benchmark
-        if: inputs.benchmark_name == 'vm_verify_fibair'
+        if: inputs.benchmark_name == 'verify_fibair'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="verify_fibair"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'tiny_e2e'
-        working-directory: lib/recursion
+        if: inputs.benchmark_name == 'fibonacci'
+        working-directory: benchmarks
         run: |
-          BIN_NAME="tiny_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'alu256_e2e'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="alu256_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'small_e2e'
         working-directory: lib/recursion
         run: |
-          BIN_NAME="small_e2e"
-          python3 ../../stark-sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       ######################################################
       - name: Store metric json and compute diff with previous
@@ -112,15 +123,13 @@ jobs:
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
-              python3 stark-sdk/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json stark-sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
-              python3 stark-sdk/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json stark-sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
-            # Old fallback until we switch all benchmarks to new metrics format:
-            cp benchmark/tmp/_result.md results.md
           fi
 
       - name: Install inferno-flamegraph
@@ -129,7 +138,7 @@ jobs:
       - name: Generate flamegraphs
         run: |
           if [[ -f $METRIC_PATH ]]; then
-            python3 stark-sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
@@ -140,14 +149,20 @@ jobs:
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+            echo "<details>" >> $RESULT_PATH
+            echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
+            echo "" >> $RESULT_PATH
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
               flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
+            echo "" >> $RESULT_PATH
+            echo "</details>" >> $RESULT_PATH
+            echo "" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "AWS Instance Type: [${{ inputs.instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.instance_type }})" >> $RESULT_PATH
+          echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
 
@@ -162,7 +177,7 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("${{ inputs.benchmark_name }}")) {
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--${{ inputs.benchmark_name }}-->")) {
                 console.log("collapse comment ", comment.id);
                 const resp = await github.graphql(`
                   mutation {
@@ -188,7 +203,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${{ inputs.benchmark_name }}\n\n${newBenchmark}`
+              body: `<!--${{ inputs.benchmark_name }}-->\n${newBenchmark}`
             });
 
       - name: Update latest main result in s3

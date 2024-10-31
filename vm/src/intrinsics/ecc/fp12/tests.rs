@@ -39,6 +39,7 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         expr,
         offset,
         vec![local_opcode_idx],
+        vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         name,
     );

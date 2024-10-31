@@ -7,11 +7,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-axvm-native-compiler = { workspace = true, features = ["sdk"] }
+axvm-native-compiler = { workspace = true }
 axvm-recursion = { workspace = true }
 ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
-axvm-circuit = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

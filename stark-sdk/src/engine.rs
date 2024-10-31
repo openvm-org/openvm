@@ -2,14 +2,13 @@ use std::sync::Arc;
 
 pub use ax_stark_backend::engine::StarkEngine;
 use ax_stark_backend::{
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     engine::VerificationData,
     prover::types::AirProofInput,
     rap::AnyRap,
     verifier::VerificationError,
 };
 use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::Level;
 
 use crate::config::{instrument::StarkHashStatistics, setup_tracing_with_log_level, FriParameters};
