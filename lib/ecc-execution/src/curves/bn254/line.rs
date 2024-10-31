@@ -1,6 +1,6 @@
 use halo2curves_axiom::ff::Field;
 
-use crate::common::{EvaluatedLine, FieldExtension};
+use crate::common::{EcPoint, EvaluatedLine, FieldExtension};
 
 /// Multiplies two elements in 013 form and outputs the product in 01234 form
 pub fn mul_013_by_013<Fp, Fp2>(
@@ -47,4 +47,35 @@ where
 {
     let x_fp12 = Fp12::from_coeffs(&x);
     f * x_fp12
+}
+
+/// Returns a line function for a tangent line at the point P
+#[allow(non_snake_case)]
+pub fn tangent_line_013<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+where
+    Fp: Field,
+    Fp2: FieldExtension<BaseField = Fp>,
+{
+    let one = Fp2::ONE;
+    let two = one + one;
+    let three = one + two;
+    let x = Fp2::embed(&P.x);
+    let y = Fp2::embed(&P.y);
+
+    // λ = (3x^2) / (2y)
+    // 1 - λ(x/y)w + (λx - y)(1/y)w^3
+    // b = -(λ * x / y)
+    //   = -3x^3 / 2y^2
+    // c = (λ * x - y) / y
+    //   = 3x^3/2y^2 - 1
+    let x_squared = x.square();
+    let x_cubed = x_squared * x;
+    let y_squared = y.square();
+    let three_x_cubed = three * x_cubed;
+    let over_two_y_squared = (two * y_squared).invert().unwrap();
+
+    let b = three_x_cubed.neg() * over_two_y_squared;
+    let c = three_x_cubed * over_two_y_squared - Fp2::ONE;
+
+    EvaluatedLine { b, c }
 }

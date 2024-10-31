@@ -50,9 +50,6 @@ cfg-if = { workspace = true }
 ax-circuit-primitives.workspace = true
 
 [[bin]]
-name = "alu256_e2e"
-
-[[bin]]
 name = "small_e2e"
 
 [features]

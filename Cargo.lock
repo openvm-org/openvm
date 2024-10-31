@@ -362,7 +362,7 @@ name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
  "axvm-ecc-constants",
- "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility)",
+ "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
  "lazy_static",
  "num",
@@ -377,10 +377,11 @@ name = "ax-ecc-primitives"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
+ "ax-ecc-execution",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-ecc-constants",
- "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git)",
+ "halo2curves-axiom 0.7.0",
  "hex-literal",
  "lazy_static",
  "num-bigint-dig",
@@ -505,6 +506,7 @@ dependencies = [
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
+ "ax-poseidon2-air",
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-native-compiler",
@@ -567,6 +569,7 @@ dependencies = [
  "ark-ff 0.4.2",
  "ax-circuit-derive",
  "ax-circuit-primitives",
+ "ax-ecc-execution",
  "ax-ecc-primitives",
  "ax-poseidon2-air",
  "ax-stark-backend",
@@ -580,6 +583,7 @@ dependencies = [
  "derive-new",
  "enum-utils",
  "enum_dispatch",
+ "halo2curves-axiom 0.7.0",
  "hex-literal",
  "inferno",
  "itertools 0.13.0",
@@ -1866,33 +1870,6 @@ dependencies = [
 name = "halo2curves-axiom"
 version = "0.7.0"
 source = "git+https://github.com/axiom-crypto/halo2curves.git?branch=test/visibility#c148550bd309e92b8aaa954ec5e07df3dd137dab"
-dependencies = [
- "blake2b_simd",
- "digest 0.10.7",
- "ff 0.13.0",
- "group 0.13.0",
- "hex",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "pairing 0.23.0",
- "pasta_curves 0.5.1",
- "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rayon",
- "serde",
- "serde_arrays",
- "sha2",
- "static_assertions",
- "subtle",
- "unroll",
-]
-
-[[package]]
-name = "halo2curves-axiom"
-version = "0.7.0"
-source = "git+https://github.com/axiom-crypto/halo2curves.git#ee35b4e4a69a1a108e1e70fd54b39eadec894616"
 dependencies = [
  "blake2b_simd",
  "digest 0.10.7",

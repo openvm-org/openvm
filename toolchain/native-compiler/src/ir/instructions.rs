@@ -1,7 +1,4 @@
-use num_bigint_dig::BigUint;
-
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
-use crate::ir::modular_arithmetic::BigUintVar;
 
 /// An intermeddiate instruction set for implementing programs.
 ///
@@ -36,10 +33,6 @@ pub enum DslIr<C: Config> {
     AddEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Add a field element and an ext field immediate (ext = felt + ext field imm).
     AddEFFI(Ext<C::F, C::EF>, Felt<C::F>, C::EF),
-    /// Add two modular BigInts over some field.
-    ModularAdd(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Add two 256-bit integers
-    Add256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Subtractions.
     /// Subtracts two variables (var = var - var).
@@ -64,10 +57,6 @@ pub enum DslIr<C: Config> {
     SubEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Subtracts an extension field element and a field element (ext = ext - felt).
     SubEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Subtract two modular BigInts over some field.
-    ModularSub(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Subtract two 256-bit integers
-    Sub256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Multiplications.
     /// Multiplies two variables (var = var * var).
@@ -86,10 +75,6 @@ pub enum DslIr<C: Config> {
     MulEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Multiplies an extension field element and a field element (ext = ext * felt).
     MulEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Multiply two modular BigInts over some field.
-    ModularMul(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Multiply two 256-bit integers
-    Mul256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Divisions.
     /// Divides two variables (var = var / var).
@@ -108,8 +93,6 @@ pub enum DslIr<C: Config> {
     DivEFI(Ext<C::F, C::EF>, Ext<C::F, C::EF>, C::F),
     /// Divides an extension field element and a field element (ext = ext / felt).
     DivEF(Ext<C::F, C::EF>, Ext<C::F, C::EF>, Felt<C::F>),
-    /// Divide two modular BigInts over some field.
-    ModularDiv(BigUint, BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // Negations.
     /// Negates a variable (var = -var).
@@ -124,28 +107,6 @@ pub enum DslIr<C: Config> {
     LessThanV(Var<C::N>, Var<C::N>, Var<C::N>),
     /// Compares a variable and an immediate
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
-    /// Compare two u256 for <
-    LessThanU256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
-    /// Compare two 256-bit integers for ==
-    EqualTo256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
-    /// Compare two signed 256-bit integers for <
-    LessThanI256(Ptr<C::N>, BigUintVar<C>, BigUintVar<C>),
-
-    // Bitwise operations.
-    /// Bitwise XOR on two 256-bit integers
-    Xor256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Bitwise AND on two 256-bit integers
-    And256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Bitwise OR on two 256-bit integers
-    Or256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-
-    // Shifts.
-    /// Shift left on 256-bit integers
-    ShiftLeft256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Shift right logical on 256-bit integers
-    ShiftRightLogic256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
-    /// Shift right arithmetic on 256-bit integers
-    ShiftRightArith256(BigUintVar<C>, BigUintVar<C>, BigUintVar<C>),
 
     // =======
 
@@ -247,24 +208,6 @@ pub enum DslIr<C: Config> {
     /// overwrite the `input` memory. The `output` is in `u16` limbs, with conversion to bytes being
     /// **little-endian**. The `output` is exactly 16 limbs (32 bytes).
     Keccak256(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
-
-    /// ```ignore
-    /// Secp256k1AddUnequal(dst, p, q)
-    /// ```
-    /// Reads `p,q` from heap and writes `dst = p + q` to heap. A point is represented on the heap
-    /// as two affine coordinates concatenated together into a byte array.
-    /// Assumes that `p.x != q.x` which is equivalent to `p != +-q`.
-    Secp256k1AddUnequal(
-        Array<C, Var<C::N>>,
-        Array<C, Var<C::N>>,
-        Array<C, Var<C::N>>,
-    ),
-    /// ```ignore
-    /// Secp256k1Double(dst, p)
-    /// ```
-    /// Reads `p` from heap and writes `dst = p + p` to heap. A point is represented on the heap
-    /// as two affine coordinates concatenated together into a byte array.
-    Secp256k1Double(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
 
     // Miscellaneous instructions.
     /// Prints a variable.

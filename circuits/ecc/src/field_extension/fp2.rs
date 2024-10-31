@@ -47,6 +47,12 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn square(&mut self) -> Fp2 {
+        let c0 = self.c0.square() - self.c1.square();
+        let c1 = (&mut self.c0 * &mut self.c1).int_mul(2);
+        Fp2 { c0, c1 }
+    }
+
     pub fn div(&mut self, other: &mut Fp2) -> Fp2 {
         let builder = self.c0.builder.borrow();
         let prime = builder.prime.clone();
@@ -81,7 +87,6 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint1 = &self.c0.expr - &other.c0.expr * &fake_z0 + &other.c1.expr * &fake_z1;
 
         // Constraint 2: x1 = y1*z0 + y0*z1
         let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
@@ -95,11 +100,12 @@ impl Fp2 {
         if carry_bits > self.c0.range_checker_bits {
             other.save();
         }
-        let constraint2 = &self.c1.expr - &other.c1.expr * &fake_z0 - &other.c0.expr * &fake_z1;
 
         let mut builder = self.c0.builder.borrow_mut();
         let (z0_idx, z0) = builder.new_var();
         let (z1_idx, z1) = builder.new_var();
+        let constraint1 = &self.c0.expr - &other.c0.expr * &z0 + &other.c1.expr * &z1;
+        let constraint2 = &self.c1.expr - &other.c1.expr * &z0 - &other.c0.expr * &z1;
         builder.set_compute(z0_idx, compute_z0);
         builder.set_compute(z1_idx, compute_z1);
         builder.set_constraint(z0_idx, constraint1);
@@ -121,11 +127,23 @@ impl Fp2 {
         }
     }
 
+    pub fn int_add(&mut self, c: [isize; 2]) -> Fp2 {
+        Fp2 {
+            c0: self.c0.int_add(c[0]),
+            c1: self.c1.int_add(c[1]),
+        }
+    }
+
     // c is like a Fp2, but with both c0 and c1 being very small numbers.
     pub fn int_mul(&mut self, c: [isize; 2]) -> Fp2 {
-        let c0 = self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]);
-        let c1 = self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]);
-        Fp2 { c0, c1 }
+        Fp2 {
+            c0: self.c0.int_mul(c[0]) - self.c1.int_mul(c[1]),
+            c1: self.c0.int_mul(c[1]) + self.c1.int_mul(c[0]),
+        }
+    }
+
+    pub fn neg(&mut self) -> Fp2 {
+        self.int_mul([-1, 0])
     }
 }
 
@@ -134,10 +152,9 @@ mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
     use ax_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        utils::create_seeded_rng,
     };
     use axvm_ecc_constants::BN254;
-    use halo2curves_axiom::{bn256::Fq2, ff::Field};
+    use halo2curves_axiom::bn256::Fq2;
     use num_bigint_dig::BigUint;
     use p3_air::BaseAir;
     use p3_baby_bear::BabyBear;
@@ -148,11 +165,6 @@ mod tests {
         super::super::{field_expression::*, test_utils::*},
         *,
     };
-
-    fn generate_random_fq2() -> Fq2 {
-        let mut rng = create_seeded_rng();
-        Fq2::random(&mut rng)
-    }
 
     fn two_fp2_input(x: &Fq2, y: &Fq2) -> Vec<BigUint> {
         vec![
@@ -182,8 +194,8 @@ mod tests {
         let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fq2();
-        let y_fp2 = generate_random_fq2();
+        let x_fp2 = bn254_fq2_random(1);
+        let y_fp2 = bn254_fq2_random(5);
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
@@ -243,9 +255,9 @@ mod tests {
         let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
-        let x_fp2 = generate_random_fq2();
-        let y_fp2 = generate_random_fq2();
-        let z_fp2 = generate_random_fq2();
+        let x_fp2 = bn254_fq2_random(5);
+        let y_fp2 = bn254_fq2_random(15);
+        let z_fp2 = bn254_fq2_random(95);
         let r_fp2 = z_fp2.invert().unwrap() * x_fp2 * y_fp2;
         let inputs = vec![
             bn254_fq_to_biguint(&x_fp2.c0),

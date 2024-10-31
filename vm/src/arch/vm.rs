@@ -20,10 +20,13 @@ use crate::{
     arch::{ExecutionSegment, PersistenceType, VmConfig},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, CHUNK},
+        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
         program::{trace::AxVmCommittedExe, ExecutionError},
     },
 };
+
+/// VM memory state for continuations.
+pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -54,6 +57,8 @@ pub enum ExitCode {
 
 pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
+    /// When VM is running on persistent mode, public values are stored in a special memory space.
+    pub final_memory: Option<VmMemoryState<Val<SC>>>,
 }
 
 impl<F: PrimeField32> VmExecutor<F> {
@@ -65,6 +70,10 @@ impl<F: PrimeField32> VmExecutor<F> {
             config,
             _marker: Default::default(),
         }
+    }
+
+    pub fn continuation_enabled(&self) -> bool {
+        self.config.continuation_enabled()
     }
 
     fn execute_segments(
@@ -94,10 +103,9 @@ impl<F: PrimeField32> VmExecutor<F> {
                 break;
             }
 
-            assert_eq!(
-                self.config.memory_config.persistence_type,
-                PersistenceType::Persistent,
-                "cannot segment in volatile memory mode"
+            assert!(
+                self.continuation_enabled(),
+                "multiple segments require to enable continuations"
             );
 
             assert_eq!(
@@ -134,9 +142,10 @@ impl<F: PrimeField32> VmExecutor<F> {
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<(), ExecutionError> {
-        let results = self.execute_segments(exe, input)?;
-        let last = results.last().unwrap();
+    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+        let mut results = self.execute_segments(exe, input)?;
+        let last = results.last_mut().unwrap();
+        let final_memory = mem::take(&mut last.final_memory);
         let end_state =
             last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
         // TODO[jpw]: add these as execution errors
@@ -145,7 +154,7 @@ impl<F: PrimeField32> VmExecutor<F> {
             end_state.exit_code == ExitCode::Success as u32,
             "program did not exit successfully"
         );
-        Ok(())
+        Ok(final_memory)
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
@@ -156,13 +165,15 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(exe, input)?;
+        let mut segments = self.execute_segments(exe, input)?;
+        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(None))
                 .collect(),
+            final_memory,
         })
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
@@ -173,13 +184,15 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(commited_exe.exe.clone(), input)?;
+        let mut segments = self.execute_segments(commited_exe.exe.clone(), input)?;
+        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(Some(commited_exe.committed_program.clone())))
                 .collect(),
+            final_memory,
         })
     }
 }
@@ -313,7 +326,7 @@ where
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let executor = VmExecutor::new(self.config.clone());
         executor.execute(exe, input)
     }

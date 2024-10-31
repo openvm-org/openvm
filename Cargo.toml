@@ -83,6 +83,7 @@ axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", defau
 axvm-circuit = { path = "vm", default-features = false }
 axvm-circuit-derive = { path = "vm/derive", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
+ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
@@ -112,6 +113,7 @@ p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa"
 p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
     "loader_halo2",

@@ -15,11 +15,10 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::POSEIDON2_DIRECT_BUS,
+    arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
     system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
-        TimestampedEquipartition,
+        offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
     },
 };
 

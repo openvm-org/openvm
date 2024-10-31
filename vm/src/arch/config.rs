@@ -1,3 +1,4 @@
+use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -16,6 +17,12 @@ use crate::{
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
+/// Width of Poseidon2 VM uses.
+pub const POSEIDON2_WIDTH: usize = 16;
+/// Returns a Poseidon2 config for the VM.
+pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
+    Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum PersistenceType {
@@ -27,6 +34,8 @@ pub enum PersistenceType {
 pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
     pub as_height: usize,
+    /// The offset of the address space.
+    pub as_offset: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
@@ -35,7 +44,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 16, PersistenceType::Volatile)
+        Self::new(29, 1, 29, 29, 16, PersistenceType::Volatile)
     }
 }
 
@@ -47,6 +56,8 @@ pub struct VmConfig {
     pub supported_modulus: Vec<BigUint>,
     /// List of all supported EC curves
     pub supported_ec_curves: Vec<EcCurve>,
+    /// List of all supported pairing curves
+    pub supported_pairing_curves: Vec<EcCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     pub memory_config: MemoryConfig,
@@ -58,6 +69,7 @@ pub struct VmConfig {
 }
 
 impl VmConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_parameters(
         poseidon2_max_constraint_degree: usize,
         memory_config: MemoryConfig,
@@ -67,6 +79,7 @@ impl VmConfig {
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
         supported_ec_curves: Vec<EcCurve>,
+        supported_pairing_curves: Vec<EcCurve>,
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
@@ -77,7 +90,12 @@ impl VmConfig {
             collect_metrics,
             supported_modulus,
             supported_ec_curves,
+            supported_pairing_curves,
         }
+    }
+
+    pub fn continuation_enabled(&self) -> bool {
+        self.memory_config.persistence_type == PersistenceType::Persistent
     }
 
     pub fn add_executor(mut self, executor: ExecutorName) -> Self {
@@ -85,6 +103,16 @@ impl VmConfig {
         // Adding these will cause a panic in the `create_chip_set` function.
         self.executors.push(executor);
         self
+    }
+
+    pub fn add_int256_alu(self) -> Self {
+        self.add_executor(ExecutorName::BaseAlu256Rv32)
+            .add_executor(ExecutorName::LessThan256Rv32)
+            .add_executor(ExecutorName::Shift256Rv32)
+    }
+
+    pub fn add_int256_m(self) -> Self {
+        self.add_executor(ExecutorName::Multiplication256Rv32)
     }
 
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
@@ -128,6 +156,7 @@ impl Default for VmConfig {
             false,
             vec![],
             vec![],
+            vec![],
         )
     }
 }
@@ -143,7 +172,7 @@ impl VmConfig {
             ..Default::default()
         }
         .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::ArithmeticLogicUnitRv32)
+        .add_executor(ExecutorName::BaseAluRv32)
         .add_executor(ExecutorName::LessThanRv32)
         .add_executor(ExecutorName::ShiftRv32)
         .add_executor(ExecutorName::LoadStoreRv32)

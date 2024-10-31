@@ -215,6 +215,26 @@ impl FieldVariable {
         }
     }
 
+    pub fn int_add(&mut self, scalar: isize) -> FieldVariable {
+        let limb_max_abs = self.limb_max_abs + scalar.unsigned_abs();
+        FieldVariable::save_if_overflow(
+            self,
+            SymbolicExpr::IntAdd(Box::new(self.expr.clone()), scalar),
+            limb_max_abs,
+        );
+
+        let limb_max_abs = self.limb_max_abs + scalar.unsigned_abs();
+        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
+        FieldVariable {
+            expr: SymbolicExpr::IntAdd(Box::new(self.expr.clone()), scalar),
+            builder: self.builder.clone(),
+            limb_max_abs,
+            max_overflow_bits,
+            expr_limbs: self.expr_limbs,
+            range_checker_bits: self.range_checker_bits,
+        }
+    }
+
     pub fn int_mul(&mut self, scalar: isize) -> FieldVariable {
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
         FieldVariable::save_if_overflow(
