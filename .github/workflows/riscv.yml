@@ -39,6 +39,7 @@ jobs:
       - name: Run Makefile
         working-directory: toolchain/riscv/transpiler/rv32im-test-vectors
         run: |
+          export PATH=/opt/riscv/bin:$PATH
           make
 
       - name: Run RISC-V test vector tests
