@@ -6,7 +6,10 @@ use ax_ecc_primitives::{
     field_extension::Fp2,
 };
 
-pub fn fp2_addsub_expr(config: ExprBuilderConfig, range_bus: VariableRangeCheckerBus) -> FieldExpr {
+pub fn fp2_addsub_expr(
+    config: ExprBuilderConfig,
+    range_bus: VariableRangeCheckerBus,
+) -> (FieldExpr, usize) {
     config.check_valid();
     let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
@@ -21,7 +24,7 @@ pub fn fp2_addsub_expr(config: ExprBuilderConfig, range_bus: VariableRangeChecke
     z.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    (FieldExpr::new(builder, range_bus), flag)
 }
 
 #[cfg(test)]
@@ -36,6 +39,7 @@ mod tests {
         bn256::{Fq, Fq2, G2Affine},
         ff::Field,
     };
+    use itertools::Itertools;
     use num_bigint_dig::BigUint;
     use num_traits::FromPrimitive;
     use p3_baby_bear::BabyBear;
@@ -44,7 +48,7 @@ mod tests {
 
     use super::fp2_addsub_expr;
     use crate::{
-        arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
+        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, VmChipWrapper},
         intrinsics::field_expression::FieldExpressionCoreChip,
         rv32im::adapters::Rv32VecHeapAdapterChip,
         utils::{biguint_to_limbs, rv32_write_heap_default},
@@ -62,19 +66,20 @@ mod tests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let expr = fp2_addsub_expr(
+        let (expr, flag_idx) = fp2_addsub_expr(
             config,
             tester.memory_controller().borrow().range_checker.bus(),
         );
 
         let core = FieldExpressionCoreChip::new(
             expr,
-            EccOpcode::default_offset(),
-            vec![EccOpcode::EC_ADD_NE as usize],
+            Fp2Opcode::default_offset(),
+            vec![Fp2Opcode::ADD as usize, Fp2Opcode::SUB as usize],
+            vec![flag_idx],
             tester.memory_controller().borrow().range_checker.clone(),
             "Fp2AddSub",
         );
-        let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+        let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
@@ -84,16 +89,50 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let x = Fq2::random(&mut rng);
         let y = Fq2::random(&mut rng);
-        let expected_sum = bn254_fq2_to_biguint_vec(&(x + y));
         let inputs = [x.c0, x.c1, y.c0, y.c1].map(|x| bn254_fq_to_biguint(&x));
-        let r = chip
+
+        let expected_sum = bn254_fq2_to_biguint_vec(&(x + y));
+        let r_sum = chip
             .core
             .air
             .expr
             .execute_with_output(inputs.to_vec(), vec![true]);
+        assert_eq!(r_sum.len(), 2);
+        assert_eq!(r_sum[0], expected_sum[0]);
+        assert_eq!(r_sum[1], expected_sum[1]);
 
-        assert_eq!(r.len(), 2);
-        assert_eq!(r[0], expected_sum[0]);
-        assert_eq!(r[1], expected_sum[1]);
+        let expected_sub = bn254_fq2_to_biguint_vec(&(x - y));
+        let r_sub = chip
+            .core
+            .air
+            .expr
+            .execute_with_output(inputs.to_vec(), vec![false]);
+        assert_eq!(r_sub.len(), 2);
+        assert_eq!(r_sub[0], expected_sub[0]);
+        assert_eq!(r_sub[1], expected_sub[1]);
+
+        let x_limbs = inputs[0..2]
+            .iter()
+            .map(|x| {
+                biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS)
+                    .map(BabyBear::from_canonical_u32)
+            })
+            .collect_vec();
+        let y_limbs = inputs[2..4]
+            .iter()
+            .map(|x| {
+                biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS)
+                    .map(BabyBear::from_canonical_u32)
+            })
+            .collect_vec();
+        let instruction = rv32_write_heap_default(
+            &mut tester,
+            x_limbs,
+            y_limbs,
+            chip.core.air.offset + Fp2Opcode::ADD as usize,
+        );
+        tester.execute(&mut chip, instruction);
+        let tester = tester.build().load(chip).finalize();
+        tester.simple_test().expect("Verification failed");
     }
 }
