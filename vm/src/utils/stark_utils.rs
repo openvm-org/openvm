@@ -10,18 +10,19 @@ use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
-use crate::arch::{PersistenceType, VirtualMachine, VmConfig, VmExecutor};
+use crate::arch::{PersistenceType, VirtualMachine, VmConfig, VmExecutor, VmMemoryState};
 
 pub fn air_test(config: VmConfig, exe: impl Into<AxVmExe<BabyBear>>) {
     air_test_with_min_segments(config, exe, vec![], 1);
 }
 
+/// Executes the VM and returns the final memory state.
 pub fn air_test_with_min_segments(
     config: VmConfig,
     exe: impl Into<AxVmExe<BabyBear>>,
     input: Vec<Vec<BabyBear>>,
     min_segments: usize,
-) {
+) -> Option<VmMemoryState<BabyBear>> {
     setup_tracing();
 
     let persistence_type = config.memory_config.persistence_type;
@@ -29,7 +30,8 @@ pub fn air_test_with_min_segments(
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
-    let result = vm.execute_and_generate(exe, input).unwrap();
+    let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let final_memory = std::mem::take(&mut result.final_memory);
     let proofs = vm.prove(&pk, result);
 
     assert!(proofs.len() >= min_segments);
@@ -44,6 +46,7 @@ pub fn air_test_with_min_segments(
                 .expect("segment proofs should verify");
         }
     }
+    final_memory
 }
 
 // TODO[jpw]: this should be deleted once tests switch to new API

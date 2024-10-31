@@ -1,3 +1,4 @@
+use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
@@ -16,6 +17,12 @@ use crate::{
 
 pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
+/// Width of Poseidon2 VM uses.
+pub const POSEIDON2_WIDTH: usize = 16;
+/// Returns a Poseidon2 config for the VM.
+pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
+    Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum PersistenceType {
@@ -27,6 +34,8 @@ pub enum PersistenceType {
 pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
     pub as_height: usize,
+    /// The offset of the address space.
+    pub as_offset: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
@@ -35,7 +44,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 29, 29, 16, PersistenceType::Volatile)
+        Self::new(29, 1, 29, 29, 16, PersistenceType::Volatile)
     }
 }
 
@@ -78,6 +87,10 @@ impl VmConfig {
             supported_modulus,
             supported_ec_curves,
         }
+    }
+
+    pub fn continuation_enabled(&self) -> bool {
+        self.memory_config.persistence_type == PersistenceType::Persistent
     }
 
     pub fn add_executor(mut self, executor: ExecutorName) -> Self {
