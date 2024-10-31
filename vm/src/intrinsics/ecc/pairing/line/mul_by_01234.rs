@@ -79,17 +79,15 @@ pub fn mul_by_01234_expr(
     );
 
     let mut f = Fp12::new(builder.clone());
-    // let mut x = Fp12::new_from_01234(builder.clone());
-    // let mut r = f.mul(&mut x, xi);
-
     let mut x0 = Fp2::new(builder.clone());
     let mut x1 = Fp2::new(builder.clone());
     let mut x2 = Fp2::new(builder.clone());
     let mut x3 = Fp2::new(builder.clone());
     let mut x4 = Fp2::new(builder.clone());
-    let mut x5 = Fp2::new(builder.clone());
+    // x5 is unused; required for input sizes to balance to 12 on the adapter
+    let _x5 = Fp2::new(builder.clone());
 
-    let mut r = f.mul_by_01234(&mut x0, &mut x2, &mut x4, &mut x1, &mut x3, xi);
+    let mut r = f.mul_by_01234(&mut x0, &mut x1, &mut x2, &mut x3, &mut x4, xi);
     r.save_output();
 
     let builder = builder.borrow().clone();

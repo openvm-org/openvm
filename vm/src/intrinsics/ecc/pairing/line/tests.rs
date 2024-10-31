@@ -210,23 +210,7 @@ fn test_mul_by_01234() {
         ax_ecc_execution::curves::bn254::mul_by_01234::<Fq, Fq2, Fq12>(f, [x0, x1, x2, x3, x4]);
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(&r_cmp);
 
-    println!(
-        "output {:#?}",
-        output
-            .iter()
-            .map(|x| x.to_str_radix(16))
-            .collect::<Vec<_>>()
-    );
-    println!(
-        "r_cmp {:#?}",
-        r_cmp_bigint
-            .iter()
-            .map(|x| x.to_str_radix(16))
-            .collect::<Vec<_>>()
-    );
-
     for i in 0..12 {
-        println!("iter i: {}", i);
         assert_eq!(output[i], r_cmp_bigint[i]);
     }
 
