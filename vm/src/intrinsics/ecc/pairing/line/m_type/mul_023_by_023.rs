@@ -10,7 +10,7 @@ use ax_ecc_primitives::{
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_ecc_constants::BLS12381;
-use axvm_instructions::EcLineMTypeOpcode;
+use axvm_instructions::PairingOpcode;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -55,7 +55,8 @@ impl<
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![EcLineMTypeOpcode::MUL_023_BY_023 as usize],
+            vec![PairingOpcode::MUL_023_BY_023 as usize],
+            vec![],
             memory_controller.borrow().range_checker.clone(),
             "Mul023By023",
         );

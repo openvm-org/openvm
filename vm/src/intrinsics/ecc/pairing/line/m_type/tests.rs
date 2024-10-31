@@ -7,7 +7,7 @@ use ax_ecc_primitives::{
     test_utils::{bls12381_fq2_to_biguint_vec, bls12381_fq_to_biguint},
 };
 use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{EcLineMTypeOpcode, UsizeOpcode};
+use axvm_instructions::{PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -15,7 +15,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::{testing::VmChipTestBuilder, VmChipWrapper},
-    intrinsics::{ecc::line::mul_023_by_023_expr, field_expression::FieldExpressionCoreChip},
+    intrinsics::{ecc::pairing::mul_023_by_023_expr, field_expression::FieldExpressionCoreChip},
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
 };
@@ -39,8 +39,9 @@ fn test_mul_023_by_023() {
     );
     let core = FieldExpressionCoreChip::new(
         expr,
-        EcLineMTypeOpcode::default_offset(),
-        vec![EcLineMTypeOpcode::MUL_023_BY_023 as usize],
+        PairingOpcode::default_offset(),
+        vec![PairingOpcode::MUL_023_BY_023 as usize],
+        vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul023By023",
     );
@@ -124,7 +125,7 @@ fn test_mul_023_by_023() {
         &mut tester,
         input_line0_limbs,
         input_line1_limbs,
-        chip.core.air.offset + EcLineMTypeOpcode::MUL_023_BY_023 as usize,
+        chip.core.air.offset + PairingOpcode::MUL_023_BY_023 as usize,
     );
 
     tester.execute(&mut chip, instruction);
