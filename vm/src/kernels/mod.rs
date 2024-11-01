@@ -8,3 +8,4 @@ pub mod field_extension;
 pub mod jal;
 pub mod modular;
 pub mod public_values;
+pub mod fri;

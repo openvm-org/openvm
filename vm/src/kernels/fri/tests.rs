@@ -8,9 +8,9 @@ use rand::Rng;
 
 use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    intrinsics::fri::{FriFoldChip, FriFoldCols},
     system::program::Instruction,
 };
+use crate::kernels::fri::{FriFoldChip, FriFoldCols};
 
 fn compute_fri_fold<F: Field>(alpha: F, mut alpha_pow: F, a: &Vec<F>, b: &Vec<F>) -> (F, F) {
     let mut result = F::zero();
