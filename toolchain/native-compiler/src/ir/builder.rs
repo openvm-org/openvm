@@ -206,6 +206,23 @@ impl<C: Config> Builder<C> {
         dst.assign(expr.into(), self);
     }
 
+    /// Casts a Felt to a Var. Please use carefully.
+    pub fn cast_felt_to_var(&mut self, felt: Felt<C::F>) -> Var<C::N> {
+        if self.flags.static_only {
+            panic!("Cannot cast a Felt to a Var in static mode");
+        }
+        let var: Var<_> = self.uninit();
+        let buffer = self.alloc(1, 1);
+        let idx = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        felt.store(buffer, idx, self);
+        var.load(buffer, idx, self);
+        var
+    }
+
     /// Asserts that two expressions are equal.
     pub fn assert_eq<V: Variable<C>>(
         &mut self,

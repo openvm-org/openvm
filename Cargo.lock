@@ -511,6 +511,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
+ "derivative",
  "p3-baby-bear",
  "serde",
  "serde_json",
