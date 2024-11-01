@@ -24,8 +24,8 @@ type F = BabyBear;
 
 #[test]
 fn test_mul_023_by_023() {
-    const NUM_LIMBS: usize = 16;
-    const LIMB_BITS: usize = 24;
+    const NUM_LIMBS: usize = 64;
+    const LIMB_BITS: usize = 8;
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let expr = mul_023_by_023_expr(
@@ -45,7 +45,7 @@ fn test_mul_023_by_023() {
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul023By023",
     );
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 30, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 10, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),

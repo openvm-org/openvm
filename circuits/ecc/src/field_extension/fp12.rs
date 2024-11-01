@@ -130,6 +130,7 @@ impl Fp12 {
         x4: &mut Fp2,
         xi: [isize; 2],
     ) -> Fp12 {
+        // The following uses the formula from Fp12 mul with co5 (x5) = 0
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs4co4 + cs5co3)
         // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs5co4)
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + cs4co3

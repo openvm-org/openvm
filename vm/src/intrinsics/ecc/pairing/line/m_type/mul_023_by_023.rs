@@ -87,17 +87,13 @@ pub fn mul_023_by_023_expr(
     // where w⁶ = xi
     // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
     //         = (c0c1 + xi) + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 + b1)w⁵
-    let mut l0 = c0.mul(&mut c1).int_add(xi);
-    let mut l2 = c0.mul(&mut b1).add(&mut c1.mul(&mut b0));
-    let mut l3 = c0.add(&mut c1);
-    let mut l4 = b0.mul(&mut b1);
-    let mut l5 = b0.add(&mut b1);
+    let l0 = c0.mul(&mut c1).int_add(xi);
+    let l2 = c0.mul(&mut b1).add(&mut c1.mul(&mut b0));
+    let l3 = c0.add(&mut c1);
+    let l4 = b0.mul(&mut b1);
+    let l5 = b0.add(&mut b1);
 
-    l0.save_output();
-    l2.save_output();
-    l3.save_output();
-    l4.save_output();
-    l5.save_output();
+    [l0, l2, l3, l4, l5].map(|mut l| l.save_output());
 
     let builder = builder.borrow().clone();
     FieldExpr {

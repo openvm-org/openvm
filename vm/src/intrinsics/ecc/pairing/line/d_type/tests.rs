@@ -69,13 +69,13 @@ fn test_mul_013_by_013() {
     let line0 = tangent_line_013::<Fq, Fq2>(ec_pt_0);
     let line1 = tangent_line_013::<Fq, Fq2>(ec_pt_1);
     let input_line0 = [
-        bn254_fq2_to_biguint_vec(&line0.b),
-        bn254_fq2_to_biguint_vec(&line0.c),
+        bn254_fq2_to_biguint_vec(line0.b),
+        bn254_fq2_to_biguint_vec(line0.c),
     ]
     .concat();
     let input_line1 = [
-        bn254_fq2_to_biguint_vec(&line1.b),
-        bn254_fq2_to_biguint_vec(&line1.c),
+        bn254_fq2_to_biguint_vec(line1.b),
+        bn254_fq2_to_biguint_vec(line1.c),
     ]
     .concat();
 
@@ -99,7 +99,7 @@ fn test_mul_013_by_013() {
         Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one()),
     );
     let r_cmp_bigint = r_cmp
-        .map(|x| [bn254_fq_to_biguint(&x.c0), bn254_fq_to_biguint(&x.c1)])
+        .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
 
     for i in 0..10 {
@@ -173,14 +173,14 @@ fn test_mul_by_01234() {
     let mut rng = StdRng::seed_from_u64(31);
     let x4 = Fq2::random(&mut rng);
 
-    let input_f = bn254_fq12_to_biguint_vec(&f);
+    let input_f = bn254_fq12_to_biguint_vec(f);
     let input_x = [
-        bn254_fq2_to_biguint_vec(&x0),
-        bn254_fq2_to_biguint_vec(&x1),
-        bn254_fq2_to_biguint_vec(&x2),
-        bn254_fq2_to_biguint_vec(&x3),
-        bn254_fq2_to_biguint_vec(&x4),
-        bn254_fq2_to_biguint_vec(&Fq2::zero()),
+        bn254_fq2_to_biguint_vec(x0),
+        bn254_fq2_to_biguint_vec(x1),
+        bn254_fq2_to_biguint_vec(x2),
+        bn254_fq2_to_biguint_vec(x3),
+        bn254_fq2_to_biguint_vec(x4),
+        bn254_fq2_to_biguint_vec(Fq2::zero()),
     ]
     .concat();
 
@@ -200,7 +200,7 @@ fn test_mul_by_01234() {
 
     let r_cmp =
         ax_ecc_execution::curves::bn254::mul_by_01234::<Fq, Fq2, Fq12>(f, [x0, x1, x2, x3, x4]);
-    let r_cmp_bigint = bn254_fq12_to_biguint_vec(&r_cmp);
+    let r_cmp_bigint = bn254_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {
         assert_eq!(output[i], r_cmp_bigint[i]);
