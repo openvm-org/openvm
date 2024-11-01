@@ -2,10 +2,15 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
+    iter::once,
     marker::PhantomData,
+    sync::Arc,
 };
 
 use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
@@ -50,6 +55,7 @@ pub struct Rv32HeapBranchAdapterCols<T, const NUM_READS: usize, const READ_SIZE:
 pub struct Rv32HeapBranchAdapterAir<const NUM_READS: usize, const READ_SIZE: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    pub bus: BitwiseOperationLookupBus,
     address_bits: usize,
 }
 
@@ -90,9 +96,35 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
+        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
+        // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
+        // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
+        let need_range_check: Vec<AB::Expr> = cols
+            .rs_val
+            .iter()
+            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1].into())
+            .chain(once(AB::Expr::zero())) // in case NUM_READS is odd
+            .collect();
+
+        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
+        let limb_shift = AB::F::from_canonical_usize(
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
+        );
+
+        // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
+        //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
+        //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
+        for i in 0..need_range_check.len() / 2 {
+            self.bus
+                .send_range(
+                    need_range_check[i * 2].clone() * limb_shift,
+                    need_range_check[i * 2 + 1].clone() * limb_shift,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
+
         let heap_ptr = cols.rs_val.map(|r| {
             r.iter().rev().fold(AB::Expr::zero(), |acc, limb| {
-                // TODO: range check (ty Arayi :3)
                 acc * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + (*limb)
             })
         });
@@ -134,6 +166,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 #[derive(Debug)]
 pub struct Rv32HeapBranchAdapterChip<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
     pub air: Rv32HeapBranchAdapterAir<NUM_READS, READ_SIZE>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     _marker: PhantomData<F>,
 }
 
@@ -144,6 +177,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
@@ -151,8 +185,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
             air: Rv32HeapBranchAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge: memory_controller.memory_bridge(),
+                bus: bitwise_lookup_chip.bus(),
                 address_bits: memory_controller.mem_config.pointer_max_bits,
             },
+            bitwise_lookup_chip,
             _marker: PhantomData,
         }
     }
@@ -193,6 +229,19 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
             record
         });
 
+        let need_range_check: Vec<u32> = rs_records
+            .iter()
+            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .chain(once(0)) // in case NUM_READS is odd
+            .collect();
+
+        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        for i in 0..need_range_check.len() / 2 {
+            self.bitwise_lookup_chip.request_range(
+                need_range_check[i * 2] * limb_shift,
+                need_range_check[i * 2 + 1] * limb_shift,
+            );
+        }
         let heap_records = rs_vals.map(|address| {
             debug_assert!(address < (1 << self.air.address_bits));
             memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))

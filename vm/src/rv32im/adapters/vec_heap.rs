@@ -393,7 +393,9 @@ impl<
         let (rd_record, rd_val) = read_rv32_register(memory, d, a);
 
         let read_records = rs_vals.map(|address| {
-            // TODO: assert address has < 2^address_bits
+            assert!(
+                address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.air.address_bits)
+            );
             from_fn(|i| {
                 memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
             })

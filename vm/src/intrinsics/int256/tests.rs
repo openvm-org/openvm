@@ -255,11 +255,16 @@ fn shift_256_sra_rand_test() {
 
 fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut chip = Rv32BranchEqual256Chip::<F>::new(
         Rv32HeapBranchAdapterChip::<F, 2, INT256_NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         BranchEqualCoreChip::new(0, 4),
         tester.memory_controller(),
@@ -279,7 +284,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         &mut tester,
         Some(branch_fn),
     );
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -305,6 +310,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
