@@ -757,11 +757,6 @@ impl VmConfig {
                 num_limbs: 48,
                 limb_bits: 8,
             };
-            let config64 = ExprBuilderConfig {
-                modulus,
-                num_limbs: 64,
-                limb_bits: 8,
-            };
             match executor {
                 ExecutorName::EcAddNeRv32_2x32 => {
                     let chip = Rc::new(RefCell::new(EcAddNeChip::new(
@@ -835,13 +830,13 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMul023By023 => {
                     let chip = Rc::new(RefCell::new(EcLineMul023By023Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 10, 64, 64>::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
                         ),
                         memory_controller.clone(),
-                        config64,
+                        config48,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());

@@ -23,26 +23,26 @@ use crate::{
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcLineMul023By023Chip<
     F: PrimeField32,
-    const INPUT_LANES: usize,
-    const OUTPUT_LANES: usize,
-    const LANE_SIZE: usize,
+    const INPUT_BLOCKS: usize,
+    const OUTPUT_BLOCKS: usize,
+    const BLOCK_SIZE: usize,
 >(
     VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
     >,
 );
 
 impl<
         F: PrimeField32,
-        const INPUT_LANES: usize,
-        const OUTPUT_LANES: usize,
-        const LANE_SIZE: usize,
-    > EcLineMul023By023Chip<F, INPUT_LANES, OUTPUT_LANES, LANE_SIZE>
+        const INPUT_BLOCKS: usize,
+        const OUTPUT_BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+    > EcLineMul023By023Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_LANES, OUTPUT_LANES, LANE_SIZE, LANE_SIZE>,
+        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
