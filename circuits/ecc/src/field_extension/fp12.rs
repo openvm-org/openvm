@@ -136,67 +136,67 @@ impl Fp12 {
         // c4 = cs0co4 + cs1co3 + cs3co1 + cs4co0 + xi(cs5co2)
         // c5 = cs1co4 + cs2co3 + cs3co2 + cs4co1 + cs5co0
         //   where cs*: self.c*
-        let mut s0 = x0;
-        let mut s1 = x2;
-        let mut s2 = x4;
-        let mut s3 = x1;
-        let mut s4 = x3;
+        let mut o0 = x0;
+        let mut o1 = x2;
+        let mut o2 = x4;
+        let mut o3 = x1;
+        let mut o4 = x3;
 
-        let c0 = self.c0.mul(&mut s0).add(
+        let c0 = self.c0.mul(&mut o0).add(
             &mut self
                 .c1
-                .mul(&mut s2)
-                .add(&mut self.c2.mul(&mut s1))
-                .add(&mut self.c4.mul(&mut s4))
-                .add(&mut self.c5.mul(&mut s3))
+                .mul(&mut o2)
+                .add(&mut self.c2.mul(&mut o1))
+                .add(&mut self.c4.mul(&mut o4))
+                .add(&mut self.c5.mul(&mut o3))
                 .int_mul(xi),
         );
 
         let c1 = self
             .c0
-            .mul(&mut s1)
-            .add(&mut self.c1.mul(&mut s0))
-            .add(&mut self.c3.mul(&mut s3))
+            .mul(&mut o1)
+            .add(&mut self.c1.mul(&mut o0))
+            .add(&mut self.c3.mul(&mut o3))
             .add(
                 &mut self
                     .c2
-                    .mul(&mut s2)
-                    .add(&mut self.c5.mul(&mut s4))
+                    .mul(&mut o2)
+                    .add(&mut self.c5.mul(&mut o4))
                     .int_mul(xi),
             );
 
         let c2 = self
             .c0
-            .mul(&mut s2)
-            .add(&mut self.c1.mul(&mut s1))
-            .add(&mut self.c2.mul(&mut s0))
-            .add(&mut self.c3.mul(&mut s4))
-            .add(&mut self.c4.mul(&mut s3));
+            .mul(&mut o2)
+            .add(&mut self.c1.mul(&mut o1))
+            .add(&mut self.c2.mul(&mut o0))
+            .add(&mut self.c3.mul(&mut o4))
+            .add(&mut self.c4.mul(&mut o3));
 
-        let c3 = self.c0.mul(&mut s3).add(&mut self.c3.mul(&mut s0)).add(
+        let c3 = self.c0.mul(&mut o3).add(&mut self.c3.mul(&mut o0)).add(
             &mut self
                 .c2
-                .mul(&mut s4)
-                .add(&mut self.c4.mul(&mut s2))
-                .add(&mut self.c5.mul(&mut s1))
+                .mul(&mut o4)
+                .add(&mut self.c4.mul(&mut o2))
+                .add(&mut self.c5.mul(&mut o1))
                 .int_mul(xi),
         );
 
         let c4 = self
             .c0
-            .mul(&mut s4)
-            .add(&mut self.c1.mul(&mut s3))
-            .add(&mut self.c3.mul(&mut s1))
-            .add(&mut self.c4.mul(&mut s0))
-            .add(&mut self.c5.mul(&mut s2).int_mul(xi));
+            .mul(&mut o4)
+            .add(&mut self.c1.mul(&mut o3))
+            .add(&mut self.c3.mul(&mut o1))
+            .add(&mut self.c4.mul(&mut o0))
+            .add(&mut self.c5.mul(&mut o2).int_mul(xi));
 
         let c5 = self
             .c1
-            .mul(&mut s4)
-            .add(&mut self.c2.mul(&mut s3))
-            .add(&mut self.c3.mul(&mut s2))
-            .add(&mut self.c4.mul(&mut s1))
-            .add(&mut self.c5.mul(&mut s0));
+            .mul(&mut o4)
+            .add(&mut self.c2.mul(&mut o3))
+            .add(&mut self.c3.mul(&mut o2))
+            .add(&mut self.c4.mul(&mut o1))
+            .add(&mut self.c5.mul(&mut o0));
 
         Fp12 {
             c0,
