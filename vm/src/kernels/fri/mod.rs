@@ -1,37 +1,32 @@
 use std::sync::Arc;
 
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::{is_zero::IsZeroSubAir, utils::not, SubAir, TraceSubRowGenerator};
+use ax_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionBuilder,
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
+};
+use axvm_instructions::{instruction::Instruction, FriFoldOpcode::FRI_FOLD};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
-use p3_matrix::Matrix;
-
-use afs_derive::AlignedBorrow;
-use afs_primitives::{
-    is_zero::{
-        columns::{IsZeroCols, IsZeroIoCols},
-        IsZeroAir,
-    },
-    sub_chip::{LocalTraceInstructions, SubAir},
-    utils::not,
-};
-use afs_stark_backend::{Chip, ChipUsageGetter, config::Val, interaction::InteractionBuilder, prover::types::AirProofInput, rap::{AnyRap, BaseAirWithPublicValues}};
-use afs_stark_backend::p3_uni_stark::StarkGenericConfig;
-use afs_stark_backend::rap::PartitionedBaseAir;
-use axvm_instructions::FriFoldOpcode::FRI_FOLD;
-
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use ax_circuit_primitives::is_zero::IsZeroIo;
 use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
     system::{
         memory::{
-            MemoryAuxColsFactory,
-            MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord, offline_checker::{
+            offline_checker::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
+            MemoryAddress, MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord,
+            MemoryWriteRecord,
         },
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
-use crate::system::memory::MemoryAddress;
 
 #[cfg(test)]
 mod tests;
@@ -40,7 +35,7 @@ mod tests;
 #[derive(AlignedBorrow)]
 pub struct FriFoldCols<T> {
     pub enabled: T,
-    
+
     pub pc: T,
     pub start_timestamp: T,
 
@@ -145,7 +140,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         when_is_not_last.assert_eq(next.alpha_pow_current, alpha_pow_current * alpha);
         when_is_not_last.assert_eq(next.index, index + AB::Expr::one());
         when_is_not_last.assert_eq(next.enabled, enabled);
-        
+
         builder.assert_bool(enabled);
 
         // first row constraint
@@ -159,13 +154,14 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
 
         // is zero subair
 
-        SubAir::eval(&IsZeroAir {},
+        SubAir::eval(&IsZeroSubAir {},
             builder,
-            IsZeroIoCols {
-                is_zero: index_is_zero,
-                x: index,
+                     (IsZeroIo {
+                x: index.into(),
+                out: index_is_zero.into(),
+                condition: AB::Expr::one(),
             },
-            is_zero_aux,
+            is_zero_aux),
         );
 
         // execution interaction
@@ -184,17 +180,30 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
                     alpha_pow_pointer,
                 ],
                 ExecutionState::new(pc, start_timestamp),
-                ExecutionState::<AB::Expr>::new(AB::Expr::one() + pc, total_accesses + start_timestamp - AB::F::one()),
+                ExecutionState::<AB::Expr>::new(
+                    AB::Expr::one() + pc,
+                    total_accesses + start_timestamp - AB::F::one(),
+                ),
             )
             .eval(builder, enabled * is_last);
 
         // initial reads
 
         self.memory_bridge
-            .read(MemoryAddress::new(address_space, alpha_pointer), [alpha], start_timestamp, &alpha_aux)
+            .read(
+                MemoryAddress::new(address_space, alpha_pointer),
+                [alpha],
+                start_timestamp,
+                &alpha_aux,
+            )
             .eval(builder, enabled * is_last);
         self.memory_bridge
-            .read(MemoryAddress::new(address_space, length_pointer), [length], start_timestamp + AB::F::one(), &length_aux)
+            .read(
+                MemoryAddress::new(address_space, length_pointer),
+                [length],
+                start_timestamp + AB::F::one(),
+                &length_aux,
+            )
             .eval(builder, enabled * is_last);
 
         // general reads
@@ -223,7 +232,10 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
                 MemoryAddress::new(address_space, alpha_pow_pointer),
                 [alpha * alpha_pow_current],
                 start_timestamp + num_initial_accesses + num_loop_accesses.clone(),
-                &MemoryWriteAuxCols { base: alpha_pow_aux, prev_data: [alpha_pow_original] },
+                &MemoryWriteAuxCols {
+                    base: alpha_pow_aux,
+                    prev_data: [alpha_pow_original],
+                },
             )
             .eval(builder, enabled * is_last);
         self.memory_bridge
@@ -331,7 +343,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
             alpha_pow_write,
             result_write,
         });
-        
+
         self.height += length;
 
         Ok(ExecutionState {
@@ -346,7 +358,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
     }
 }
 
-impl <F: Field> ChipUsageGetter for FriFoldChip<F> {
+impl<F: Field> ChipUsageGetter for FriFoldChip<F> {
     fn air_name(&self) -> String {
         "FriFoldAir".to_string()
     }
@@ -360,7 +372,7 @@ impl <F: Field> ChipUsageGetter for FriFoldChip<F> {
     }
 }
 
-impl <F: PrimeField32> FriFoldChip<F> {
+impl<F: PrimeField32> FriFoldChip<F> {
     fn record_to_rows(
         record: FriFoldRecord<F>,
         aux_cols_factory: MemoryAuxColsFactory<F>,
@@ -385,11 +397,13 @@ impl <F: PrimeField32> FriFoldChip<F> {
 
         let mut alpha_pow_current = alpha_pow_original;
         let mut current = F::zero();
-        
+
         let alpha_aux = aux_cols_factory.make_read_aux_cols(record.alpha_read);
         let length_aux = aux_cols_factory.make_read_aux_cols(record.length_read);
-        
-        let alpha_pow_aux = aux_cols_factory.make_write_aux_cols(record.alpha_pow_write).get_base();
+
+        let alpha_pow_aux = aux_cols_factory
+            .make_write_aux_cols(record.alpha_pow_write)
+            .get_base();
         let result_aux = aux_cols_factory.make_write_aux_cols(record.result_write);
 
         for i in 0..length {
@@ -397,16 +411,14 @@ impl <F: PrimeField32> FriFoldChip<F> {
             let b = record.b_reads[i].data[0];
             current += (b - a) * alpha_pow_current;
 
-            let IsZeroCols {
-                io:
-                IsZeroIoCols {
-                    is_zero: index_is_zero,
-                    ..
-                },
-                inv: is_zero_aux,
-            } = IsZeroAir {}.generate_trace_row(F::from_canonical_usize(i));
-            
-            let cols: &mut FriFoldCols<F> = std::borrow::BorrowMut::borrow_mut(&mut slice[i * width..(i + 1) * width]);
+            let mut index_is_zero = F::zero();
+            let mut is_zero_aux = F::zero();
+
+            let index = F::from_canonical_usize(i);
+            IsZeroSubAir {}.generate_subrow(index, (&mut is_zero_aux, &mut index_is_zero));
+
+            let cols: &mut FriFoldCols<F> =
+                std::borrow::BorrowMut::borrow_mut(&mut slice[i * width..(i + 1) * width]);
             *cols = FriFoldCols {
                 enabled: F::one(),
                 pc: record.pc,
@@ -429,7 +441,7 @@ impl <F: PrimeField32> FriFoldChip<F> {
                 alpha,
                 alpha_pow_original,
                 alpha_pow_current,
-                index: F::from_canonical_usize(i),
+                index,
                 index_is_zero,
                 is_zero_aux,
                 current,
@@ -438,34 +450,27 @@ impl <F: PrimeField32> FriFoldChip<F> {
             alpha_pow_current *= alpha;
         }
     }
-    fn blank_row(
-        slice: &mut [F],
-    ) {
+    fn blank_row(slice: &mut [F]) {
         let cols: &mut FriFoldCols<F> = std::borrow::BorrowMut::borrow_mut(slice);
-
-        let IsZeroCols {
-            io:
-            IsZeroIoCols {
-                is_zero: index_is_zero,
-                ..
-            },
-            inv: is_zero_aux,
-        } = IsZeroAir {}.generate_trace_row(F::zero());
-        cols.index_is_zero = index_is_zero;
-        cols.is_zero_aux = is_zero_aux;
+        IsZeroSubAir {}
+            .generate_subrow(cols.index, (&mut cols.is_zero_aux, &mut cols.index_is_zero));
     }
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut flat_trace = vec![F::zero(); self.height.next_power_of_two() * self.trace_width()];
 
         let width = self.trace_width();
-        
+
         let mut index = 0;
         for record in self.records {
             let length = record.a_reads.len();
-            Self::record_to_rows(record, self.memory.borrow().aux_cols_factory(), &mut flat_trace[index..index + (length * width)]);
+            Self::record_to_rows(
+                record,
+                self.memory.borrow().aux_cols_factory(),
+                &mut flat_trace[index..index + (length * width)],
+            );
             index += length * width;
         }
-        
+
         while index < flat_trace.len() {
             Self::blank_row(&mut flat_trace[index..index + width]);
             index += width;
@@ -475,7 +480,10 @@ impl <F: PrimeField32> FriFoldChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for FriFoldChip<Val<SC>> where Val<SC>: PrimeField32 {
+impl<SC: StarkGenericConfig> Chip<SC> for FriFoldChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         Arc::new(self.air)
     }

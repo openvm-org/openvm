@@ -1,6 +1,6 @@
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::utils::create_seeded_rng;
-use axvm_instructions::FriFoldOpcode::FRI_FOLD;
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_sdk::utils::create_seeded_rng;
+use axvm_instructions::{instruction::Instruction, FriFoldOpcode::FRI_FOLD};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -8,9 +8,8 @@ use rand::Rng;
 
 use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    system::program::Instruction,
+    kernels::fri::{FriFoldChip, FriFoldCols},
 };
-use crate::kernels::fri::{FriFoldChip, FriFoldCols};
 
 fn compute_fri_fold<F: Field>(alpha: F, mut alpha_pow: F, a: &Vec<F>, b: &Vec<F>) -> (F, F) {
     let mut result = F::zero();
