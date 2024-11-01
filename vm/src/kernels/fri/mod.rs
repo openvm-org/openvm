@@ -114,14 +114,13 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             index_is_zero,
             is_zero_aux,
             current,
-            ..
+            a_aux,
+            b_aux,
+            result_aux,
+            length_aux,
+            alpha_aux,
+            alpha_pow_aux,
         } = local;
-        let a_aux = local.a_aux.clone();
-        let b_aux = local.b_aux.clone();
-        let result_aux = local.result_aux.clone();
-        let length_aux = local.length_aux.clone();
-        let alpha_aux = local.alpha_aux.clone();
-        let alpha_pow_aux = local.alpha_pow_aux.clone();
 
         let is_first = index_is_zero;
         let is_last = next.index_is_zero;
@@ -276,6 +275,7 @@ pub struct FriFoldChip<F: Field> {
 }
 
 impl<F: PrimeField32> FriFoldChip<F> {
+    #[allow(dead_code)]
     fn new(
         memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
@@ -439,10 +439,10 @@ impl<F: PrimeField32> FriFoldChip<F> {
                 start_timestamp: record.start_timestamp,
                 a_aux: aux_cols_factory.make_read_aux_cols(record.a_reads[i]),
                 b_aux: aux_cols_factory.make_read_aux_cols(record.b_reads[i]),
-                alpha_aux: alpha_aux.clone(),
-                length_aux: length_aux.clone(),
-                alpha_pow_aux: alpha_pow_aux.clone(),
-                result_aux: result_aux.clone(),
+                alpha_aux,
+                length_aux,
+                alpha_pow_aux,
+                result_aux,
                 a,
                 b,
                 alpha,
