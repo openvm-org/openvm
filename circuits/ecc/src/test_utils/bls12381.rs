@@ -10,6 +10,15 @@ pub fn bls12381_fq_to_biguint(fq: Fq) -> BigUint {
     BigUint::from_bytes_le(&bytes)
 }
 
+pub fn bls12381_fq_to_biguint_vec(fq: Fq) -> Vec<BigUint> {
+    let bytes = fq.to_bytes();
+    let chunks = bytes.chunks(12).collect::<Vec<_>>();
+    chunks
+        .into_iter()
+        .map(|chunk| BigUint::from_bytes_le(chunk))
+        .collect::<Vec<_>>()
+}
+
 pub fn bls12381_fq2_to_biguint_vec(x: Fq2) -> Vec<BigUint> {
     vec![bls12381_fq_to_biguint(x.c0), bls12381_fq_to_biguint(x.c1)]
 }

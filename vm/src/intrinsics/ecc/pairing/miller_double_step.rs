@@ -108,6 +108,7 @@ mod tests {
     type F = BabyBear;
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+
     #[test]
     #[allow(non_snake_case)]
     fn test_miller_double() {
