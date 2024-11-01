@@ -1,3 +1,5 @@
+//! Macros for adding custom RISC-V instructions in assembly using .insn directives.
+
 #[macro_export]
 macro_rules! custom_insn_i {
     ($opcode:expr, $funct3:expr, $rd:literal, $rs1:literal, $imm:expr) => {
