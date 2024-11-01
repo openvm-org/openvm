@@ -1,7 +1,8 @@
-use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData};
+use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
+use ax_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS}};
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
@@ -38,6 +39,7 @@ pub struct Rv32HeapAdapterAir<
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    pub bus: BitwiseOperationLookupBus,
     /// The max number of bits for an address in memory
     address_bits: usize,
 }
@@ -76,6 +78,7 @@ impl<
             Rv32VecHeapAdapterAir::new(
                 self.execution_bridge,
                 self.memory_bridge,
+                self.bus,
                 self.address_bits,
             );
         vec_heap_air.eval(builder, local, ctx.into());
@@ -96,6 +99,7 @@ pub struct Rv32HeapAdapterChip<
     const WRITE_SIZE: usize,
 > {
     pub air: Rv32HeapAdapterAir<NUM_READS, READ_SIZE, WRITE_SIZE>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     _marker: PhantomData<F>,
 }
 
@@ -106,6 +110,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
@@ -115,8 +120,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             air: Rv32HeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                bus: bitwise_lookup_chip.bus(),
                 address_bits,
             },
+            bitwise_lookup_chip,
             _marker: PhantomData,
         }
     }
@@ -157,6 +164,21 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             debug_assert!(address < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
+        let mut need_range_check: Vec<u32> = Vec::with_capacity(NUM_READS + 2);
+        for i in 0..NUM_READS {
+            need_range_check
+                .push(rs_records[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
+        }
+        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
+        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()); // in case NUM_READS is even
+        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        for i in 0..need_range_check.len() / 2 {
+            self.bitwise_lookup_chip.request_range(
+                need_range_check[i * 2] * limb_shift,
+                need_range_check[i * 2 + 1] * limb_shift,
+            );
+        }
+
         let read_data = read_records.map(|r| r[0].data);
 
         let record = Rv32VecHeapReadRecord {

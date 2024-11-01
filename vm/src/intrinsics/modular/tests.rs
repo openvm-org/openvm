@@ -51,11 +51,17 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
@@ -139,7 +145,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -170,11 +176,16 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     // doing 1xNUM_LIMBS reads and writes
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
@@ -259,7 +270,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }

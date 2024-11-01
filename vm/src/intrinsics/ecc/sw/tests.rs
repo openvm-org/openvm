@@ -1,6 +1,6 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
-use ax_circuit_primitives::bigint::utils::secp256k1_coord_prime;
+use ax_circuit_primitives::{bigint::utils::secp256k1_coord_prime, bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip}};
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use axvm_instructions::UsizeOpcode;
 use num_bigint_dig::BigUint;
@@ -10,7 +10,7 @@ use p3_field::AbstractField;
 
 use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
-    arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper},
+    arch::{instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
@@ -40,6 +40,10 @@ fn test_add_ne() {
         tester.memory_controller().borrow().range_checker.clone(),
         "EcAddNe",
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
