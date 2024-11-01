@@ -5,15 +5,15 @@ impl<C: Config> Builder<C> {
         &mut self,
         alpha: Ext<C::F, C::EF>,
         curr_alpha_pow: Ext<C::F, C::EF>,
-        at_x_array: Array<C, Felt<C::F>>,
-        at_z_array: Array<C, Ext<C::F, C::EF>>,
+        at_x_array: &Array<C, Felt<C::F>>,
+        at_z_array: &Array<C, Ext<C::F, C::EF>>,
     ) -> Ext<C::F, C::EF> {
         let result = self.uninit();
         self.operations.push(crate::ir::DslIr::FriFold(
             alpha,
             curr_alpha_pow,
-            at_x_array,
-            at_z_array,
+            at_x_array.clone(),
+            at_z_array.clone(),
             result,
         ));
         result

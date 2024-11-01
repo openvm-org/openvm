@@ -187,7 +187,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             });*/
 
                             let fri_fold_result =
-                                builder.fri_fold(alpha, cur_alpha_pow, mat_opening, ps_at_z);
+                                builder.fri_fold(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
                             builder.assign(&cur_ro, cur_ro + (fri_fold_result / (z - x)));
 
                             builder.cycle_tracker_end("sp1-fri-fold");
