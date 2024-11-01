@@ -161,7 +161,12 @@ impl AssertLtSubAir {
 }
 
 impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
-    type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     // constrain that x < y
     // warning: send for range check must be included for the constraints to be sound
@@ -187,7 +192,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
 pub struct AssertLtWhenTransitionAir(pub AssertLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
-    type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.

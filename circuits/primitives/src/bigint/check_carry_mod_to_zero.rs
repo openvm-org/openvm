@@ -46,8 +46,14 @@ impl CheckCarryModToZeroSubAir {
 impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
     /// `(expr, cols, is_valid)`
     type AirContext<'a>
-    = (OverflowInt<AB::Expr>, CheckCarryModToZeroCols<AB::Var>, AB::Var) where
-        AB::Var:'a, AB::Expr:'a,
+        = (
+        OverflowInt<AB::Expr>,
+        CheckCarryModToZeroCols<AB::Var>,
+        AB::Var,
+    )
+    where
+        AB::Var: 'a,
+        AB::Expr: 'a,
         AB: 'a;
 
     fn eval<'a>(
