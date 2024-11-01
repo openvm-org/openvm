@@ -151,8 +151,7 @@ mod tests {
         let expected_mul = bn254_fq2_to_biguint_vec(&(x * y));
         let r_mul = chip
             .core
-            .air
-            .expr
+            .expr()
             .execute_with_output(inputs.to_vec(), vec![true]);
         assert_eq!(r_mul.len(), 2);
         assert_eq!(r_mul[0], expected_mul[0]);
@@ -161,8 +160,7 @@ mod tests {
         let expected_div = bn254_fq2_to_biguint_vec(&(x * y.invert().unwrap()));
         let r_div = chip
             .core
-            .air
-            .expr
+            .expr()
             .execute_with_output(inputs.to_vec(), vec![false]);
         assert_eq!(r_div.len(), 2);
         assert_eq!(r_div[0], expected_div[0]);

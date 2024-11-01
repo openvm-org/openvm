@@ -133,8 +133,7 @@ mod tests {
         let expected_sum = bn254_fq2_to_biguint_vec(&(x + y));
         let r_sum = chip
             .core
-            .air
-            .expr
+            .expr()
             .execute_with_output(inputs.to_vec(), vec![true]);
         assert_eq!(r_sum.len(), 2);
         assert_eq!(r_sum[0], expected_sum[0]);
@@ -143,8 +142,7 @@ mod tests {
         let expected_sub = bn254_fq2_to_biguint_vec(&(x - y));
         let r_sub = chip
             .core
-            .air
-            .expr
+            .expr()
             .execute_with_output(inputs.to_vec(), vec![false]);
         assert_eq!(r_sub.len(), 2);
         assert_eq!(r_sub[0], expected_sub[0]);

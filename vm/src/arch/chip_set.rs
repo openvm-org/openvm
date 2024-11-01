@@ -934,7 +934,7 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleAndAddStepRv32_48(chip));
                 }
-                ExecutorName::Fp2ModularAddSubRv32_32 => {
+                ExecutorName::Fp2AddSubRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
@@ -947,9 +947,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Fp2ModularAddSubRv32_32(chip));
+                    chips.push(AxVmChip::Fp2AddSubRv32_32(chip));
                 }
-                ExecutorName::Fp2ModularMulDivRv32_32 => {
+                ExecutorName::Fp2MulDivRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
                             execution_bus,
@@ -962,9 +962,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Fp2ModularMulDivRv32_32(chip));
+                    chips.push(AxVmChip::Fp2MulDivRv32_32(chip));
                 }
-                ExecutorName::Fp2ModularAddSubRv32_48 => {
+                ExecutorName::Fp2AddSubRv32_48 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
                             execution_bus,
@@ -977,9 +977,9 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Fp2ModularAddSubRv32_48(chip));
+                    chips.push(AxVmChip::Fp2AddSubRv32_48(chip));
                 }
-                ExecutorName::Fp2ModularMulDivRv32_48 => {
+                ExecutorName::Fp2MulDivRv32_48 => {
                     let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
                             execution_bus,
@@ -992,7 +992,7 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Fp2ModularMulDivRv32_48(chip));
+                    chips.push(AxVmChip::Fp2MulDivRv32_48(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
@@ -1238,25 +1238,25 @@ fn gen_pairing_executor_tuple(
                     (
                         Fp2Opcode::ADD as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularAddSubRv32_32,
+                        ExecutorName::Fp2AddSubRv32_32,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::SUB as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularAddSubRv32_32,
+                        ExecutorName::Fp2AddSubRv32_32,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::MUL as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularMulDivRv32_32,
+                        ExecutorName::Fp2MulDivRv32_32,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::DIV as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularMulDivRv32_32,
+                        ExecutorName::Fp2MulDivRv32_32,
                         curve.prime(),
                     ),
                 ]
@@ -1277,25 +1277,25 @@ fn gen_pairing_executor_tuple(
                     (
                         Fp2Opcode::ADD as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularAddSubRv32_48,
+                        ExecutorName::Fp2AddSubRv32_48,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::SUB as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularAddSubRv32_48,
+                        ExecutorName::Fp2AddSubRv32_48,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::MUL as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularMulDivRv32_48,
+                        ExecutorName::Fp2MulDivRv32_48,
                         curve.prime(),
                     ),
                     (
                         Fp2Opcode::DIV as usize,
                         fp2_class_offset,
-                        ExecutorName::Fp2ModularMulDivRv32_48,
+                        ExecutorName::Fp2MulDivRv32_48,
                         curve.prime(),
                     ),
                 ]
