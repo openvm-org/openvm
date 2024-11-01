@@ -13,7 +13,9 @@ use ax_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{instruction::Instruction, FriFoldOpcode::FRI_FOLD};
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, FriFoldOpcode::FRI_FOLD,
+};
 use itertools::Itertools;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -230,7 +232,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
                 ],
                 ExecutionState::new(pc, start_timestamp),
                 ExecutionState::<AB::Expr>::new(
-                    AB::Expr::one() + pc,
+                    AB::Expr::from_canonical_u32(DEFAULT_PC_STEP) + pc,
                     total_accesses + start_timestamp - AB::F::one(),
                 ),
             )
@@ -343,7 +345,7 @@ pub struct FriFoldChip<F: Field> {
 
 impl<F: PrimeField32> FriFoldChip<F> {
     #[allow(dead_code)]
-    fn new(
+    pub(crate) fn new(
         memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -436,7 +438,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         self.height += length;
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: result_write.timestamp,
         })
     }

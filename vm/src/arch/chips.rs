@@ -33,6 +33,7 @@ use crate::{
         castf::CastFChip,
         field_arithmetic::FieldArithmeticChip,
         field_extension::FieldExtensionChip,
+        fri::FriFoldChip,
         jal::KernelJalChip,
         loadstore::KernelLoadStoreChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
@@ -87,6 +88,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    FriFold(Rc<RefCell<FriFoldChip<F>>>),
     /// Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
@@ -143,6 +145,7 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    FriFold(Rc<RefCell<FriFoldChip<F>>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),

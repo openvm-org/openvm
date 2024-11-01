@@ -177,17 +177,18 @@ pub fn verify_two_adic_pcs<C: Config>(
 
                             builder.cycle_tracker_start("sp1-fri-fold");
 
-                            builder.range(0, ps_at_z.len()).for_each(|t, builder| {
+                            /*builder.range(0, ps_at_z.len()).for_each(|t, builder| {
                                 let p_at_x = builder.get(&mat_opening, t);
                                 let p_at_z = builder.get(&ps_at_z, t);
                                 let quotient = (p_at_z - p_at_x) / (z - x);
 
                                 builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
                                 builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
-                            });
+                            });*/
 
-                            //let fri_fold_result = builder.fri_fold(alpha, cur_alpha_pow, mat_opening, ps_at_z);
-                            //builder.assign(&cur_ro, cur_ro + (fri_fold_result / (z - x)));
+                            let fri_fold_result =
+                                builder.fri_fold(alpha, cur_alpha_pow, mat_opening, ps_at_z);
+                            builder.assign(&cur_ro, cur_ro + (fri_fold_result / (z - x)));
 
                             builder.cycle_tracker_end("sp1-fri-fold");
                         });

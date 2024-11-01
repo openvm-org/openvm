@@ -63,6 +63,7 @@ use crate::{
         castf::{CastFChip, CastFCoreChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        fri::FriFoldChip,
         jal::{JalCoreChip, KernelJalChip},
         loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
@@ -402,6 +403,17 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::Keccak256(chip));
+                }
+                ExecutorName::FriFold => {
+                    let chip = Rc::new(RefCell::new(FriFoldChip::new(
+                        memory_controller.clone(),
+                        execution_bus,
+                        program_bus,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::FriFold(chip));
                 }
                 ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
@@ -1303,6 +1315,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::default_offset(),
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
+        ),
+        ExecutorName::FriFold => (
+            FriFoldOpcode::default_offset(),
+            FriFoldOpcode::COUNT,
+            FriFoldOpcode::default_offset(),
         ),
         ExecutorName::BaseAluRv32 => (
             BaseAluOpcode::default_offset(),
