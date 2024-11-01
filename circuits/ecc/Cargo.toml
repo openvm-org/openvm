@@ -22,7 +22,7 @@ num-traits.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-ax-circuit-primitives = { path = "../primitives" }
+ax-circuit-primitives = { workspace = true }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 lazy_static.workspace = true

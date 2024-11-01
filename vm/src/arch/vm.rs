@@ -13,16 +13,20 @@ use ax_stark_backend::{
 use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
+use thiserror::Error;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::{ExecutionSegment, PersistenceType, VmConfig},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, CHUNK},
+        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
         program::{trace::AxVmCommittedExe, ExecutionError},
     },
 };
+
+/// VM memory state for continuations.
+pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -53,6 +57,8 @@ pub enum ExitCode {
 
 pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub per_segment: Vec<ProofInput<SC>>,
+    /// When VM is running on persistent mode, public values are stored in a special memory space.
+    pub final_memory: Option<VmMemoryState<Val<SC>>>,
 }
 
 impl<F: PrimeField32> VmExecutor<F> {
@@ -64,6 +70,10 @@ impl<F: PrimeField32> VmExecutor<F> {
             config,
             _marker: Default::default(),
         }
+    }
+
+    pub fn continuation_enabled(&self) -> bool {
+        self.config.continuation_enabled()
     }
 
     fn execute_segments(
@@ -93,10 +103,9 @@ impl<F: PrimeField32> VmExecutor<F> {
                 break;
             }
 
-            assert_eq!(
-                self.config.memory_config.persistence_type,
-                PersistenceType::Persistent,
-                "cannot segment in volatile memory mode"
+            assert!(
+                self.continuation_enabled(),
+                "multiple segments require to enable continuations"
             );
 
             assert_eq!(
@@ -133,9 +142,10 @@ impl<F: PrimeField32> VmExecutor<F> {
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<(), ExecutionError> {
-        let results = self.execute_segments(exe, input)?;
-        let last = results.last().unwrap();
+    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
+        let mut results = self.execute_segments(exe, input)?;
+        let last = results.last_mut().unwrap();
+        let final_memory = mem::take(&mut last.final_memory);
         let end_state =
             last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
         // TODO[jpw]: add these as execution errors
@@ -144,7 +154,7 @@ impl<F: PrimeField32> VmExecutor<F> {
             end_state.exit_code == ExitCode::Success as u32,
             "program did not exit successfully"
         );
-        Ok(())
+        Ok(final_memory)
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
@@ -155,13 +165,15 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(exe, input)?;
+        let mut segments = self.execute_segments(exe, input)?;
+        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(None))
                 .collect(),
+            final_memory,
         })
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
@@ -172,13 +184,15 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let segments = self.execute_segments(commited_exe.exe.clone(), input)?;
+        let mut segments = self.execute_segments(commited_exe.exe.clone(), input)?;
+        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
                 .map(|seg| seg.generate_proof_input(Some(commited_exe.committed_program.clone())))
                 .collect(),
+            final_memory,
         })
     }
 }
@@ -251,6 +265,30 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum VmVerificationError {
+    #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
+    InitialPcMismatch { initial: u32, prev_final: u32 },
+
+    #[error("initial memory root mismatch")]
+    InitialMemoryRootMismatch,
+
+    #[error("is terminate mismatch (expected: {expected}, actual: {actual})")]
+    IsTerminateMismatch { expected: bool, actual: bool },
+
+    #[error("exit code mismatch")]
+    ExitCodeMismatch { expected: u32, actual: u32 },
+
+    #[error("unexpected public values (expected: {expected}, actual: {actual})")]
+    UnexpectedPvs { expected: usize, actual: usize },
+
+    #[error("number of public values mismatch (expected: {expected}, actual: {actual})")]
+    NumPublicValuesMismatch { expected: usize, actual: usize },
+
+    #[error("stark verification error: {0}")]
+    StarkError(#[from] VerificationError),
+}
+
 pub struct VirtualMachine<SC, E> {
     pub engine: E,
     pub config: VmConfig,
@@ -288,7 +326,7 @@ where
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let executor = VmExecutor::new(self.config.clone());
         executor.execute(exe, input)
     }
@@ -369,11 +407,15 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<(), VmVerificationError>
+    where
+        Val<SC>: PrimeField32,
+    {
         match self.config.memory_config.persistence_type {
             PersistenceType::Volatile => {
                 assert_eq!(proofs.len(), 1);
                 self.verify_single(vk, &proofs.into_iter().next().unwrap())
+                    .map_err(VmVerificationError::StarkError)
             }
             PersistenceType::Persistent => self.verify_segments(vk, proofs),
         }
@@ -384,7 +426,10 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<SC>,
         proofs: Vec<Proof<SC>>,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<(), VmVerificationError>
+    where
+        Val<SC>: PrimeField32,
+    {
         let mut prev_final_memory_root = None;
         let mut prev_final_pc = None;
 
@@ -392,7 +437,7 @@ where
             let res = self.engine.verify(vk, proof);
             match res {
                 Ok(_) => (),
-                Err(e) => return Err(e),
+                Err(e) => return Err(VmVerificationError::StarkError(e)),
             };
 
             // Check public values.
@@ -405,38 +450,57 @@ where
 
                     if i != 0 {
                         // Check initial pc matches the previous final pc.
-                        assert_eq!(pvs.initial_pc, prev_final_pc.unwrap());
+                        if pvs.initial_pc != prev_final_pc.unwrap() {
+                            return Err(VmVerificationError::InitialPcMismatch {
+                                initial: pvs.initial_pc.as_canonical_u32(),
+                                prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                            });
+                        }
                     } else {
                         // TODO: Fetch initial pc from program
                     }
                     prev_final_pc = Some(pvs.final_pc);
 
                     let expected_is_terminate = i == proofs.len() - 1;
-                    assert_eq!(
-                        pvs.is_terminate,
-                        Val::<SC>::from_bool(expected_is_terminate)
-                    );
+                    if pvs.is_terminate != Val::<SC>::from_bool(expected_is_terminate) {
+                        return Err(VmVerificationError::IsTerminateMismatch {
+                            expected: expected_is_terminate,
+                            actual: pvs.is_terminate.as_canonical_u32() != 0,
+                        });
+                    }
 
                     let expected_exit_code = if expected_is_terminate {
                         ExitCode::Success as u32
                     } else {
                         DEFAULT_SUSPEND_EXIT_CODE
                     };
-                    assert_eq!(
-                        pvs.exit_code,
-                        Val::<SC>::from_canonical_u32(expected_exit_code)
-                    );
+                    if pvs.exit_code != Val::<SC>::from_canonical_u32(expected_exit_code) {
+                        return Err(VmVerificationError::ExitCodeMismatch {
+                            expected: expected_exit_code,
+                            actual: pvs.exit_code.as_canonical_u32(),
+                        });
+                    }
                 } else if air_proof_data.air_id == MERKLE_AIR_ID {
                     let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
                     // Check that initial root matches the previous final root.
-                    if i != 0 {
-                        assert_eq!(pvs.initial_root, prev_final_memory_root.unwrap());
+                    if i != 0 && pvs.initial_root != prev_final_memory_root.unwrap() {
+                        return Err(VmVerificationError::InitialMemoryRootMismatch);
                     }
                     prev_final_memory_root = Some(pvs.final_root);
                 } else {
-                    assert_eq!(pvs.len(), 0);
-                    assert_eq!(air_vk.params.num_public_values, 0);
+                    if !pvs.is_empty() {
+                        return Err(VmVerificationError::UnexpectedPvs {
+                            expected: 0,
+                            actual: pvs.len(),
+                        });
+                    }
+                    if air_vk.params.num_public_values != 0 {
+                        return Err(VmVerificationError::NumPublicValuesMismatch {
+                            expected: 0,
+                            actual: air_vk.params.num_public_values,
+                        });
+                    }
                 }
             }
         }

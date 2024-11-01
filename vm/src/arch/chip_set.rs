@@ -14,7 +14,6 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
-use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -31,14 +30,17 @@ use parking_lot::Mutex;
 use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
-use super::{EcCurve, Streams};
+use super::{vm_poseidon2_config, EcCurve, Streams};
 use crate::{
     arch::{
         AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
     },
     intrinsics::{
         ecc::{
-            pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleStepChip},
+            pairing::{
+                EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleAndAddStepChip,
+                MillerDoubleStepChip,
+            },
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -267,10 +269,7 @@ impl VmConfig {
         // PublicValuesChip is required when num_public_values > 0.
         let public_values_chip = if self.num_public_values > 0 {
             // Raw public values are not supported when continuation is enabled.
-            assert_ne!(
-                self.memory_config.persistence_type,
-                PersistenceType::Persistent
-            );
+            assert!(!self.continuation_enabled());
             let (range, offset) = default_executor_range(ExecutorName::PublicValues);
             let chip = Rc::new(RefCell::new(PublicValuesChip::new(
                 NativeAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
@@ -291,8 +290,7 @@ impl VmConfig {
             required_executors.remove(&ExecutorName::Poseidon2);
         }
         // We may not use this chip if the memory kind is volatile and there is no executor for Poseidon2.
-        let needs_poseidon_chip = has_poseidon_chip
-            || (self.memory_config.persistence_type == PersistenceType::Persistent);
+        let needs_poseidon_chip = has_poseidon_chip || self.continuation_enabled();
 
         for &executor in required_executors.iter() {
             let (range, offset) = default_executor_range(executor);
@@ -727,7 +725,7 @@ impl VmConfig {
         if needs_poseidon_chip {
             let (range, offset) = default_executor_range(ExecutorName::Poseidon2);
             let poseidon_chip = Rc::new(RefCell::new(Poseidon2Chip::from_poseidon2_config(
-                Poseidon2Config::<16, F>::new_p3_baby_bear_16(),
+                vm_poseidon2_config(),
                 self.poseidon2_max_constraint_degree,
                 execution_bus,
                 program_bus,
@@ -891,6 +889,34 @@ impl VmConfig {
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleStepRv32_48(chip));
+                }
+                ExecutorName::MillerDoubleAndAddStepRv32_32 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleAndAddStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 4, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleAndAddStepRv32_32(chip));
+                }
+                ExecutorName::MillerDoubleAndAddStepRv32_48 => {
+                    let chip = Rc::new(RefCell::new(MillerDoubleAndAddStepChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::MillerDoubleAndAddStepRv32_48(chip));
                 }
                 _ => unreachable!("Unsupported executor"),
             }
@@ -1115,19 +1141,35 @@ fn gen_pairing_executor_tuple(
             let class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
-                vec![(
-                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                    class_offset,
-                    ExecutorName::MillerDoubleStepRv32_32,
-                    curve.prime(),
-                )]
+                vec![
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleStepRv32_32,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleAndAddStepRv32_32,
+                        curve.prime(),
+                    ),
+                ]
             } else if bytes <= 48 {
-                vec![(
-                    PairingOpcode::MILLER_DOUBLE_STEP as usize,
-                    class_offset,
-                    ExecutorName::MillerDoubleStepRv32_48,
-                    curve.prime(),
-                )]
+                vec![
+                    (
+                        PairingOpcode::MILLER_DOUBLE_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleStepRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+                        class_offset,
+                        ExecutorName::MillerDoubleAndAddStepRv32_48,
+                        curve.prime(),
+                    ),
+                ]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }

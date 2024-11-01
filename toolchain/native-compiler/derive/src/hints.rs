@@ -4,7 +4,6 @@ use syn::ItemStruct;
 
 pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStream, TokenStream> {
     let name = &ast.ident;
-
     let name_prefix = name.to_string();
     let name_var = format!("{}Var", name_prefix);
     let name_var_ident = Ident::new(&name_var, Span::call_site());
@@ -28,18 +27,18 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         })
         .collect();
 
-    let existing_generics = ast.generics.clone();
-    if !existing_generics.params.is_empty() {
-        return Err(quote! {
-            compile_error!("Hintable macro only supports structs with no generics for now");
-        });
-    }
+    let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
+
+    let impl_generics = {
+        let params = &ast.generics.params;
+        quote! { < C: axvm_native_compiler::prelude::Config, #params >}
+    };
     let input_struct_tokens: Vec<_> = field_names
         .iter()
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                pub #name: <#field_type as Hintable<C> >::HintVariable,
+                pub #name: <#field_type as axvm_recursion::hints::Hintable<C> >::HintVariable,
             }
         })
         .collect();
@@ -49,7 +48,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                let #name = <#field_type as Hintable<C>>::read(builder);
+                let #name = <#field_type as axvm_recursion::hints::Hintable<C>>::read(builder);
             }
         })
         .collect();
@@ -58,21 +57,21 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .iter()
         .map(|name| {
             quote! {
-                stream.extend(Hintable::<C>::write(&self.#name));
+                stream.extend(axvm_recursion::hints::Hintable::<C>::write(&self.#name));
             }
         })
         .collect();
 
     Ok(quote! {
-        #[derive(DslVariable, Debug, Clone)]
-        pub struct #name_var_ident <C: Config>  {
+        #[derive(axvm_native_compiler_derive::DslVariable, Debug, Clone)]
+        pub struct #name_var_ident #impl_generics  {
             #(#input_struct_tokens)*
         }
 
-        impl<C: Config> Hintable<C> for #name {
+        impl #impl_generics axvm_recursion::hints::Hintable<C> for #name #ty_generics #where_clause {
             type HintVariable = #name_var_ident<C>;
 
-            fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+            fn read(builder: &mut axvm_native_compiler::prelude::Builder<C>) -> Self::HintVariable {
                 #(#read_tokens)*
 
                 #name_var_ident {
@@ -80,7 +79,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
                 }
             }
 
-            fn write(&self) -> Vec<Vec<<C as Config>::N>> {
+            fn write(&self) -> Vec<Vec<<C as axvm_native_compiler::prelude::Config>::N>> {
                 let mut stream = Vec::new();
 
                 #(#write_tokens)*
