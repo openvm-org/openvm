@@ -73,12 +73,17 @@ pub fn fp2_addsub_expr(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use ax_circuit_primitives::bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    };
     use ax_ecc_primitives::{
         field_expression::ExprBuilderConfig,
         test_utils::{bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
     };
     use axvm_ecc_constants::BN254;
-    use axvm_instructions::UsizeOpcode;
+    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
@@ -87,7 +92,10 @@ mod tests {
 
     use super::fp2_addsub_expr;
     use crate::{
-        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, VmChipWrapper},
+        arch::{
+            instructions::Fp2Opcode, testing::VmChipTestBuilder, VmChipWrapper,
+            BITWISE_OP_LOOKUP_BUS,
+        },
         intrinsics::field_expression::FieldExpressionCoreChip,
         rv32im::adapters::Rv32VecHeapAdapterChip,
         utils::{biguint_to_limbs, rv32_write_heap_default},
@@ -118,10 +126,15 @@ mod tests {
             tester.memory_controller().borrow().range_checker.clone(),
             "Fp2AddSub",
         );
+        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         );
         let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
 
@@ -176,7 +189,7 @@ mod tests {
         );
         tester.execute(&mut chip, instruction1);
         tester.execute(&mut chip, instruction2);
-        let tester = tester.build().load(chip).finalize();
+        let tester = tester.build().load(chip).load(bitwise_chip).finalize();
         tester.simple_test().expect("Verification failed");
     }
 }
