@@ -11,44 +11,11 @@ use revm::{
     Evm,
 };
 
-/// Load number parameter and set to storage with slot 0
-const INIT_CODE: &[u8] = &[
-    opcode::PUSH1,
-    0x01,
-    opcode::PUSH1,
-    0x17,
-    opcode::PUSH1,
-    0x1f,
-    opcode::CODECOPY,
-    opcode::PUSH0,
-    opcode::MLOAD,
-    opcode::PUSH0,
-    opcode::SSTORE,
-];
-
-/// Copy runtime bytecode to memory and return
-const RET: &[u8] = &[
-    opcode::PUSH1,
-    0x02,
-    opcode::PUSH1,
-    0x15,
-    opcode::PUSH0,
-    opcode::CODECOPY,
-    opcode::PUSH1,
-    0x02,
-    opcode::PUSH0,
-    opcode::RETURN,
-];
-
-/// Load storage from slot zero to memory
-const RUNTIME_BYTECODE: &[u8] = &[opcode::PUSH0, opcode::SLOAD];
-
 axvm::entry!(main);
 
 fn main() {
-    let param = core::hint::black_box(0x42);
-    let bytecode: Bytes =
-        core::hint::black_box([INIT_CODE, RET, RUNTIME_BYTECODE, &[param]].concat().into());
+    let bytecode: Bytes = axvm::io::read_vec().into();
+
     let mut evm = Evm::builder()
         .with_db(InMemoryDB::default())
         .modify_tx_env(|tx| {
@@ -93,5 +60,5 @@ fn main() {
     };
 
     tracing::info!("storage U256(0) at {address}:  {storage0:#?}");
-    assert_eq!(storage0.present_value(), U256::from(param), "{result:#?}");
+    assert_eq!(storage0.present_value(), U256::from(0x42), "{result:#?}");
 }

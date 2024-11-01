@@ -18,6 +18,7 @@ eyre.workspace = true
 tempfile.workspace = true
 metrics.workspace = true
 tracing.workspace = true
+revm-interpreter = { version = "13.0.0", optional = true }
 
 [dev-dependencies]
 
@@ -30,3 +31,4 @@ parallel = ["axvm-recursion/parallel"]
 mimalloc = ["axvm-circuit/mimalloc"]
 jemalloc = ["axvm-circuit/jemalloc"]
 jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
+revm = ["dep:revm-interpreter"]
