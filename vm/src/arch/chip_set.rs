@@ -409,6 +409,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         execution_bus,
                         program_bus,
+                        offset,
                     )));
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());

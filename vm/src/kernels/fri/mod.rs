@@ -84,6 +84,7 @@ pub struct FriFoldCols<T> {
 pub struct FriFoldAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+    offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for FriFoldAir {
@@ -219,7 +220,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
         self.execution_bridge
             .execute(
-                AB::F::from_canonical_usize(FRI_FOLD as usize),
+                AB::F::from_canonical_usize((FRI_FOLD as usize) + self.offset),
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
@@ -345,10 +346,12 @@ impl<F: PrimeField32> FriFoldChip<F> {
         memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
+        offset: usize,
     ) -> Self {
         let air = FriFoldAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge: memory.borrow().memory_bridge(),
+            offset,
         };
         Self {
             memory,
@@ -446,7 +449,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        assert_eq!(opcode, FRI_FOLD as usize);
+        assert_eq!(opcode, (FRI_FOLD as usize) + self.air.offset);
         String::from("FRI_FOLD")
     }
 }

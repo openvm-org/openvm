@@ -38,11 +38,14 @@ fn fri_fold_air_test() {
     let address_space_range = || 1usize..=2;
     let length_range = || 1..=49;
 
+    let offset = 37;
+
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FriFoldChip::new(
         tester.memory_controller(),
         tester.execution_bus(),
         tester.program_bus(),
+        offset,
     );
 
     let mut rng = create_seeded_rng();
@@ -107,7 +110,7 @@ fn fri_fold_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                FRI_FOLD as usize,
+                (FRI_FOLD as usize) + offset,
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
