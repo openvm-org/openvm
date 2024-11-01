@@ -17,7 +17,7 @@ use crate::{
 };
 
 // Input: two EcPoint<Fp2>: 4 field elements each
-// Output: (EcPoint<Fp2>, Fp2, Fp2, Fp2, Fp2) -> 12 field elements
+// Output: (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct MillerDoubleAndAddStepChip<
     F: PrimeField32,
