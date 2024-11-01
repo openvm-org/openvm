@@ -12,6 +12,7 @@ use p3_field::{AbstractField, PrimeField32};
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};
 
+#[derive(Clone)]
 pub struct Poseidon2Config<const WIDTH: usize, F: Clone> {
     pub external_constants: Vec<[F; WIDTH]>,
     pub internal_constants: Vec<F>,
@@ -20,6 +21,14 @@ pub struct Poseidon2Config<const WIDTH: usize, F: Clone> {
     pub reduction_factor: F,
 }
 
+impl<const WIDTH: usize, F: Clone> Poseidon2Config<WIDTH, F> {
+    pub fn rounds_f(&self) -> usize {
+        self.external_constants.len()
+    }
+    pub fn rounds_p(&self) -> usize {
+        self.internal_constants.len()
+    }
+}
 /// MDSMat4 from Plonky3
 /// [ 2 3 1 1 ]
 /// [ 1 2 3 1 ]

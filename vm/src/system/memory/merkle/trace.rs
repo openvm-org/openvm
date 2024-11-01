@@ -3,14 +3,14 @@ use std::{borrow::BorrowMut, cmp::Reverse, collections::HashSet, sync::Arc};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::system::memory::{
-    manager::dimensions::MemoryDimensions,
-    merkle::{MemoryMerkleChip, MemoryMerkleCols},
-    tree::{
-        HasherChip,
-        MemoryNode::{self, NonLeaf},
+use crate::{
+    arch::hasher::HasherChip,
+    system::memory::{
+        manager::dimensions::MemoryDimensions,
+        merkle::{MemoryMerkleChip, MemoryMerkleCols},
+        tree::MemoryNode::{self, NonLeaf},
+        Equipartition,
     },
-    Equipartition,
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {

@@ -16,7 +16,10 @@ use crate::{
     arch::ExecutionState,
     intrinsics::{
         ecc::{
-            pairing::{EcLineMul013By013Chip, EcLineMul023By023Chip, MillerDoubleStepChip},
+            pairing::{
+                EcLineMul013By013Chip, EcLineMul023By023Chip, MillerDoubleAndAddStepChip,
+                MillerDoubleStepChip,
+            },
             sw::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
@@ -118,6 +121,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     // 32-bytes or 48-bytes prime.
     MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
+    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
+    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
@@ -171,6 +176,8 @@ pub enum AxVmChip<F: PrimeField32> {
     // 32-bytes or 48-bytes prime.
     MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
+    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
+    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
