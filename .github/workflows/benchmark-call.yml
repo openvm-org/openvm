@@ -98,6 +98,7 @@ jobs:
         working-directory: benchmarks
         run: |
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},revm" >> $GITHUB_ENV
+          CMD_ARGS="--features ${FEATURE_FLAGS}"
           echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
