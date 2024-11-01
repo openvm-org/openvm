@@ -1,6 +1,6 @@
 use axvm_circuit::system::program::util::execute_program;
 use axvm_native_compiler::{
-    asm::AsmBuilder,
+    asm::{AsmBuilder, AsmConfig},
     ir::{Array, Config, Ext, Felt, RVar, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
@@ -214,6 +214,64 @@ fn test_array_eq_neg() {
     builder.set(&arr2, 0, F::one());
     builder.set(&arr2, 1, F::one());
     builder.assert_var_array_eq(&arr1, &arr2);
+
+    builder.halt();
+
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
+}
+
+#[test]
+fn test_slice_variable_impl_happy_path() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    type C = AsmConfig<F, EF>;
+
+    const N: usize = 3;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let slice1: [Felt<F>; N] = builder.uninit();
+    for (i, f) in slice1.iter().enumerate() {
+        builder.assign(f, F::from_canonical_u32(i as u32));
+    }
+    let slice2: [Felt<F>; N] = builder.uninit();
+    slice2.assign(slice1, &mut builder);
+    builder.assert_eq::<[_; N]>(slice1, slice2);
+    for (i, f) in slice2.iter().enumerate() {
+        builder.assign(f, F::from_canonical_u32(i as u32));
+    }
+    let ptr = builder.alloc(1, <[Felt<F>; N] as MemVariable<C>>::size_of());
+    let mem_index = MemIndex {
+        index: RVar::zero(),
+        offset: 0,
+        size: N,
+    };
+    slice1.store(ptr, mem_index, &mut builder);
+    let slice3: [Felt<F>; N] = builder.uninit();
+    slice3.load(ptr, mem_index, &mut builder);
+    builder.assert_eq::<[_; N]>(slice1, slice3);
+
+    builder.halt();
+
+    let program = builder.compile_isa();
+    execute_program(program, vec![]);
+}
+
+#[test]
+#[should_panic]
+fn test_slice_assert_eq_neg() {
+    type F = BabyBear;
+    type EF = BinomialExtensionField<BabyBear, 4>;
+    const N: usize = 3;
+
+    let mut builder = AsmBuilder::<F, EF>::default();
+    let slice1: [Felt<F>; N] = builder.uninit();
+    for (i, f) in slice1.iter().enumerate() {
+        builder.assign(f, F::from_canonical_u32(i as u32));
+    }
+    let slice2: [Felt<F>; N] = [builder.eval(F::zero()); N];
+    // Should panic because slice1 != slice2
+    builder.assert_eq::<[_; N]>(slice1, slice2);
 
     builder.halt();
 

@@ -12,14 +12,14 @@ p3-field = { workspace = true }
 p3-keccak-air = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
+p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 
 ax-poseidon2-air = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
-ax-ecc-execution = { workspace = true }
-ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
+ax-ecc-primitives = { workspace = true }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
@@ -45,7 +45,7 @@ once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
-halo2curves-axiom = { workspace = true }
+thiserror.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
@@ -65,6 +65,8 @@ test-log.workspace = true
 lazy_static.workspace = true
 axvm-ecc-constants = { workspace = true }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
+ax-ecc-execution = { workspace = true }
 halo2curves-axiom = { workspace = true }
 
 [features]

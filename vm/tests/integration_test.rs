@@ -11,11 +11,14 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        ExecutorName, ExitCode, MemoryConfig, PersistenceType, SingleSegmentVmExecutor,
-        VirtualMachine, VmConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, ExitCode, MemoryConfig,
+        PersistenceType, SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak::hasher::utils::keccak256,
-    system::{memory::CHUNK, program::trace::AxVmCommittedExe},
+    system::{
+        memory::{tree::public_values::compute_user_public_values_proof, CHUNK},
+        program::trace::AxVmCommittedExe,
+    },
     utils::{air_test, air_test_with_min_segments},
 };
 use axvm_instructions::{
@@ -36,7 +39,7 @@ use axvm_instructions::{
     UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use test_log::test;
 
@@ -270,7 +273,7 @@ fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -390,7 +393,6 @@ fn test_vm_continuations() {
     .add_executor(ExecutorName::BranchEqual)
     .add_executor(ExecutorName::Jal);
 
-    /*
     let expected_output = {
         let mut a = 0;
         let mut b = 1;
@@ -400,9 +402,19 @@ fn test_vm_continuations() {
         }
         BabyBear::from_canonical_u32(a)
     };
-    */
 
-    air_test_with_min_segments(config, program, vec![], 3);
+    let memory_dimensions = config.memory_config.memory_dimensions();
+    let final_state = air_test_with_min_segments(config, program, vec![], 3).unwrap();
+    let hasher = vm_poseidon2_hasher();
+    let num_public_values = 8;
+    let pv_proof = compute_user_public_values_proof(
+        memory_dimensions,
+        num_public_values,
+        &hasher,
+        &final_state,
+    );
+    assert_eq!(pv_proof.public_values.len(), num_public_values);
+    assert_eq!(pv_proof.public_values[0], expected_output);
 }
 
 #[test]
@@ -592,7 +604,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     let program = Program::from_instructions(&instructions);
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig::new(1, 16, 10, 6, PersistenceType::Persistent),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, PersistenceType::Persistent),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
