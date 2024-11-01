@@ -1,5 +1,6 @@
 mod alu;
 mod branch;
+mod eq_mod;
 mod heap;
 mod heap_branch;
 mod hintstore;
@@ -14,6 +15,7 @@ use std::ops::Mul;
 pub use alu::*;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
+pub use eq_mod::*;
 pub use heap::*;
 pub use heap_branch::*;
 pub use hintstore::*;

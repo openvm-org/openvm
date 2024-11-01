@@ -1,5 +1,6 @@
 use std::array;
 
+use ax_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
@@ -124,6 +125,16 @@ pub fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     rng: &mut StdRng,
 ) -> [u32; NUM_LIMBS] {
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+}
+
+pub fn generate_field_element<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    modulus: &BigUint,
+    rng: &mut StdRng,
+) -> [u32; NUM_LIMBS] {
+    let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(rng);
+    let bigint = BigUint::new(x.to_vec()) % modulus;
+    let vec = big_uint_to_limbs(&bigint, LIMB_BITS);
+    array::from_fn(|i| if i < vec.len() { vec[i] as u32 } else { 0 })
 }
 
 pub fn generate_rv32_is_type_immediate(

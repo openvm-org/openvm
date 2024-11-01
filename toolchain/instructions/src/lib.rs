@@ -372,15 +372,6 @@ pub enum EccOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x510]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Rv32ModularEqualOpcode {
-    IS_EQ,
-}
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
 #[opcode_offset = 0x700]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
