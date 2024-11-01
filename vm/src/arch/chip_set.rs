@@ -751,7 +751,7 @@ impl VmConfig {
                 limb_bits: 8,
             };
             let config48 = ExprBuilderConfig {
-                modulus: modulus.clone(),
+                modulus,
                 num_limbs: 48,
                 limb_bits: 8,
             };
