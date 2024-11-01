@@ -19,7 +19,11 @@ serde = { version = "1.0", default-features = false, features = [
     "derive",
 ] }
 tiny-keccak.workspace = true
-bincode = { version = "2.0.0-rc", default-features = false, features = ["derive", "alloc"] }
+bincode = { version = "2.0.0-rc", default-features = false, features = [
+    "derive",
+    "alloc",
+    "serde",
+] }
 
 [dev-dependencies]
 chrono = { version = "0.4", default-features = false, features = ["serde"] }

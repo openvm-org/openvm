@@ -3,25 +3,36 @@
 use alloc::vec::Vec;
 use core::alloc::Layout;
 
+use serde::de::DeserializeOwned;
+
+#[cfg(target_os = "zkvm")]
 use crate::{hint_store_u32, intrinsics::hint_input};
 
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
-    hint_input();
-    read_vec_by_len(read_u32() as usize)
+    #[cfg(not(target_os = "zkvm"))]
+    {
+        todo!()
+    }
+    #[cfg(target_os = "zkvm")]
+    {
+        hint_input();
+        read_vec_by_len(read_u32() as usize)
+    }
 }
 
 /// Read the next vec and deserialize it into a type `T`.
-pub fn read<T: bincode::Decode>() -> T {
+pub fn read<T: DeserializeOwned>() -> T {
     let serialized_data = read_vec();
-    bincode::decode_from_slice(&serialized_data[..], bincode::config::standard())
-        .unwrap()
+    bincode::serde::decode_from_slice(&serialized_data[..], bincode::config::standard())
+        .expect("Deserialize from bytes failed")
         .0
 }
 
 /// Read the next 4 bytes from the hint stream into a register.
 /// Because [hint_store_u32] stores a word to memory, this function first reads to memory and then
 /// loads from memory to register.
+#[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[allow(asm_sub_register)]
 pub fn read_u32() -> u32 {
@@ -35,6 +46,7 @@ pub fn read_u32() -> u32 {
     result
 }
 
+#[cfg(target_os = "zkvm")]
 /// Read the next `len` bytes from the hint stream into a vector.
 fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = (len + 3) / 4;
