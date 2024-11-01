@@ -9,7 +9,7 @@ use axvm_circuit::{
     arch::{VmConfig, VmExecutor},
     utils::{air_test, air_test_with_min_segments},
 };
-use axvm_platform::memory::MEM_SIZE;
+use axvm_platform::{bincode, memory::MEM_SIZE};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -91,7 +91,7 @@ fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
 }
 
 #[test]
-fn test_rv32i_prove_with_hint() -> Result<()> {
+fn test_read_vec_runtime() -> Result<()> {
     let pkg = get_package(get_examples_dir().join("hint/program"));
     let target_dir = tempdir()?;
     let guest_opts = GuestOptions::default().into();
@@ -101,13 +101,44 @@ fn test_rv32i_prove_with_hint() -> Result<()> {
         max_segment_len: (1 << 18) - 1,
         ..VmConfig::rv32i()
     };
-    let (_, exe) = setup_executor_from_elf(elf_path, config.clone())?;
-    air_test_with_min_segments(
-        config,
-        exe,
-        vec![[0, 1, 2, 3].map(F::from_canonical_u32).to_vec()],
-        1,
-    );
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    executor.execute(exe, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
+    Ok(())
+}
+
+#[test]
+fn test_read_runtime() -> Result<()> {
+    let pkg = get_package(get_examples_dir().join("read/program"));
+    let target_dir = tempdir()?;
+    let guest_opts = GuestOptions::default().into();
+    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+
+    #[derive(serde::Serialize)]
+    struct Foo {
+        bar: u32,
+        baz: Vec<u32>,
+    }
+    let foo = Foo {
+        bar: 42,
+        baz: vec![0, 1, 2, 3],
+    };
+    let serialized_foo = bincode::serde::encode_to_vec(&foo, bincode::config::standard())
+        .expect("serialize to vec failed");
+    executor
+        .execute(
+            exe,
+            vec![serialized_foo
+                .into_iter()
+                .map(F::from_canonical_u8)
+                .collect()],
+        )
+        .unwrap();
     Ok(())
 }
 

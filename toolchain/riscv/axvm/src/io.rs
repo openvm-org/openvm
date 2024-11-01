@@ -1,6 +1,7 @@
 //! User IO functions
 
 use alloc::vec::Vec;
+#[cfg(target_os = "zkvm")]
 use core::alloc::Layout;
 
 use axvm_platform::bincode;

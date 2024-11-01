@@ -22,6 +22,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-build.workspace = true
 ax-stark-sdk.workspace = true
 tempfile.workspace = true
+serde = { workspace = true, features = ["alloc", "derive"] }
 
 [features]
 parallel = ["axvm-circuit/parallel"]

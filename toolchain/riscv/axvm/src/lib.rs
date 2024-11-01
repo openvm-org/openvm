@@ -4,14 +4,12 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![feature(asm_const)]
 
 extern crate alloc;
 
 pub mod intrinsics;
 pub mod io;
 pub mod process;
-pub mod serde;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;

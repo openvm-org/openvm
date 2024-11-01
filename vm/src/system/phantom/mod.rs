@@ -139,7 +139,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             }
             PhantomInstruction::HintInput | PhantomInstruction::HintInputRv32 => {
                 let mut streams = self.streams.get().unwrap().lock();
-                let hint = match streams.input_stream.pop_front() {
+                let mut hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
                         return Err(ExecutionError::EndOfInputStream(from_state.pc));
@@ -153,12 +153,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                             .iter()
                             .map(|b| F::from_canonical_u8(*b)),
                     );
+                    // Extend by 0 for 4 byte alignment
+                    let capacity = hint.len().div_ceil(4) * 4;
+                    hint.resize(capacity, F::zero());
+                    streams.hint_stream.extend(hint);
                 } else {
                     streams
                         .hint_stream
                         .push_back(F::from_canonical_usize(hint.len()));
+                    streams.hint_stream.extend(hint);
                 }
-                streams.hint_stream.extend(hint);
                 drop(streams);
             }
             PhantomInstruction::HintBits => {
