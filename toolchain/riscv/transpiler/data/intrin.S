@@ -30,43 +30,43 @@
 .endm
 
 .macro sub256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 1, \rd, \rs1, \rs2
 .endm
 
 .macro xor256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 2, \rd, \rs1, \rs2
 .endm
 
 .macro or256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 3, \rd, \rs1, \rs2
 .endm
 
 .macro and256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 4, \rd, \rs1, \rs2
 .endm
 
 .macro sll256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 5, \rd, \rs1, \rs2
 .endm
 
 .macro srl256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 6, \rd, \rs1, \rs2
 .endm
 
 .macro sra256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 7, \rd, \rs1, \rs2
 .endm
 
 .macro slt256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 8, \rd, \rs1, \rs2
 .endm
 
 .macro sltu256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 9, \rd, \rs1, \rs2
 .endm
 
 .macro mul256 rd, rs1, rs2
-	.insn r CUSTOM_0, 5, 0, \rd, \rs1, \rs2
+	.insn r CUSTOM_0, 5, 10, \rd, \rs1, \rs2
 .endm
 
 
@@ -90,5 +90,5 @@ _start:
 	sra256 a4, a0, a1
 	slt256 a5, a0, a1
 	sltu256 a6, a0, a1
-	mul256 a2, a0, a1
+	#mul256 a2, a0, a1
     .insn i 0x0b, 0, x0, x0, 0
