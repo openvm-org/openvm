@@ -130,6 +130,7 @@ impl Fp12 {
         x4: &mut Fp2,
         xi: [isize; 2],
     ) -> Fp12 {
+        // The following uses the formula from Fp12 mul with co5 (x5) = 0
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs4co4 + cs5co3)
         // c1 = cs0co1 + cs1co0 + cs3co3 + xi(cs2co2 + cs5co4)
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + cs4co3
@@ -226,6 +227,7 @@ impl Fp12 {
         x5: &mut Fp2,
         xi: [isize; 2],
     ) -> Fp12 {
+        // The following uses the formula from Fp12 mul with co3 (x1) = 0 (see coefficient ordering note below)
         // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
         // c1 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
         // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
@@ -233,6 +235,20 @@ impl Fp12 {
         // c4 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
         // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
         //   where cs*: self.c*
+
+        // we update the order of the coefficients to match the Fp12 coefficient ordering:
+        // Fp12 {
+        //   c0: Fp6 {
+        //     c0: x0,
+        //     c1: x2,
+        //     c2: x4,
+        //   },
+        //   c1: Fp6 {
+        //     c0: x1,
+        //     c1: x3,
+        //     c2: x5,
+        //   },
+        // }
         let o0 = x0;
         let o1 = x2;
         let o2 = x4;
