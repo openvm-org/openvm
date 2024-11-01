@@ -18,6 +18,7 @@ use crate::{
     rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
 };
 
+// TODO[yj]: Update to use 10 FE for 2nd input once the adapter change is merged for unbalanced inputs
 // Input: 2 Fp12: 2 x 12 field elements
 // Output: Fp12 -> 12 field elements
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
