@@ -46,8 +46,9 @@ const RUNTIME_BYTECODE: &[u8] = &[opcode::PUSH0, opcode::SLOAD];
 axvm::entry!(main);
 
 fn main() {
-    let param = 0x42;
-    let bytecode: Bytes = [INIT_CODE, RET, RUNTIME_BYTECODE, &[param]].concat().into();
+    let param = core::hint::black_box(0x42);
+    let bytecode: Bytes =
+        core::hint::black_box([INIT_CODE, RET, RUNTIME_BYTECODE, &[param]].concat().into());
     let mut evm = Evm::builder()
         .with_db(InMemoryDB::default())
         .modify_tx_env(|tx| {
