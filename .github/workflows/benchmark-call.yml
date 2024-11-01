@@ -11,6 +11,7 @@ on:
           - verify_fibair
           - fibonacci
           - small_e2e
+          - revm_contract_deployment
       instance_type:
         type: string
         required: false
@@ -88,6 +89,12 @@ jobs:
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'fibonacci'
+        working-directory: benchmarks
+        run: |
+          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'revm_contract_deployment'
         working-directory: benchmarks
         run: |
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS

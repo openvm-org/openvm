@@ -72,7 +72,11 @@ fn main() {
         .modify_tx_env(|tx| {
             tx.transact_to = TxKind::Call(address);
             tx.data = Default::default();
-            *tx.nonce.as_mut().unwrap() += 1;
+            if let Some(nonce) = tx.nonce.as_mut() {
+                *nonce += 1;
+            } else {
+                tx.nonce = Some(1);
+            }
         })
         .build();
 
