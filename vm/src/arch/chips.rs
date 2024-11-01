@@ -17,8 +17,8 @@ use crate::{
     intrinsics::{
         ecc::{
             pairing::{
-                EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleAndAddStepChip,
-                MillerDoubleStepChip,
+                EcLineMul013By013Chip, EcLineMulBy01234Chip, EvaluateLineChip,
+                MillerDoubleAndAddStepChip, MillerDoubleStepChip,
             },
             sw::{EcAddNeChip, EcDoubleChip},
         },
@@ -123,6 +123,8 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
     MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
+    EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
+    EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
@@ -178,6 +180,8 @@ pub enum AxVmChip<F: PrimeField32> {
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
     MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
+    EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
+    EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),

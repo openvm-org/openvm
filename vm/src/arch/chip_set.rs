@@ -38,8 +38,8 @@ use crate::{
     intrinsics::{
         ecc::{
             pairing::{
-                EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleAndAddStepChip,
-                MillerDoubleStepChip,
+                EcLineMul013By013Chip, EcLineMulBy01234Chip, EvaluateLineChip,
+                MillerDoubleAndAddStepChip, MillerDoubleStepChip,
             },
             sw::{EcAddNeChip, EcDoubleChip},
         },
@@ -73,6 +73,7 @@ use crate::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
             Rv32HintStoreAdapterChip, Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip,
             Rv32MultAdapterChip, Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
+            Rv32VecHeapTwoReadsAdapterChip,
         },
         *,
     },
@@ -932,6 +933,34 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::MillerDoubleAndAddStepRv32_48(chip));
                 }
+                ExecutorName::EvaluateLineRv32_32 => {
+                    let chip = Rc::new(RefCell::new(EvaluateLineChip::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EvaluateLineRv32_32(chip));
+                }
+                ExecutorName::EvaluateLineRv32_48 => {
+                    let chip = Rc::new(RefCell::new(EvaluateLineChip::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 6, 12, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::EvaluateLineRv32_48(chip));
+                }
                 _ => unreachable!("Unsupported executor"),
             }
         }
@@ -1172,6 +1201,12 @@ fn gen_pairing_executor_tuple(
                         ExecutorName::MillerDoubleAndAddStepRv32_32,
                         curve.prime(),
                     ),
+                    (
+                        PairingOpcode::EVALUATE_LINE as usize,
+                        class_offset,
+                        ExecutorName::EvaluateLineRv32_32,
+                        curve.prime(),
+                    ),
                 ]
             } else if bytes <= 48 {
                 vec![
@@ -1185,6 +1220,12 @@ fn gen_pairing_executor_tuple(
                         PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
                         class_offset,
                         ExecutorName::MillerDoubleAndAddStepRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::EVALUATE_LINE as usize,
+                        class_offset,
+                        ExecutorName::EvaluateLineRv32_48,
                         curve.prime(),
                     ),
                 ]
