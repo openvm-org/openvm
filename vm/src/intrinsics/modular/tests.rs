@@ -26,6 +26,7 @@ use crate::{
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
+const BLOCK_SIZE: usize = 32;
 type F = BabyBear;
 
 #[test]
@@ -60,7 +61,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     ));
 
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -184,7 +185,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         bitwise_bus,
     ));
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
