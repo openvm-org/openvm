@@ -149,9 +149,10 @@ impl<F: PrimeField32> VmExecutor<F> {
         let end_state =
             last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
         // TODO[jpw]: add these as execution errors
-        assert!(end_state.is_terminate == 1, "program must terminate");
-        assert!(
-            end_state.exit_code == ExitCode::Success as u32,
+        assert_eq!(end_state.is_terminate, 1, "program must terminate");
+        assert_eq!(
+            end_state.exit_code,
+            ExitCode::Success as u32,
             "program did not exit successfully"
         );
         Ok(final_memory)

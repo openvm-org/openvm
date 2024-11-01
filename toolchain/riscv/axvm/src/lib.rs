@@ -12,7 +12,6 @@ pub mod intrinsics;
 #[cfg(target_os = "zkvm")]
 pub mod io;
 pub mod process;
-pub mod serde;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;

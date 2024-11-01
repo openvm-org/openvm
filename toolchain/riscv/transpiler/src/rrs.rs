@@ -304,6 +304,13 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
         _ => None,
     }
     .unwrap_or_else(|| {
+        if opcode == 0b1110011 {
+            eprintln!(
+                "CSRRW instruction: {:b} (opcode = {:07b}, funct3 = {:03b})",
+                instruction_u32, opcode, funct3
+            );
+            return nop();
+        }
         panic!(
             "Failed to transpile custom instruction: {:b} (opcode = {:07b}, funct3 = {:03b})",
             instruction_u32, opcode, funct3
