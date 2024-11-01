@@ -10,21 +10,21 @@ use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     kernels::{
         field_extension::FieldExtension,
-        fri::{FriFoldChip, FriFoldCols, EXT_DEG},
+        fri::{elem_to_ext, FriFoldChip, FriFoldCols, EXT_DEG},
     },
 };
 
 fn compute_fri_fold<F: Field>(
     alpha: [F; EXT_DEG],
     mut alpha_pow: [F; EXT_DEG],
-    a: &[[F; EXT_DEG]],
+    a: &[F],
     b: &[[F; EXT_DEG]],
 ) -> ([F; EXT_DEG], [F; EXT_DEG]) {
     let mut result = [F::zero(); EXT_DEG];
     for (&a, &b) in a.iter().zip_eq(b) {
         result = FieldExtension::add(
             result,
-            FieldExtension::multiply(FieldExtension::subtract(b, a), alpha_pow),
+            FieldExtension::multiply(FieldExtension::subtract(b, elem_to_ext(a)), alpha_pow),
         );
         alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
     }
@@ -59,7 +59,9 @@ fn fri_fold_air_test() {
         let alpha = gen_ext!();
         let length = rng.gen_range(length_range());
         let alpha_pow_initial = gen_ext!();
-        let a = (0..length).map(|_| gen_ext!()).collect_vec();
+        let a = (0..length)
+            .map(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())))
+            .collect_vec();
         let b = (0..length).map(|_| gen_ext!()).collect_vec();
 
         let (alpha_pow_final, result) = compute_fri_fold(alpha, alpha_pow_initial, &a, &b);
@@ -70,7 +72,7 @@ fn fri_fold_air_test() {
         let b_pointer_pointer = gen_pointer(&mut rng, 1);
         let alpha_pow_pointer = gen_pointer(&mut rng, 4);
         let result_pointer = gen_pointer(&mut rng, 4);
-        let a_pointer = gen_pointer(&mut rng, 4);
+        let a_pointer = gen_pointer(&mut rng, 1);
         let b_pointer = gen_pointer(&mut rng, 4);
 
         let address_space = rng.gen_range(address_space_range());
@@ -98,7 +100,7 @@ fn fri_fold_air_test() {
         );
         tester.write(address_space, alpha_pow_pointer, alpha_pow_initial);
         for i in 0..length {
-            tester.write(address_space, a_pointer + (4 * i), a[i]);
+            tester.write_cell(address_space, a_pointer + i, a[i]);
             tester.write(address_space, b_pointer + (4 * i), b[i]);
         }
 

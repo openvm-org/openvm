@@ -2,7 +2,7 @@ use axvm_circuit::system::program::util::execute_program;
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
-    ir::{Array, Ext},
+    ir::{Array, Ext, Felt},
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -23,13 +23,13 @@ fn test_fri_fold() {
     let x_value = rng.gen::<EF>();
     let z_value = rng.gen::<EF>();
 
-    let mat_opening: Array<_, Ext<_, _>> = builder.dyn_array(n);
     let ps_at_z: Array<_, Ext<_, _>> = builder.dyn_array(n);
+    let mat_opening: Array<_, Felt<_>> = builder.dyn_array(n);
 
     for i in 0..n {
-        let a_value = rng.gen::<EF>();
+        let a_value = rng.gen::<F>();
         let b_value = rng.gen::<EF>();
-        let val = builder.constant::<Ext<_, _>>(a_value);
+        let val = builder.constant::<Felt<_>>(a_value);
         builder.set(&mat_opening, i, val);
         let val = builder.constant::<Ext<_, _>>(b_value);
         builder.set(&ps_at_z, i, val);

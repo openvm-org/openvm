@@ -272,7 +272,7 @@ pub enum DslIr<C: Config> {
     FriFold(
         Ext<C::F, C::EF>,
         Ext<C::F, C::EF>,
-        Array<C, Ext<C::F, C::EF>>,
+        Array<C, Felt<C::F>>,
         Array<C, Ext<C::F, C::EF>>,
         Ext<C::F, C::EF>,
     ),

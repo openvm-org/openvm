@@ -59,7 +59,7 @@ pub struct FriFoldCols<T> {
 
     pub a_pointer_aux: MemoryReadAuxCols<T, 1>,
     pub b_pointer_aux: MemoryReadAuxCols<T, 1>,
-    pub a_aux: MemoryReadAuxCols<T, EXT_DEG>,
+    pub a_aux: MemoryReadAuxCols<T, 1>,
     pub b_aux: MemoryReadAuxCols<T, EXT_DEG>,
     pub result_aux: MemoryWriteAuxCols<T, EXT_DEG>,
     pub length_aux: MemoryReadAuxCols<T, 1>,
@@ -68,7 +68,7 @@ pub struct FriFoldCols<T> {
 
     pub a_pointer: T,
     pub b_pointer: T,
-    pub a: [T; EXT_DEG],
+    pub a: T,
     pub b: [T; EXT_DEG],
     pub alpha: [T; EXT_DEG],
     pub alpha_pow_original: [T; EXT_DEG],
@@ -158,12 +158,12 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
 
         let mut when_is_not_last = builder.when(not(is_last));
 
-        let next_alpha_pow_times_a = FieldExtension::multiply(next.alpha_pow_current, next.a);
         let next_alpha_pow_times_b = FieldExtension::multiply(next.alpha_pow_current, next.b);
         for i in 0..EXT_DEG {
             when_is_not_last.assert_eq(
                 next.current[i],
-                next_alpha_pow_times_b[i].clone() - next_alpha_pow_times_a[i].clone() + current[i],
+                next_alpha_pow_times_b[i].clone() - (next.alpha_pow_current[i] * next.a)
+                    + current[i],
             );
         }
 
@@ -191,12 +191,11 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             alpha_pow_original,
         );
 
-        let alpha_pow_times_a = FieldExtension::multiply(alpha_pow_current, a);
         let alpha_pow_times_b = FieldExtension::multiply(alpha_pow_current, b);
         for i in 0..EXT_DEG {
             builder.when(is_first).assert_eq(
                 current[i],
-                alpha_pow_times_b[i].clone() - alpha_pow_times_a[i].clone(),
+                alpha_pow_times_b[i].clone() - (alpha_pow_current[i] * a),
             );
         }
 
@@ -277,11 +276,8 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    address_space,
-                    a_pointer + (index * AB::F::from_canonical_usize(4)),
-                ),
-                a,
+                MemoryAddress::new(address_space, a_pointer + index),
+                [a],
                 start_timestamp + num_initial_accesses + (index * AB::F::two()),
                 &a_aux,
             )
@@ -330,7 +326,7 @@ pub struct FriFoldRecord<F: Field> {
     pub length_read: MemoryReadRecord<F, 1>,
     pub a_pointer_read: MemoryReadRecord<F, 1>,
     pub b_pointer_read: MemoryReadRecord<F, 1>,
-    pub a_reads: Vec<MemoryReadRecord<F, EXT_DEG>>,
+    pub a_reads: Vec<MemoryReadRecord<F, 1>>,
     pub b_reads: Vec<MemoryReadRecord<F, EXT_DEG>>,
     pub alpha_pow_write: MemoryWriteRecord<F, EXT_DEG>,
     pub result_write: MemoryWriteRecord<F, EXT_DEG>,
@@ -361,6 +357,12 @@ impl<F: PrimeField32> FriFoldChip<F> {
             height: 0,
         }
     }
+}
+
+fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
+    let mut ret = [F::zero(); EXT_DEG];
+    ret[0] = elem;
+    ret
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
@@ -404,15 +406,15 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         let mut result = [F::zero(); EXT_DEG];
 
         for i in 0..length {
-            let a_read = memory.read(address_space, a_pointer + F::from_canonical_usize(4 * i));
+            let a_read = memory.read_cell(address_space, a_pointer + F::from_canonical_usize(i));
             let b_read = memory.read(address_space, b_pointer + F::from_canonical_usize(4 * i));
             a_reads.push(a_read);
             b_reads.push(b_read);
-            let a = a_read.data;
+            let a = a_read.data[0];
             let b = b_read.data;
             result = FieldExtension::add(
                 result,
-                FieldExtension::multiply(FieldExtension::subtract(b, a), alpha_pow),
+                FieldExtension::multiply(FieldExtension::subtract(b, elem_to_ext(a)), alpha_pow),
             );
             alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
         }
@@ -502,11 +504,14 @@ impl<F: PrimeField32> FriFoldChip<F> {
         let result_aux = aux_cols_factory.make_write_aux_cols(record.result_write);
 
         for i in 0..length {
-            let a = record.a_reads[i].data;
+            let a = record.a_reads[i].data[0];
             let b = record.b_reads[i].data;
             current = FieldExtension::add(
                 current,
-                FieldExtension::multiply(FieldExtension::subtract(b, a), alpha_pow_current),
+                FieldExtension::multiply(
+                    FieldExtension::subtract(b, elem_to_ext(a)),
+                    alpha_pow_current,
+                ),
             );
 
             let mut index_is_zero = F::zero();
