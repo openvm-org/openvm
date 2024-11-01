@@ -3,6 +3,7 @@
 use alloc::vec::Vec;
 use core::alloc::Layout;
 
+use axvm_platform::bincode;
 use serde::de::DeserializeOwned;
 
 #[cfg(target_os = "zkvm")]

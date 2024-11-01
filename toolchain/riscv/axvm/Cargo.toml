@@ -14,16 +14,8 @@ bytemuck = { version = "1.13", features = ["extern_crate_alloc"] }
 getrandom = { version = "0.2", features = ["custom"] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 axvm-platform = { workspace = true, features = ["rust-runtime"] }
-serde = { version = "1.0", default-features = false, features = [
-    "alloc",
-    "derive",
-] }
+serde = { workspace = true, features = ["alloc", "derive"] }
 tiny-keccak.workspace = true
-bincode = { version = "2.0.0-rc", default-features = false, features = [
-    "derive",
-    "alloc",
-    "serde",
-] }
 
 [dev-dependencies]
 chrono = { version = "0.4", default-features = false, features = ["serde"] }

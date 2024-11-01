@@ -519,7 +519,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axvm-platform",
- "bincode 2.0.0-rc.3",
  "borsh",
  "bytemuck",
  "chrono",
@@ -716,6 +715,7 @@ dependencies = [
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
+ "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
  "embedded-alloc",

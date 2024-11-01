@@ -18,6 +18,9 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+// Re-export bincode for consistent version for serialization and deserialization across crates.
+pub use bincode;
+
 pub mod memory;
 // #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
 // mod getrandom;
