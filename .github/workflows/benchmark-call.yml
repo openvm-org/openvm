@@ -97,9 +97,8 @@ jobs:
         if: inputs.benchmark_name == 'revm_contract_deployment'
         working-directory: benchmarks
         run: |
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},revm" >> $GITHUB_ENV
+          FEATURE_FLAGS=${FEATURE_FLAGS},revm
           CMD_ARGS="--features ${FEATURE_FLAGS}"
-          echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
