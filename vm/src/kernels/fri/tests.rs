@@ -11,7 +11,7 @@ use crate::{
     kernels::fri::{FriFoldChip, FriFoldCols},
 };
 
-fn compute_fri_fold<F: Field>(alpha: F, mut alpha_pow: F, a: &Vec<F>, b: &Vec<F>) -> (F, F) {
+fn compute_fri_fold<F: Field>(alpha: F, mut alpha_pow: F, a: &[F], b: &[F]) -> (F, F) {
     let mut result = F::zero();
     for (&a, &b) in a.iter().zip_eq(b) {
         result += (b - a) * alpha_pow;
