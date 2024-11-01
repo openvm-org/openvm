@@ -712,6 +712,9 @@ dependencies = [
 name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "p3-field",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
