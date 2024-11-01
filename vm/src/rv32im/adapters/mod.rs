@@ -7,6 +7,7 @@ mod loadstore;
 mod mul;
 mod rdwrite;
 mod vec_heap;
+mod vec_heap_two_reads;
 
 pub use alu::*;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -18,6 +19,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use rdwrite::*;
 pub use vec_heap::*;
+pub use vec_heap_two_reads::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
 pub const INT256_NUM_LIMBS: usize = 32;
