@@ -648,6 +648,66 @@ mod conversions {
         }
     }
 
+    // AdapterAirContext: DynInterface -> VecHeapTwoReadsAdapterInterface
+    impl<
+            T: Clone,
+            const BLOCKS_PER_READ1: usize,
+            const BLOCKS_PER_READ2: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            VecHeapTwoReadsAdapterInterface<
+                T,
+                BLOCKS_PER_READ1,
+                BLOCKS_PER_READ2,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            const BLOCKS_PER_READ1: usize,
+            const BLOCKS_PER_READ2: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            VecHeapTwoReadsAdapterInterface<
+                T,
+                BLOCKS_PER_READ1,
+                BLOCKS_PER_READ2,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
     // AdapterRuntimeContext: BasicInterface -> VecHeapAdapterInterface
     impl<
             T,
@@ -981,6 +1041,34 @@ mod conversions {
             );
             let mut it = v.0.into_iter();
             from_fn(|_| from_fn(|_| from_fn(|_| it.next().unwrap())))
+        }
+    }
+
+    impl<T, const N: usize, const M1: usize, const M2: usize> From<([[T; N]; M1], [[T; N]; M2])>
+        for DynArray<T>
+    {
+        fn from(v: ([[T; N]; M1], [[T; N]; M2])) -> Self {
+            let mut vec: Vec<_> = v.0.into_iter().flatten().collect();
+            vec.extend(v.1.into_iter().flatten());
+            Self(vec)
+        }
+    }
+
+    impl<T, const N: usize, const M1: usize, const M2: usize> From<DynArray<T>>
+        for ([[T; N]; M1], [[T; N]; M2])
+    {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(
+                v.0.len(),
+                N * (M1 + M2),
+                "Incorrect vector length {}",
+                v.0.len()
+            );
+            let mut it = v.0.into_iter();
+            (
+                from_fn(|_| from_fn(|_| it.next().unwrap())),
+                from_fn(|_| from_fn(|_| it.next().unwrap())),
+            )
         }
     }
 
