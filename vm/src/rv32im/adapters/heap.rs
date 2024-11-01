@@ -171,11 +171,8 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         });
         let need_range_check: Vec<u32> = rs_records
             .iter()
-            .map(|rs_record| rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(
-                std::iter::repeat(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-                    .take(2),
-            )
+            .chain(std::iter::repeat(&rd_record).take(2))
+            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
             .collect();
         let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
         for i in 0..need_range_check.len() / 2 {

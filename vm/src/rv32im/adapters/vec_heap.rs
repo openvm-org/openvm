@@ -239,8 +239,8 @@ impl<
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
+            .chain(std::iter::repeat(&cols.rd_val).take(2))
             .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
-            .chain(std::iter::repeat(cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1]).take(2))
             .collect();
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
@@ -400,11 +400,8 @@ impl<
         });
         let need_range_check: Vec<u32> = rs_records
             .iter()
-            .map(|rs_record| rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(
-                std::iter::repeat(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-                    .take(2),
-            )
+            .chain(std::iter::repeat(&rd_record).take(2))
+            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
             .collect();
         let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
         for i in 0..need_range_check.len() / 2 {
