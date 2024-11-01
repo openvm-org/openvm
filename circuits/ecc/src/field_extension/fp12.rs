@@ -136,11 +136,11 @@ impl Fp12 {
         // c4 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
         // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
         //   where cs*: self.c*
-        let mut o0 = x0.clone();
-        let mut o1 = x2.clone();
-        let mut o2 = x4.clone();
-        let mut o4 = x3.clone();
-        let mut o5 = x5.clone();
+        let mut o0 = x0;
+        let mut o1 = x2;
+        let mut o2 = x4;
+        let mut o4 = x3;
+        let mut o5 = x5;
 
         let c0 = self.c0.mul(&mut o0).add(
             &mut self
