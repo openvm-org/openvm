@@ -4,7 +4,10 @@ use axvm_circuit::arch::{
     instructions::{program::Program, *},
     Modulus,
 };
-use axvm_instructions::instruction::{DebugInfo, Instruction};
+use axvm_instructions::{
+    instruction::{DebugInfo, Instruction},
+    program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
+};
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
@@ -742,5 +745,6 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         instructions_and_debug_infos,
         step: DEFAULT_PC_STEP,
         pc_base: 0,
+        max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
     }
 }
