@@ -11,6 +11,11 @@ pub fn read_vec() -> Vec<u8> {
     read_vec_by_len(read_u32() as usize)
 }
 
+pub fn read<T>() -> T {
+    let serialized_data = read_vec();
+    bincode::deserialize(&serialized_data[..]).unwrap()
+}
+
 /// Read the next 4 bytes from the hint stream into a register.
 /// Because [hint_store_u32] stores a word to memory, this function first reads to memory and then
 /// loads from memory to register.
