@@ -111,6 +111,11 @@ impl VmConfig {
             .add_executor(ExecutorName::Shift256Rv32)
     }
 
+    pub fn add_int256_branch(self) -> Self {
+        self.add_executor(ExecutorName::BranchEqual256Rv32)
+            .add_executor(ExecutorName::BranchLessThan256Rv32)
+    }
+
     pub fn add_int256_m(self) -> Self {
         self.add_executor(ExecutorName::Multiplication256Rv32)
     }

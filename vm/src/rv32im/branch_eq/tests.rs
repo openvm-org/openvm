@@ -62,7 +62,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
             1,
             1,
         ),
-        rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
+        rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
     let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(opcode, &a, &b);
