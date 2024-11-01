@@ -343,6 +343,14 @@ pub struct Rv32Shift256Opcode(pub ShiftOpcode);
 pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x420]
+pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x425]
+pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x450]
 pub struct Rv32Mul256Opcode(pub MulOpcode);
 
@@ -362,6 +370,15 @@ pub enum Rv32ModularArithmeticOpcode {
     DIV,
 }
 
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x510]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32ModularEqualOpcode {
+    IS_EQ,
+}
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
