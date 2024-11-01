@@ -114,7 +114,10 @@ fn test_rv32i_prove_with_hint() -> Result<()> {
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     setup_tracing();
-    let config = VmConfig::rv32im().add_canonical_modulus();
+    let config = VmConfig::rv32im()
+        .add_canonical_modulus()
+        .add_int256_alu()
+        .add_int256_m();
     let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
     executor.execute(exe, vec![])?;
     Ok(())
