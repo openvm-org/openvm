@@ -1,10 +1,15 @@
+use std::sync::Arc;
+
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_ecc_execution::{common::EcPoint, curves::bn254::tangent_line_013};
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc_constants::BN254;
-use axvm_instructions::{PairingOpcode, UsizeOpcode};
+use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
@@ -14,7 +19,7 @@ use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper},
+    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     intrinsics::{
         ecc::pairing::{mul_013_by_013_expr, mul_by_01234_expr},
         field_expression::FieldExpressionCoreChip,
@@ -48,10 +53,16 @@ fn test_mul_013_by_013() {
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul013By013",
     );
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 10, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(8);
@@ -127,7 +138,7 @@ fn test_mul_013_by_013() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -151,10 +162,16 @@ fn test_mul_by_01234() {
         tester.memory_controller().borrow().range_checker.clone(),
         "MulBy01234",
     );
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let mut rng = StdRng::seed_from_u64(8);
@@ -224,6 +241,6 @@ fn test_mul_by_01234() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

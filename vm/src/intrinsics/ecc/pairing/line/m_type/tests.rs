@@ -1,3 +1,8 @@
+use std::sync::Arc;
+
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_ecc_execution::{
     common::{EcPoint, Fp2Constructor},
     curves::bls12_381::tangent_line_023,
@@ -7,14 +12,14 @@ use ax_ecc_primitives::{
     test_utils::{bls12381_fq2_to_biguint_vec, bls12381_fq_to_biguint},
 };
 use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{PairingOpcode, UsizeOpcode};
+use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper},
+    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     intrinsics::{ecc::pairing::mul_023_by_023_expr, field_expression::FieldExpressionCoreChip},
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
@@ -45,10 +50,16 @@ fn test_mul_023_by_023() {
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul023By023",
     );
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 30, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(55);
@@ -129,6 +140,6 @@ fn test_mul_023_by_023() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
