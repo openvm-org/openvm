@@ -1,27 +1,25 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir,
-    sub_chip::{LocalTraceInstructions, SubAir},
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+use ax_circuit_primitives::{
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use ax_ecc_primitives::field_expression::{
-    ExprBuilder, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr,
 };
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::FIELD_ELEMENT_BITS;
 use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    system::program::Instruction,
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
 };
 
@@ -34,49 +32,34 @@ pub struct ModularMulDivCoreAir {
 
 impl ModularMulDivCoreAir {
     pub fn new(
-        modulus: BigUint,
-        num_limbs: usize,
-        limb_bits: usize,
-        range_bus: usize,
-        range_max_bits: usize,
+        config: ExprBuilderConfig,
+        range_bus: VariableRangeCheckerBus,
         offset: usize,
-        max_limb_bits: usize,
     ) -> Self {
-        assert!(modulus.bits() <= num_limbs * limb_bits);
-        let subair = CheckCarryModToZeroSubAir::new(
-            modulus.clone(),
-            limb_bits,
-            range_bus,
-            range_max_bits,
-            FIELD_ELEMENT_BITS,
-        );
-        let builder =
-            ExprBuilder::new(modulus, limb_bits, num_limbs, range_max_bits, max_limb_bits);
+        config.check_valid();
+
+        let builder = ExprBuilder::new(config, range_bus.range_max_bits);
         let builder = Rc::new(RefCell::new(builder));
         let x = ExprBuilder::new_input(builder.clone());
         let y = ExprBuilder::new_input(builder.clone());
-        let z = builder.borrow_mut().new_var();
+        let (z_idx, z) = builder.borrow_mut().new_var();
         let z = FieldVariable::from_var(builder.clone(), z);
         let is_mul_flag = builder.borrow_mut().new_flag();
         // constraint is x * y = z, or z * y = x
         let lvar = FieldVariable::select(is_mul_flag, &x, &z);
         let rvar = FieldVariable::select(is_mul_flag, &z, &x);
         let constraint = lvar * y.clone() - rvar;
-        builder.borrow_mut().add_constraint(constraint.expr);
+        builder.borrow_mut().set_constraint(z_idx, constraint.expr);
         let compute = SymbolicExpr::Select(
             is_mul_flag,
             Box::new(x.expr.clone() * y.expr.clone()),
             Box::new(x.expr.clone() / y.expr.clone()),
         );
-        builder.borrow_mut().add_compute(compute);
+        builder.borrow_mut().set_compute(z_idx, compute);
 
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr {
-            builder,
-            check_carry_mod_to_zero: subair,
-            range_bus: VariableRangeCheckerBus::new(range_bus, range_max_bits),
-        };
+        let expr = FieldExpr::new(builder, range_bus);
         Self { expr, offset }
     }
 }
@@ -102,7 +85,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
-        SubAir::eval(&self.expr, builder, local.to_vec(), ());
+        self.expr.eval(builder, local);
 
         let FieldExprCols {
             is_valid,
@@ -134,7 +117,6 @@ where
     }
 }
 
-#[derive(Clone)]
 pub struct ModularMulDivCoreChip {
     pub air: ModularMulDivCoreAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
@@ -142,22 +124,11 @@ pub struct ModularMulDivCoreChip {
 
 impl ModularMulDivCoreChip {
     pub fn new(
-        modulus: BigUint,
-        limb_bits: usize,
-        num_limbs: usize,
+        config: ExprBuilderConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         offset: usize,
-        max_limb_bits: usize,
     ) -> Self {
-        let air = ModularMulDivCoreAir::new(
-            modulus,
-            limb_bits,
-            num_limbs,
-            range_checker.bus().index,
-            range_checker.range_max_bits(),
-            offset,
-            max_limb_bits,
-        );
+        let air = ModularMulDivCoreAir::new(config, range_checker.bus(), offset);
         Self { air, range_checker }
     }
 }
@@ -237,15 +208,14 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let input = (
-            vec![record.x, record.y],
-            self.range_checker.clone(),
-            vec![record.is_mul_flag],
+        self.air.expr.generate_subrow(
+            (
+                &self.range_checker,
+                vec![record.x, record.y],
+                vec![record.is_mul_flag],
+            ),
+            row_slice,
         );
-        let row = LocalTraceInstructions::<F>::generate_trace_row(&self.air.expr, input);
-        for (i, element) in row.iter().enumerate() {
-            row_slice[i] = *element;
-        }
     }
 
     fn air(&self) -> &Self::Air {

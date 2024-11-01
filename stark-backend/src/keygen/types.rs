@@ -70,7 +70,8 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
 ///
 /// This struct contains the necessary data for the verifier to verify proofs generated for
 /// multiple AIRs using a single verifying key.
-#[derive(Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"

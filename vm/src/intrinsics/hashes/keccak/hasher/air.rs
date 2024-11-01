@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
-use afs_primitives::{utils::not, xor::bus::XorBus};
-use afs_stark_backend::{
+use ax_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
+use ax_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -22,7 +22,7 @@ pub struct KeccakVmAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
-    pub xor_bus: XorBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     // TODO: add configuration for enabling direct non-memory interactions
     pub(super) offset: usize,
 }

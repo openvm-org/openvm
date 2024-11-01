@@ -1,19 +1,18 @@
 use std::marker::PhantomData;
 
-use axvm_instructions::{riscv::RvIntrinsic, EccOpcode, Rv32ModularArithmeticOpcode};
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RvIntrinsic, RV32_REGISTER_NUM_LIMBS},
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode,
+    LessThanOpcode, MulHOpcode, MulOpcode, PhantomInstruction, Rv32AuipcOpcode,
+    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
+    Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
+};
+use axvm_platform::constants::{CUSTOM_0, CUSTOM_1};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     process_instruction, InstructionProcessor,
-};
-use stark_vm::{
-    arch::instructions::{
-        AluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-        MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-        Rv32LoadStoreOpcode, ShiftOpcode, UsizeOpcode,
-    },
-    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-    system::program::Instruction,
 };
 use strum::EnumCount;
 
@@ -27,39 +26,39 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::ADD.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::ADD.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::ADD.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::ADD.with_default_offset(), &dec_insn)
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::SUB.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::SUB.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xor(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::XOR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::XOR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::XOR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::XOR.with_default_offset(), &dec_insn)
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::OR.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::OR.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::OR.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::OR.with_default_offset(), &dec_insn)
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(AluOpcode::AND.with_default_offset(), 1, &dec_insn)
+        from_r_type(BaseAluOpcode::AND.with_default_offset(), 1, &dec_insn)
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(AluOpcode::AND.with_default_offset(), &dec_insn)
+        from_i_type(BaseAluOpcode::AND.with_default_offset(), &dec_insn)
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -172,11 +171,13 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::zero(),
             F::from_bool(dec_insn.rd != 0),
             F::zero(),
-            String::new(),
         )
     }
 
     fn process_lui(&mut self, dec_insn: UType) -> Self::InstructionResult {
+        if dec_insn.rd == 0 {
+            return nop();
+        }
         // we need to set f to 1 because this is handled by the same chip as jal
         let mut result = from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn);
         result.f = F::one();
@@ -196,73 +197,78 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::zero(),
             F::zero(),
             F::zero(),
-            String::new(),
         )
     }
 
     fn process_mul(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulOpcode::MUL.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulOpcode::MUL.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulh(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULH.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULH.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulhu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHU.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULHU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_mulhsu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 1, &dec_insn)
+        from_r_type(MulHOpcode::MULHSU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_div(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIV.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::DIV.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_divu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::DIVU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_rem(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REM.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::REM.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_remu(&mut self, dec_insn: RType) -> Self::InstructionResult {
-        from_r_type(DivRemOpcode::REMU.with_default_offset(), 1, &dec_insn)
+        from_r_type(DivRemOpcode::REMU.with_default_offset(), 0, &dec_insn)
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        let _ = dec_insn;
         eprintln!("trying to transpile fence ({:?})", dec_insn);
-        // unimplemented!()
-        Instruction {
-            debug: format!("fence({:?})", dec_insn),
-            ..unimp()
-        }
+        nop()
     }
 }
 
 fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruction<F> {
     let opcode = (instruction_u32 & 0x7f) as u8;
-    let funct3 = ((instruction_u32 >> 12) & 3) as u8; // All our instructions are R- or I-type
+    let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R- or I-type
 
     match opcode {
-        0x0b => {
-            match funct3 {
-                0b000 => Some(terminate()),
-                0b001 => {
-                    // keccak or poseidon
-                    None
-                }
-                0b010 => {
-                    // u256
-                    todo!("Implement u256 transpiler");
-                }
-                _ => None,
+        CUSTOM_0 => match funct3 {
+            0b000 => {
+                let imm = (instruction_u32 >> 20) & 0xfff;
+                Some(terminate(imm.try_into().expect("exit code must be byte")))
             }
-        }
-        0x2b => {
+            0b001 => {
+                let rd = (instruction_u32 >> 7) & 0x1f;
+                let imm = (instruction_u32 >> 20) & 0xfff;
+                Some(Instruction::from_isize(
+                    Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
+                    0,
+                    (RV32_REGISTER_NUM_LIMBS * rd as usize) as isize,
+                    imm as isize,
+                    1,
+                    2,
+                ))
+            }
+            0b011 => Some(Instruction::phantom(
+                PhantomInstruction::HintInputRv32,
+                F::zero(),
+                F::zero(),
+                0,
+            )),
+            _ => unimplemented!(),
+        },
+        CUSTOM_1 => {
             match funct3 {
                 Rv32ModularArithmeticOpcode::FUNCT3 => {
                     // mod operations
@@ -310,17 +316,11 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
 /// # Panics
 ///
 /// This function will return an error if the [`Instruction`] cannot be processed.
-#[allow(dead_code)]
 pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instruction<F>> {
     let mut instructions = Vec::new();
     let mut transpiler = InstructionTranspiler::<F>(PhantomData);
     for instruction_u32 in instructions_u32 {
-        // TODO: we probably want to forbid such instructions, but for now we just skip them
-        if *instruction_u32 == 115 {
-            eprintln!("trying to transpile ecall ({:x})", instruction_u32);
-            instructions.push(terminate());
-            continue;
-        }
+        assert!(*instruction_u32 != 115, "ecall is not supported");
         let instruction = process_instruction(&mut transpiler, *instruction_u32)
             .unwrap_or_else(|| process_custom_instruction(*instruction_u32));
         instructions.push(instruction);

@@ -3,10 +3,11 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
+use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::Rng;
@@ -24,9 +25,7 @@ use crate::{
         adapters::native_vectorized_adapter::NativeVectorizedAdapterChip,
         field_extension::{FieldExtension, FieldExtensionChip, FieldExtensionCoreChip},
     },
-    system::program::Instruction,
 };
-
 #[test]
 fn new_field_extension_air_test() {
     type F = BabyBear;

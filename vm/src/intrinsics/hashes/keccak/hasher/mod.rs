@@ -1,6 +1,6 @@
 use std::{array::from_fn, cmp::min, sync::Arc};
 
-use afs_primitives::xor::lookup::XorLookupChip;
+use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
@@ -15,6 +15,7 @@ pub mod utils;
 mod tests;
 
 pub use air::KeccakVmAir;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 
 use crate::{
     arch::{
@@ -23,7 +24,7 @@ use crate::{
     },
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
 
@@ -56,13 +57,13 @@ pub const KECCAK_DIGEST_BYTES: usize = 32;
 /// Number of 64-bit digest limbs.
 pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct KeccakVmChip<F: PrimeField32> {
     pub air: KeccakVmAir,
     /// IO and memory data necessary for each opcode call
     pub records: Vec<KeccakRecord<F>>,
     pub memory_controller: MemoryControllerRef<F>,
-    pub byte_xor_chip: Arc<XorLookupChip<8>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
 
     offset: usize,
 }
@@ -94,7 +95,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
-        byte_xor_chip: Arc<XorLookupChip<8>>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -102,11 +103,11 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             air: KeccakVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
-                byte_xor_chip.bus(),
+                bitwise_lookup_chip.bus(),
                 offset,
             ),
             memory_controller,
-            byte_xor_chip,
+            bitwise_lookup_chip,
             records: Vec::new(),
             offset,
         }
@@ -229,7 +230,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         memory.increase_timestamp_to(to_timestamp);
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: to_timestamp,
         })
     }

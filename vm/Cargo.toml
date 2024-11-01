@@ -1,9 +1,9 @@
 [package]
-name = "stark-vm"
+name = "axvm-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Virtual Machine STARK"
+description = "axVM circuits"
 
 [dependencies]
 p3-air = { workspace = true }
@@ -12,20 +12,23 @@ p3-field = { workspace = true }
 p3-keccak-air = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
+p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 
-poseidon2-air = { workspace = true }
-afs-primitives = { workspace = true }
-afs-stark-backend = { workspace = true }
-afs-derive = { workspace = true }
-ax-sdk = { workspace = true, optional = true }
+ax-poseidon2-air = { workspace = true }
+ax-stark-backend = { workspace = true }
+ax-circuit-primitives = { workspace = true }
+ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+axvm-ecc-constants = { workspace = true }
+axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
+ax-stark-sdk = { workspace = true, optional = true }
 
 parking_lot.workspace = true
-enum-utils = "0.1.1"
-strum = { workspace = true }
-tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+enum-utils.workspace = true
+strum.workspace = true
+tiny-keccak.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
 enum_dispatch.workspace = true
@@ -42,6 +45,7 @@ once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
+thiserror.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
@@ -55,21 +59,21 @@ p3-symmetric = { workspace = true }
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
-ax-sdk = { path = "../sdk" }
+ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
-stark-vm = { workspace = true, features = ["sdk"] }
+lazy_static.workspace = true
+axvm-ecc-constants = { workspace = true }
+axvm-circuit = { workspace = true, features = ["test-utils"] }
+ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
+ax-ecc-execution = { workspace = true }
+halo2curves-axiom = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["afs-stark-backend/parallel"]
-sdk = ["dep:ax-sdk"]
-bench-metrics = [
-    "sdk",
-    "dep:metrics",
-    "dep:inferno",
-    "afs-stark-backend/bench-metrics",
-]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
-jemalloc-prof = ["afs-stark-backend/jemalloc-prof"]
+parallel = ["ax-stark-backend/parallel"]
+test-utils = ["dep:ax-stark-sdk"]
+bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]
+jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::Field;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -16,11 +16,12 @@ use crate::{
 };
 
 /// All commitments to a multi-matrix STARK that are not preprocessed.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct Commitments<SC: StarkGenericConfig> {
     /// Multiple commitments for the main trace.
     /// For each RAP, each part of a partitioned matrix trace matrix
@@ -38,8 +39,9 @@ pub struct Commitments<SC: StarkGenericConfig> {
 /// multiple commitments, where each commitment is multi-matrix.
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct Proof<SC: StarkGenericConfig> {
     /// The PCS commitments
     pub commitments: Commitments<SC>,
@@ -49,8 +51,9 @@ pub struct Proof<SC: StarkGenericConfig> {
     pub per_air: Vec<AirProofData<SC>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
+#[derivative(Clone(bound = "SC::Challenge: Clone"))]
 pub struct AirProofData<SC: StarkGenericConfig> {
     pub air_id: usize,
     /// height of trace matrix.
@@ -79,7 +82,7 @@ impl<SC: StarkGenericConfig> ProofInput<SC> {
 #[derive(Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
-    pub raw_data: RowMajorMatrix<Val<SC>>,
+    pub raw_data: Arc<RowMajorMatrix<Val<SC>>>,
     pub prover_data: ProverTraceData<SC>,
 }
 
@@ -146,5 +149,27 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
 impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
     pub fn validate(&self, proof_input: &ProofInput<SC>) -> bool {
         self.get_vk().validate(proof_input)
+    }
+}
+
+impl<F: Field> AirProofRawInput<F> {
+    pub fn height(&self) -> usize {
+        let mut height = None;
+        for m in self.cached_mains.iter() {
+            if let Some(h) = height {
+                assert_eq!(h, m.height());
+            } else {
+                height = Some(m.height());
+            }
+        }
+        let common_h = self.common_main.as_ref().map(|trace| trace.height());
+        if let Some(h) = height {
+            if let Some(common_h) = common_h {
+                assert_eq!(h, common_h);
+            }
+            h
+        } else {
+            common_h.unwrap_or(0)
+        }
     }
 }

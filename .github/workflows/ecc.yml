@@ -4,12 +4,12 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
     paths:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
+      - "toolchain/native-compiler/**"
       - "circuits/ecc/**"
       - "lib/ecc/**"
       - "lib/ecc-execution/**"
@@ -36,11 +36,6 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ecc-lib crate tests
-        working-directory: lib/ecc
-        run: |
-          cargo nextest run --cargo-profile=fast --features parallel
-
       - name: Run ecc-execution crate tests
         working-directory: lib/ecc-execution
         run: |
@@ -49,4 +44,4 @@ jobs:
       - name: Run ecc-circuits crate tests
         working-directory: circuits/ecc
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel

@@ -1,11 +1,13 @@
 use core::borrow::Borrow;
 
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness};
-use afs_stark_backend::prover::{
+use ax_stark_backend::prover::{
     opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
     types::{AirProofData, Commitments, Proof},
 };
-use ax_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use axvm_native_compiler::ir::{
+    Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
+};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
@@ -169,6 +171,13 @@ impl Witnessable<C> for Proof<BabyBearPoseidon2OuterConfig> {
     type WitnessVariable = StarkProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
+        if builder.flags.static_only {
+            // Check that the trace heights are sorted
+            assert!(
+                self.per_air.windows(2).all(|w| w[0].degree >= w[1].degree),
+                "Static verifier requires trace heights to be sorted descending"
+            );
+        }
         let commitments = self.commitments.read(builder);
         let opening = self.opening.read(builder);
         let per_air = self.per_air.read(builder);

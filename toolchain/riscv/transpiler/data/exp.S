@@ -25,4 +25,4 @@ finish:
 	rem a0, a0, a2
 	li a1, 1
 	bne a0, a1, 228
-	ecall
+	.insn i 0x0b, 0, x0, x0, 0

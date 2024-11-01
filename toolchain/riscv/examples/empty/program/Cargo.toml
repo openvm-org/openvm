@@ -5,7 +5,7 @@ name = "axvm-empty-program"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../../zkvm/lib" }
+axvm = { path = "../../../axvm" }
 
 [profile.release]
 panic = "abort"

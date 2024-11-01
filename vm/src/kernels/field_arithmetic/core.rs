@@ -1,22 +1,20 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{
-    arch::{
-        instructions::{
-            FieldArithmeticOpcode,
-            FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
-            UsizeOpcode,
-        },
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
+use crate::arch::{
+    instructions::{
+        FieldArithmeticOpcode,
+        FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
+        UsizeOpcode,
     },
-    system::program::Instruction,
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]

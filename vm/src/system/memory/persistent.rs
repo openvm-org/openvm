@@ -4,9 +4,9 @@ use std::{
     iter,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -15,11 +15,10 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    kernels::core::POSEIDON2_DIRECT_BUS,
+    arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
     system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
-        TimestampedEquipartition,
+        offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
     },
 };
 
@@ -111,7 +110,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
     touched_labels: HashSet<(F, usize)>,

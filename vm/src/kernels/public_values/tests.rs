@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
     rap::{AnyRap, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::to_field_vec,
 };

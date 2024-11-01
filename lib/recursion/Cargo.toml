@@ -1,16 +1,18 @@
 [package]
-name = "afs-recursion"
-version = "0.1.0"
-edition = "2021"
+name = "axvm-recursion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
-afs-stark-backend = { path = "../../stark-backend" }
-afs-compiler = { path = "../../toolchain/compiler", features = ["sdk"] }
-ax-sdk = { path = "../../sdk" }                                # TODO: feature-gate sdk
-afs-derive = { path = "../../derive" }
-stark-vm = { path = "../../vm", features = ["sdk"] }
-ax-ecc-lib = { path = "../ecc" }
-afs-primitives = { path = "../../circuits/primitives" }
+ax-stark-backend = { workspace = true }
+axvm-native-compiler = { workspace = true }
+axvm-native-compiler-derive = { workspace = true }
+ax-stark-sdk = { workspace = true }
+axvm-circuit = { workspace = true, features = [
+    "test-utils",
+] } # TODO: remove this feature
+ax-circuit-primitives = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -45,33 +47,24 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-afs-primitives = { path = "../../circuits/primitives" }
-
-[[bin]]
-name = "verify_fibair"
-required-features = ["bench-metrics"]
-
-[[bin]]
-name = "tiny_e2e"
-harness = false
-required-features = ["bench-metrics"]
-
-[[bin]]
-name = "alu256_e2e"
-required-features = ["bench-metrics"]
+ax-circuit-primitives.workspace = true
 
 [[bin]]
 name = "small_e2e"
-required-features = ["bench-metrics"]
 
 [features]
-default = []
-parallel = ["afs-stark-backend/parallel"]
+default = [
+    "parallel",
+    "mimalloc",
+    "test-utils",
+] # remove test-utils after binaries are moved out
+parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
-    "afs-compiler/halo2-compiler",
+    "axvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-bench-metrics = ["dep:metrics", "stark-vm/bench-metrics"]
-mimalloc = ["afs-stark-backend/mimalloc"]
-jemalloc = ["afs-stark-backend/jemalloc"]
+test-utils = ["axvm-circuit/test-utils"]
+bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
+mimalloc = ["ax-stark-backend/mimalloc"]
+jemalloc = ["ax-stark-backend/jemalloc"]

@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::AbstractField;
@@ -8,6 +8,7 @@ use super::{
     utils::{big_uint_to_limbs, range_check},
     OverflowInt,
 };
+use crate::SubAir;
 
 #[derive(Clone)]
 pub struct CheckCarryModToZeroCols<T> {
@@ -32,24 +33,35 @@ impl CheckCarryModToZeroSubAir {
         limb_bits: usize,
         range_checker_bus: usize,
         decomp: usize,
-        field_element_bits: usize,
     ) -> Self {
-        let check_carry_to_zero =
-            CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp, field_element_bits);
+        let check_carry_to_zero = CheckCarryToZeroSubAir::new(limb_bits, range_checker_bus, decomp);
         let modulus_limbs = big_uint_to_limbs(&modulus, limb_bits);
         Self {
             modulus_limbs,
             check_carry_to_zero,
         }
     }
+}
 
-    pub fn constrain_carry_mod_to_zero<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        expr: OverflowInt<AB::Expr>,
-        cols: CheckCarryModToZeroCols<AB::Var>,
-        is_valid: AB::Var,
-    ) {
+impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
+    /// `(expr, cols, is_valid)`
+    type AirContext<'a>
+    = (OverflowInt<AB::Expr>, CheckCarryModToZeroCols<AB::Var>, AB::Var) where
+        AB::Var:'a, AB::Expr:'a,
+        AB: 'a;
+
+    fn eval<'a>(
+        &'a self,
+        builder: &'a mut AB,
+        (expr, cols, is_valid): (
+            OverflowInt<AB::Expr>,
+            CheckCarryModToZeroCols<AB::Var>,
+            AB::Var,
+        ),
+    ) where
+        AB::Var: 'a,
+        AB::Expr: 'a,
+    {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
         builder.assert_bool(is_valid);
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
@@ -63,10 +75,12 @@ impl CheckCarryModToZeroSubAir {
                 is_valid,
             );
         }
-        let overflow_q = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
-            quotient,
-            self.check_carry_to_zero.limb_bits,
-        );
+        let limb_bits = self.check_carry_to_zero.limb_bits;
+        let overflow_q = OverflowInt::<AB::Expr> {
+            limbs: quotient.iter().map(|&x| x.into()).collect(),
+            max_overflow_bits: limb_bits + 1, // q can be negative, so this is the constraint we have when range check.
+            limb_max_abs: 1 << limb_bits,
+        };
         let p_limbs = self
             .modulus_limbs
             .iter()
@@ -78,11 +92,7 @@ impl CheckCarryModToZeroSubAir {
         );
 
         let expr = expr - overflow_q * overflow_p;
-        self.check_carry_to_zero.constrain_carry_to_zero(
-            builder,
-            expr,
-            CheckCarryToZeroCols { carries },
-            is_valid,
-        );
+        self.check_carry_to_zero
+            .eval(builder, (expr, CheckCarryToZeroCols { carries }, is_valid));
     }
 }

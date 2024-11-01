@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     ir::{Array, Builder, Config, Ext, Felt, FromConstant, MemIndex, Ptr, Usize, Var, Variable},
     prelude::MemVariable,
 };
@@ -16,6 +16,12 @@ impl<C: Config> DigestVal<C> {
         match self {
             DigestVal::F(v) => v.len(),
             DigestVal::N(v) => v.len(),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            DigestVal::F(v) => v.is_empty(),
+            DigestVal::N(v) => v.is_empty(),
         }
     }
 }

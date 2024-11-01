@@ -1,5 +1,5 @@
-use afs_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
-use ax_sdk::{
+use ax_stark_backend::{prover::USE_DEBUG_BUILDER, verifier::VerificationError};
+use ax_stark_sdk::{
     any_rap_arc_vec,
     dummy_airs::interaction::{dummy_interaction_air::DummyInteractionAir, verify_interactions},
 };

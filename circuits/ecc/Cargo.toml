@@ -11,21 +11,26 @@ p3-matrix = { workspace = true }
 p3-util = { workspace = true }
 p3-baby-bear = { workspace = true }
 
-afs-stark-backend = { workspace = true }
-afs-primitives = { workspace = true }
-ax-sdk = { workspace = true }
+ax-stark-backend = { workspace = true }
+ax-circuit-primitives = { workspace = true }
+ax-stark-sdk = { workspace = true }
+halo2curves-axiom = { workspace = true, optional = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git" }
 
 [dev-dependencies]
-afs-primitives = { path = "../primitives" }
+ax-circuit-primitives = { workspace = true }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
+lazy_static.workspace = true
+ax-ecc-execution = { workspace = true }
+axvm-ecc-constants = { workspace = true }
+halo2curves-axiom = { workspace = true }
 
 [features]
 default = []
-parallel = ["afs-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel"]
+test-utils = ["dep:halo2curves-axiom"]

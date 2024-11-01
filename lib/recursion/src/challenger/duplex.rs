@@ -1,4 +1,4 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
@@ -259,18 +259,18 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use afs_compiler::{
-        asm::{AsmBuilder, AsmConfig},
-        ir::Felt,
-    };
-    use ax_sdk::{
+    use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
+    };
+    use axvm_circuit::system::program::util::execute_program;
+    use axvm_native_compiler::{
+        asm::{AsmBuilder, AsmConfig},
+        ir::Felt,
     };
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
-    use stark_vm::system::program::util::execute_program;
 
     use super::DuplexChallengerVariable;
 

@@ -5,40 +5,9 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    common::{fp12_square, EcPoint, EvaluatedLine, FieldExtension, LineDType},
-    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, Bn254},
+    common::{fp12_square, EcPoint, FieldExtension, LineDType},
+    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, tangent_line_013, Bn254},
 };
-
-/// Returns a line function for a tangent line at the point P
-#[allow(non_snake_case)]
-fn point_to_013<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    let one = Fp2::ONE;
-    let two = one + one;
-    let three = one + two;
-    let x = Fp2::embed(&P.x);
-    let y = Fp2::embed(&P.y);
-
-    // λ = (3x^2) / (2y)
-    // 1 - λ(x/y)w + (λx - y)(1/y)w^3
-    // b = -(λ * x / y)
-    //   = -3x^3 / 2y^2
-    // c = (λ * x - y) / y
-    //   = 3x^3/2y^2 - 1
-    let x_squared = x.square();
-    let x_cubed = x_squared * x;
-    let y_squared = y.square();
-    let three_x_cubed = three * x_cubed;
-    let over_two_y_squared = (two * y_squared).invert().unwrap();
-
-    let b = three_x_cubed.neg() * over_two_y_squared;
-    let c = three_x_cubed * over_two_y_squared - Fp2::ONE;
-
-    EvaluatedLine { b, c }
-}
 
 #[test]
 fn test_fp12_square() {
@@ -65,8 +34,8 @@ fn test_mul_013_by_013() {
     };
 
     // Get lines evaluated at rnd_pt_0 and rnd_pt_1
-    let line_0 = point_to_013::<Fq, Fq2>(ec_point_0);
-    let line_1 = point_to_013::<Fq, Fq2>(ec_point_1);
+    let line_0 = tangent_line_013::<Fq, Fq2>(ec_point_0);
+    let line_1 = tangent_line_013::<Fq, Fq2>(ec_point_1);
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_013_by_013 = mul_013_by_013::<Fq, Fq2>(line_0, line_1, Bn254::xi());
@@ -88,7 +57,7 @@ fn test_mul_by_013() {
         x: rnd_pt.x,
         y: rnd_pt.y,
     };
-    let line = point_to_013::<Fq, Fq2>(ec_point);
+    let line = tangent_line_013::<Fq, Fq2>(ec_point);
     let mul_by_013 = mul_by_013::<Fq, Fq2, Fq12>(f, line);
 
     let check_mul_fp12 = Fq12::from_evaluated_line_d_type(line) * f;

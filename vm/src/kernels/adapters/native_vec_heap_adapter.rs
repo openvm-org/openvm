@@ -6,8 +6,9 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -23,7 +24,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
 
@@ -34,7 +35,7 @@ use crate::{
 ///   from the heap, starting from the addresses in `rs`
 /// * Writes take the form of `NUM_WRITES` consecutive writes of size `WRITE_SIZE`
 ///   to the heap, starting from the address in `rd`.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeVecHeapAdapterChip<
     F: Field,
     const R: usize,
@@ -254,7 +255,7 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (4, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
@@ -342,7 +343,7 @@ impl<
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 1,
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, writes },

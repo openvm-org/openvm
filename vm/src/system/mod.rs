@@ -1,7 +1,8 @@
+pub mod connector;
 pub mod memory;
+/// Chip to handle phantom instructions.
+/// The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
+/// The runtime executor will execute different phantom instructions that may
+/// affect trace generation based on the operand.
+pub mod phantom;
 pub mod program;
-pub mod vm;
-
-/// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
-/// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
-pub const DEFAULT_PC_STEP: u32 = 4;

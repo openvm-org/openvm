@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
@@ -90,8 +90,9 @@ where
                     // u64 <-> bytes conversion is little-endian
                     for (i, &byte) in bytes.iter().enumerate() {
                         let s_byte = (*s >> (i * 8)) as u8;
-                        // Update xor chip state: order matters!
-                        self.byte_xor_chip.request(byte as u32, s_byte as u32);
+                        // Update bitwise lookup (i.e. xor) chip state: order matters!
+                        self.bitwise_lookup_chip
+                            .request_xor(byte as u32, s_byte as u32);
                         *s ^= (byte as u64) << (i * 8);
                     }
                 }

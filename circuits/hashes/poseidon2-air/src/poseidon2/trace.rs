@@ -1,4 +1,3 @@
-use afs_primitives::sub_chip::LocalTraceInstructions;
 use itertools::izip;
 use p3_field::{AbstractField, Field};
 use p3_matrix::dense::RowMajorMatrix;
@@ -19,9 +18,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         RowMajorMatrix::new(
             input_states
                 .into_iter()
-                .flat_map(|input_state| {
-                    self.generate_local_trace(input_state).flatten().into_iter()
-                })
+                .flat_map(|input_state| self.generate_trace_row(input_state).flatten().into_iter())
                 .collect(),
             self.get_width(),
         )
@@ -31,7 +28,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     pub fn request_trace(&mut self, states: &[[F; WIDTH]]) -> Vec<Vec<F>> {
         states
             .iter()
-            .map(|s| self.generate_local_trace(*s).io.output.to_vec())
+            .map(|s| self.generate_trace_row(*s).io.output.to_vec())
             .collect()
     }
 
@@ -61,7 +58,7 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
     }
 
     /// Generate one row of trace from the input state.
-    pub fn generate_local_trace(&self, input_state: [F; WIDTH]) -> Poseidon2Cols<WIDTH, F> {
+    pub fn generate_trace_row(&self, input_state: [F; WIDTH]) -> Poseidon2Cols<WIDTH, F> {
         let mut state = input_state;
 
         // The first half of the external rounds.
@@ -162,12 +159,5 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
             ret *= value.clone();
         }
         ret
-    }
-}
-
-impl<const WIDTH: usize, F: Field> LocalTraceInstructions<F> for Poseidon2Air<WIDTH, F> {
-    type LocalInput = [F; WIDTH];
-    fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
-        self.generate_local_trace(local_input)
     }
 }

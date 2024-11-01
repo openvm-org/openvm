@@ -1,12 +1,12 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use afs_stark_backend::{
+use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -14,7 +14,7 @@ use crate::arch::{ExecutionBus, ExecutionState};
 
 pub mod air;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ExecutionTester<F: Field> {
     pub bus: ExecutionBus,
     pub records: Vec<DummyExecutionInteractionCols<F>>,
@@ -47,31 +47,6 @@ impl<F: PrimeField32> ExecutionTester<F> {
     pub fn last_to_pc(&self) -> F {
         self.records.last().unwrap().final_state.pc
     }
-
-    // for use by CoreChip, needs to be modified to setup memorytester (or just merge them before writing CoreChip)
-    /*fn test_execution_with_expected_changes<F: PrimeField64, E: InstructionExecutor<F>>(
-        &mut self,
-        executor: &mut E,
-        instruction: Instruction<F>,
-        expected_pc_change: usize,
-        expected_timestamp_change: usize,
-    ) {
-        let initial_state = ExecutionState {
-            pc: self.next_elem_size_usize::<F>(),
-            timestamp: self.next_elem_size_usize::<F>(),
-        };
-        let final_state = ExecutionState {
-            pc: initial_state.pc + expected_pc_change,
-            timestamp: initial_state.timestamp + expected_timestamp_change,
-        };
-        assert_eq!(executor.execute(&instruction, initial_state), final_state);
-        self.executions.push(Execution {
-            initial_state,
-            final_state,
-            instruction: InstructionCols::from_instruction(&instruction)
-                .map(|elem| elem.as_canonical_u64() as usize),
-        });
-    }*/
 }
 
 impl<SC: StarkGenericConfig> Chip<SC> for ExecutionTester<Val<SC>>

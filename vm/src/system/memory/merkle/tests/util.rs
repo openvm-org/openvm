@@ -1,11 +1,14 @@
 use std::array::from_fn;
 
-use ax_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
+use ax_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{kernels::core::POSEIDON2_DIRECT_BUS, system::memory::tree::HasherChip};
+use crate::arch::{
+    hasher::{Hasher, HasherChip},
+    POSEIDON2_DIRECT_BUS,
+};
 
 pub fn test_hash_sum<const CHUNK: usize, F: Field>(
     left: [F; CHUNK],
@@ -41,14 +44,15 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 }
 
+impl<const CHUNK: usize, F: Field> Hasher<CHUNK, F> for HashTestChip<CHUNK, F> {
+    fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
+        test_hash_sum(*left, *right)
+    }
+}
 impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, F> {
     fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
         let result = test_hash_sum(*left, *right);
         self.requests.push([*left, *right, result]);
         result
-    }
-
-    fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
-        test_hash_sum(*left, *right)
     }
 }

@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 
 use crate::system::memory::{offline_checker::AUX_LEN, MemoryAddress};
 

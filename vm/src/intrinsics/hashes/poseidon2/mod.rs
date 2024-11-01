@@ -1,13 +1,14 @@
 use std::array;
 
-use afs_primitives::sub_chip::LocalTraceInstructions;
+use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use columns::*;
 use p3_field::PrimeField32;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
+        hasher::{Hasher, HasherChip},
         instructions::{
             Poseidon2Opcode::{self, *},
             UsizeOpcode,
@@ -17,10 +18,9 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            tree::HasherChip,
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{ExecutionError, Instruction, ProgramBus},
+        program::{ExecutionError, ProgramBus},
     },
 };
 
@@ -316,7 +316,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         });
 
         Ok(ExecutionState {
-            pc: from_state.pc + 1,
+            pc: from_state.pc + DEFAULT_PC_STEP,
             timestamp: memory_controller.timestamp(),
         })
     }
@@ -326,7 +326,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         format!("{local_opcode_index:?}")
     }
 }
+impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {
+    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+        let mut input_state = [F::zero(); WIDTH];
+        input_state[..CHUNK].copy_from_slice(lhs);
+        input_state[CHUNK..].copy_from_slice(rhs);
 
+        let inner_cols = self.air.inner.generate_trace_row(input_state);
+        array::from_fn(|i| inner_cols.io.output[i])
+    }
+}
 impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
     /// Key method for Hasher trait.
     ///
@@ -345,14 +354,5 @@ impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
             .push(Poseidon2Record::DirectCompress { inner_cols });
 
         output
-    }
-
-    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::zero(); WIDTH];
-        input_state[..CHUNK].copy_from_slice(lhs);
-        input_state[CHUNK..].copy_from_slice(rhs);
-
-        let inner_cols = self.air.inner.generate_trace_row(input_state);
-        array::from_fn(|i| inner_cols.io.output[i])
     }
 }

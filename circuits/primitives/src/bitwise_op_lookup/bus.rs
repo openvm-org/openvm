@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,14 +12,28 @@ impl BitwiseOperationLookupBus {
     }
 
     #[must_use]
-    pub fn send<T>(
+    pub fn send_range<T>(
+        &self,
+        x: impl Into<T>,
+        y: impl Into<T>,
+    ) -> BitwiseOperationLookupBusInteraction<T>
+    where
+        T: AbstractField,
+    {
+        self.push(x, y, T::zero(), T::zero(), InteractionType::Send)
+    }
+
+    #[must_use]
+    pub fn send_xor<T>(
         &self,
         x: impl Into<T>,
         y: impl Into<T>,
         z: impl Into<T>,
-        op: impl Into<T>,
-    ) -> BitwiseOperationLookupBusInteraction<T> {
-        self.push(x, y, z, op, InteractionType::Send)
+    ) -> BitwiseOperationLookupBusInteraction<T>
+    where
+        T: AbstractField,
+    {
+        self.push(x, y, z, T::one(), InteractionType::Send)
     }
 
     #[must_use]

@@ -5,20 +5,10 @@ use std::{
     rc::Rc,
 };
 
-use afs_primitives::bigint::check_carry_to_zero::get_carry_max_abs_and_bits;
+use ax_circuit_primitives::bigint::check_carry_to_zero::get_carry_max_abs_and_bits;
 use p3_util::log2_ceil_usize;
 
 use super::{ExprBuilder, SymbolicExpr};
-
-pub trait FieldVariableConfig {
-    // This is the limb bits for a canonical field element. Typically 8.
-    fn canonical_limb_bits() -> usize;
-    // The max bits allowed per limb, determined by the underlying field we use to represent the field element.
-    // For example BabyBear -> 29.
-    fn max_limb_bits() -> usize;
-    // Number of limbs to represent a field element.
-    fn num_limbs_per_field_element() -> usize;
-}
 
 #[derive(Clone)]
 pub struct FieldVariable {
@@ -55,21 +45,15 @@ impl FieldVariable {
             return var_id;
         }
         let mut builder = self.builder.borrow_mut();
-        builder.num_variables += 1;
 
         // Introduce a new variable to replace self.expr.
-        let new_var = SymbolicExpr::Var(builder.num_variables - 1);
+        let (new_var_idx, new_var) = builder.new_var();
         // self.expr - new_var = 0
         let new_constraint =
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(new_var.clone()));
         // limbs information.
-        let (q_limbs, carry_limbs) =
-            self.expr
-                .constraint_limbs(&builder.prime, builder.limb_bits, builder.num_limbs);
-        builder.constraints.push(new_constraint);
-        builder.q_limbs.push(q_limbs);
-        builder.carry_limbs.push(carry_limbs);
-        builder.computes.push(self.expr.clone());
+        builder.set_constraint(new_var_idx, new_constraint);
+        builder.set_compute(new_var_idx, self.expr.clone());
 
         self.expr = new_var;
         self.limb_max_abs = (1 << builder.limb_bits) - 1;
@@ -77,6 +61,12 @@ impl FieldVariable {
         self.expr_limbs = builder.num_limbs;
 
         builder.num_variables - 1
+    }
+
+    pub fn save_output(&mut self) {
+        let index = self.save();
+        let mut builder = self.builder.borrow_mut();
+        builder.output_indices.push(index);
     }
 
     pub fn canonical_limb_bits(&self) -> usize {
@@ -94,20 +84,20 @@ impl FieldVariable {
     }
 
     fn save_if_overflow(
-        a: &mut FieldVariable,
-        b: &mut FieldVariable,
-        expr: SymbolicExpr,
-        limb_max_fn: fn(&FieldVariable, &FieldVariable) -> usize,
+        a: &mut FieldVariable, // will save this variable if overflow
+        expr: SymbolicExpr, // the "compute" expression of the result variable. Note that we need to check if constraint overflows
+        limb_max_abs: usize, // The max abs of limbs of compute expression.
     ) {
-        let canonical_limb_bits = a.builder.borrow().limb_bits;
-        debug_assert_eq!(canonical_limb_bits, b.builder.borrow().limb_bits);
-
+        if let SymbolicExpr::Var(_) = a.expr {
+            return;
+        }
         let builder = a.builder.borrow();
+        let canonical_limb_bits = builder.limb_bits;
         let q_limbs = FieldVariable::get_q_limbs(expr, &builder);
         let canonical_limb_max_abs = (1 << canonical_limb_bits) - 1;
 
-        // The constraint equation is expr - new_var - qp.
-        let limb_max_abs = limb_max_fn(a, b)
+        // The constraint equation is expr - new_var - qp, and we need to check if it overflows.
+        let limb_max_abs = limb_max_abs
             + canonical_limb_max_abs  // new var
             + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, builder.num_limbs); // qp
         drop(builder);
@@ -115,14 +105,7 @@ impl FieldVariable {
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, canonical_limb_bits);
         if carry_bits > a.range_checker_bits {
-            // Need to save self or other (or both) to prevent overflow.
-            if a.max_overflow_bits > b.max_overflow_bits {
-                assert!(a.max_overflow_bits > canonical_limb_bits);
-                a.save();
-            } else {
-                assert!(b.max_overflow_bits > canonical_limb_bits);
-                b.save();
-            }
+            a.save();
         }
     }
 
@@ -134,16 +117,14 @@ impl FieldVariable {
         let limb_max_fn = |a: &FieldVariable, b: &FieldVariable| a.limb_max_abs + b.limb_max_abs;
         FieldVariable::save_if_overflow(
             self,
-            other,
             SymbolicExpr::Add(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
         // Do again to check if the other also needs to be saved.
         FieldVariable::save_if_overflow(
-            self,
             other,
             SymbolicExpr::Add(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
 
         let limb_max_abs = limb_max_fn(self, other);
@@ -163,16 +144,14 @@ impl FieldVariable {
         let limb_max_fn = |a: &FieldVariable, b: &FieldVariable| a.limb_max_abs + b.limb_max_abs;
         FieldVariable::save_if_overflow(
             self,
-            other,
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
         // Do again to check if the other also needs to be saved.
         FieldVariable::save_if_overflow(
-            self,
             other,
             SymbolicExpr::Sub(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
 
         let limb_max_abs = limb_max_fn(self, other);
@@ -194,16 +173,14 @@ impl FieldVariable {
         };
         FieldVariable::save_if_overflow(
             self,
-            other,
             SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
         // Do again to check if the other also needs to be saved.
         FieldVariable::save_if_overflow(
-            self,
             other,
             SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(other.expr.clone())),
-            limb_max_fn,
+            limb_max_fn(self, other),
         );
 
         let limb_max_abs = limb_max_fn(self, other);
@@ -219,22 +196,12 @@ impl FieldVariable {
     }
 
     pub fn square(&mut self) -> FieldVariable {
-        let canonical_limb_bits = self.builder.borrow().limb_bits;
-        let builder = self.builder.borrow();
-        let expr = SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(self.expr.clone()));
-        let q_limbs = FieldVariable::get_q_limbs(expr, &builder);
-        let canonical_limb_max_abs = (1 << canonical_limb_bits) - 1;
-
         let limb_max_abs = self.limb_max_abs * self.limb_max_abs * self.expr_limbs;
-        let limb_max_abs = limb_max_abs
-            + canonical_limb_max_abs  // new var
-            + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, builder.num_limbs); // qp
-        let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, builder.limb_bits);
-        drop(builder);
-        if carry_bits > self.range_checker_bits {
-            self.save();
-        }
+        FieldVariable::save_if_overflow(
+            self,
+            SymbolicExpr::Mul(Box::new(self.expr.clone()), Box::new(self.expr.clone())),
+            limb_max_abs,
+        );
 
         let limb_max_abs = self.limb_max_abs * self.limb_max_abs * self.expr_limbs;
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
@@ -248,61 +215,92 @@ impl FieldVariable {
         }
     }
 
-    pub fn int_mul(&mut self, scalar: isize) -> FieldVariable {
-        let builder = self.builder.borrow();
-        let max_limb_bits = builder.max_limb_bits;
-        assert!(scalar.unsigned_abs() < (1 << max_limb_bits));
+    pub fn int_add(&mut self, scalar: isize) -> FieldVariable {
+        let limb_max_abs = self.limb_max_abs + scalar.unsigned_abs();
+        FieldVariable::save_if_overflow(
+            self,
+            SymbolicExpr::IntAdd(Box::new(self.expr.clone()), scalar),
+            limb_max_abs,
+        );
 
-        let q_limbs = FieldVariable::get_q_limbs(self.expr.clone(), &builder);
-        let canonical_limb_max_abs = (1 << builder.limb_bits) - 1;
-        let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
-        let limb_max_abs = limb_max_abs
-            + canonical_limb_max_abs  // new var
-            + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, builder.num_limbs); // qp
+        let limb_max_abs = self.limb_max_abs + scalar.unsigned_abs();
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, builder.limb_bits);
-        drop(builder);
-        if carry_bits > self.range_checker_bits {
-            self.save();
+        FieldVariable {
+            expr: SymbolicExpr::IntAdd(Box::new(self.expr.clone()), scalar),
+            builder: self.builder.clone(),
+            limb_max_abs,
+            max_overflow_bits,
+            expr_limbs: self.expr_limbs,
+            range_checker_bits: self.range_checker_bits,
         }
+    }
+
+    pub fn int_mul(&mut self, scalar: isize) -> FieldVariable {
+        let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
+        FieldVariable::save_if_overflow(
+            self,
+            SymbolicExpr::IntMul(Box::new(self.expr.clone()), scalar),
+            limb_max_abs,
+        );
+
         let limb_max_abs = self.limb_max_abs * scalar.unsigned_abs();
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
-        let mut res = FieldVariable {
+        FieldVariable {
             expr: SymbolicExpr::IntMul(Box::new(self.expr.clone()), scalar),
             builder: self.builder.clone(),
             limb_max_abs,
             max_overflow_bits,
             expr_limbs: self.expr_limbs,
             range_checker_bits: self.range_checker_bits,
-        };
-        if max_overflow_bits > max_limb_bits {
-            res.save();
         }
-        res
     }
 
     // expr cannot have division, so auto-save a new variable.
-    pub fn div(&self, other: &FieldVariable) -> FieldVariable {
+    pub fn div(&mut self, other: &mut FieldVariable) -> FieldVariable {
         assert!(Rc::ptr_eq(&self.builder, &other.builder));
-        let new_var = {
-            let mut builder = self.builder.borrow_mut();
-            // Introduce a new variable to replace self.expr / other.expr.
-            let new_var = builder.new_var();
-            // other.expr * new_var = self.expr
-            let new_constraint = SymbolicExpr::Sub(
-                Box::new(SymbolicExpr::Mul(
-                    Box::new(other.expr.clone()),
-                    Box::new(new_var.clone()),
-                )),
-                Box::new(self.expr.clone()),
-            );
-            builder.add_constraint(new_constraint);
-            // Only compute can have division.
-            let compute =
-                SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
-            builder.computes.push(compute);
-            new_var
-        };
+        let builder = self.builder.borrow();
+        let prime = builder.prime.clone();
+        let limb_bits = builder.limb_bits;
+        let num_limbs = builder.num_limbs;
+        drop(builder);
+
+        // This is a dummy variable, will be replaced later so the index within it doesn't matter.
+        // We use this to check if we need to save self/other first.
+        let fake_var = SymbolicExpr::Var(0);
+
+        // Constraint: other.expr * new_var - self.expr = 0 (mod p)
+        let new_constraint = SymbolicExpr::Sub(
+            Box::new(SymbolicExpr::Mul(
+                Box::new(other.expr.clone()),
+                Box::new(fake_var.clone()),
+            )),
+            Box::new(self.expr.clone()),
+        );
+        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.range_checker_bits {
+            // TODO: should save the "bigger" one first (the one with higher limb_max_abs)
+            self.save();
+        }
+        // Do it again to check if other needs to be saved.
+        let new_constraint = SymbolicExpr::Sub(
+            Box::new(SymbolicExpr::Mul(
+                Box::new(other.expr.clone()),
+                Box::new(fake_var.clone()),
+            )),
+            Box::new(self.expr.clone()),
+        );
+        let carry_bits = new_constraint.constraint_carry_bits_with_pq(&prime, limb_bits, num_limbs);
+        if carry_bits > self.range_checker_bits {
+            other.save();
+        }
+
+        let mut builder = self.builder.borrow_mut();
+        let (new_var_idx, new_var) = builder.new_var();
+        builder.set_constraint(new_var_idx, new_constraint);
+        // Only compute can have division.
+        let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));
+        builder.set_compute(new_var_idx, compute);
+        drop(builder);
 
         FieldVariable::from_var(self.builder.clone(), new_var)
     }
@@ -400,34 +398,19 @@ impl Mul<&mut FieldVariable> for &mut FieldVariable {
     }
 }
 
-impl Div for FieldVariable {
+impl Div<FieldVariable> for FieldVariable {
     type Output = FieldVariable;
 
-    fn div(self, rhs: FieldVariable) -> Self::Output {
-        self.div(&rhs)
+    fn div(mut self, mut rhs: FieldVariable) -> Self::Output {
+        let x = &mut self;
+        x.div(&mut rhs)
     }
 }
 
-impl Div<FieldVariable> for &FieldVariable {
+impl Div<&mut FieldVariable> for &mut FieldVariable {
     type Output = FieldVariable;
 
-    fn div(self, rhs: FieldVariable) -> Self::Output {
-        self.div(&rhs)
-    }
-}
-
-impl Div<&FieldVariable> for FieldVariable {
-    type Output = FieldVariable;
-
-    fn div(self, rhs: &FieldVariable) -> Self::Output {
-        FieldVariable::div(&self, rhs)
-    }
-}
-
-impl Div<&FieldVariable> for &FieldVariable {
-    type Output = FieldVariable;
-
-    fn div(self, rhs: &FieldVariable) -> Self::Output {
+    fn div(self, rhs: &mut FieldVariable) -> Self::Output {
         FieldVariable::div(self, rhs)
     }
 }

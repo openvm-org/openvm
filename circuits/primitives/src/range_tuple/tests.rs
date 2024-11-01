@@ -1,7 +1,7 @@
 use std::{array, iter, sync::Arc};
 
-use afs_stark_backend::rap::AnyRap;
-use ax_sdk::{
+use ax_stark_backend::rap::AnyRap;
+use ax_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,

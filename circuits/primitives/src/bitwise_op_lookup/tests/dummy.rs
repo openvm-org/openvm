@@ -1,5 +1,5 @@
-use afs_stark_backend::{
-    interaction::InteractionBuilder,
+use ax_stark_backend::{
+    interaction::{InteractionBuilder, InteractionType},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -33,10 +33,15 @@ impl<F: Field> BaseAir<F> for DummyAir {
 impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        // local = [x, y, z, op]
         let local = main.row_slice(0);
         self.bus
-            .send(local[0], local[1], local[2], local[3])
+            .push(
+                local[0],
+                local[1],
+                local[2],
+                local[3],
+                InteractionType::Send,
+            )
             .eval(builder, AB::F::one());
     }
 }

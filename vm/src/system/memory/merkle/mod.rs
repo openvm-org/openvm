@@ -15,7 +15,7 @@ pub use columns::*;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
     touched_nodes: HashSet<(usize, usize, usize)>,

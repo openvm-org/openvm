@@ -1,8 +1,8 @@
-use afs_compiler::{
+use ax_stark_backend::keygen::types::TraceWidth;
+use axvm_native_compiler::{
     ir::{Builder, Config},
     prelude::*,
 };
-use afs_stark_backend::keygen::types::TraceWidth;
 use itertools::Itertools;
 use p3_util::log2_strict_usize;
 

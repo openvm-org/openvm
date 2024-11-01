@@ -1,10 +1,11 @@
-use axvm_instructions::{NopOpcode, TerminateOpcode, UsizeOpcode};
+use std::collections::BTreeMap;
+
+use axvm_instructions::{
+    exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
+    utils::isize_to_field, SystemOpcode, UsizeOpcode,
+};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
-use stark_vm::{
-    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-    system::program::{isize_to_field, Instruction},
-};
 
 fn i12_to_u24(imm: i32) -> u32 {
     (imm as u32) & 0xffffff
@@ -28,7 +29,6 @@ pub fn from_r_type<F: PrimeField32>(
         F::from_canonical_usize(e_as), // rs2 can be mem (eg modular arith)
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -46,7 +46,6 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
         F::zero(), // rs2 is an immediate
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -64,7 +63,6 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         F::two(), // we load from memory
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -78,12 +76,11 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
         opcode,
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-        F::from_canonical_u32(i12_to_u24(dec_insn.shamt as i32)),
+        F::from_canonical_u32(dec_insn.shamt),
         F::one(),  // rd and rs1 are registers
         F::zero(), // rs2 is an immediate
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -98,7 +95,6 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
         F::two(),
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -115,7 +111,6 @@ pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruct
         F::one(), // rs2 is a register
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
@@ -130,7 +125,6 @@ pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruct
         F::zero(),
         F::from_bool(dec_insn.rd != 0), // we may need to use this flag in the operation
         F::zero(),
-        String::new(),
     )
 }
 
@@ -148,14 +142,13 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
         F::zero(),
         F::zero(),
         F::zero(),
-        String::new(),
     )
 }
 
 /// Create a new [`Instruction`] that exits with code 1.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: TerminateOpcode::TERMINATE.with_default_offset(),
+        opcode: SystemOpcode::TERMINATE.with_default_offset(),
         c: F::one(),
         ..Default::default()
     }
@@ -163,14 +156,31 @@ pub fn unimp<F: PrimeField32>() -> Instruction<F> {
 
 pub fn nop<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: NopOpcode::NOP.with_default_offset(),
+        opcode: SystemOpcode::PHANTOM.with_default_offset(),
         ..Default::default()
     }
 }
 
-pub fn terminate<F: PrimeField32>() -> Instruction<F> {
+pub fn terminate<F: PrimeField32>(code: u8) -> Instruction<F> {
     Instruction {
-        opcode: TerminateOpcode::TERMINATE.with_default_offset(),
+        opcode: SystemOpcode::TERMINATE.with_default_offset(),
+        c: F::from_canonical_u8(code),
         ..Default::default()
     }
+}
+
+/// Converts our memory image (u32 -> [u8; 4]) into AxVm memory image ((as, address) -> word)
+pub fn elf_memory_image_to_axvm_memory_image<F: PrimeField32>(
+    memory_image: BTreeMap<u32, u32>,
+) -> MemoryImage<F> {
+    let mut result = MemoryImage::new();
+    for (addr, word) in memory_image {
+        for (i, byte) in word.to_le_bytes().into_iter().enumerate() {
+            result.insert(
+                (F::two(), F::from_canonical_u32(addr + i as u32)),
+                F::from_canonical_u8(byte),
+            );
+        }
+    }
+    result
 }

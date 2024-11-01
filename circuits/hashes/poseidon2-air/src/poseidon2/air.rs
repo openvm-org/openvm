@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_primitives::sub_chip::{AirConfig, SubAir};
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -190,10 +189,6 @@ impl<const WIDTH: usize, F: Field> BaseAir<F> for Poseidon2Air<WIDTH, F> {
     }
 }
 
-impl<const WIDTH: usize, F> AirConfig for Poseidon2Air<WIDTH, F> {
-    type Cols<T> = Poseidon2Cols<WIDTH, T>;
-}
-
 impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH, AB::F> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -203,15 +198,6 @@ impl<AB: InteractionBuilder, const WIDTH: usize> Air<AB> for Poseidon2Air<WIDTH,
         let poseidon2_cols = Poseidon2Cols::from_slice(local, self);
         let Poseidon2Cols { io, aux } = poseidon2_cols;
 
-        SubAir::<AB>::eval(self, builder, io, aux);
-    }
-}
-
-impl<AB: InteractionBuilder, const WIDTH: usize> SubAir<AB> for Poseidon2Air<WIDTH, AB::F> {
-    type IoView = Poseidon2IoCols<WIDTH, AB::Var>;
-    type AuxView = Poseidon2AuxCols<WIDTH, AB::Var>;
-
-    fn eval(&self, builder: &mut AB, io: Self::IoView, aux: Self::AuxView) {
         self.eval_interactions(builder, io);
         self.eval_without_interactions(builder, io, aux.into_expr::<AB>());
     }

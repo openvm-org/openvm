@@ -3,8 +3,8 @@
 
 use std::{array, borrow::Borrow, iter};
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::assert_less_than::columns::AssertLessThanAuxCols;
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::is_less_than::LessThanAuxCols;
 use p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
@@ -13,12 +13,12 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 // we assume the order of the fields when using borrow or borrow_mut
 #[repr(C)]
 /// Base structure for auxiliary memory columns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
+#[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(super) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
-    pub(super) clk_lt_aux: AssertLessThanAuxCols<T, AUX_LEN>,
+    pub(super) clk_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 impl<T: Clone> MemoryBaseAuxCols<T> {
@@ -45,22 +45,18 @@ impl<T> MemoryBaseAuxCols<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
+#[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
     pub base: MemoryBaseAuxCols<T>,
     pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
-    pub fn new(
-        prev_data: [T; N],
-        prev_timestamp: T,
-        clk_lt_aux: AssertLessThanAuxCols<T, AUX_LEN>,
-    ) -> Self {
+    pub fn new(prev_data: [T; N], prev_timestamp: T, lt_aux: LessThanAuxCols<T, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp,
-                clk_lt_aux,
+                clk_lt_aux: lt_aux,
             },
             prev_data,
         }
@@ -109,13 +105,13 @@ impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
+#[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryReadAuxCols<T, const N: usize> {
     pub(super) base: MemoryBaseAuxCols<T>,
 }
 
 impl<const N: usize, F: PrimeField32> MemoryReadAuxCols<F, N> {
-    pub fn new(prev_timestamp: u32, clk_lt_aux: AssertLessThanAuxCols<F, AUX_LEN>) -> Self {
+    pub fn new(prev_timestamp: u32, clk_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::from_canonical_u32(prev_timestamp),
@@ -223,7 +219,7 @@ impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, PartialEq, Eq, AlignedBorrow)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {
     pub(super) base: MemoryBaseAuxCols<T>,
     pub(super) is_immediate: T,
@@ -235,7 +231,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
         prev_timestamp: T,
         is_immediate: T,
         is_zero_aux: T,
-        clk_lt_aux: AssertLessThanAuxCols<T, AUX_LEN>,
+        clk_lt_aux: LessThanAuxCols<T, AUX_LEN>,
     ) -> Self {
         Self {
             base: MemoryBaseAuxCols {

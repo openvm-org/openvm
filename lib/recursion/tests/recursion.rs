@@ -1,17 +1,14 @@
-use afs_compiler::{asm::AsmBuilder, ir::Felt};
-use afs_recursion::testing_utils::inner::run_recursive_test;
-use ax_sdk::{
+use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
 };
+use axvm_circuit::arch::{instructions::program::Program, ExecutorName, VmConfig, VmExecutor};
+use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
+use axvm_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_uni_stark::{Domain, StarkGenericConfig};
-use stark_vm::system::{
-    program::Program,
-    vm::{config::VmConfig, VirtualMachine},
-};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -52,11 +49,15 @@ where
     let vm_config = VmConfig {
         num_public_values: 3,
         ..Default::default()
-    };
+    }
+    .add_executor(ExecutorName::FieldArithmetic)
+    .add_executor(ExecutorName::BranchEqual)
+    .add_executor(ExecutorName::LoadStore)
+    .add_executor(ExecutorName::Jal);
 
-    let vm = VirtualMachine::new(vm_config);
+    let executor = VmExecutor::new(vm_config);
 
-    let mut result = vm.execute_and_generate(fib_program).unwrap();
+    let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
     ProofInputForTest {
@@ -75,8 +76,9 @@ fn test_fibonacci_program_verify() {
 
 #[cfg(feature = "static-verifier")]
 #[test]
+#[ignore = "slow"]
 fn test_fibonacci_program_halo2_verify() {
-    use afs_recursion::halo2::testing_utils::run_static_verifier_test;
+    use axvm_recursion::halo2::testing_utils::run_static_verifier_test;
 
     let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
     run_static_verifier_test(

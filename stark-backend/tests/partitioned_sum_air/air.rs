@@ -3,7 +3,7 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::PartitionedAirBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

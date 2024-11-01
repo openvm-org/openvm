@@ -4,8 +4,9 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -21,14 +22,14 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{Instruction, ProgramBus},
+        program::ProgramBus,
     },
 };
 
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeAdapterChip<F: Field, const R: usize, const W: usize> {
     pub air: NativeAdapterAir<R, W>,
     _marker: PhantomData<F>,
@@ -187,7 +188,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -251,7 +252,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 1,
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {

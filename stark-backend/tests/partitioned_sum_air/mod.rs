@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     prover::{
         types::{AirProofInput, AirProofRawInput, ProofInput},
         USE_DEBUG_BUILDER,
     },
     verifier::VerificationError,
 };
-use ax_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
+use ax_stark_sdk::{config::baby_bear_poseidon2::default_engine, engine::StarkEngine};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;

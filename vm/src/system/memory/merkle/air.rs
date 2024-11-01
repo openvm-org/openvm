@@ -1,4 +1,6 @@
-use afs_stark_backend::{
+use std::borrow::Borrow;
+
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -6,7 +8,9 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols};
+use crate::system::memory::merkle::{
+    MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols, MemoryMerklePvs,
+};
 
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
@@ -17,12 +21,12 @@ pub struct MemoryMerkleAir<const CHUNK: usize> {
 impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
 impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
     fn width(&self) -> usize {
-        MemoryMerkleCols::<CHUNK, F>::get_width()
+        MemoryMerkleCols::<F, CHUNK>::width()
     }
 }
 impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
     fn num_public_values(&self) -> usize {
-        2 * CHUNK
+        MemoryMerklePvs::<F, CHUNK>::width()
     }
 }
 
@@ -31,10 +35,9 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
-        let local = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&local);
-        let next = main.row_slice(1);
-        let next = MemoryMerkleCols::<CHUNK, AB::Var>::from_slice(&next);
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local: &MemoryMerkleCols<_, CHUNK> = (*local).borrow();
+        let next: &MemoryMerkleCols<_, CHUNK> = (*next).borrow();
 
         // `expand_direction` should be -1, 0, 1
         builder.assert_eq(
@@ -102,15 +105,17 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         );
 
         // constrain public values
+        let &MemoryMerklePvs::<_, CHUNK> {
+            initial_root,
+            final_root,
+        } = builder.public_values().borrow();
         for i in 0..CHUNK {
-            let initial_hash_elem = builder.public_values()[i];
-            let final_hash_elem = builder.public_values()[CHUNK + i];
             builder
                 .when_first_row()
-                .assert_eq(local.parent_hash[i], initial_hash_elem);
+                .assert_eq(local.parent_hash[i], initial_root[i]);
             builder
                 .when_first_row()
-                .assert_eq(next.parent_hash[i], final_hash_elem);
+                .assert_eq(next.parent_hash[i], final_root[i]);
         }
 
         self.eval_interactions(builder, local);

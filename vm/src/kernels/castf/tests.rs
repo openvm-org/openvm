@@ -1,11 +1,11 @@
 use std::borrow::BorrowMut;
 
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
-use ax_sdk::{
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError, Chip};
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use axvm_instructions::CastfOpcode;
+use axvm_instructions::{instruction::Instruction, CastfOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
@@ -17,9 +17,7 @@ use crate::{
         adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
         castf::{CastF, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS},
     },
-    system::program::Instruction,
 };
-
 type F = BabyBear;
 
 fn generate_uint_number(rng: &mut StdRng) -> u32 {
@@ -148,7 +146,7 @@ fn negative_castf_memread_test() {
         .split_at_mut(ConvertAdapterCols::<F, 1, 4>::width())
         .0
         .borrow_mut();
-    cols.b_idx += F::one();
+    cols.b_pointer += F::one();
 
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 
@@ -186,7 +184,7 @@ fn negative_castf_memwrite_test() {
         .split_at_mut(ConvertAdapterCols::<F, 1, 4>::width())
         .0
         .borrow_mut();
-    cols.a_idx += F::one();
+    cols.a_pointer += F::one();
 
     let rc_p_input = range_checker_chip.generate_air_proof_input();
 

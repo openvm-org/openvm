@@ -1,6 +1,6 @@
 use core::mem::{size_of, transmute};
 
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use p3_util::indices_arr;
 
 #[derive(Default, AlignedBorrow)]

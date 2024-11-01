@@ -1,5 +1,6 @@
-use num_bigint::BigUint;
+use num_bigint_dig::BigUint;
 use num_traits::Num;
+use p3_field::Field;
 
 pub fn parse_biguint_auto(s: &str) -> Option<BigUint> {
     let s = s.trim();
@@ -10,4 +11,11 @@ pub fn parse_biguint_auto(s: &str) -> Option<BigUint> {
     } else {
         BigUint::from_str_radix(s, 10).ok()
     }
+}
+
+pub fn isize_to_field<F: Field>(value: isize) -> F {
+    if value < 0 {
+        return F::neg_one() * F::from_canonical_usize(value.unsigned_abs());
+    }
+    F::from_canonical_usize(value as usize)
 }

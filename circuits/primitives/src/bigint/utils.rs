@@ -1,12 +1,11 @@
 use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use p3_field::PrimeField64;
 
-use super::modular_arithmetic::ModularArithmeticAir;
-use crate::var_range::bus::VariableRangeCheckerBus;
+use crate::var_range::VariableRangeCheckerBus;
 
 // Checks that the given expression is within bits number of bits.
 pub fn range_check<AB: InteractionBuilder>(
@@ -44,33 +43,6 @@ pub fn secp256k1_scalar_prime() -> BigUint {
         "115792089237316195423570985008687907852837564279074904382605163141518161494337",
     )
     .unwrap()
-}
-
-pub fn get_arithmetic_air(
-    prime: BigUint,
-    limb_bits: usize,
-    field_element_bits: usize,
-    num_limbs: usize,
-    is_mul_div: bool,
-    range_bus: usize,
-    range_decomp: usize,
-) -> ModularArithmeticAir {
-    let q_limbs = if is_mul_div { num_limbs } else { 1 };
-    let carry_limbs = if is_mul_div {
-        2 * num_limbs - 1
-    } else {
-        num_limbs
-    };
-    ModularArithmeticAir::new(
-        prime,
-        limb_bits,
-        field_element_bits,
-        num_limbs,
-        q_limbs,
-        carry_limbs,
-        range_bus,
-        range_decomp,
-    )
 }
 
 pub fn big_int_abs(x: &BigInt) -> BigUint {

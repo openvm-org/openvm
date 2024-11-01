@@ -1,0 +1,22 @@
+[package]
+name = "axiom-vm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+axvm-native-compiler = { workspace = true }
+axvm-recursion = { workspace = true }
+ax-poseidon2-air = { workspace = true }
+ax-stark-sdk = { workspace = true }
+p3-baby-bear = { workspace = true }
+axvm-circuit = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["axvm-circuit/parallel"]

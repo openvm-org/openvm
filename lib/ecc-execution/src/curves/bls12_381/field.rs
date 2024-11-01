@@ -141,7 +141,7 @@ impl ExpBigInt<Fq12> for Fq12 {}
 #[cfg(test)]
 impl FeltPrint<Fq> for Fq {
     fn felt_print(&self, label: &str) {
-        println!("{} {:?}", label, self.0);
+        println!("{} {:?}", label, self);
     }
 }
 

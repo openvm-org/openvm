@@ -2,50 +2,43 @@ use std::{
     array,
     cell::RefCell,
     collections::{BTreeMap, HashMap},
-    iter,
     marker::PhantomData,
     rc::Rc,
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::{
-    assert_less_than::{columns::AssertLessThanAuxCols, AssertLessThanAir},
-    is_less_than::IsLessThanAir,
-    is_zero::IsZeroAir,
-    sub_chip::LocalTraceInstructions,
-    var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip},
+use ax_circuit_primitives::{
+    assert_less_than::{AssertLtSubAir, LessThanAuxCols},
+    is_less_than::IsLtSubAir,
+    is_zero::IsZeroSubAir,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    TraceSubRowGenerator,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
     rap::AnyRap,
 };
+use axvm_instructions::exe::MemoryImage;
 use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
 
 use self::interface::MemoryInterface;
-use super::{
-    offline_checker::{MemoryHeapReadAuxCols, MemoryHeapWriteAuxCols},
-    volatile::VolatileBoundaryChip,
-};
+use super::volatile::VolatileBoundaryChip;
 use crate::{
-    kernels::core::RANGE_CHECKER_BUS,
-    system::{
-        memory::{
-            adapter::AccessAdapterAir,
-            manager::memory::{AccessAdapterRecord, Memory},
-            offline_checker::{
-                MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-                MemoryWriteAuxCols, AUX_LEN,
-            },
+    arch::{hasher::HasherChip, MemoryConfig, RANGE_CHECKER_BUS},
+    system::memory::{
+        adapter::AccessAdapterAir,
+        manager::memory::{AccessAdapterRecord, Memory},
+        offline_checker::{
+            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+            MemoryWriteAuxCols, AUX_LEN,
         },
-        vm::config::MemoryConfig,
     },
 };
 
@@ -59,110 +52,17 @@ use crate::system::memory::{
     manager::memory::INITIAL_TIMESTAMP,
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
-    tree::{HasherChip, MemoryNode},
+    tree::MemoryNode,
 };
 
 pub const CHUNK: usize = 8;
+/// The offset of the Merkle AIR in AIRs of MemoryController.
+pub const MERKLE_AIR_OFFSET: usize = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
     pub timestamp: u32,
     pub values: [T; N],
-}
-
-/// Represents first reads a pointer, and then a batch read at the pointer.
-#[derive(Clone, Copy, Debug)]
-pub struct MemoryHeapReadRecord<T, const N: usize> {
-    pub address_read: MemoryReadRecord<T, 1>,
-    pub data_read: MemoryReadRecord<T, N>,
-}
-
-/// Represents first reads a pointer, and then a batch write at the pointer.
-#[derive(Clone, Copy, Debug)]
-pub struct MemoryHeapWriteRecord<T, const N: usize> {
-    pub address_read: MemoryReadRecord<T, 1>,
-    pub data_write: MemoryWriteRecord<T, N>,
-}
-
-/// Holds the data and the information about its address.
-#[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow)]
-pub struct MemoryDataIoCols<T, const N: usize> {
-    pub data: [T; N],
-    pub address_space: T,
-    pub pointer: T,
-}
-
-impl<T: Clone, const N: usize> MemoryDataIoCols<T, N> {
-    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
-        Self {
-            data: array::from_fn(|_| iter.next().unwrap()),
-            address_space: iter.next().unwrap(),
-            pointer: iter.next().unwrap(),
-        }
-    }
-
-    pub fn flatten(&self) -> impl Iterator<Item = &T> {
-        self.data
-            .iter()
-            .chain(iter::once(&self.address_space))
-            .chain(iter::once(&self.pointer))
-    }
-}
-
-/// Holds the heap data and the information about its address.
-#[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow)]
-pub struct MemoryHeapDataIoCols<T, const N: usize> {
-    pub address: MemoryDataIoCols<T, 1>,
-    pub data: MemoryDataIoCols<T, N>,
-}
-
-impl<T: Clone, const N: usize> MemoryHeapDataIoCols<T, N> {
-    pub fn from_iterator(mut iter: impl Iterator<Item = T>) -> Self {
-        Self {
-            address: MemoryDataIoCols::from_iterator(iter.by_ref()),
-            data: MemoryDataIoCols::from_iterator(iter.by_ref()),
-        }
-    }
-
-    pub fn flatten(&self) -> impl Iterator<Item = &T> {
-        self.address.flatten().chain(self.data.flatten())
-    }
-}
-
-impl<T: Clone, const N: usize> From<MemoryHeapReadRecord<T, N>> for MemoryHeapDataIoCols<T, N> {
-    fn from(record: MemoryHeapReadRecord<T, N>) -> Self {
-        Self {
-            address: MemoryDataIoCols {
-                data: record.address_read.data,
-                address_space: record.address_read.address_space,
-                pointer: record.address_read.pointer,
-            },
-            data: MemoryDataIoCols {
-                data: record.data_read.data,
-                address_space: record.data_read.address_space,
-                pointer: record.data_read.pointer,
-            },
-        }
-    }
-}
-
-impl<T: Clone, const N: usize> From<MemoryHeapWriteRecord<T, N>> for MemoryHeapDataIoCols<T, N> {
-    fn from(record: MemoryHeapWriteRecord<T, N>) -> Self {
-        Self {
-            address: MemoryDataIoCols {
-                data: record.address_read.data,
-                address_space: record.address_read.address_space,
-                pointer: record.address_read.pointer,
-            },
-            data: MemoryDataIoCols {
-                data: record.data_write.data,
-                address_space: record.data_write.address_space,
-                pointer: record.data_write.pointer,
-            },
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -190,8 +90,8 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
 
-#[derive(Clone, Debug)]
-pub struct MemoryController<F: Field> {
+#[derive(Debug)]
+pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub(crate) mem_config: MemoryConfig,
@@ -218,9 +118,8 @@ impl<F: PrimeField32> MemoryController<F> {
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
-                    mem_config.addr_space_max_bits,
+                    mem_config.as_height,
                     mem_config.pointer_max_bits,
-                    mem_config.decomp,
                     range_checker.clone(),
                 ),
             },
@@ -239,7 +138,7 @@ impl<F: PrimeField32> MemoryController<F> {
         initial_memory: Equipartition<F, CHUNK>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
-            as_height: mem_config.addr_space_max_bits,
+            as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
@@ -266,7 +165,9 @@ impl<F: PrimeField32> MemoryController<F> {
         }
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                panic!("Cannot set initial memory for volatile memory");
+                if !memory.is_empty() {
+                    panic!("Cannot set initial memory for volatile memory");
+                }
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
@@ -328,22 +229,6 @@ impl<F: PrimeField32> MemoryController<F> {
         record
     }
 
-    /// First lookup the heap pointer, and then read the data at the pointer.
-    pub fn read_heap<const N: usize>(
-        &mut self,
-        ptr_address_space: F,
-        data_address_space: F,
-        ptr_pointer: F,
-    ) -> MemoryHeapReadRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
-        let data_read = self.read(data_address_space, address_read.value());
-
-        MemoryHeapReadRecord {
-            address_read,
-            data_read,
-        }
-    }
-
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
@@ -392,31 +277,11 @@ impl<F: PrimeField32> MemoryController<F> {
         record
     }
 
-    /// First lookup the heap pointer, and then write the data at the pointer.
-    pub fn write_heap<const N: usize>(
-        &mut self,
-        ptr_address_space: F,
-        data_address_space: F,
-        ptr_pointer: F,
-        data: [F; N],
-    ) -> MemoryHeapWriteRecord<F, N> {
-        let address_read = self.read_cell(ptr_address_space, ptr_pointer);
-        let data_write = self.write(data_address_space, address_read.value(), data);
-
-        MemoryHeapWriteRecord {
-            address_read,
-            data_write,
-        }
-    }
-
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.mem_config.decomp);
         MemoryAuxColsFactory {
             range_checker: self.range_checker.clone(),
-            timestamp_lt_air: AssertLessThanAir::<AUX_LEN>::new(
-                range_bus,
-                self.mem_config.clk_max_bits,
-            ),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
     }
@@ -438,8 +303,8 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
-    pub fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
-        let lt_air = IsLessThanAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
+    fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
+        let lt_air = IsLtSubAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
         AccessAdapterAir::<N> {
             memory_bus: self.memory_bus,
             lt_air,
@@ -492,10 +357,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     hasher,
                 );
 
+                debug_assert_eq!(traces.len(), MERKLE_AIR_OFFSET);
                 traces.push(expand_trace);
                 let mut expand_pvs = vec![];
                 expand_pvs.extend(initial_node.hash());
                 expand_pvs.extend(final_node.hash());
+                debug_assert_eq!(pvs.len(), MERKLE_AIR_OFFSET);
                 pvs.push(expand_pvs);
                 (records, Some(final_memory_values))
             }
@@ -559,6 +426,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ..
             } => {
                 airs.push(Arc::new(boundary_chip.air.clone()));
+                debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
                 airs.push(Arc::new(merkle_chip.air.clone()));
             }
         }
@@ -667,7 +535,7 @@ impl<F: PrimeField32> MemoryController<F> {
 #[derive(Clone, Debug)]
 pub struct MemoryAuxColsFactory<T> {
     range_checker: Arc<VariableRangeCheckerChip>,
-    timestamp_lt_air: AssertLessThanAir<AUX_LEN>,
+    timestamp_lt_air: AssertLtSubAir,
     _marker: PhantomData<T>,
 }
 
@@ -687,38 +555,20 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         )
     }
 
-    pub fn make_heap_read_aux_cols<const N: usize>(
-        &self,
-        read: MemoryHeapReadRecord<F, N>,
-    ) -> MemoryHeapReadAuxCols<F, N> {
-        MemoryHeapReadAuxCols {
-            address: self.make_read_aux_cols(read.address_read),
-            data: self.make_read_aux_cols(read.data_read),
-        }
-    }
-
-    pub fn make_heap_write_aux_cols<const N: usize>(
-        &self,
-        write: MemoryHeapWriteRecord<F, N>,
-    ) -> MemoryHeapWriteAuxCols<F, N> {
-        MemoryHeapWriteAuxCols {
-            address: self.make_read_aux_cols(write.address_read),
-            data: self.make_write_aux_cols(write.data_write),
-        }
-    }
-
     pub fn make_read_or_immediate_aux_cols(
         &self,
         read: MemoryReadRecord<F, 1>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
-        let addr_space_is_zero_cols = IsZeroAir.generate_trace_row(read.address_space);
+        let mut inv = F::zero();
+        let mut is_zero = F::zero();
+        IsZeroSubAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
         let timestamp_lt_cols =
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
 
         MemoryReadOrImmediateAuxCols::new(
             F::from_canonical_u32(read.prev_timestamp),
-            addr_space_is_zero_cols.io.is_zero,
-            addr_space_is_zero_cols.inv,
+            is_zero,
+            inv,
             timestamp_lt_cols,
         )
     }
@@ -738,40 +588,50 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         &self,
         prev_timestamp: u32,
         timestamp: u32,
-    ) -> AssertLessThanAuxCols<F, AUX_LEN> {
+    ) -> LessThanAuxCols<F, AUX_LEN> {
         debug_assert!(prev_timestamp < timestamp);
-        let mut aux: AssertLessThanAuxCols<F, AUX_LEN> =
-            AssertLessThanAuxCols::<F, AUX_LEN>::new([F::zero(); AUX_LEN]);
-        self.timestamp_lt_air.generate_trace_row_aux(
-            prev_timestamp,
-            timestamp,
-            &self.range_checker,
-            &mut aux,
+        let mut decomp = [F::zero(); AUX_LEN];
+        self.timestamp_lt_air.generate_subrow(
+            (&self.range_checker, prev_timestamp, timestamp),
+            &mut decomp,
         );
-        aux
+        LessThanAuxCols::new(decomp)
     }
+}
+
+pub fn memory_image_to_equipartition<F: PrimeField32, const N: usize>(
+    memory_image: MemoryImage<F>,
+) -> Equipartition<F, { N }> {
+    let mut result = Equipartition::new();
+    for ((addr_space, addr), word) in memory_image {
+        let addr_u32 = addr.as_canonical_u32();
+        let shift = addr_u32 as usize % N;
+        let key = (addr_space, (addr_u32 / N as u32) as usize);
+        result.entry(key).or_insert([F::zero(); N])[shift] = word;
+    }
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
     use crate::{
-        kernels::core::RANGE_CHECKER_BUS,
-        system::{memory::offline_checker::MemoryBus, vm::config::MemoryConfig},
+        arch::{MemoryConfig, MEMORY_BUS, RANGE_CHECKER_BUS},
+        system::memory::offline_checker::MemoryBus,
     };
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
         type F = BabyBear;
 
-        let memory_bus = MemoryBus(1);
+        let memory_bus = MemoryBus(MEMORY_BUS);
         let memory_config = MemoryConfig::default();
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));

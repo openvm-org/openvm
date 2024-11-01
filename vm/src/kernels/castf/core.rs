@@ -3,10 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::var_range::{bus::VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::CastfOpcode;
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::{instruction::Instruction, CastfOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -16,9 +16,7 @@ use crate::{
         VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
-    system::program::Instruction,
 };
-
 // LIMB_BITS is the size of the limbs in bits.
 pub(crate) const LIMB_BITS: usize = 8;
 // the final limb has only 6 bits
