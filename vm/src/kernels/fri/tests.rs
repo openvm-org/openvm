@@ -8,15 +8,24 @@ use rand::Rng;
 
 use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    kernels::fri::{FriFoldChip, FriFoldCols},
+    kernels::{
+        field_extension::FieldExtension,
+        fri::{FriFoldChip, FriFoldCols, EXT_DEG},
+    },
 };
-use crate::kernels::field_extension::FieldExtension;
-use crate::kernels::fri::EXT_DEG;
 
-fn compute_fri_fold<F: Field>(alpha: [F; EXT_DEG], mut alpha_pow: [F; EXT_DEG], a: &[[F; EXT_DEG]], b: &[[F; EXT_DEG]]) -> ([F; EXT_DEG], [F; EXT_DEG]) {
+fn compute_fri_fold<F: Field>(
+    alpha: [F; EXT_DEG],
+    mut alpha_pow: [F; EXT_DEG],
+    a: &[[F; EXT_DEG]],
+    b: &[[F; EXT_DEG]],
+) -> ([F; EXT_DEG], [F; EXT_DEG]) {
     let mut result = [F::zero(); EXT_DEG];
     for (&a, &b) in a.iter().zip_eq(b) {
-        result = FieldExtension::add(result, FieldExtension::multiply(FieldExtension::subtract(b, a), alpha_pow));
+        result = FieldExtension::add(
+            result,
+            FieldExtension::multiply(FieldExtension::subtract(b, a), alpha_pow),
+        );
         alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
     }
     (alpha_pow, result)
@@ -37,28 +46,28 @@ fn fri_fold_air_test() {
     );
 
     let mut rng = create_seeded_rng();
-    
+
     macro_rules! gen_ext {
         () => {
-            std::array::from_fn::<_, EXT_DEG, _>(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())))
-        }
+            std::array::from_fn::<_, EXT_DEG, _>(|_| {
+                BabyBear::from_canonical_u32(rng.gen_range(elem_range()))
+            })
+        };
     }
 
     for _ in 0..num_ops {
         let alpha = gen_ext!();
         let length = rng.gen_range(length_range());
         let alpha_pow_initial = gen_ext!();
-        let a = (0..length)
-            .map(|_| gen_ext!())
-            .collect_vec();
-        let b = (0..length)
-            .map(|_| gen_ext!())
-            .collect_vec();
+        let a = (0..length).map(|_| gen_ext!()).collect_vec();
+        let b = (0..length).map(|_| gen_ext!()).collect_vec();
 
         let (alpha_pow_final, result) = compute_fri_fold(alpha, alpha_pow_initial, &a, &b);
 
         let alpha_pointer = gen_pointer(&mut rng, 4);
         let length_pointer = gen_pointer(&mut rng, 1);
+        let a_pointer_pointer = gen_pointer(&mut rng, 1);
+        let b_pointer_pointer = gen_pointer(&mut rng, 1);
         let alpha_pow_pointer = gen_pointer(&mut rng, 4);
         let result_pointer = gen_pointer(&mut rng, 4);
         let a_pointer = gen_pointer(&mut rng, 4);
@@ -70,12 +79,22 @@ fn fri_fold_air_test() {
             "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
             result_as, as1, as2, result_pointer, address1, address2, result, operand1, operand2,
         );*/
-        
+
         tester.write(address_space, alpha_pointer, alpha);
         tester.write_cell(
             address_space,
             length_pointer,
             BabyBear::from_canonical_usize(length),
+        );
+        tester.write_cell(
+            address_space,
+            a_pointer_pointer,
+            BabyBear::from_canonical_usize(a_pointer),
+        );
+        tester.write_cell(
+            address_space,
+            b_pointer_pointer,
+            BabyBear::from_canonical_usize(b_pointer),
         );
         tester.write(address_space, alpha_pow_pointer, alpha_pow_initial);
         for i in 0..length {
@@ -88,8 +107,8 @@ fn fri_fold_air_test() {
             Instruction::from_usize(
                 FRI_FOLD as usize,
                 [
-                    a_pointer,
-                    b_pointer,
+                    a_pointer_pointer,
+                    b_pointer_pointer,
                     result_pointer,
                     address_space,
                     length_pointer,
