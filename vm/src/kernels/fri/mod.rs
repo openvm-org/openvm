@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{is_zero::IsZeroSubAir, utils::not, SubAir, TraceSubRowGenerator};
+use ax_circuit_primitives::{
+    is_zero::{IsZeroIo, IsZeroSubAir},
+    utils::not,
+    SubAir, TraceSubRowGenerator,
+};
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -13,7 +17,7 @@ use axvm_instructions::{instruction::Instruction, FriFoldOpcode::FRI_FOLD};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use ax_circuit_primitives::is_zero::IsZeroIo;
+
 use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
     system::{
@@ -154,14 +158,17 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
 
         // is zero subair
 
-        SubAir::eval(&IsZeroSubAir {},
+        SubAir::eval(
+            &IsZeroSubAir {},
             builder,
-                     (IsZeroIo {
-                x: index.into(),
-                out: index_is_zero.into(),
-                condition: AB::Expr::one(),
-            },
-            is_zero_aux),
+            (
+                IsZeroIo {
+                    x: index.into(),
+                    out: index_is_zero.into(),
+                    condition: AB::Expr::one(),
+                },
+                is_zero_aux,
+            ),
         );
 
         // execution interaction
