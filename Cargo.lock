@@ -730,6 +730,7 @@ dependencies = [
  "getrandom",
  "libm",
  "stability",
+ "strum_macros",
 ]
 
 [[package]]
