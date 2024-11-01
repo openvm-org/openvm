@@ -54,7 +54,7 @@ where
 
 /// Returns a line function for a tangent line at the point P
 #[allow(non_snake_case)]
-pub fn point_to_023<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+pub fn tangent_line_023<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
 where
     Fp: Field,
     Fp2: FieldExtension<BaseField = Fp>,

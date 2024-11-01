@@ -1,6 +1,6 @@
 use ax_ecc_execution::{
     common::{EcPoint, Fp2Constructor},
-    curves::bls12_381::point_to_023,
+    curves::bls12_381::tangent_line_023,
 };
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
@@ -63,8 +63,8 @@ fn test_mul_023_by_023() {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
-    let line0 = point_to_023::<Fq, Fq2>(ec_pt_0);
-    let line1 = point_to_023::<Fq, Fq2>(ec_pt_1);
+    let line0 = tangent_line_023::<Fq, Fq2>(ec_pt_0);
+    let line1 = tangent_line_023::<Fq, Fq2>(ec_pt_1);
     let input_line0 = [
         bls12381_fq2_to_biguint_vec(line0.b),
         bls12381_fq2_to_biguint_vec(line0.c),

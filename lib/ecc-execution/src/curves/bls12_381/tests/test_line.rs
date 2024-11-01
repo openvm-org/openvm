@@ -6,7 +6,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     common::{fp12_square, EcPoint, FieldExtension, LineMType},
-    curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, point_to_023, Bls12_381},
+    curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, tangent_line_023, Bls12_381},
 };
 
 // TODO[yj]: Probably should refactor these tests so that they don't repeat the ones in BN254
@@ -35,8 +35,8 @@ fn test_mul_023_by_023() {
     };
 
     // Get lines evaluated at rnd_pt_0 and rnd_pt_1
-    let line_0 = point_to_023::<Fq, Fq2>(ec_point_0);
-    let line_1 = point_to_023::<Fq, Fq2>(ec_point_1);
+    let line_0 = tangent_line_023::<Fq, Fq2>(ec_point_0);
+    let line_1 = tangent_line_023::<Fq, Fq2>(ec_point_1);
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_023_by_023 = mul_023_by_023::<Fq, Fq2>(line_0, line_1, Bls12_381::xi());
@@ -58,7 +58,7 @@ fn test_mul_by_023() {
         x: rnd_pt.x,
         y: rnd_pt.y,
     };
-    let line = point_to_023::<Fq, Fq2>(ec_point);
+    let line = tangent_line_023::<Fq, Fq2>(ec_point);
     let mul_by_023 = mul_by_023::<Fq, Fq2, Fq12>(f, line);
 
     let check_mul_fp12 = Fq12::from_evaluated_line_m_type(line) * f;
