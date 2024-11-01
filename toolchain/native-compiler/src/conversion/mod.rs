@@ -4,7 +4,10 @@ use axvm_circuit::arch::{
     instructions::{program::Program, *},
     Modulus,
 };
-use axvm_instructions::instruction::{DebugInfo, Instruction};
+use axvm_instructions::{
+    instruction::{DebugInfo, Instruction},
+    FriFoldOpcode::FRI_FOLD,
+};
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
@@ -673,6 +676,16 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        AsmInstruction::FriFold(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
+            opcode: options.opcode_with_offset(FRI_FOLD),
+            a: i32_f(a),
+            b: i32_f(b),
+            c: i32_f(res),
+            d: AS::Memory.to_field(),
+            e: i32_f(len),
+            f: i32_f(alpha),
+            g: i32_f(alpha_pow),
+        }],
     };
 
     let debug_infos = vec![debug_info; instructions.len()];

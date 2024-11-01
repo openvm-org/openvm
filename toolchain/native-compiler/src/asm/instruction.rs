@@ -118,6 +118,9 @@ pub enum AsmInstruction<F, EF> {
     /// Same as `Keccak256`, but with fixed length input (hence length is an immediate value).
     Keccak256FixLen(i32, i32, F),
 
+    /// (a, b, res, len, alpha, alpha_pow)
+    FriFold(i32, i32, i32, i32, i32, i32),
+
     /// Print a variable.
     PrintV(i32),
 
@@ -349,6 +352,13 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             }
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
+            }
+            AsmInstruction::FriFold(a, b, res, len, alpha, alpha_pow) => {
+                write!(
+                    f,
+                    "fri_fold ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
+                    a, b, res, len, alpha, alpha_pow
+                )
             }
         }
     }
