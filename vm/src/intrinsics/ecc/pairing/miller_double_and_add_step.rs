@@ -130,6 +130,8 @@ mod tests {
     type F = BabyBear;
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    const BLOCK_SIZE: usize = 32;
+
     #[test]
     #[allow(non_snake_case)]
     fn test_miller_double_and_add() {
@@ -155,7 +157,7 @@ mod tests {
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
         ));
-        let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, NUM_LIMBS, NUM_LIMBS>::new(
+        let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
