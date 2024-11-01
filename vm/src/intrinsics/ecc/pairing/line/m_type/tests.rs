@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_ecc_execution::{
     common::{EcPoint, Fp2Constructor},
-    curves::bls12_381::point_to_023,
+    curves::bls12_381::tangent_line_023,
 };
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
@@ -9,7 +14,7 @@ use ax_ecc_primitives::{
     },
 };
 use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{PairingOpcode, UsizeOpcode};
+use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
@@ -19,7 +24,7 @@ use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper},
+    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     intrinsics::{
         ecc::pairing::{mul_023_by_023_expr, mul_by_02345_expr},
         field_expression::FieldExpressionCoreChip,
@@ -29,12 +34,12 @@ use crate::{
 };
 
 type F = BabyBear;
+const NUM_LIMBS: usize = 48;
+const LIMB_BITS: usize = 8;
+const BLOCK_SIZE: usize = 16;
 
 #[test]
 fn test_mul_023_by_023() {
-    const NUM_LIMBS: usize = 64;
-    const LIMB_BITS: usize = 8;
-
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let expr = mul_023_by_023_expr(
         ExprBuilderConfig {
@@ -53,10 +58,16 @@ fn test_mul_023_by_023() {
         tester.memory_controller().borrow().range_checker.clone(),
         "Mul023By023",
     );
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 10, NUM_LIMBS, NUM_LIMBS>::new(
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 30, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(15);
@@ -71,8 +82,8 @@ fn test_mul_023_by_023() {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
-    let line0 = point_to_023::<Fq, Fq2>(ec_pt_0);
-    let line1 = point_to_023::<Fq, Fq2>(ec_pt_1);
+    let line0 = tangent_line_023::<Fq, Fq2>(ec_pt_0);
+    let line1 = tangent_line_023::<Fq, Fq2>(ec_pt_1);
     let input_line0 = [
         bls12381_fq2_to_biguint_vec(line0.b),
         bls12381_fq2_to_biguint_vec(line0.c),
@@ -137,17 +148,12 @@ fn test_mul_023_by_023() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
-// NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
 #[test]
-#[ignore]
 fn test_mul_by_02345() {
-    const NUM_LIMBS: usize = 64;
-    const LIMB_BITS: usize = 8;
-
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let expr = mul_by_02345_expr(
         ExprBuilderConfig {
@@ -166,10 +172,16 @@ fn test_mul_by_02345() {
         tester.memory_controller().borrow().range_checker.clone(),
         "MulBy02345",
     );
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, NUM_LIMBS, NUM_LIMBS>::new(
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let mut rng = StdRng::seed_from_u64(8);
@@ -241,6 +253,6 @@ fn test_mul_by_02345() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

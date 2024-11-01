@@ -9,7 +9,7 @@ use ax_ecc_primitives::{
     field_extension::{Fp12, Fp2},
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_ecc_constants::BLS12381;
+use axvm_ecc_constants::BN254;
 use axvm_instructions::PairingOpcode;
 use p3_field::PrimeField32;
 
@@ -18,10 +18,11 @@ use crate::{
     rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
 };
 
+// TODO[yj]: Update to use 10 FE for 2nd input once the adapter change is merged for unbalanced inputs
 // Input: 2 Fp12: 2 x 12 field elements
 // Output: Fp12 -> 12 field elements
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct EcLineMulBy02345Chip<
+pub struct EcLineMulBy01234Chip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
     const OUTPUT_BLOCKS: usize,
@@ -39,7 +40,7 @@ impl<
         const INPUT_BLOCKS: usize,
         const OUTPUT_BLOCKS: usize,
         const BLOCK_SIZE: usize,
-    > EcLineMulBy02345Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
+    > EcLineMulBy01234Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -47,24 +48,24 @@ impl<
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let expr = mul_by_02345_expr(
+        let expr = mul_by_01234_expr(
             config,
             memory_controller.borrow().range_checker.bus(),
-            BLS12381.XI,
+            BN254.XI,
         );
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![PairingOpcode::MUL_BY_02345 as usize],
+            vec![PairingOpcode::MUL_BY_01234 as usize],
             vec![],
             memory_controller.borrow().range_checker.clone(),
-            "MulBy02345",
+            "MulBy01234",
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
 }
 
-pub fn mul_by_02345_expr(
+pub fn mul_by_01234_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
     xi: [isize; 2],
@@ -81,14 +82,14 @@ pub fn mul_by_02345_expr(
 
     let mut f = Fp12::new(builder.clone());
     let mut x0 = Fp2::new(builder.clone());
-    // x1 is unused; required for input sizes to balance to 12 on the adapter
-    let _x1 = Fp2::new(builder.clone());
+    let mut x1 = Fp2::new(builder.clone());
     let mut x2 = Fp2::new(builder.clone());
     let mut x3 = Fp2::new(builder.clone());
     let mut x4 = Fp2::new(builder.clone());
-    let mut x5 = Fp2::new(builder.clone());
+    // x5 is unused; required for input sizes to balance to 12 on the adapter
+    let _x5 = Fp2::new(builder.clone());
 
-    let mut r = f.mul_by_02345(&mut x0, &mut x2, &mut x3, &mut x4, &mut x5, xi);
+    let mut r = f.mul_by_01234(&mut x0, &mut x1, &mut x2, &mut x3, &mut x4, xi);
     r.save_output();
 
     let builder = builder.borrow().clone();

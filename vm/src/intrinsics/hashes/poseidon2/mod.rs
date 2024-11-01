@@ -8,6 +8,7 @@ use p3_field::PrimeField32;
 use self::air::Poseidon2VmAir;
 use crate::{
     arch::{
+        hasher::{Hasher, HasherChip},
         instructions::{
             Poseidon2Opcode::{self, *},
             UsizeOpcode,
@@ -17,7 +18,6 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            tree::HasherChip,
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
         program::{ExecutionError, ProgramBus},
@@ -326,7 +326,16 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         format!("{local_opcode_index:?}")
     }
 }
+impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {
+    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+        let mut input_state = [F::zero(); WIDTH];
+        input_state[..CHUNK].copy_from_slice(lhs);
+        input_state[CHUNK..].copy_from_slice(rhs);
 
+        let inner_cols = self.air.inner.generate_trace_row(input_state);
+        array::from_fn(|i| inner_cols.io.output[i])
+    }
+}
 impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
     /// Key method for Hasher trait.
     ///
@@ -345,14 +354,5 @@ impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
             .push(Poseidon2Record::DirectCompress { inner_cols });
 
         output
-    }
-
-    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::zero(); WIDTH];
-        input_state[..CHUNK].copy_from_slice(lhs);
-        input_state[CHUNK..].copy_from_slice(rhs);
-
-        let inner_cols = self.air.inner.generate_trace_row(input_state);
-        array::from_fn(|i| inner_cols.io.output[i])
     }
 }

@@ -1,9 +1,12 @@
-use ax_circuit_primitives::bigint::utils::{
-    big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime,
+use std::sync::Arc;
+
+use ax_circuit_primitives::{
+    bigint::utils::{big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -14,7 +17,7 @@ use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::VmChipTestBuilder,
-        VmChipWrapper,
+        VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::test_utils::write_ptr_reg,
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
@@ -23,6 +26,7 @@ use crate::{
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
+const BLOCK_SIZE: usize = 32;
 type F = BabyBear;
 
 #[test]
@@ -51,11 +55,17 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
@@ -139,7 +149,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -170,11 +180,16 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller().borrow().range_checker.clone(),
         ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     // doing 1xNUM_LIMBS reads and writes
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, NUM_LIMBS, NUM_LIMBS>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
@@ -259,7 +274,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
         }
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     tester.simple_test().expect("Verification failed");
 }

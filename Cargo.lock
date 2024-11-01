@@ -455,6 +455,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "thiserror",
  "tikv-jemallocator",
  "tracing",
  "tracing-forest",
@@ -505,6 +506,7 @@ dependencies = [
 name = "axiom-vm"
 version = "0.1.0"
 dependencies = [
+ "ax-poseidon2-air",
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-native-compiler",
@@ -612,6 +614,7 @@ dependencies = [
  "strum_macros",
  "test-case",
  "test-log",
+ "thiserror",
  "tiny-keccak",
  "toml",
  "tracing",
@@ -709,6 +712,9 @@ dependencies = [
 name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "p3-field",
  "proc-macro2",
  "quote",
  "syn 1.0.109",

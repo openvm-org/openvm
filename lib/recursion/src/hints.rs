@@ -475,15 +475,10 @@ mod test {
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
-        prelude::*,
     };
-    use axvm_native_compiler_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
 
-    use crate::{
-        hints::{Hintable, InnerChallenge, InnerVal},
-        types::InnerConfig,
-    };
+    use crate::hints::{Hintable, InnerChallenge, InnerVal};
 
     #[test]
     fn test_var_array() {
@@ -558,24 +553,5 @@ mod test {
 
         let program = builder.compile_isa();
         execute_program(program, stream);
-    }
-
-    #[derive(Hintable)]
-    struct TestStruct {
-        a: usize,
-        b: usize,
-        c: usize,
-    }
-
-    #[test]
-    fn test_macro() {
-        let x = TestStruct { a: 1, b: 2, c: 3 };
-        let stream = Hintable::<InnerConfig>::write(&x);
-        assert_eq!(
-            stream,
-            [1, 2, 3]
-                .map(|x| vec![InnerVal::from_canonical_usize(x)])
-                .to_vec()
-        );
     }
 }

@@ -53,11 +53,13 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     ));
 
     let mut tester = VmChipTestBuilder::default();
+
     let mut chip = Rv32BaseAlu256Chip::<F>::new(
         Rv32HeapAdapterChip::<F, 2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         BaseAluCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
@@ -105,6 +107,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
@@ -134,6 +137,10 @@ fn run_mul_256_rand_test(num_ops: usize) {
         ],
     );
     let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32Multiplication256Chip::<F>::new(
@@ -141,6 +148,7 @@ fn run_mul_256_rand_test(num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
         tester.memory_controller(),
@@ -151,6 +159,7 @@ fn run_mul_256_rand_test(num_ops: usize) {
         .build()
         .load(chip)
         .load(range_tuple_checker)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -172,6 +181,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         ShiftCoreChip::new(
             bitwise_chip.clone(),
