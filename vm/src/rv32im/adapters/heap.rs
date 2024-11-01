@@ -1,8 +1,13 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{instruction::Instruction, riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS}};
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+};
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
@@ -165,9 +170,8 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
         let mut need_range_check: Vec<u32> = Vec::with_capacity(NUM_READS + 2);
-        for i in 0..NUM_READS {
-            need_range_check
-                .push(rs_records[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
+        for rs_record in rs_records {
+            need_range_check.push(rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
         }
         need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
         need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()); // in case NUM_READS is even

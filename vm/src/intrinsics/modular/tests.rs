@@ -1,9 +1,12 @@
-use ax_circuit_primitives::bigint::utils::{
-    big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime,
+use std::sync::Arc;
+
+use ax_circuit_primitives::{
+    bigint::utils::{big_uint_mod_inverse, secp256k1_coord_prime, secp256k1_scalar_prime},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -14,7 +17,7 @@ use crate::{
     arch::{
         instructions::{ModularArithmeticOpcode, UsizeOpcode},
         testing::VmChipTestBuilder,
-        VmChipWrapper,
+        VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::test_utils::write_ptr_reg,
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},

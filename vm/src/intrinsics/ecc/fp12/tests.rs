@@ -87,11 +87,7 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     );
     tester.execute(&mut chip, instruction);
 
-    let run_tester = tester
-        .build()
-        .load(chip)
-        .load(bitwise_chip)
-        .finalize();
+    let run_tester = tester.build().load(chip).load(bitwise_chip).finalize();
     run_tester.simple_test().expect("Verification failed");
 }
 

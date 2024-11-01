@@ -399,9 +399,8 @@ impl<
             })
         });
         let mut need_range_check: Vec<u32> = Vec::with_capacity(NUM_READS + 2);
-        for i in 0..NUM_READS {
-            need_range_check
-                .push(rs_records[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
+        for rs_record in rs_records {
+            need_range_check.push(rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
         }
         need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
         need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()); // in case NUM_READS is even
