@@ -169,12 +169,14 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             debug_assert!(address < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
-        let mut need_range_check: Vec<u32> = Vec::with_capacity(NUM_READS + 2);
-        for rs_record in rs_records {
-            need_range_check.push(rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
-        }
-        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
-        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()); // in case NUM_READS is even
+        let need_range_check: Vec<u32> = rs_records
+            .iter()
+            .map(|rs_record| rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .chain(
+                std::iter::repeat(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+                    .take(2),
+            )
+            .collect();
         let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
         for i in 0..need_range_check.len() / 2 {
             self.bitwise_lookup_chip.request_range(

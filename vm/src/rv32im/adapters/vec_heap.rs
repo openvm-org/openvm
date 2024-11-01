@@ -236,12 +236,12 @@ impl<
         // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
         // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
         // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
-        let mut need_range_check: Vec<AB::Var> = Vec::with_capacity(NUM_READS + 2);
-        for i in 0..NUM_READS {
-            need_range_check.push(cols.rs_val[i][RV32_REGISTER_NUM_LIMBS - 1]);
-        }
-        need_range_check.push(cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1]);
-        need_range_check.push(cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1]); // in case NUM_READS is even
+        let need_range_check: Vec<AB::Var> = cols
+            .rs_val
+            .iter()
+            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
+            .chain(std::iter::repeat(cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1]).take(2))
+            .collect();
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
         let limb_shift = AB::F::from_canonical_usize(
@@ -398,12 +398,14 @@ impl<
                 memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
             })
         });
-        let mut need_range_check: Vec<u32> = Vec::with_capacity(NUM_READS + 2);
-        for rs_record in rs_records {
-            need_range_check.push(rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
-        }
-        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
-        need_range_check.push(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()); // in case NUM_READS is even
+        let need_range_check: Vec<u32> = rs_records
+            .iter()
+            .map(|rs_record| rs_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .chain(
+                std::iter::repeat(rd_record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+                    .take(2),
+            )
+            .collect();
         let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
         for i in 0..need_range_check.len() / 2 {
             self.bitwise_lookup_chip.request_range(
