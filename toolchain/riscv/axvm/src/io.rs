@@ -11,9 +11,12 @@ pub fn read_vec() -> Vec<u8> {
     read_vec_by_len(read_u32() as usize)
 }
 
-pub fn read<T>() -> T {
+/// Read the next vec and deserialize it into a type `T`.
+pub fn read<T: bincode::Decode>() -> T {
     let serialized_data = read_vec();
-    bincode::deserialize(&serialized_data[..]).unwrap()
+    bincode::decode_from_slice(&serialized_data[..], bincode::config::standard())
+        .unwrap()
+        .0
 }
 
 /// Read the next 4 bytes from the hint stream into a register.
