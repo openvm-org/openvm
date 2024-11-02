@@ -17,7 +17,11 @@ use p3_field::AbstractField;
 use tempfile::tempdir;
 use test_case::test_case;
 
-use crate::{elf::Elf, rrs::transpile, AxVmExe};
+use crate::{
+    elf::{Elf, ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES},
+    rrs::transpile,
+    AxVmExe,
+};
 
 type F = BabyBear;
 
@@ -119,7 +123,7 @@ fn test_reveal_runtime() -> Result<()> {
     let guest_opts = GuestOptions::default().into();
     build_guest_package(&pkg, &target_dir, &guest_opts, None);
     let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
-    let num_public_values = 16;
+    let num_public_values = ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES;
     let config = VmConfig {
         max_segment_len: (1 << 18) - 1,
         ..VmConfig::rv32i()
@@ -133,10 +137,9 @@ fn test_reveal_runtime() -> Result<()> {
         &hasher,
         &final_memory,
     );
-    assert_eq!(pv_proof.public_values.len(), num_public_values);
     assert_eq!(
         pv_proof.public_values,
-        [123, 0, 456, 0u32]
+        [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
             .into_iter()
             .flat_map(|x| x.to_le_bytes())
             .map(F::from_canonical_u8)
