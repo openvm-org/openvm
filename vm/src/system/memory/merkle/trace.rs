@@ -65,7 +65,7 @@ struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
-impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
+impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
     fn recur(
         &mut self,
         height: usize,

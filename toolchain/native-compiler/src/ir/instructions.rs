@@ -196,9 +196,8 @@ pub enum DslIr<C: Config> {
     /// Permutes an array of Bn254 elements using Poseidon2 (output = p2_permute(array)). Should only
     /// be used when target is a gnark circuit.
     CircuitPoseidon2Permute([Var<C::N>; 3]),
-    /// Permutates an array of BabyBear elements in the circuit.
+    // Permutates an array of BabyBear elements in the circuit.
     // CircuitPoseidon2PermuteBabyBear([Felt<C::F>; 16]),
-
     /// ```ignore
     /// Keccak256(output, input)
     /// ```

@@ -20,10 +20,11 @@ mod tests;
 
 impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     fn from(elf: Elf) -> Self {
-        let program = Program::from_instructions_and_step(
+        let program = Program::new_without_debug_infos(
             &transpile(&elf.instructions),
             DEFAULT_PC_STEP,
             elf.pc_base,
+            elf.max_num_public_values,
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
         Self {

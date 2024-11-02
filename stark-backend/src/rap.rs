@@ -37,6 +37,7 @@ pub trait PartitionedBaseAir<F>: BaseAir<F> {
 /// - Preprocessing
 /// - Main trace generation and commitment
 /// - Permutation trace generation and commitment
+///
 /// Randomness is drawn after the main trace commitment phase, and used in the permutation trace.
 ///
 /// Does not inherit [Air](p3_air::Air) trait to allow overrides for technical reasons

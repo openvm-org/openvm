@@ -36,7 +36,7 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'a, SC> {
+impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'_, SC> {
     /// Returns the preprocessed commit of each AIR. If the AIR does not have a preprocessed trace, returns None.
     pub fn preprocessed_commits(&self) -> Vec<Option<Com<SC>>> {
         self.per_air
@@ -98,7 +98,7 @@ impl<'a, SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> MultiStarkProvingKeyView<'a, SC> {
+impl<SC: StarkGenericConfig> MultiStarkProvingKeyView<'_, SC> {
     pub fn vk_view(&self) -> MultiStarkVerifyingKeyView<SC> {
         MultiStarkVerifyingKeyView {
             per_air: self.per_air.iter().map(|pk| &pk.vk).collect(),
