@@ -674,9 +674,7 @@ pub struct IfCompiler<'a, F, EF> {
     is_eq: bool,
 }
 
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    IfCompiler<'_, F, EF>
-{
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> IfCompiler<'_, F, EF> {
     pub fn then<Func>(self, f: Func, debug_info: Option<DebugInfo>)
     where
         Func: FnOnce(&mut AsmCompiler<F, EF>),
@@ -791,9 +789,7 @@ pub struct ForCompiler<'a, F: Field, EF> {
     loop_var: Var<F>,
 }
 
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    ForCompiler<'_, F, EF>
-{
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> ForCompiler<'_, F, EF> {
     pub(super) fn for_each(
         mut self,
         f: impl FnOnce(Var<F>, &mut AsmCompiler<F, EF>),
@@ -900,9 +896,7 @@ struct LoopCompiler<'a, F: Field, EF> {
     compiler: &'a mut AsmCompiler<F, EF>,
 }
 
-impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
-    LoopCompiler<'_, F, EF>
-{
+impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> LoopCompiler<'_, F, EF> {
     fn compile(
         self,
         compile_body: impl FnOnce(&mut AsmCompiler<F, EF>),
