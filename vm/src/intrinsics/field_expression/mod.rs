@@ -171,6 +171,10 @@ impl FieldExpressionCoreChip {
             name: name.to_string(),
         }
     }
+
+    pub fn expr(&self) -> &FieldExpr {
+        &self.air.expr
+    }
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for FieldExpressionCoreChip

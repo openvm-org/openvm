@@ -17,6 +17,7 @@ mod vm;
 
 pub use axvm_instructions as instructions;
 
+pub mod hasher;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;

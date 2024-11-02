@@ -1,16 +1,23 @@
+use std::sync::Arc;
+
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_ecc_primitives::{
     field_expression::{ExprBuilderConfig, FieldExpr},
-    test_utils::{bls12381_fq12_random, bn254_fq12_random},
+    test_utils::{bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec},
 };
 use axvm_ecc_constants::{BLS12381, BN254};
-use axvm_instructions::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode};
+use axvm_instructions::{
+    riscv::RV32_CELL_BITS, Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode,
+};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper},
+    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
@@ -43,10 +50,16 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         tester.memory_controller().borrow().range_checker.clone(),
         name,
     );
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, NUM_LIMBS, NUM_LIMBS>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
 
     let x_limbs = x
@@ -74,7 +87,7 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     );
     tester.execute(&mut chip, instruction);
 
-    let run_tester = tester.build().load(chip).finalize();
+    let run_tester = tester.build().load(chip).load(bitwise_chip).finalize();
     run_tester.simple_test().expect("Verification failed");
 }
 
@@ -91,8 +104,8 @@ fn test_fp12_add_bn254() {
         tester.memory_controller().borrow().range_checker.bus(),
     );
 
-    let x = bn254_fq12_random(1);
-    let y = bn254_fq12_random(2);
+    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(1));
+    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(2));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,
@@ -119,8 +132,8 @@ fn test_fp12_sub_bn254() {
         tester.memory_controller().borrow().range_checker.bus(),
     );
 
-    let x = bn254_fq12_random(59);
-    let y = bn254_fq12_random(3);
+    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(59));
+    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(3));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,
@@ -149,8 +162,8 @@ fn test_fp12_mul_bn254() {
         xi,
     );
 
-    let x = bn254_fq12_random(5);
-    let y = bn254_fq12_random(25);
+    let x = bn254_fq12_to_biguint_vec(&bn254_fq12_random(5));
+    let y = bn254_fq12_to_biguint_vec(&bn254_fq12_random(25));
 
     test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
         tester,
@@ -223,7 +236,6 @@ fn test_fp12_sub_bls12381() {
 // NOTE[yj]: This test requires RUST_MIN_STACK=8388608 to run without overflowing the stack, so it is ignored by the test runner for now
 #[test]
 #[ignore]
-
 fn test_fp12_mul_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {

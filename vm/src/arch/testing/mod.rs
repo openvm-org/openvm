@@ -48,10 +48,7 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::{
-    arch::PersistenceType, intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::memory::MemoryControllerRef,
-};
+use crate::{intrinsics::hashes::poseidon2::Poseidon2Chip, system::memory::MemoryControllerRef};
 
 #[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {
@@ -213,7 +210,7 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 29, 29, 17, PersistenceType::Volatile);
+        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,

@@ -34,8 +34,6 @@ type F = InnerVal;
 #[derive(Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct LeafVmVerifierPvs<T, const CHUNK: usize> {
-    // TODO: is to right to assume a trace commitment [T; CHUNK]?
-    pub app_pc_start: T,
     pub app_commit: [T; CHUNK],
     pub connector: VmConnectorPvs<T>,
     pub memory: MemoryMerklePvs<T, CHUNK>,
@@ -45,7 +43,6 @@ pub struct LeafVmVerifierPvs<T, const CHUNK: usize> {
 impl<const CHUNK: usize> LeafVmVerifierPvs<Felt<F>, { CHUNK }> {
     fn uninit(builder: &mut Builder<C>) -> Self {
         Self {
-            app_pc_start: builder.uninit(),
             app_commit: array::from_fn(|_| builder.uninit()),
             connector: VmConnectorPvs {
                 initial_pc: builder.uninit(),
@@ -84,6 +81,7 @@ impl LeafVmVerifierConfig {
         self,
         app_vm_vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> Program<F> {
+        self.app_vm_config.memory_config.memory_dimensions();
         let m_advice = new_from_inner_multi_vk(&app_vm_vk);
         let mut builder = Builder::<C>::default();
 
@@ -103,8 +101,6 @@ impl LeafVmVerifierConfig {
                     builder, &pcs, &m_advice, &proof,
                 );
                 {
-                    // TODO: Add app_pc_start
-                    builder.assign(&pvs.app_pc_start, F::zero());
                     let t_id = RVar::from(PROGRAM_CACHED_TRACE_INDEX);
                     let commit = builder.get(&proof.commitments.main_trace, t_id);
                     let commit = if let DigestVariable::Felt(commit) = commit {

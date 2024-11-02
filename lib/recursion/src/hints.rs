@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 
-use ax_circuit_primitives::bigint::utils::big_uint_to_num_limbs;
 use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
@@ -10,11 +9,9 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use axvm_native_compiler::ir::{
-    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
+    unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
@@ -472,42 +469,16 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
     }
 }
 
-impl Hintable<InnerConfig> for BigUint {
-    type HintVariable = BigUintVar<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.uninit_biguint();
-        for i in 0..NUM_LIMBS {
-            // FIXME: range check for each element.
-            let v = builder.hint_var();
-            builder.set_value(&ret, i, v);
-        }
-        ret
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![big_uint_to_num_limbs(self, LIMB_BITS, NUM_LIMBS)
-            .iter()
-            .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
-            .collect()]
-    }
-}
-
 #[cfg(test)]
 mod test {
     use axvm_circuit::system::program::util::execute_program;
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
-        prelude::*,
     };
-    use axvm_native_compiler_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
 
-    use crate::{
-        hints::{Hintable, InnerChallenge, InnerVal},
-        types::InnerConfig,
-    };
+    use crate::hints::{Hintable, InnerChallenge, InnerVal};
 
     #[test]
     fn test_var_array() {
@@ -582,24 +553,5 @@ mod test {
 
         let program = builder.compile_isa();
         execute_program(program, stream);
-    }
-
-    #[derive(Hintable)]
-    struct TestStruct {
-        a: usize,
-        b: usize,
-        c: usize,
-    }
-
-    #[test]
-    fn test_macro() {
-        let x = TestStruct { a: 1, b: 2, c: 3 };
-        let stream = Hintable::<InnerConfig>::write(&x);
-        assert_eq!(
-            stream,
-            [1, 2, 3]
-                .map(|x| vec![InnerVal::from_canonical_usize(x)])
-                .to_vec()
-        );
     }
 }

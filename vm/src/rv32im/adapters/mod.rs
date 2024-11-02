@@ -1,5 +1,6 @@
 mod alu;
 mod branch;
+mod heap;
 mod hintstore;
 mod jalr;
 mod loadstore;
@@ -10,12 +11,16 @@ mod vec_heap;
 pub use alu::*;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
+pub use heap::*;
 pub use hintstore::*;
 pub use jalr::*;
 pub use loadstore::*;
 pub use mul::*;
 pub use rdwrite::*;
 pub use vec_heap::*;
+
+/// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
+pub const INT256_NUM_LIMBS: usize = 32;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;

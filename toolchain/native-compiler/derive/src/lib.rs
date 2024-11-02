@@ -5,14 +5,36 @@ extern crate proc_macro;
 use hints::create_new_struct_and_impl_hintable;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, ItemStruct};
+use syn::{
+    parse_macro_input, Data, DeriveInput, Fields, GenericParam, Generics, ItemStruct,
+    TypeParamBound,
+};
 
 mod hints;
+
+/// Returns true if the generic parameter C: Config exists.
+pub(crate) fn has_config_generic(generics: &Generics) -> bool {
+    generics.params.iter().any(|param| match param {
+        GenericParam::Type(ty) => {
+            ty.ident == "C"
+                && ty.bounds.iter().any(|b| match b {
+                    TypeParamBound::Trait(tr) => tr.path.segments.last().unwrap().ident == "Config",
+                    _ => false,
+                })
+        }
+        _ => false,
+    })
+}
 
 #[proc_macro_derive(DslVariable)]
 pub fn derive_variable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident; // Struct name
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    assert!(
+        has_config_generic(&input.generics),
+        "DslVariable requires a generic parameter C: Config"
+    );
 
     let gen = match input.data {
         Data::Struct(data) => match data.fields {
@@ -87,7 +109,7 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                 });
 
                 quote! {
-                    impl<C: Config> Variable<C> for #name<C> {
+                    impl #impl_generics Variable<C> for #name #ty_generics #where_clause {
                         type Expression = Self;
 
                         fn uninit(builder: &mut Builder<C>) -> Self {
@@ -121,7 +143,7 @@ pub fn derive_variable(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    impl<C: Config> MemVariable<C> for #name<C> {
+                    impl #impl_generics MemVariable<C> for #name #ty_generics #where_clause {
                         fn size_of() -> usize {
                             let mut size = 0;
                             #(size += #field_sizes;)*

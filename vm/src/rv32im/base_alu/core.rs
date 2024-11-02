@@ -210,7 +210,7 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
+        let output = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),
         };

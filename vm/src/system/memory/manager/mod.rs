@@ -31,7 +31,7 @@ use p3_util::log2_strict_usize;
 use self::interface::MemoryInterface;
 use super::volatile::VolatileBoundaryChip;
 use crate::{
-    arch::{MemoryConfig, RANGE_CHECKER_BUS},
+    arch::{hasher::HasherChip, MemoryConfig, RANGE_CHECKER_BUS},
     system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::{AccessAdapterRecord, Memory},
@@ -52,7 +52,7 @@ use crate::system::memory::{
     manager::memory::INITIAL_TIMESTAMP,
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
-    tree::{HasherChip, MemoryNode},
+    tree::MemoryNode,
 };
 
 pub const CHUNK: usize = 8;

@@ -377,6 +377,15 @@ impl FieldExpr {
         vars
     }
 
+    pub fn execute_with_output(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+        let vars = self.execute(inputs, flags);
+        self.builder
+            .output_indices
+            .iter()
+            .map(|i| vars[*i].clone())
+            .collect()
+    }
+
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
         let is_valid = arr[0].clone();
         let mut idx = 1;

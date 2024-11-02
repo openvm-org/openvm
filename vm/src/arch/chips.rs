@@ -15,8 +15,17 @@ use strum_macros::IntoStaticStr;
 use crate::{
     arch::ExecutionState,
     intrinsics::{
-        ecc::sw::{EcAddNeChip, EcDoubleChip},
+        ecc::{
+            pairing::{
+                EcLineMul013By013Chip, EcLineMulBy01234Chip, MillerDoubleAndAddStepChip,
+                MillerDoubleStepChip,
+            },
+            sw::{EcAddNeChip, EcDoubleChip},
+        },
         hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        int256::{
+            Rv32BaseAlu256Chip, Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
+        },
         modular::{ModularAddSubChip, ModularMulDivChip},
     },
     kernels::{
@@ -28,9 +37,6 @@ use crate::{
         loadstore::KernelLoadStoreChip,
         modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::PublicValuesChip,
-    },
-    old::{
-        alu::ArithmeticLogicChip, shift::ShiftChip, uint_multiplication::UintMultiplicationChip,
     },
     rv32im::*,
     system::{phantom::PhantomChip, program::ExecutionError},
@@ -81,15 +87,13 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    /// Rv32 (for standard 32-bit integers):
+    BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
     MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
-    Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
@@ -98,6 +102,11 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
+    /// 256Rv32 (for 256-bit integers):
+    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
+    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
+    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
+    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
     // Intrinsics:
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
     ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
@@ -107,6 +116,13 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     EcDoubleRv32_2x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
     EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
     EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
+    EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
+    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
+    // 32-bytes or 48-bytes prime.
+    MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
+    MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
+    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
+    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
@@ -128,15 +144,16 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
-    ArithmeticLogicUnitRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    ArithmeticLogicUnit256(Rc<RefCell<ArithmeticLogicChip<F, 32, 8>>>),
+    BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
+    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
+    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
     MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
     MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    U256Multiplication(Rc<RefCell<UintMultiplicationChip<F, 32, 8>>>),
+    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
-    Shift256(Rc<RefCell<ShiftChip<F, 32, 8>>>),
+    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
@@ -154,6 +171,13 @@ pub enum AxVmChip<F: PrimeField32> {
     EcDoubleRv32_2x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
     EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
     EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
+    EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
+    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
+    // 32-bytes or 48-bytes prime.
+    MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
+    MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
+    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
+    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
     ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),

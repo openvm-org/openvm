@@ -150,40 +150,6 @@ pub enum ModularArithmeticOpcode {
     DIV,
 }
 
-// to be deleted and replaced by Rv32Alu256Opcodes below
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x180]
-#[repr(usize)]
-pub enum U256Opcode {
-    // maybe later we will make it uint and specify the parameters in the config
-    ADD,
-    SUB,
-    LT,
-    EQ,
-    XOR,
-    AND,
-    OR,
-    SLT,
-
-    SLL,
-    SRL,
-    SRA,
-
-    MUL,
-}
-impl U256Opcode {
-    // Excludes multiplication
-    pub fn arithmetic_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (U256Opcode::ADD as usize..=U256Opcode::SLT as usize).map(U256Opcode::from_usize)
-    }
-
-    pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
-    }
-}
-
 // to be deleted and replaced by Rv32SwOpcode
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
@@ -406,6 +372,23 @@ pub enum Fp12Opcode {
     ADD,
     SUB,
     MUL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x710]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PairingOpcode {
+    MILLER_DOUBLE_STEP,
+    MILLER_DOUBLE_AND_ADD_STEP,
+    MUL_013_BY_013,
+    MUL_BY_013,
+    MUL_BY_01234,
+    MUL_023_BY_023,
+    MUL_BY_023,
+    MUL_BY_02345,
 }
 
 // =================================================================================================
