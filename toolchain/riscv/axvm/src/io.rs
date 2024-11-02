@@ -71,6 +71,7 @@ fn read_vec_by_len(len: usize) -> Vec<u8> {
 }
 
 /// Publish `x` as the `index`-th u32 output.
+#[allow(unused_variables)]
 pub fn reveal(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
     #[cfg(target_os = "zkvm")]
