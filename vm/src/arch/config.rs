@@ -64,7 +64,7 @@ pub struct VmConfig {
     /// In single segment mode, `num_public_values` is the number of public values of
     /// PublicValuesChips. In this case, verifier can read public values directly.
     /// In continuation mode, public values are stored in a special address space.
-    /// `number_public_values` indicates the allowed address in that address space. The verifier
+    /// `number_public_values` indicates the number of allowed addresses in that address space. The verifier
     /// cannot read public values directly, but they can decommit the public values from the memory
     /// state commit.
     pub num_public_values: usize,
