@@ -4,12 +4,12 @@ use std::{
     collections::{
         BTreeMap,
         Bound::{Included, Unbounded},
-        HashMap,
     },
     fmt::Debug,
 };
 
 use p3_field::PrimeField32;
+use rustc_hash::FxHashMap;
 
 use crate::system::memory::{Equipartition, TimestampedEquipartition, TimestampedValues};
 
@@ -92,7 +92,7 @@ impl Block {
 #[derive(Debug)]
 pub struct Memory<F> {
     blocks: BTreeMap<Address, Block>,
-    data: HashMap<Address, F>,
+    data: FxHashMap<Address, F>,
     initial_block_size: usize,
     timestamp: u32,
 }
@@ -105,7 +105,7 @@ impl<F: PrimeField32> Memory<F> {
         assert!(N.is_power_of_two());
 
         let mut blocks = BTreeMap::new();
-        let mut data = HashMap::new();
+        let mut data = FxHashMap::default();
         for (&(address_space, block_idx), values) in initial_memory {
             let address_space_usize = address_space.as_canonical_u32() as usize;
             let pointer = block_idx * N;
