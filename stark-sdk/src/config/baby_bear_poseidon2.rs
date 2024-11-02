@@ -240,7 +240,7 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
         if name == type_name::<(Val, [Val; DIGEST_WIDTH])>() {
             let count = lens
                 .iter()
-                .fold(0, |count, len| count + (len + RATE - 1) / RATE);
+                .fold(0, |count, len| count + len.div_ceil(RATE));
             println!("Hash: {name}, Count: {count}");
             hash_count += count;
         } else {
@@ -254,7 +254,7 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
         if name == type_name::<[Val; DIGEST_WIDTH]>() {
             let count = lens.iter().fold(0, |count, len| {
                 // len should always be N=2 for TruncatedPermutation
-                count + (DIGEST_WIDTH * len + WIDTH - 1) / WIDTH
+                count + (DIGEST_WIDTH * len).div_ceil(WIDTH)
             });
             println!("Compress: {name}, Count: {count}");
             compress_count += count;

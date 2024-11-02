@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<'a, SC> PairBuilder for DebugConstraintBuilder<'a, SC>
+impl<SC> PairBuilder for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -92,7 +92,7 @@ where
     }
 }
 
-impl<'a, SC> ExtensionBuilder for DebugConstraintBuilder<'a, SC>
+impl<SC> ExtensionBuilder for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<'a, SC> AirBuilderWithPublicValues for DebugConstraintBuilder<'a, SC>
+impl<SC> AirBuilderWithPublicValues for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -160,7 +160,7 @@ where
     }
 }
 
-impl<'a, SC> PermutationAirBuilderWithExposedValues for DebugConstraintBuilder<'a, SC>
+impl<SC> PermutationAirBuilderWithExposedValues for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -171,7 +171,7 @@ where
     }
 }
 
-impl<'a, SC> PartitionedAirBuilder for DebugConstraintBuilder<'a, SC>
+impl<SC> PartitionedAirBuilder for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -189,7 +189,7 @@ where
 }
 
 // No-op implementation
-impl<'a, SC> InteractionBuilder for DebugConstraintBuilder<'a, SC>
+impl<SC> InteractionBuilder for DebugConstraintBuilder<'_, SC>
 where
     SC: StarkGenericConfig,
 {

@@ -122,7 +122,7 @@ where
         let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(states);
         let num_rows = p3_keccak_trace.height();
         // Every `NUM_ROUNDS` rows corresponds to one input block
-        let num_blocks = (num_rows + NUM_ROUNDS - 1) / NUM_ROUNDS;
+        let num_blocks = num_rows.div_ceil(NUM_ROUNDS);
         // Resize with dummy `is_opcode = 0`
         opcode_blocks.resize(num_blocks, Default::default());
 

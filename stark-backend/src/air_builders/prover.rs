@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<'a, SC> PairBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> PairBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -90,7 +90,7 @@ where
     }
 }
 
-impl<'a, SC> ExtensionBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> ExtensionBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -108,7 +108,7 @@ where
     }
 }
 
-impl<'a, SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'a, SC> {
+impl<SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'_, SC> {
     type PublicVar = Self::F;
 
     fn public_values(&self) -> &[Self::F] {
@@ -140,7 +140,7 @@ where
     }
 }
 
-impl<'a, SC> PermutationAirBuilderWithExposedValues for ProverConstraintFolder<'a, SC>
+impl<SC> PermutationAirBuilderWithExposedValues for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -151,7 +151,7 @@ where
     }
 }
 
-impl<'a, SC> PartitionedAirBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> PartitionedAirBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -168,7 +168,7 @@ where
     }
 }
 
-impl<'a, SC> InteractionBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> InteractionBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -210,7 +210,7 @@ where
     }
 }
 
-impl<'a, SC> SymbolicEvaluator<Val<SC>, PackedVal<SC>> for ProverConstraintFolder<'a, SC>
+impl<SC> SymbolicEvaluator<Val<SC>, PackedVal<SC>> for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {

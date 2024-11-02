@@ -622,7 +622,7 @@ enum IfCondition<N> {
     NeI(Var<N>, N),
 }
 
-impl<'a, C: Config> IfBuilder<'a, C> {
+impl<C: Config> IfBuilder<'_, C> {
     pub fn then(&mut self, mut f: impl FnMut(&mut Builder<C>)) {
         self.then_may_break(|builder| {
             f(builder);
@@ -953,7 +953,7 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
 /// A builder for the DSL that handles for loops with breaks.
 pub struct RangeBuilderWithBreaks<'a, C: Config>(RangeBuilder<'a, C>);
 
-impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
+impl<C: Config> RangeBuilderWithBreaks<'_, C> {
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.0 = self.0.step_by(step_size);
         self
