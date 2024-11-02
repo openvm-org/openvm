@@ -122,6 +122,7 @@ impl Rv32RdWriteAdapterAir {
     /// - Only writes if `needs_write`.
     /// - Sets operand `f = needs_write` in the instruction.
     /// - Does not put any other constraints on `needs_write`
+    ///
     /// Otherwise:
     /// - Writes if `ctx.instruction.is_valid`.
     /// - Sets operand `f` to default value of `0` in the instruction.

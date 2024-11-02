@@ -264,6 +264,7 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
 /// - the main trace matrix is horizontally partitioned into multiple matrices,
 ///   where each matrix can belong to a separate matrix commitment.
 /// - after each round of challenges, a trace matrix for trace allowed to use those challenges
+///
 /// Each of these matrices is allowed to be in a separate commitment.
 ///
 /// Only the main trace matrix is allowed to be partitioned, so that different parts may belong to
