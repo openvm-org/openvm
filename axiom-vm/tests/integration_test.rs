@@ -10,9 +10,7 @@ use ax_stark_sdk::{
 };
 use axiom_vm::config::{AxiomVmConfig, AxiomVmProvingKey};
 use axvm_circuit::{
-    arch::{
-        ExecutorName, MemoryConfig, PersistenceType, SingleSegmentVmExecutor, VmConfig, VmExecutor,
-    },
+    arch::{ExecutorName, SingleSegmentVmExecutor, VmConfig, VmExecutor},
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -29,10 +27,7 @@ fn test_1() {
         fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
         app_vm_config: VmConfig {
             max_segment_len: 200,
-            memory_config: MemoryConfig {
-                persistence_type: PersistenceType::Persistent,
-                ..Default::default()
-            },
+            continuation_enabled: true,
             ..Default::default()
         }
         .add_executor(ExecutorName::BranchEqual)

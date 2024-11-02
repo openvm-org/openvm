@@ -32,9 +32,7 @@ use strum::EnumCount;
 
 use super::{vm_poseidon2_config, EcCurve, Streams};
 use crate::{
-    arch::{
-        AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, PersistenceType, VmConfig,
-    },
+    arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
         ecc::{
             pairing::{
@@ -231,23 +229,20 @@ impl VmConfig {
         let bitwise_lookup_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_lookup_chip = Arc::new(BitwiseOperationLookupChip::new(bitwise_lookup_bus));
 
-        let memory_controller = match self.memory_config.persistence_type {
-            PersistenceType::Volatile => {
-                Rc::new(RefCell::new(MemoryController::with_volatile_memory(
-                    memory_bus,
-                    self.memory_config,
-                    range_checker.clone(),
-                )))
-            }
-            PersistenceType::Persistent => {
-                Rc::new(RefCell::new(MemoryController::with_persistent_memory(
-                    memory_bus,
-                    self.memory_config,
-                    range_checker.clone(),
-                    merkle_bus,
-                    Equipartition::<F, CHUNK>::new(),
-                )))
-            }
+        let memory_controller = if self.continuation_enabled {
+            Rc::new(RefCell::new(MemoryController::with_persistent_memory(
+                memory_bus,
+                self.memory_config,
+                range_checker.clone(),
+                merkle_bus,
+                Equipartition::<F, CHUNK>::new(),
+            )))
+        } else {
+            Rc::new(RefCell::new(MemoryController::with_volatile_memory(
+                memory_bus,
+                self.memory_config,
+                range_checker.clone(),
+            )))
         };
         let program_chip = ProgramChip::default();
 
@@ -266,10 +261,8 @@ impl VmConfig {
         );
         let range_tuple_checker = Arc::new(RangeTupleCheckerChip::new(range_tuple_bus));
 
-        // PublicValuesChip is required when num_public_values > 0.
-        let public_values_chip = if self.num_public_values > 0 {
-            // Raw public values are not supported when continuation is enabled.
-            assert!(!self.continuation_enabled());
+        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        let public_values_chip = if !self.continuation_enabled && self.num_public_values > 0 {
             let (range, offset) = default_executor_range(ExecutorName::PublicValues);
             let chip = Rc::new(RefCell::new(PublicValuesChip::new(
                 NativeAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
@@ -281,7 +274,10 @@ impl VmConfig {
             }
             Some(chip)
         } else {
-            required_executors.remove(&ExecutorName::PublicValues);
+            assert!(
+                !required_executors.contains(&ExecutorName::PublicValues),
+                "PublicValuesChip should not be used in continuation mode."
+            );
             None
         };
         // We always put Poseidon2 chips in the end. So it will be initialized separately.
@@ -290,7 +286,7 @@ impl VmConfig {
             required_executors.remove(&ExecutorName::Poseidon2);
         }
         // We may not use this chip if the memory kind is volatile and there is no executor for Poseidon2.
-        let needs_poseidon_chip = has_poseidon_chip || self.continuation_enabled();
+        let needs_poseidon_chip = has_poseidon_chip || self.continuation_enabled;
 
         for &executor in required_executors.iter() {
             let (range, offset) = default_executor_range(executor);
@@ -640,6 +636,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
@@ -655,6 +652,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         LessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
                         memory_controller.clone(),
@@ -670,6 +668,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
                         memory_controller.clone(),
@@ -685,6 +684,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         ShiftCoreChip::new(
                             bitwise_lookup_chip.clone(),
@@ -762,6 +762,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -776,6 +777,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -790,6 +792,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -804,6 +807,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -818,6 +822,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -832,6 +837,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -868,6 +874,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -882,6 +889,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -896,6 +904,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -910,6 +919,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -986,6 +996,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         ModularAddSubCoreChip::new(
                             config32,
@@ -1005,6 +1016,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         ModularMulDivCoreChip::new(
                             config32,
@@ -1024,6 +1036,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         ModularAddSubCoreChip::new(
                             config48,
@@ -1043,6 +1056,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         ModularMulDivCoreChip::new(
                             config48,
