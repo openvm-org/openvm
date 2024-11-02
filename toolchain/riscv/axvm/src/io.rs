@@ -45,3 +45,12 @@ fn read_vec_by_len(len: usize) -> Vec<u8> {
     }
     unsafe { Vec::from_raw_parts(ptr_start, len, capacity) }
 }
+
+/// Publish `x` as the `index`-th u32 output.
+pub fn reveal(x: u32, index: usize) {
+    let byte_index = (index * 4) as u32;
+    #[cfg(target_os = "zkvm")]
+    crate::reveal!(byte_index, x, 0);
+    #[cfg(not(target_os = "zkvm"))]
+    todo!()
+}

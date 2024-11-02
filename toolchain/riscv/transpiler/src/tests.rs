@@ -6,7 +6,8 @@ use std::{
 use ax_stark_sdk::config::setup_tracing;
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, VmConfig, VmExecutor},
+    system::memory::tree::public_values::compute_user_public_values_proof,
     utils::{air_test, air_test_with_min_segments},
 };
 use axvm_platform::memory::MEM_SIZE;
@@ -107,6 +108,39 @@ fn test_rv32i_prove_with_hint() -> Result<()> {
         exe,
         vec![[0, 1, 2, 3].map(F::from_canonical_u32).to_vec()],
         1,
+    );
+    Ok(())
+}
+
+#[test]
+fn test_reveal_runtime() -> Result<()> {
+    let pkg = get_package(get_examples_dir().join("reveal/program"));
+    let target_dir = tempdir()?;
+    let guest_opts = GuestOptions::default().into();
+    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let num_public_values = 16;
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    let final_memory = executor.execute(exe, vec![])?.unwrap();
+    let hasher = vm_poseidon2_hasher();
+    let pv_proof = compute_user_public_values_proof(
+        config.memory_config.memory_dimensions(),
+        num_public_values,
+        &hasher,
+        &final_memory,
+    );
+    assert_eq!(pv_proof.public_values.len(), num_public_values);
+    assert_eq!(
+        pv_proof.public_values,
+        [123, 0, 456, 0u32]
+            .into_iter()
+            .flat_map(|x| x.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect::<Vec<_>>()
     );
     Ok(())
 }
