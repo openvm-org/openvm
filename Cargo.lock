@@ -356,7 +356,7 @@ name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
  "axvm-ecc-constants",
- "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git?branch=test%2Fvisibility)",
+ "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
  "lazy_static",
  "num",
