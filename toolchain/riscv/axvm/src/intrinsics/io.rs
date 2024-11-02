@@ -24,3 +24,18 @@ pub fn hint_input() {
     #[cfg(not(target_os = "zkvm"))]
     todo!()
 }
+
+/// Store rs1 to [[rd] + imm]_2.
+#[cfg(target_os = "zkvm")]
+#[macro_export]
+macro_rules! reveal {
+    ($rd:ident, $rs1:ident, $imm:expr) => {
+        axvm_platform::custom_insn_i!(
+            axvm_platform::constants::CUSTOM_0,
+            axvm_platform::constants::Custom0Funct3::Reveal as u8,
+            $rd,
+            $rs1,
+            $imm
+        )
+    };
+}

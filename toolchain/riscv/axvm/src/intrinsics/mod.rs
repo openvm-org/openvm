@@ -2,7 +2,7 @@
 
 mod hash;
 /// Library functions for user input/output.
-pub mod io;
+mod io;
 
 pub use hash::*;
 pub use io::*;
