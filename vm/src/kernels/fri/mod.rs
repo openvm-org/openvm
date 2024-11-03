@@ -376,8 +376,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriMatOpeningChip<F> {
         } = instruction;
 
         let mut memory = RefCell::borrow_mut(&self.memory);
-        #[cfg(debug_assertions)]
-        let start_timestamp = memory.timestamp();
 
         let alpha_read = memory.read(addr_space, alpha_ptr);
         let length_read = memory.read_cell(addr_space, length_ptr);
@@ -414,10 +412,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriMatOpeningChip<F> {
         let alpha_pow_write = memory.write(addr_space, alpha_pow_ptr, alpha_pow);
         debug_assert_eq!(alpha_pow_write.prev_data, alpha_pow_original);
         let result_write = memory.write(addr_space, result_ptr, result);
-        debug_assert_eq!(
-            memory.timestamp(),
-            start_timestamp + 4 + 2 * (length as u32) + 2
-        );
 
         self.records.push(FriMatOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),

@@ -399,7 +399,7 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Keccak256(chip));
                 }
-                ExecutorName::FriFold => {
+                ExecutorName::FriMatOpening => {
                     let chip = Rc::new(RefCell::new(FriMatOpeningChip::new(
                         memory_controller.clone(),
                         execution_bus,
@@ -409,7 +409,7 @@ impl VmConfig {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(AxVmChip::FriFold(chip));
+                    chips.push(AxVmChip::FriMatOpening(chip));
                 }
                 ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
@@ -1275,7 +1275,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
         ),
-        ExecutorName::FriFold => (
+        ExecutorName::FriMatOpening => (
             FriOpcode::default_offset(),
             FriOpcode::COUNT,
             FriOpcode::default_offset(),
