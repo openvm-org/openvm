@@ -44,6 +44,9 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
     val
 }
 
+/// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.
+/// Returns the read record and the register value as u32.
+/// Does not make any range check calls.
 pub fn read_rv32_register<F: PrimeField32>(
     memory: &mut MemoryController<F>,
     address_space: F,

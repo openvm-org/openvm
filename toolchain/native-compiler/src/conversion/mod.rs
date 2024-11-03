@@ -12,7 +12,6 @@ use axvm_instructions::{
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
-use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
