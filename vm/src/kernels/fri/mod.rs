@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, cell::RefCell, sync::Arc};
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
@@ -16,7 +16,7 @@ use ax_stark_backend::{
 use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, FriFoldOpcode::FRI_FOLD,
 };
-use itertools::Itertools;
+use itertools::zip_eq;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -94,7 +94,6 @@ impl<F: Field> BaseAir<F> for FriFoldAir {
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for FriFoldAir {}
-
 impl<F: Field> PartitionedBaseAir<F> for FriFoldAir {}
 
 fn assert_eq_ext<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
@@ -102,7 +101,7 @@ fn assert_eq_ext<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
     x: [I1; EXT_DEG],
     y: [I2; EXT_DEG],
 ) {
-    for (x, y) in x.into_iter().zip_eq(y.into_iter()) {
+    for (x, y) in zip_eq(x, y) {
         builder.assert_eq(x, y);
     }
 }
@@ -111,9 +110,9 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &FriFoldCols<AB::Var> = std::borrow::Borrow::borrow(&*local);
+        let local: &FriFoldCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1);
-        let next: &FriFoldCols<AB::Var> = std::borrow::Borrow::borrow(&*next);
+        let next: &FriFoldCols<AB::Var> = (*next).borrow();
 
         let &FriFoldCols {
             enabled,
@@ -156,7 +155,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let num_final_accesses = AB::F::two();
 
         // general constraints
-
         let mut when_is_not_last = builder.when(not(is_last));
 
         let next_alpha_pow_times_b = FieldExtension::multiply(next.alpha_pow_current, next.b);
@@ -185,7 +183,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         builder.assert_bool(enabled);
 
         // first row constraint
-
         assert_eq_ext(
             &mut builder.when(is_first),
             alpha_pow_current,
@@ -200,20 +197,9 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             );
         }
 
-        // is zero subair
-
-        SubAir::eval(
-            &IsZeroSubAir {},
-            builder,
-            (
-                IsZeroIo {
-                    x: index.into(),
-                    out: index_is_zero.into(),
-                    condition: AB::Expr::one(),
-                },
-                is_zero_aux,
-            ),
-        );
+        // is zero constraint
+        let is_zero_io = IsZeroIo::new(index.into(), index_is_zero.into(), enabled.into());
+        IsZeroSubAir.eval(builder, (is_zero_io, is_zero_aux));
 
         // execution interaction
 
@@ -350,7 +336,7 @@ impl<F: PrimeField32> FriFoldChip<F> {
     ) -> Self {
         let air = FriFoldAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-            memory_bridge: memory.borrow().memory_bridge(),
+            memory_bridge: RefCell::borrow(&memory).memory_bridge(),
             offset,
         };
         Self {
@@ -471,7 +457,7 @@ impl<F: Field> ChipUsageGetter for FriFoldChip<F> {
 impl<F: PrimeField32> FriFoldChip<F> {
     fn record_to_rows(
         record: FriFoldRecord<F>,
-        aux_cols_factory: MemoryAuxColsFactory<F>,
+        aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
     ) {
         let width = FriFoldCols::<F>::width();
@@ -560,30 +546,21 @@ impl<F: PrimeField32> FriFoldChip<F> {
             alpha_pow_current = FieldExtension::multiply(alpha, alpha_pow_current);
         }
     }
-    fn blank_row(slice: &mut [F]) {
-        let cols: &mut FriFoldCols<F> = std::borrow::BorrowMut::borrow_mut(slice);
-        IsZeroSubAir {}
-            .generate_subrow(cols.index, (&mut cols.is_zero_aux, &mut cols.index_is_zero));
-    }
+
     fn generate_trace(self) -> RowMajorMatrix<F> {
         let mut flat_trace = vec![F::zero(); self.height.next_power_of_two() * self.trace_width()];
-
         let width = self.trace_width();
+        let aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
 
         let mut index = 0;
         for record in self.records {
             let length = record.a_reads.len();
             Self::record_to_rows(
                 record,
-                self.memory.borrow().aux_cols_factory(),
+                &aux_cols_factory,
                 &mut flat_trace[index..index + (length * width)],
             );
             index += length * width;
-        }
-
-        while index < flat_trace.len() {
-            Self::blank_row(&mut flat_trace[index..index + width]);
-            index += width;
         }
 
         RowMajorMatrix::new(flat_trace, width)
