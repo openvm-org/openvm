@@ -16,7 +16,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
+        instructions::{Rv32ModularArithmeticOpcode, UsizeOpcode},
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
@@ -173,10 +173,10 @@ where
         let x_biguint = limbs_to_biguint(&x, limb_bits);
         let y_biguint = limbs_to_biguint(&y, limb_bits);
 
-        let local_opcode = ModularArithmeticOpcode::from_usize(local_opcode_idx);
+        let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_mul_flag = match local_opcode {
-            ModularArithmeticOpcode::MUL => true,
-            ModularArithmeticOpcode::DIV => false,
+            Rv32ModularArithmeticOpcode::MUL => true,
+            Rv32ModularArithmeticOpcode::DIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 

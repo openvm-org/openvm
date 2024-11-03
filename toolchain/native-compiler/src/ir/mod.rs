@@ -16,7 +16,6 @@ mod builder;
 mod collections;
 mod fri;
 mod instructions;
-mod keccak;
 mod poseidon;
 mod ptr;
 mod ref_ptr;

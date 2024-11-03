@@ -14,7 +14,7 @@ use axvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, ExitCode, MemoryConfig,
         SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
-    intrinsics::hashes::keccak::hasher::utils::keccak256,
+    intrinsics::hashes::keccak256::utils::keccak256,
     system::{
         memory::{tree::public_values::compute_user_public_values_proof, CHUNK},
         program::trace::AxVmCommittedExe,
@@ -28,13 +28,13 @@ use axvm_instructions::{
     BranchEqualOpcode::*,
     FieldArithmeticOpcode::*,
     FieldExtensionOpcode::*,
-    Keccak256Opcode::*,
     NativeBranchEqualOpcode,
     NativeJalOpcode::*,
     NativeLoadStoreOpcode::*,
     PhantomInstruction,
     Poseidon2Opcode::*,
     PublishOpcode::PUBLISH,
+    Rv32KeccakOpcode::*,
     SystemOpcode::*,
     UsizeOpcode,
 };
@@ -870,7 +870,7 @@ fn test_vm_keccak() {
     air_test(
         VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::Keccak256Rv32)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal),
         program,
@@ -899,7 +899,7 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::Keccak256Rv32)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal),
         program,

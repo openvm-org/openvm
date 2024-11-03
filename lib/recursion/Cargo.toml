@@ -49,15 +49,8 @@ cfg-if = { workspace = true }
 [dev-dependencies]
 ax-circuit-primitives.workspace = true
 
-[[bin]]
-name = "small_e2e"
-
 [features]
-default = [
-    "parallel",
-    "mimalloc",
-    "test-utils",
-] # remove test-utils after binaries are moved out
+default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
     "axvm-native-compiler/halo2-compiler",

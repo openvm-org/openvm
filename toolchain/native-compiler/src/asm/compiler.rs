@@ -496,25 +496,6 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         _ => unimplemented!(),
                     }
                 }
-                DslIr::Keccak256(output, input) => match (output, input) {
-                    (Array::Dyn(output, _const_len), Array::Dyn(input, len)) => match len {
-                        Usize::Const(fix_len) => {
-                            self.push(
-                                AsmInstruction::Keccak256FixLen(
-                                    output.fp(),
-                                    input.fp(),
-                                    *fix_len.borrow(),
-                                ),
-                                debug_info,
-                            );
-                        }
-                        Usize::Var(len) => self.push(
-                            AsmInstruction::Keccak256(output.fp(), input.fp(), len.fp()),
-                            debug_info,
-                        ),
-                    },
-                    _ => unimplemented!(),
-                },
                 DslIr::Error() => self.push(AsmInstruction::j(self.trap_label), debug_info),
                 DslIr::PrintF(dst) => {
                     self.push(AsmInstruction::PrintF(dst.fp()), debug_info);

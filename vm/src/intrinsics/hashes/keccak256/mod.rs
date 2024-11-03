@@ -1,3 +1,5 @@
+//! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
+//! variable length inputs read from VM memory.
 use std::{array::from_fn, cmp::min, sync::Arc};
 
 use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
@@ -19,7 +21,7 @@ use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 
 use crate::{
     arch::{
-        instructions::{Keccak256Opcode, UsizeOpcode},
+        instructions::{Rv32KeccakOpcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
     system::{
@@ -130,8 +132,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             f,
             ..
         } = instruction;
-        let local_opcode_index = Keccak256Opcode::from_usize(opcode - self.offset);
-        debug_assert_eq!(local_opcode_index, Keccak256Opcode::KECCAK256);
+        let local_opcode = Rv32KeccakOpcode::from_usize(opcode - self.offset);
+        debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
         let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory.timestamp());

@@ -45,21 +45,6 @@ impl CompilerOptions {
         let offset = Opcode::default_offset();
         offset + opcode.as_usize()
     }
-
-    pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
-        &self,
-        opcode: Opcode,
-        modulus: BigUint,
-    ) -> usize {
-        let res = self.opcode_with_offset(opcode);
-        let modulus_id = self
-            .enabled_modulus
-            .iter()
-            .position(|m| m == &modulus)
-            .unwrap_or_else(|| panic!("unsupported modulus: {}", modulus));
-        let modular_shift = modulus_id * ModularArithmeticOpcode::COUNT;
-        res + modular_shift
-    }
 }
 
 fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
@@ -633,27 +618,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
-            options.opcode_with_offset(Keccak256Opcode::KECCAK256),
-            i32_f(dst),
-            i32_f(src),
-            i32_f(len),
-            AS::Memory,
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Keccak256FixLen(_dst, _src, _len) => {
-            todo!("len as immediate needs to be handled");
-            // inst_med(
-            //     KECCAK256,
-            //     i32_f(dst),
-            //     i32_f(src),
-            //     i32_f(len),
-            //     AS::Memory,
-            //     AS::Memory,
-            //     AS::Immediate,
-            // )
-        }
         AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
                 vec![Instruction::debug(PhantomInstruction::CtStart)]
