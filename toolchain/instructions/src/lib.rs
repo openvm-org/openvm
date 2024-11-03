@@ -362,6 +362,7 @@ pub enum Rv32ModularArithmeticOpcode {
     DIV,
 }
 
+/// Opcodes for FRI opening proofs.
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
@@ -369,6 +370,8 @@ pub enum Rv32ModularArithmeticOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FriFoldOpcode {
+    /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
+    /// for a single matrix.
     FRI_FOLD,
 }
 

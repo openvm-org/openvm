@@ -177,7 +177,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
-                            builder.cycle_tracker_start("sp1-fri-fold");
+                            builder.cycle_tracker_start("single-mat-reduced-opening");
 
                             if builder.flags.static_only {
                                 builder.range(0, ps_at_z.len()).for_each(|t, builder| {
@@ -194,7 +194,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder.assign(&cur_ro, cur_ro + (fri_fold_result / (z - x)));
                             }
 
-                            builder.cycle_tracker_end("sp1-fri-fold");
+                            builder.cycle_tracker_end("single-mat-reduced-opening");
                         });
 
                         builder.set_value(&ro, log_height, cur_ro);

@@ -25,6 +25,7 @@ use itertools::zip_eq;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_maybe_rayon::prelude::*;
 
 use crate::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
@@ -198,7 +199,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         }
 
         // is zero constraint
-        let is_zero_io = IsZeroIo::new(index.into(), index_is_zero.into(), enabled.into());
+        let is_zero_io = IsZeroIo::new(index.into(), index_is_zero.into(), AB::Expr::one());
         IsZeroSubAir.eval(builder, (is_zero_io, is_zero_aux));
 
         // length will only be used on the last row, so it equals 1 + index
@@ -516,7 +517,7 @@ impl<F: PrimeField32> FriFoldChip<F> {
             let mut is_zero_aux = F::zero();
 
             let index = F::from_canonical_usize(i);
-            IsZeroSubAir {}.generate_subrow(index, (&mut is_zero_aux, &mut index_is_zero));
+            IsZeroSubAir.generate_subrow(index, (&mut is_zero_aux, &mut index_is_zero));
 
             let cols: &mut FriFoldCols<F> = slice[i * width..(i + 1) * width].borrow_mut();
             *cols = FriFoldCols {
@@ -570,6 +571,14 @@ impl<F: PrimeField32> FriFoldChip<F> {
             );
             index += length * width;
         }
+        // In padding rows, need index_is_zero = 1 so IsZero constraints pass, and also because next.index_is_zero is used
+        // to determine the last row per instruction, so the last non-padding row needs next.index_is_zero = 1
+        flat_trace[self.height * width..]
+            .par_chunks_mut(width)
+            .for_each(|row| {
+                let row: &mut FriFoldCols<F> = row.borrow_mut();
+                row.index_is_zero = F::one();
+            });
 
         RowMajorMatrix::new(flat_trace, width)
     }
