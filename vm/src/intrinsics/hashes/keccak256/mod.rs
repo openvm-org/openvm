@@ -8,7 +8,6 @@ use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
 pub mod air;
-pub mod bridge;
 pub mod columns;
 pub mod trace;
 pub mod utils;
