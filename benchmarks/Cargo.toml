@@ -21,7 +21,11 @@ tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+pprof = { version = "0.13", features = [
+    "criterion",
+    "flamegraph",
+    "frame-pointer",
+] }
 
 
 [features]

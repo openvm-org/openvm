@@ -20,11 +20,7 @@ fn benchmark_function(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().with_profiler(PProfProfiler::new(10, Output::Flamegraph(None)));
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
     targets = benchmark_function
 }
 criterion_main!(benches);
-
-// Generate flamegraph using command:
-// cargo bench --bench fibonacci_execute -- --profile-time=30
-// open ../target/criterion/fibonacci/execute/profile/flamegraph.svg
