@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashSet,
     iter,
 };
 
@@ -13,6 +12,7 @@ use ax_stark_backend::{
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rustc_hash::FxHashSet;
 
 use crate::{
     arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
@@ -114,7 +114,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 #[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: HashSet<(F, usize)>,
+    touched_labels: FxHashSet<(F, usize)>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -129,7 +129,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 memory_bus,
                 merkle_bus,
             },
-            touched_labels: HashSet::new(),
+            touched_labels: FxHashSet::default(),
         }
     }
 

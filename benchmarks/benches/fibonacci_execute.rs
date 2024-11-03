@@ -24,3 +24,7 @@ criterion_group! {
     targets = benchmark_function
 }
 criterion_main!(benches);
+
+// Generate flamegraph using command:
+// cargo bench --bench fibonacci_execute -- --profile-time=30
+// open ../target/criterion/fibonacci/execute/profile/flamegraph.svg

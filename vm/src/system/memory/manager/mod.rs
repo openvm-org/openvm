@@ -183,11 +183,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
+        let ptr_u32 = pointer.as_canonical_u32();
         assert!(
-            address_space == F::zero()
-                || pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            address_space == F::zero() || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
+            "memory out of bounds: {ptr_u32:?}",
         );
 
         if address_space == F::zero() {
@@ -205,10 +204,9 @@ impl<F: PrimeField32> MemoryController<F> {
             };
         }
 
-        let (record, adapter_records) = self.memory.read::<N>(
-            address_space.as_canonical_u32() as usize,
-            pointer.as_canonical_u32() as usize,
-        );
+        let (record, adapter_records) = self
+            .memory
+            .read::<N>(address_space.as_canonical_u32() as usize, ptr_u32 as usize);
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -217,7 +215,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(ptr_u32 + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 
@@ -245,15 +243,15 @@ impl<F: PrimeField32> MemoryController<F> {
         data: [F; N],
     ) -> MemoryWriteRecord<F, N> {
         assert_ne!(address_space, F::zero());
+        let ptr_u32 = pointer.as_canonical_u32();
         assert!(
-            pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            ptr_u32 < (1 << self.mem_config.pointer_max_bits),
+            "memory out of bounds: {ptr_u32:?}",
         );
 
         let (record, adapter_records) = self.memory.write(
             address_space.as_canonical_u32() as usize,
-            pointer.as_canonical_u32() as usize,
+            ptr_u32 as usize,
             data,
         );
         for record in adapter_records {
@@ -264,7 +262,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(ptr_u32 + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 
