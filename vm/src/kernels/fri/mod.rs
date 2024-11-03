@@ -1,4 +1,5 @@
 use std::{
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     sync::Arc,
@@ -153,11 +154,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let is_first = index_is_zero;
         let is_last = next.index_is_zero;
 
-        let length = AB::Expr::one() + index;
-        let num_initial_accesses = AB::F::from_canonical_usize(4);
-        let num_loop_accesses = AB::Expr::two() * length.clone();
-        let num_final_accesses = AB::F::two();
-
         builder.assert_bool(enabled);
         // transition constraints
         let mut when_is_not_last = builder.when(not(is_last));
@@ -205,6 +201,12 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let is_zero_io = IsZeroIo::new(index.into(), index_is_zero.into(), enabled.into());
         IsZeroSubAir.eval(builder, (is_zero_io, is_zero_aux));
 
+        // length will only be used on the last row, so it equals 1 + index
+        let length = AB::Expr::one() + index;
+        let num_initial_accesses = AB::F::from_canonical_usize(4);
+        let num_loop_accesses = AB::Expr::two() * length.clone();
+        let num_final_accesses = AB::F::two();
+
         // execution interaction
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
         self.execution_bridge
@@ -222,13 +224,12 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
                 ExecutionState::new(pc, start_timestamp),
                 ExecutionState::<AB::Expr>::new(
                     AB::Expr::from_canonical_u32(DEFAULT_PC_STEP) + pc,
-                    total_accesses + start_timestamp - AB::F::one(),
+                    start_timestamp + total_accesses,
                 ),
             )
             .eval(builder, enabled * is_last);
 
         // initial reads
-
         self.memory_bridge
             .read(
                 MemoryAddress::new(address_space, alpha_pointer),
@@ -263,11 +264,12 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             .eval(builder, enabled * is_last);
 
         // general reads
+        let timestamp = start_timestamp + num_initial_accesses + (index * AB::F::two());
         self.memory_bridge
             .read(
                 MemoryAddress::new(address_space, a_pointer + index),
                 [a],
-                start_timestamp + num_initial_accesses + (index * AB::F::two()),
+                timestamp.clone(),
                 &a_aux,
             )
             .eval(builder, enabled);
@@ -275,20 +277,21 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             .read(
                 MemoryAddress::new(
                     address_space,
-                    b_pointer + (index * AB::F::from_canonical_usize(4)),
+                    b_pointer + (index * AB::F::from_canonical_usize(EXT_DEG)),
                 ),
                 b,
-                start_timestamp + num_initial_accesses + (index * AB::F::two()) + AB::F::one(),
+                timestamp + AB::F::one(),
                 &b_aux,
             )
             .eval(builder, enabled);
 
         // final writes
+        let timestamp = start_timestamp + num_initial_accesses + num_loop_accesses.clone();
         self.memory_bridge
             .write(
                 MemoryAddress::new(address_space, alpha_pow_pointer),
                 FieldExtension::multiply(alpha, alpha_pow_current),
-                start_timestamp + num_initial_accesses + num_loop_accesses.clone(),
+                timestamp.clone(),
                 &MemoryWriteAuxCols {
                     base: alpha_pow_aux,
                     prev_data: alpha_pow_original,
@@ -299,7 +302,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             .write(
                 MemoryAddress::new(address_space, result_pointer),
                 current,
-                start_timestamp + num_initial_accesses + num_loop_accesses + AB::F::one(),
+                timestamp + AB::F::one(),
                 &result_aux,
             )
             .eval(builder, enabled * is_last);
@@ -328,8 +331,7 @@ pub struct FriFoldChip<F: Field> {
 }
 
 impl<F: PrimeField32> FriFoldChip<F> {
-    #[allow(dead_code)]
-    pub(crate) fn new(
+    pub fn new(
         memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -373,6 +375,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         } = instruction;
 
         let mut memory = RefCell::borrow_mut(&self.memory);
+        #[cfg(debug_assertions)]
+        let start_timestamp = memory.timestamp();
 
         let alpha_read = memory.read(address_space, alpha_pointer);
         let length_read = memory.read_cell(address_space, length_pointer);
@@ -380,7 +384,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         let b_pointer_read = memory.read_cell(address_space, b_pointer_pointer);
 
         let alpha = alpha_read.data;
-        let alpha_pow_original = std::array::from_fn(|i| {
+        let alpha_pow_original = from_fn(|i| {
             memory.unsafe_read_cell(
                 address_space,
                 alpha_pow_pointer + F::from_canonical_usize(i),
@@ -391,8 +395,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         let a_pointer = a_pointer_read.data[0];
         let b_pointer = b_pointer_read.data[0];
 
-        let mut a_reads = vec![];
-        let mut b_reads = vec![];
+        let mut a_reads = Vec::with_capacity(length);
+        let mut b_reads = Vec::with_capacity(length);
         let mut result = [F::zero(); EXT_DEG];
 
         for i in 0..length {
@@ -410,8 +414,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
         }
 
         let alpha_pow_write = memory.write(address_space, alpha_pow_pointer, alpha_pow);
-        assert_eq!(alpha_pow_write.prev_data, alpha_pow_original);
+        debug_assert_eq!(alpha_pow_write.prev_data, alpha_pow_original);
         let result_write = memory.write(address_space, result_pointer, result);
+        debug_assert_eq!(
+            memory.timestamp(),
+            start_timestamp + 4 + 2 * (length as u32) + 2
+        );
 
         self.records.push(FriFoldRecord {
             pc: F::from_canonical_u32(from_state.pc),
@@ -431,7 +439,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
 
         Ok(ExecutionState {
             pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: result_write.timestamp,
+            timestamp: memory.timestamp(),
         })
     }
 
