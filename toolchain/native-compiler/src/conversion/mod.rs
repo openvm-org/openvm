@@ -6,6 +6,7 @@ use axvm_circuit::arch::{
 };
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
+    program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
     FriFoldOpcode::FRI_FOLD,
 };
 use num_bigint_dig::BigUint;
@@ -755,5 +756,6 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         instructions_and_debug_infos,
         step: DEFAULT_PC_STEP,
         pc_base: 0,
+        max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
     }
 }

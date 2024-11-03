@@ -1,7 +1,5 @@
 use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
-#[cfg(feature = "sdk")]
-pub use sdk::*;
 
 use crate::arch::{ExecutorName, VmConfig, VmExecutor};
 

@@ -1,3 +1,12 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+authors = ["Intrinsic Technologies"]
+homepage = "https://axiom.xyz"
+repository = "https://github.com/axiom-crypto/"
+
 [workspace]
 members = [
     "stark-backend",
@@ -23,14 +32,6 @@ members = [
     "benchmarks",
 ]
 resolver = "2"
-
-[workspace.package]
-version = "0.1.0"
-authors = ["Intrinsic Technologies"]
-edition = "2021"
-homepage = "https://axiom.xyz"
-repository = "https://github.com/axiom-crypto/"
-license = "MIT"
 
 # Fastest runtime configuration
 [profile.release]

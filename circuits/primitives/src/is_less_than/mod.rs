@@ -160,7 +160,12 @@ impl IsLtSubAir {
 }
 
 impl<AB: InteractionBuilder> SubAir<AB> for IsLtSubAir {
-    type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     // constrain that out == (x < y) when count != 0
     // warning: send for range check must be included for the constraints to be sound
@@ -186,7 +191,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLtSubAir {
 pub struct IsLtWhenTransitionAir(pub IsLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
-    type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.

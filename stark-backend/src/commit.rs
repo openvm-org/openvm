@@ -57,7 +57,7 @@ impl<'a, SC: StarkGenericConfig> CommittedSingleMatrixView<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> Clone for CommittedSingleMatrixView<'a, SC> {
+impl<SC: StarkGenericConfig> Clone for CommittedSingleMatrixView<'_, SC> {
     fn clone(&self) -> Self {
         Self {
             data: self.data,

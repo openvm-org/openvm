@@ -2,7 +2,9 @@
 
 mod hash;
 /// Library functions for user input/output.
-pub mod io;
+#[cfg(target_os = "zkvm")]
+mod io;
 
 pub use hash::*;
+#[cfg(target_os = "zkvm")]
 pub use io::*;
