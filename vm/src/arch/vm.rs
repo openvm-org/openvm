@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
-    arch::{ExecutionSegment, PersistenceType, VmConfig},
+    arch::{ExecutionSegment, VmConfig},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
@@ -73,7 +73,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
 
     pub fn continuation_enabled(&self) -> bool {
-        self.config.continuation_enabled()
+        self.config.continuation_enabled
     }
 
     fn execute_segments(
@@ -206,10 +206,9 @@ pub struct SingleSegmentVmExecutor<F: PrimeField32> {
 
 impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn new(config: VmConfig) -> Self {
-        assert_eq!(
-            config.memory_config.persistence_type,
-            PersistenceType::Volatile,
-            "Single segment VM only supports volatile memory"
+        assert!(
+            !config.continuation_enabled,
+            "Single segment VM doesn't support continuation mode"
         );
         Self {
             config,
@@ -412,13 +411,12 @@ where
     where
         Val<SC>: PrimeField32,
     {
-        match self.config.memory_config.persistence_type {
-            PersistenceType::Volatile => {
-                assert_eq!(proofs.len(), 1);
-                self.verify_single(vk, &proofs.into_iter().next().unwrap())
-                    .map_err(VmVerificationError::StarkError)
-            }
-            PersistenceType::Persistent => self.verify_segments(vk, proofs),
+        if self.config.continuation_enabled {
+            self.verify_segments(vk, proofs)
+        } else {
+            assert_eq!(proofs.len(), 1);
+            self.verify_single(vk, &proofs.into_iter().next().unwrap())
+                .map_err(VmVerificationError::StarkError)
         }
     }
 

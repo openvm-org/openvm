@@ -1,20 +1,20 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RvIntrinsic, RV32_REGISTER_NUM_LIMBS},
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode,
-    LessThanOpcode, MulHOpcode, MulOpcode, PhantomInstruction, Rv32AuipcOpcode,
-    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
-    Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, BaseAluOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode, MulOpcode,
+    PhantomInstruction, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
+    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
 };
-use axvm_platform::constants::{CUSTOM_0, CUSTOM_1};
+use axvm_platform::constants::{
+    Custom0Funct3, Custom1Funct3, CUSTOM_0, CUSTOM_1, MODULAR_ARITHMETIC_MAX_KINDS,
+    SHORT_WEIERSTRASS_MAX_KINDS,
+};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     process_instruction, InstructionProcessor,
 };
-use strum::EnumCount;
 
 use crate::util::*;
 
@@ -243,24 +243,37 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
     let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R- or I-type
 
     match opcode {
-        CUSTOM_0 => match funct3 {
-            0b000 => {
+        CUSTOM_0 => match Custom0Funct3::from_repr(funct3) {
+            Some(Custom0Funct3::Terminate) => {
                 let imm = (instruction_u32 >> 20) & 0xfff;
                 Some(terminate(imm.try_into().expect("exit code must be byte")))
             }
-            0b001 => {
-                let rd = (instruction_u32 >> 7) & 0x1f;
-                let imm = (instruction_u32 >> 20) & 0xfff;
+            Some(Custom0Funct3::HintStoreW) => {
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 Some(Instruction::from_isize(
                     Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
                     0,
-                    (RV32_REGISTER_NUM_LIMBS * rd as usize) as isize,
-                    imm as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
                     1,
                     2,
                 ))
             }
-            0b011 => Some(Instruction::phantom(
+            Some(Custom0Funct3::Reveal) => {
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
+                // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
+                Some(Instruction::from_isize(
+                    Rv32LoadStoreOpcode::STOREW.with_default_offset(),
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
+                    1,
+                    3,
+                ))
+            }
+            Some(Custom0Funct3::HintInput) => Some(Instruction::phantom(
                 PhantomInstruction::HintInputRv32,
                 F::zero(),
                 F::zero(),
@@ -269,11 +282,11 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
             _ => unimplemented!(),
         },
         CUSTOM_1 => {
-            match funct3 {
-                Rv32ModularArithmeticOpcode::FUNCT3 => {
+            match Custom1Funct3::from_repr(funct3) {
+                Some(Custom1Funct3::ModularArithmetic) => {
                     // mod operations
                     let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let size = Rv32ModularArithmeticOpcode::COUNT as u32;
+                    let size = MODULAR_ARITHMETIC_MAX_KINDS as u32;
                     let prime_idx = funct7 / size;
                     let local_opcode_idx = funct7 % size;
                     let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
@@ -284,13 +297,13 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         &RType::new(instruction_u32),
                     ))
                 }
-                EccOpcode::FUNCT3 => {
+                Some(Custom1Funct3::ShortWeierstrass) => {
                     // short weierstrass ec
                     let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let size = EccOpcode::COUNT as u32;
-                    let prime_idx = funct7 / size;
+                    let size = SHORT_WEIERSTRASS_MAX_KINDS as u32;
+                    let curve_idx = funct7 / size;
                     let local_opcode_idx = funct7 % size;
-                    let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
+                    let global_opcode_idx = (local_opcode_idx + curve_idx * size) as usize
                         + EccOpcode::default_offset();
                     Some(from_r_type(
                         global_opcode_idx,

@@ -29,14 +29,9 @@ use crate::{
         modular::{ModularAddSubChip, ModularMulDivChip},
     },
     kernels::{
-        branch_eq::KernelBranchEqChip,
-        castf::CastFChip,
-        field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip,
-        jal::KernelJalChip,
-        loadstore::KernelLoadStoreChip,
-        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
-        public_values::PublicValuesChip,
+        branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
+        field_extension::FieldExtensionChip, fri::FriMatOpeningChip, jal::KernelJalChip,
+        loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
     system::{phantom::PhantomChip, program::ExecutionError},
@@ -87,6 +82,7 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
     /// Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
@@ -125,8 +121,6 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
-    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -143,6 +137,7 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
+    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
@@ -180,6 +175,4 @@ pub enum AxVmChip<F: PrimeField32> {
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     // TO BE REPLACED:
     CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
-    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
 }

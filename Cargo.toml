@@ -1,3 +1,12 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+authors = ["Intrinsic Technologies"]
+homepage = "https://axiom.xyz"
+repository = "https://github.com/axiom-crypto/"
+
 [workspace]
 members = [
     "stark-backend",
@@ -23,14 +32,6 @@ members = [
     "benchmarks",
 ]
 resolver = "2"
-
-[workspace.package]
-version = "0.1.0"
-authors = ["Intrinsic Technologies"]
-edition = "2021"
-homepage = "https://axiom.xyz"
-repository = "https://github.com/axiom-crypto/"
-license = "MIT"
 
 # Fastest runtime configuration
 [profile.release]
@@ -140,6 +141,7 @@ enum-utils = "0.1.1"
 backtrace = "0.3.71"
 rand = "0.8.5"
 hex-literal = "0.4.1"
+hex = { version = "0.4.3", default-features = false }
 metrics = "0.23.0"
 cfg-if = "1.0.0"
 inferno = "0.11.21"
@@ -147,6 +149,10 @@ test-case = "3.3.1"
 test-log = "0.2.16"
 enum_dispatch = "0.3.13"
 eyre = "0.6.12"
+tempfile = "3.13.0"
+thiserror = "1.0.65"
+rustc-hash = "2.0.0"
+
 # cryptography
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 k256 = "0.13.3"
@@ -155,8 +161,6 @@ num-bigint-dig = "0.8.4"
 num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
-tempfile = "3.13.0"
-thiserror = "1.0.65"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

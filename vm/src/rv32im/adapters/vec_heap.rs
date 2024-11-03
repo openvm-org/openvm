@@ -4,9 +4,13 @@ use std::{
     cell::RefCell,
     iter::{once, zip},
     marker::PhantomData,
+    sync::Arc,
 };
 
 use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
@@ -48,6 +52,7 @@ pub struct Rv32VecHeapAdapterChip<
 > {
     pub air:
         Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     _marker: PhantomData<F>,
 }
 
@@ -65,6 +70,7 @@ impl<
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
@@ -74,8 +80,10 @@ impl<
             air: Rv32VecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
+                bus: bitwise_lookup_chip.bus(),
                 address_bits,
             },
+            bitwise_lookup_chip,
             _marker: PhantomData,
         }
     }
@@ -142,6 +150,7 @@ pub struct Rv32VecHeapAdapterAir<
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
+    pub bus: BitwiseOperationLookupBus,
     /// The max number of bits for an address in memory
     address_bits: usize,
 }
@@ -224,8 +233,34 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
+        // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
+        // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
+        // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
+        let need_range_check: Vec<AB::Var> = cols
+            .rs_val
+            .iter()
+            .chain(std::iter::repeat(&cols.rd_val).take(2))
+            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
+            .collect();
+
+        // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
+        let limb_shift = AB::F::from_canonical_usize(
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
+        );
+
+        // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
+        //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
+        //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
+        for i in 0..need_range_check.len() / 2 {
+            self.bus
+                .send_range(
+                    need_range_check[i * 2] * limb_shift,
+                    need_range_check[i * 2 + 1] * limb_shift,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
+
         // Compose the u32 register value into single field element, with
-        // a range check on the highest limb.
         let register_to_field = |r: [AB::Var; RV32_REGISTER_NUM_LIMBS]| {
             r.into_iter()
                 .enumerate()
@@ -363,6 +398,19 @@ impl<
                 memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
             })
         });
+        let need_range_check: Vec<u32> = rs_records
+            .iter()
+            .chain(std::iter::repeat(&rd_record).take(2))
+            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .collect();
+        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        for i in 0..need_range_check.len() / 2 {
+            self.bitwise_lookup_chip.request_range(
+                need_range_check[i * 2] * limb_shift,
+                need_range_check[i * 2 + 1] * limb_shift,
+            );
+        }
+
         let read_data = read_records.map(|r| r.map(|x| x.data));
 
         let record = Rv32VecHeapReadRecord {

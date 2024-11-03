@@ -67,7 +67,7 @@ where
     // To optimize memory and parallelism, we split the trace rows into chunks
     // based on the number of cpu threads available, and then do all
     // computations necessary for that chunk within a single thread.
-    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    let perm_width = num_interactions.div_ceil(interaction_chunk_size) + 1;
     let mut perm_values = vec![EF::zero(); height * perm_width];
     debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
@@ -79,7 +79,7 @@ where
     #[cfg(not(feature = "parallel"))]
     let num_threads = 1;
 
-    let height_chunk_size = (height + num_threads - 1) / num_threads;
+    let height_chunk_size = height.div_ceil(num_threads);
     perm_values
         .par_chunks_mut(height_chunk_size * perm_width)
         .enumerate()
@@ -177,7 +177,7 @@ pub(super) struct Evaluator<'a, F: Field> {
     pub local_index: usize,
 }
 
-impl<'a, F: Field> SymbolicEvaluator<F, F> for Evaluator<'a, F> {
+impl<F: Field> SymbolicEvaluator<F, F> for Evaluator<'_, F> {
     fn eval_var(&self, symbolic_var: SymbolicVariable<F>) -> F {
         let n = self.local_index;
         let height = self.height;

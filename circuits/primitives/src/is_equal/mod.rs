@@ -30,7 +30,12 @@ pub struct IsEqSubAir;
 
 impl<AB: AirBuilder> SubAir<AB> for IsEqSubAir {
     /// (io, inv)
-    type AirContext<'a> = (IsEqualIo<AB::Expr>, AB::Var) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsEqualIo<AB::Expr>, AB::Var)
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     fn eval<'a>(&'a self, builder: &'a mut AB, (io, inv): (IsEqualIo<AB::Expr>, AB::Var))
     where
