@@ -677,7 +677,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::FriFold(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
+        AsmInstruction::FriMatOpening(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
             opcode: options.opcode_with_offset(FRI_MAT_OPENING),
             a: i32_f(a),
             b: i32_f(b),

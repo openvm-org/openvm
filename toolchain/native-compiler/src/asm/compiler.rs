@@ -562,9 +562,9 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::Halt => {
                     self.push(AsmInstruction::Halt, debug_info);
                 }
-                DslIr::FriFold(alpha, curr_alpha_pow, at_x_array, at_z_array, result) => {
+                DslIr::FriMatOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result) => {
                     self.push(
-                        AsmInstruction::FriFold(
+                        AsmInstruction::FriMatOpening(
                             at_x_array.ptr().fp(),
                             at_z_array.ptr().fp(),
                             result.fp(),

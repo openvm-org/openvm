@@ -65,7 +65,8 @@ fn test_fri_fold() {
 
     let cur_alpha_pow: Ext<_, _> = builder.uninit();
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
-    let fri_fold_result = builder.fri_fold(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
+    let fri_fold_result =
+        builder.fri_mat_reduced_opening(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
     let actual_final_alpha_pow = cur_alpha_pow;
     let actual_result: Ext<_, _> = builder.uninit();
     builder.assign(&actual_result, fri_fold_result / (z - x));

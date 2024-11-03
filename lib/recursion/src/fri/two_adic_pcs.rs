@@ -189,9 +189,13 @@ pub fn verify_two_adic_pcs<C: Config>(
                                     builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                                 });
                             } else {
-                                let fri_fold_result =
-                                    builder.fri_fold(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
-                                builder.assign(&cur_ro, cur_ro + (fri_fold_result / (z - x)));
+                                let mat_ro = builder.fri_mat_reduced_opening(
+                                    alpha,
+                                    cur_alpha_pow,
+                                    &mat_opening,
+                                    &ps_at_z,
+                                );
+                                builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
                             }
 
                             builder.cycle_tracker_end("single-mat-reduced-opening");
