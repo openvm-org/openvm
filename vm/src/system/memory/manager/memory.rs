@@ -246,7 +246,7 @@ impl<F: PrimeField32> Memory<F> {
         (equipartition, adapter_records)
     }
 
-    // Modifies the partition to ensure that there is a block starting at (address_space, pointer).
+    // Modifies the partition to ensure that there is a block starting at (address_space, query).
     fn split_to_make_boundary(
         &mut self,
         address_space: usize,
