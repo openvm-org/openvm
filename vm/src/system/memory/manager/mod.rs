@@ -1,11 +1,4 @@
-use std::{
-    array,
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    marker::PhantomData,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{array, cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
@@ -27,6 +20,7 @@ use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
+use rustc_hash::FxHashMap;
 
 use self::interface::MemoryInterface;
 use super::volatile::VolatileBoundaryChip;
@@ -100,7 +94,7 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     memory: Memory<F>,
     /// Maps a length to a list of access adapters with that block length as th larger size.
-    adapter_records: HashMap<usize, Vec<AccessAdapterRecord<F>>>,
+    adapter_records: FxHashMap<usize, Vec<AccessAdapterRecord<F>>>,
 
     // Filled during finalization.
     result: Option<MemoryControllerResult<F>>,
@@ -124,7 +118,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: Memory::new(&Equipartition::<_, 1>::new()),
-            adapter_records: HashMap::new(),
+            adapter_records: FxHashMap::default(),
             range_checker,
             result: None,
         }
@@ -153,7 +147,7 @@ impl<F: PrimeField32> MemoryController<F> {
             mem_config,
             interface_chip,
             memory,
-            adapter_records: HashMap::new(),
+            adapter_records: FxHashMap::default(),
             range_checker,
             result: None,
         }

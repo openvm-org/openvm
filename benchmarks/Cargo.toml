@@ -20,6 +20,9 @@ metrics.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+
 
 [features]
 default = ["parallel", "mimalloc", "bench-metrics"]
@@ -30,3 +33,7 @@ parallel = ["axvm-recursion/parallel"]
 mimalloc = ["axvm-circuit/mimalloc"]
 jemalloc = ["axvm-circuit/jemalloc"]
 jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
+
+[[bench]]
+name = "fibonacci_execute"
+harness = false

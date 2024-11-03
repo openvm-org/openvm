@@ -413,6 +413,7 @@ fn commit_perm_traces<SC: StarkGenericConfig>(
     }
 }
 
+#[allow(dead_code)]
 fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     raps: &[Arc<dyn AnyRap<SC>>],
     mpk: &MultiStarkProvingKeyView<SC>,
