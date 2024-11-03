@@ -47,8 +47,8 @@ impl<T> MemoryBaseAuxCols<T> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
-    pub(super) base: MemoryBaseAuxCols<T>,
-    pub(super) prev_data: [T; N],
+    pub base: MemoryBaseAuxCols<T>,
+    pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
@@ -104,6 +104,10 @@ impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
     }
 }
 
+/// The auxiliary columns for a memory read operation with block size `N`.
+/// These columns should be automatically managed by the memory controller.
+/// To fully constrain a memory read, in addition to these columns,
+/// the address space, pointer, and data must be provided.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryReadAuxCols<T, const N: usize> {

@@ -14,6 +14,7 @@ pub use var::*;
 mod bits;
 mod builder;
 mod collections;
+mod fri;
 mod instructions;
 mod keccak;
 mod poseidon;

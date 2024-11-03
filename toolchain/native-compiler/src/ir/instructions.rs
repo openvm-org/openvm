@@ -267,6 +267,14 @@ pub enum DslIr<C: Config> {
     CircuitExt2Felt([Felt<C::F>; 4], Ext<C::F, C::EF>),
     /// Converts a slice of felts to an ext. Should only be used when target is a gnark circuit.
     CircuitFelts2Ext([Felt<C::F>; 4], Ext<C::F, C::EF>),
+    /// FriMatOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result)
+    FriMatOpening(
+        Ext<C::F, C::EF>,
+        Ext<C::F, C::EF>,
+        Array<C, Felt<C::F>>,
+        Array<C, Ext<C::F, C::EF>>,
+        Ext<C::F, C::EF>,
+    ),
 
     // Debugging instructions.
     /// Executes less than (var = var < var).  This operation is NOT constrained.

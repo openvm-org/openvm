@@ -54,16 +54,16 @@ use crate::{
             branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
             jal_native_adapter::JalNativeAdapterChip,
             loadstore_native_adapter::NativeLoadStoreAdapterChip,
-            native_adapter::NativeAdapterChip, native_vec_heap_adapter::NativeVecHeapAdapterChip,
+            native_adapter::NativeAdapterChip,
             native_vectorized_adapter::NativeVectorizedAdapterChip,
         },
         branch_eq::KernelBranchEqChip,
         castf::{CastFChip, CastFCoreChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
+        fri::FriMatOpeningChip,
         jal::{JalCoreChip, KernelJalChip},
         loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
-        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
     rv32im::{
@@ -398,6 +398,18 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::Keccak256(chip));
+                }
+                ExecutorName::FriMatOpening => {
+                    let chip = Rc::new(RefCell::new(FriMatOpeningChip::new(
+                        memory_controller.clone(),
+                        execution_bus,
+                        program_bus,
+                        offset,
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::FriMatOpening(chip));
                 }
                 ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
@@ -952,44 +964,6 @@ impl VmConfig {
                 limb_bits: 8,
             };
             match executor {
-                ExecutorName::ModularAddSub => {
-                    let new_chip = Rc::new(RefCell::new(KernelModularAddSubChip::new(
-                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        ModularAddSubCoreChip::new(
-                            config32,
-                            memory_controller.borrow().range_checker.clone(),
-                            class_offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for global_opcode in range {
-                        executors.insert(global_opcode, new_chip.clone().into());
-                    }
-                    chips.push(AxVmChip::ModularAddSub(new_chip.clone()));
-                }
-                ExecutorName::ModularMultDiv => {
-                    let new_chip = Rc::new(RefCell::new(KernelModularMulDivChip::new(
-                        NativeVecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        ModularMulDivCoreChip::new(
-                            config32,
-                            memory_controller.borrow().range_checker.clone(),
-                            class_offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for global_opcode in range {
-                        executors.insert(global_opcode, new_chip.clone().into());
-                    }
-                    chips.push(AxVmChip::ModularMultDiv(new_chip));
-                }
                 ExecutorName::ModularAddSubRv32_1x32 => {
                     let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
                         Rv32VecHeapAdapterChip::new(
@@ -1198,24 +1172,7 @@ fn gen_modular_executor_tuple(
         .into_iter()
         .enumerate()
         .flat_map(|(i, modulus)| {
-            // TODO[jpw]: delete the Kernel executors; for now I will always add both the kernel
-            // and intrinsic executors together
-            let class_offset =
-                ModularArithmeticOpcode::default_offset() + i * ModularArithmeticOpcode::COUNT;
-            let mut res = vec![
-                (
-                    ModularArithmeticOpcode::ADD as usize..=(ModularArithmeticOpcode::SUB as usize),
-                    ExecutorName::ModularAddSub,
-                    class_offset,
-                    modulus.clone(),
-                ),
-                (
-                    ModularArithmeticOpcode::MUL as usize..=(ModularArithmeticOpcode::DIV as usize),
-                    ExecutorName::ModularMultDiv,
-                    class_offset,
-                    modulus.clone(),
-                ),
-            ];
+            let mut res = vec![];
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
             // We want to use log_num_lanes as a const, this likely requires a macro
@@ -1317,6 +1274,11 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Keccak256Opcode::default_offset(),
             Keccak256Opcode::COUNT,
             Keccak256Opcode::default_offset(),
+        ),
+        ExecutorName::FriMatOpening => (
+            FriOpcode::default_offset(),
+            FriOpcode::COUNT,
+            FriOpcode::default_offset(),
         ),
         ExecutorName::BaseAluRv32 => (
             BaseAluOpcode::default_offset(),

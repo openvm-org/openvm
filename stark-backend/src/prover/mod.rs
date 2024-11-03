@@ -438,6 +438,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                         .preprocessed_data
                         .as_ref()
                         .map(|data| data.trace.as_view());
+                    tracing::debug!("Checking constraints for {}", rap.name());
                     check_constraints(
                         rap.as_ref(),
                         &preprocessed_trace,

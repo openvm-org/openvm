@@ -562,6 +562,24 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::Halt => {
                     self.push(AsmInstruction::Halt, debug_info);
                 }
+                DslIr::FriMatOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result) => {
+                    self.push(
+                        AsmInstruction::FriMatOpening(
+                            at_x_array.ptr().fp(),
+                            at_z_array.ptr().fp(),
+                            result.fp(),
+                            match at_z_array.len() {
+                                Usize::Const(_) => panic!(
+                                    "FriFold does not currently support constant length arrays"
+                                ),
+                                Usize::Var(len) => len.fp(),
+                            },
+                            alpha.fp(),
+                            curr_alpha_pow.fp(),
+                        ),
+                        debug_info,
+                    );
+                }
                 _ => unimplemented!(),
             }
         }

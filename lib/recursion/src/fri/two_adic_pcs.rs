@@ -177,16 +177,28 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
-                            builder.cycle_tracker_start("sp1-fri-fold");
-                            builder.range(0, ps_at_z.len()).for_each(|t, builder| {
-                                let p_at_x = builder.get(&mat_opening, t);
-                                let p_at_z = builder.get(&ps_at_z, t);
-                                let quotient = (p_at_z - p_at_x) / (z - x);
+                            builder.cycle_tracker_start("single-mat-reduced-opening");
 
-                                builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
-                                builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
-                            });
-                            builder.cycle_tracker_end("sp1-fri-fold");
+                            if builder.flags.static_only {
+                                builder.range(0, ps_at_z.len()).for_each(|t, builder| {
+                                    let p_at_x = builder.get(&mat_opening, t);
+                                    let p_at_z = builder.get(&ps_at_z, t);
+                                    let quotient = (p_at_z - p_at_x) / (z - x);
+
+                                    builder.assign(&cur_ro, cur_ro + cur_alpha_pow * quotient);
+                                    builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
+                                });
+                            } else {
+                                let mat_ro = builder.fri_mat_reduced_opening(
+                                    alpha,
+                                    cur_alpha_pow,
+                                    &mat_opening,
+                                    &ps_at_z,
+                                );
+                                builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
+                            }
+
+                            builder.cycle_tracker_end("single-mat-reduced-opening");
                         });
 
                         builder.set_value(&ro, log_height, cur_ro);
