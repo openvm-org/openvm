@@ -177,7 +177,7 @@ fn test_mul_by_02345() {
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
+    let adapter = Rv32VecHeapAdapterChip::<F, 2, 36, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
