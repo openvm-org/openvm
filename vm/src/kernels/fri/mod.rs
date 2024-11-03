@@ -372,7 +372,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
             ..
         } = instruction;
 
-        let mut memory = self.memory.borrow_mut();
+        let mut memory = RefCell::borrow_mut(&self.memory);
 
         let alpha_read = memory.read(address_space, alpha_pointer);
         let length_read = memory.read_cell(address_space, length_pointer);
