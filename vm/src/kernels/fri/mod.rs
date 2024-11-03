@@ -1,4 +1,8 @@
-use std::{borrow::Borrow, cell::RefCell, sync::Arc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    sync::Arc,
+};
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
@@ -154,7 +158,8 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let num_loop_accesses = AB::Expr::two() * length.clone();
         let num_final_accesses = AB::F::two();
 
-        // general constraints
+        builder.assert_bool(enabled);
+        // transition constraints
         let mut when_is_not_last = builder.when(not(is_last));
 
         let next_alpha_pow_times_b = FieldExtension::multiply(next.alpha_pow_current, next.b);
@@ -179,8 +184,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         );
         when_is_not_last.assert_eq(next.index, index + AB::Expr::one());
         when_is_not_last.assert_eq(next.enabled, enabled);
-
-        builder.assert_bool(enabled);
+        when_is_not_last.assert_eq(next.start_timestamp, start_timestamp);
 
         // first row constraint
         assert_eq_ext(
@@ -202,7 +206,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         IsZeroSubAir.eval(builder, (is_zero_io, is_zero_aux));
 
         // execution interaction
-
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
         self.execution_bridge
             .execute(
@@ -260,7 +263,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             .eval(builder, enabled * is_last);
 
         // general reads
-
         self.memory_bridge
             .read(
                 MemoryAddress::new(address_space, a_pointer + index),
@@ -282,7 +284,6 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
             .eval(builder, enabled);
 
         // final writes
-
         self.memory_bridge
             .write(
                 MemoryAddress::new(address_space, alpha_pow_pointer),
@@ -509,8 +510,7 @@ impl<F: PrimeField32> FriFoldChip<F> {
             let index = F::from_canonical_usize(i);
             IsZeroSubAir {}.generate_subrow(index, (&mut is_zero_aux, &mut index_is_zero));
 
-            let cols: &mut FriFoldCols<F> =
-                std::borrow::BorrowMut::borrow_mut(&mut slice[i * width..(i + 1) * width]);
+            let cols: &mut FriFoldCols<F> = slice[i * width..(i + 1) * width].borrow_mut();
             *cols = FriFoldCols {
                 enabled: F::one(),
                 pc: record.pc,
