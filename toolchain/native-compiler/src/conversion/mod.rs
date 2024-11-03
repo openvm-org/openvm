@@ -7,7 +7,7 @@ use axvm_circuit::arch::{
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
-    FriFoldOpcode::FRI_FOLD,
+    FriOpcode::FRI_MAT_OPENING,
 };
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
@@ -678,7 +678,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::FriFold(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
-            opcode: options.opcode_with_offset(FRI_FOLD),
+            opcode: options.opcode_with_offset(FRI_MAT_OPENING),
             a: i32_f(a),
             b: i32_f(b),
             c: i32_f(res),

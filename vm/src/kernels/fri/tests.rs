@@ -1,6 +1,10 @@
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_instructions::{instruction::Instruction, FriFoldOpcode::FRI_FOLD};
+use axvm_instructions::{
+    instruction::Instruction,
+    FriOpcode::{self, FRI_MAT_OPENING},
+    UsizeOpcode,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, Field};
@@ -10,11 +14,11 @@ use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     kernels::{
         field_extension::FieldExtension,
-        fri::{elem_to_ext, FriFoldChip, FriFoldCols, EXT_DEG},
+        fri::{elem_to_ext, FriMatOpeningChip, FriMatOpeningCols, EXT_DEG},
     },
 };
 
-fn compute_fri_fold<F: Field>(
+fn compute_fri_mat_opening<F: Field>(
     alpha: [F; EXT_DEG],
     mut alpha_pow: [F; EXT_DEG],
     a: &[F],
@@ -32,16 +36,16 @@ fn compute_fri_fold<F: Field>(
 }
 
 #[test]
-fn fri_fold_air_test() {
+fn fri_mat_opening_air_test() {
     let num_ops = 3; // non-power-of-2 to also test padding
     let elem_range = || 1..=100;
     let address_space_range = || 1usize..=2;
     let length_range = || 1..=49;
 
-    let offset = 37;
+    let offset = FriOpcode::default_offset();
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FriFoldChip::new(
+    let mut chip = FriMatOpeningChip::new(
         tester.memory_controller(),
         tester.execution_bus(),
         tester.program_bus(),
@@ -67,7 +71,7 @@ fn fri_fold_air_test() {
             .collect_vec();
         let b = (0..length).map(|_| gen_ext!()).collect_vec();
 
-        let (alpha_pow_final, result) = compute_fri_fold(alpha, alpha_pow_initial, &a, &b);
+        let (alpha_pow_final, result) = compute_fri_mat_opening(alpha, alpha_pow_initial, &a, &b);
 
         let alpha_pointer = gen_pointer(&mut rng, 4);
         let length_pointer = gen_pointer(&mut rng, 1);
@@ -110,7 +114,7 @@ fn fri_fold_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                (FRI_FOLD as usize) + offset,
+                (FRI_MAT_OPENING as usize) + offset,
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
@@ -138,7 +142,7 @@ fn fri_fold_air_test() {
         // TODO: better way to modify existing traces in tester
         let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let old_trace = trace.clone();
-        for width in 0..FriFoldCols::<BabyBear>::width()
+        for width in 0..FriMatOpeningCols::<BabyBear>::width()
         /* num operands */
         {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));

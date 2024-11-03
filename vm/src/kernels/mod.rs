@@ -6,5 +6,4 @@ pub mod field_extension;
 pub mod fri;
 pub mod jal;
 pub mod loadstore;
-pub mod modular;
 pub mod public_values;

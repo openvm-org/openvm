@@ -369,10 +369,10 @@ pub enum Rv32ModularArithmeticOpcode {
 #[opcode_offset = 0x600]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum FriFoldOpcode {
+pub enum FriOpcode {
     /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
     /// for a single matrix.
-    FRI_FOLD,
+    FRI_MAT_OPENING,
 }
 
 #[derive(

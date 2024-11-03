@@ -19,7 +19,7 @@ use ax_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, FriFoldOpcode::FRI_FOLD,
+    instruction::Instruction, program::DEFAULT_PC_STEP, FriOpcode::FRI_MAT_OPENING,
 };
 use itertools::zip_eq;
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -49,7 +49,7 @@ pub const EXT_DEG: usize = 4;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct FriFoldCols<T> {
+pub struct FriMatOpeningCols<T> {
     pub enabled: T,
 
     pub pc: T,
@@ -87,20 +87,20 @@ pub struct FriFoldCols<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct FriFoldAir {
+pub struct FriMatOpeningAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     offset: usize,
 }
 
-impl<F: Field> BaseAir<F> for FriFoldAir {
+impl<F: Field> BaseAir<F> for FriMatOpeningAir {
     fn width(&self) -> usize {
-        FriFoldCols::<F>::width()
+        FriMatOpeningCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for FriFoldAir {}
-impl<F: Field> PartitionedBaseAir<F> for FriFoldAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for FriMatOpeningAir {}
+impl<F: Field> PartitionedBaseAir<F> for FriMatOpeningAir {}
 
 fn assert_eq_ext<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
     builder: &mut AB,
@@ -112,15 +112,15 @@ fn assert_eq_ext<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
+impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &FriFoldCols<AB::Var> = (*local).borrow();
+        let local: &FriMatOpeningCols<AB::Var> = (*local).borrow();
         let next = main.row_slice(1);
-        let next: &FriFoldCols<AB::Var> = (*next).borrow();
+        let next: &FriMatOpeningCols<AB::Var> = (*next).borrow();
 
-        let &FriFoldCols {
+        let &FriMatOpeningCols {
             enabled,
             pc,
             start_timestamp,
@@ -212,7 +212,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
         self.execution_bridge
             .execute(
-                AB::F::from_canonical_usize((FRI_FOLD as usize) + self.offset),
+                AB::F::from_canonical_usize((FRI_MAT_OPENING as usize) + self.offset),
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
@@ -310,7 +310,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriFoldAir {
     }
 }
 
-pub struct FriFoldRecord<F: Field> {
+pub struct FriMatOpeningRecord<F: Field> {
     pub pc: F,
     pub start_timestamp: F,
     pub instruction: Instruction<F>,
@@ -324,21 +324,21 @@ pub struct FriFoldRecord<F: Field> {
     pub result_write: MemoryWriteRecord<F, EXT_DEG>,
 }
 
-pub struct FriFoldChip<F: Field> {
+pub struct FriMatOpeningChip<F: Field> {
     memory: MemoryControllerRef<F>,
-    air: FriFoldAir,
-    records: Vec<FriFoldRecord<F>>,
+    air: FriMatOpeningAir,
+    records: Vec<FriMatOpeningRecord<F>>,
     height: usize,
 }
 
-impl<F: PrimeField32> FriFoldChip<F> {
+impl<F: PrimeField32> FriMatOpeningChip<F> {
     pub fn new(
         memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         offset: usize,
     ) -> Self {
-        let air = FriFoldAir {
+        let air = FriMatOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge: RefCell::borrow(&memory).memory_bridge(),
             offset,
@@ -358,7 +358,7 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
     ret
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
+impl<F: PrimeField32> InstructionExecutor<F> for FriMatOpeningChip<F> {
     fn execute(
         &mut self,
         instruction: Instruction<F>,
@@ -422,7 +422,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
             start_timestamp + 4 + 2 * (length as u32) + 2
         );
 
-        self.records.push(FriFoldRecord {
+        self.records.push(FriMatOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),
             start_timestamp: F::from_canonical_u32(from_state.timestamp),
             instruction,
@@ -445,14 +445,14 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriFoldChip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        assert_eq!(opcode, (FRI_FOLD as usize) + self.air.offset);
+        assert_eq!(opcode, (FRI_MAT_OPENING as usize) + self.air.offset);
         String::from("FRI_FOLD")
     }
 }
 
-impl<F: Field> ChipUsageGetter for FriFoldChip<F> {
+impl<F: Field> ChipUsageGetter for FriMatOpeningChip<F> {
     fn air_name(&self) -> String {
-        "FriFoldAir".to_string()
+        "FriMatOpeningAir".to_string()
     }
 
     fn current_trace_height(&self) -> usize {
@@ -460,17 +460,17 @@ impl<F: Field> ChipUsageGetter for FriFoldChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        FriFoldCols::<F>::width()
+        FriMatOpeningCols::<F>::width()
     }
 }
 
-impl<F: PrimeField32> FriFoldChip<F> {
+impl<F: PrimeField32> FriMatOpeningChip<F> {
     fn record_to_rows(
-        record: FriFoldRecord<F>,
+        record: FriMatOpeningRecord<F>,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
         slice: &mut [F],
     ) {
-        let width = FriFoldCols::<F>::width();
+        let width = FriMatOpeningCols::<F>::width();
 
         let Instruction {
             a: a_pointer_pointer,
@@ -519,8 +519,8 @@ impl<F: PrimeField32> FriFoldChip<F> {
             let index = F::from_canonical_usize(i);
             IsZeroSubAir.generate_subrow(index, (&mut is_zero_aux, &mut index_is_zero));
 
-            let cols: &mut FriFoldCols<F> = slice[i * width..(i + 1) * width].borrow_mut();
-            *cols = FriFoldCols {
+            let cols: &mut FriMatOpeningCols<F> = slice[i * width..(i + 1) * width].borrow_mut();
+            *cols = FriMatOpeningCols {
                 enabled: F::one(),
                 pc: record.pc,
                 a_pointer_pointer,
@@ -576,7 +576,7 @@ impl<F: PrimeField32> FriFoldChip<F> {
         flat_trace[self.height * width..]
             .par_chunks_mut(width)
             .for_each(|row| {
-                let row: &mut FriFoldCols<F> = row.borrow_mut();
+                let row: &mut FriMatOpeningCols<F> = row.borrow_mut();
                 row.index_is_zero = F::one();
             });
 
@@ -584,7 +584,7 @@ impl<F: PrimeField32> FriFoldChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for FriFoldChip<Val<SC>>
+impl<SC: StarkGenericConfig> Chip<SC> for FriMatOpeningChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
