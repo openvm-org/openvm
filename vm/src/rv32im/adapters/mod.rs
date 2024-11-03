@@ -8,6 +8,8 @@ mod mul;
 mod rdwrite;
 mod vec_heap;
 
+use std::ops::Mul;
+
 pub use alu::*;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
@@ -30,13 +32,13 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::{MemoryController, MemoryReadRecord};
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented as a field element)
 /// back into its value as u32.
-pub fn compose<F: PrimeField32>(ptr_data: [F; 4]) -> u32 {
+pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
     let mut val = 0;
     for (i, limb) in ptr_data.map(|x| x.as_canonical_u32()).iter().enumerate() {
         val += limb << (i * 8);
@@ -56,4 +58,14 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
+}
+
+pub fn abstract_compose<T: AbstractField, V: Mul<T, Output = T>>(
+    data: [V; RV32_REGISTER_NUM_LIMBS],
+) -> T {
+    data.into_iter()
+        .enumerate()
+        .fold(T::zero(), |acc, (i, limb)| {
+            acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
+        })
 }

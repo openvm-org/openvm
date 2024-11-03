@@ -2,13 +2,14 @@ use std::{array::from_fn, borrow::Borrow};
 
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
-    utils::{not, select},
+    utils::{assert_array_eq, not, select},
 };
 use ax_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use itertools::{izip, Itertools};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::AbstractField;
@@ -18,10 +19,12 @@ use p3_matrix::Matrix;
 use super::{
     columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS,
-    KECCAK_RATE_BYTES, KECCAK_RATE_U16S, KECCAK_WIDTH_U16S, KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
+    KECCAK_RATE_BYTES, KECCAK_RATE_U16S, KECCAK_REGISTER_READS, KECCAK_WIDTH_U16S,
+    KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{instructions::Rv32KeccakOpcode, ExecutionBridge, ExecutionState},
+    rv32im::adapters::abstract_compose,
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -34,6 +37,8 @@ pub struct KeccakVmAir {
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    /// Maximum number of bits allowed for an address pointer
+    pub address_bits: usize,
     // TODO: add configuration for enabling direct non-memory interactions
     pub(super) offset: usize,
 }
@@ -59,8 +64,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
             local.sponge.is_new_start * local.is_first_round(),
         );
         builder.assert_eq(
-            local.opcode.is_enabled_first_round,
-            local.opcode.is_enabled * local.is_first_round(),
+            local.instruction.is_enabled_first_round,
+            local.instruction.is_enabled * local.is_first_round(),
         );
         // Not strictly necessary:
         builder
@@ -74,7 +79,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
         let mem = &local.mem_oc;
         // Interactions:
         self.constrain_absorb(builder, local, next);
-        let start_read_timestamp = self.eval_opcode_interactions(builder, local, &mem.op_reads);
+        let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux);
         let start_write_timestamp =
             self.constrain_input_read(builder, local, start_read_timestamp, &mem.absorb_reads);
         self.constrain_output_write(
@@ -109,8 +114,10 @@ impl KeccakVmAir {
     ) {
         let mut transition_builder = builder.when_transition();
         let mut round_builder = transition_builder.when(not(local.is_last_round()));
-        // Opcode columns
-        local.opcode.assert_eq(&mut round_builder, next.opcode);
+        // Instruction columns
+        local
+            .instruction
+            .assert_eq(&mut round_builder, next.instruction);
     }
 
     pub fn constrain_block_transition<AB: AirBuilder>(
@@ -125,30 +132,34 @@ impl KeccakVmAir {
         // then we want _parts_ of opcode instruction to stay the same
         // between blocks.
         let mut block_transition = builder.when(local.is_last_round() * not(next.is_new_start()));
-        block_transition.assert_eq(local.opcode.is_enabled, next.opcode.is_enabled);
+        block_transition.assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
         // dst is only going to be used for writes in the last input block
-        block_transition.assert_eq(local.opcode.dst, next.opcode.dst);
+        assert_array_eq(
+            &mut block_transition,
+            local.instruction.dst,
+            next.instruction.dst,
+        );
         // needed for memory reads
-        block_transition.assert_eq(local.opcode.e, next.opcode.e);
+        block_transition.assert_eq(local.instruction.e, next.instruction.e);
         // these are not used and hence not necessary, but putting for safety until performance becomes an issue:
-        block_transition.assert_eq(local.opcode.a, next.opcode.a);
-        block_transition.assert_eq(local.opcode.b, next.opcode.b);
-        block_transition.assert_eq(local.opcode.c, next.opcode.c);
-        block_transition.assert_eq(local.opcode.d, next.opcode.d);
+        block_transition.assert_eq(local.instruction.dst_ptr, next.instruction.dst_ptr);
+        block_transition.assert_eq(local.instruction.src_ptr, next.instruction.src_ptr);
+        block_transition.assert_eq(local.instruction.len_ptr, next.instruction.len_ptr);
+        // no constraint on `instruction.len` because we use `remaining_len` instead
 
         // Move the src pointer over based on the number of bytes read.
         // This should always be RATE_BYTES since it's a non-final block.
-        // TODO: depends on WORD_SIZE
         block_transition.assert_eq(
-            next.opcode.src,
-            local.opcode.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+            abstract_compose::<AB::Expr, _>(next.instruction.src),
+            abstract_compose::<AB::Expr, _>(local.instruction.src)
+                + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
         // Advance timestamp by the number of memory accesses from reading
         // `dst, src, len` and block input bytes.
-        block_transition.assert_eq(next.opcode.start_timestamp, start_write_timestamp);
+        block_transition.assert_eq(next.instruction.start_timestamp, start_write_timestamp);
         block_transition.assert_eq(
-            next.opcode.len,
-            local.opcode.len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+            next.instruction.remaining_len,
+            local.instruction.remaining_len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
         // Padding transition is constrained in `constrain_padding`.
     }
@@ -330,7 +341,7 @@ impl KeccakVmAir {
         });
 
         // only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
-        let should_absorb = next.opcode.is_enabled_first_round;
+        let should_absorb = next.instruction.is_enabled_first_round;
         for (input, pre, post) in izip!(
             next.sponge.block_bytes,
             pre_absorb_state_bytes,
@@ -363,56 +374,94 @@ impl KeccakVmAir {
         }
     }
 
-    /// Receive the opcode instruction itself on opcode bus.
-    /// Then does memory read to get `dst, src, len` from memory.
+    /// Receive the instruction itself on program bus. Send+receive on execution bus.
+    /// Then does memory read in addr space 1 to get `dst, src, len` from memory.
     ///
-    /// Returns `start_read_timestamp` which is only relevant when `local.opcode.is_enabled`.
+    /// Adds range check interactions for the most significant limbs of the register values
+    /// using BitwiseOperationLookupBus.
+    ///
+    /// Returns `start_read_timestamp` which is only relevant when `local.instruction.is_enabled`.
     /// Note that `start_read_timestamp` is a linear expression.
-    pub fn eval_opcode_interactions<AB: InteractionBuilder>(
+    pub fn eval_instruction<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
-        mem_aux: &[MemoryReadAuxCols<AB::Var, 1>; KECCAK_EXECUTION_READS],
+        register_aux: &[MemoryReadAuxCols<AB::Var, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS],
     ) -> AB::Expr {
-        let opcode = local.opcode;
+        let instruction = local.instruction;
         // Only receive opcode if:
         // - enabled row (not dummy row)
         // - first round of block
         // - is_new_start
         // Note this is degree 3, which results in quotient degree 2 if used
         // as `count` in interaction
-        let should_receive = local.opcode.is_enabled * local.sponge.is_new_start;
+        let should_receive = local.instruction.is_enabled * local.sponge.is_new_start;
 
-        let timestamp_change: AB::Expr = Self::timestamp_change(opcode.len);
+        let [dst_ptr, src_ptr, len_ptr] = [
+            instruction.dst_ptr,
+            instruction.src_ptr,
+            instruction.len_ptr,
+        ];
+        let reg_addr_sp = AB::F::one();
+        let timestamp_change: AB::Expr = Self::timestamp_change(instruction.remaining_len);
         self.execution_bridge
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(Rv32KeccakOpcode::KECCAK256 as usize + self.offset),
-                [opcode.a, opcode.b, opcode.c, opcode.d, opcode.e, opcode.f],
-                ExecutionState::new(opcode.pc, opcode.start_timestamp),
+                [
+                    dst_ptr.into(),
+                    src_ptr.into(),
+                    len_ptr.into(),
+                    reg_addr_sp.into(),
+                    instruction.e.into(),
+                ],
+                ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
             )
             .eval(builder, should_receive.clone());
 
-        let mut timestamp: AB::Expr = opcode.start_timestamp.into();
+        let mut timestamp: AB::Expr = instruction.start_timestamp.into();
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
-        for (ptr, addr_sp, value, mem_aux) in izip!(
-            [opcode.a, opcode.b, opcode.c],
-            [opcode.d, opcode.d, opcode.f],
-            [opcode.dst, opcode.src, opcode.len],
-            mem_aux,
+        for (ptr, value, aux) in izip!(
+            [dst_ptr, src_ptr, len_ptr],
+            [instruction.dst, instruction.src, instruction.len],
+            register_aux,
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(addr_sp, ptr),
-                    [value],
+                    MemoryAddress::new(reg_addr_sp, ptr),
+                    value,
                     timestamp.clone(),
-                    mem_aux,
+                    aux,
                 )
                 .eval(builder, should_receive.clone());
 
             timestamp += AB::Expr::one();
         }
+        // See Rv32VecHeapAdapterAir
+        // TODO[jpw]: reduce code duplication
+        // repeat len for even number
+        let need_range_check = [
+            &instruction.dst,
+            &instruction.src,
+            &instruction.len,
+            &instruction.len,
+        ]
+        .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1]);
+        let limb_shift = AB::F::from_canonical_usize(
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
+        );
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+                .eval(builder, should_receive.clone());
+        }
+
+        builder.when(should_receive).assert_eq(
+            abstract_compose::<AB::Expr, _>(instruction.len),
+            instruction.remaining_len,
+        );
+
         timestamp
     }
 
@@ -433,7 +482,7 @@ impl KeccakVmAir {
         let partial_block = &local.mem_oc.partial_block;
         // Only read input from memory when it is an opcode-related row
         // and only on the first round of block
-        let is_input = local.opcode.is_enabled_first_round;
+        let is_input = local.instruction.is_enabled_first_round;
 
         let mut timestamp = start_read_timestamp;
         // read `state` into `word[src + ...]_e`
@@ -445,7 +494,8 @@ impl KeccakVmAir {
         )
         .enumerate()
         {
-            let ptr = local.opcode.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            let ptr = abstract_compose::<AB::Expr, _>(local.instruction.src)
+                + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
             // Only read block i if it is not entirely padding bytes
             // count is degree 2
             let count = is_input * not(is_padding[0]);
@@ -471,10 +521,9 @@ impl KeccakVmAir {
                 );
             }
 
-            // reminder: input is currently range checked to be 8-bits in `constrain_absorb` by the XOR lookup
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(local.opcode.e, ptr),
+                    MemoryAddress::new(local.instruction.e, ptr),
                     word, // degree 2
                     timestamp.clone(),
                     mem_aux,
@@ -493,13 +542,13 @@ impl KeccakVmAir {
         start_write_timestamp: AB::Expr,
         mem_aux: &[MemoryWriteAuxCols<AB::Var, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
     ) {
-        let opcode = local.opcode;
+        let instruction = local.instruction;
 
         let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
         // since keccak-f AIR has this column, we might as well use it
         builder.assert_eq(
             local.inner.export,
-            opcode.is_enabled * is_final_block * local.is_last_round(),
+            instruction.is_enabled * is_final_block * local.is_last_round(),
         );
         // See `constrain_absorb` on how we derive the postimage bytes from u16 limbs
         // **SAFETY:** because we never XOR the final state, these bytes are NOT range checked.
@@ -525,8 +574,9 @@ impl KeccakVmAir {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        opcode.e,
-                        opcode.dst + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                        instruction.e,
+                        abstract_compose::<AB::Expr, _>(instruction.dst)
+                            + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
                     ),
                     digest_bytes.try_into().unwrap(),
                     timestamp,

@@ -16,7 +16,9 @@ pub mod utils;
 mod tests;
 
 pub use air::KeccakVmAir;
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
+};
 
 use crate::{
     arch::{
@@ -29,15 +31,17 @@ use crate::{
     },
 };
 
-/// Memory reads to get dst, src, len
-const KECCAK_EXECUTION_READS: usize = 3;
+// ==== Constants for register/memory adapter ====
+/// Register reads to get dst, src, len
+const KECCAK_REGISTER_READS: usize = 3;
 /// Number of cells to read/write in a single memory access
-const KECCAK_WORD_SIZE: usize = 8;
+const KECCAK_WORD_SIZE: usize = 4;
 /// Memory reads for absorb per row
 const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES / KECCAK_WORD_SIZE;
 /// Memory writes for digest per row
 const KECCAK_DIGEST_WRITES: usize = KECCAK_DIGEST_BYTES / KECCAK_WORD_SIZE;
 
+// ==== Do not change these constants! ====
 /// Total number of sponge bytes: number of rate bytes + number of capacity
 /// bytes.
 pub const KECCAK_WIDTH_BYTES: usize = 200;
@@ -72,9 +76,9 @@ pub struct KeccakVmChip<F: PrimeField32> {
 #[derive(Clone, Debug)]
 pub struct KeccakRecord<F> {
     pub pc: F,
-    pub dst_read: MemoryReadRecord<F, 1>,
-    pub src_read: MemoryReadRecord<F, 1>,
-    pub len_read: MemoryReadRecord<F, 1>,
+    pub dst_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub src_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub len_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub input_blocks: Vec<KeccakInputBlock<F>>,
     pub digest_writes: [MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
 }
@@ -153,7 +157,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
 
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
-                memory.increment_timestamp_by(KECCAK_EXECUTION_READS as u32);
+                memory.increment_timestamp_by(KECCAK_REGISTER_READS as u32);
             }
             let mut reads = Vec::with_capacity(KECCAK_RATE_BYTES);
 

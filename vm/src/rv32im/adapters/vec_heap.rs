@@ -17,7 +17,7 @@ use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use super::{abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -251,25 +251,15 @@ impl<
         // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
         //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
-        for i in 0..need_range_check.len() / 2 {
+        for pair in need_range_check.chunks_exact(2) {
             self.bus
-                .send_range(
-                    need_range_check[i * 2] * limb_shift,
-                    need_range_check[i * 2 + 1] * limb_shift,
-                )
+                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the u32 register value into single field element, with
-        let register_to_field = |r: [AB::Var; RV32_REGISTER_NUM_LIMBS]| {
-            r.into_iter()
-                .enumerate()
-                .fold(AB::Expr::zero(), |acc, (i, limb)| {
-                    acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
-                })
-        };
-        let rd_val_f = register_to_field(cols.rd_val);
-        let rs_val_f = cols.rs_val.map(register_to_field);
+        // Compose the u32 register value into single field element, with `abstract_compose`
+        let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let e = AB::F::from_canonical_usize(2);
         // Reads from heap

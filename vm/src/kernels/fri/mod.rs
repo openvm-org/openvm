@@ -8,7 +8,7 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
     is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::not,
+    utils::{assert_array_eq, not},
     SubAir, TraceSubRowGenerator,
 };
 use ax_stark_backend::{
@@ -102,16 +102,6 @@ impl<F: Field> BaseAir<F> for FriMatOpeningAir {
 impl<F: Field> BaseAirWithPublicValues<F> for FriMatOpeningAir {}
 impl<F: Field> PartitionedBaseAir<F> for FriMatOpeningAir {}
 
-fn assert_eq_ext<AB: AirBuilder, I1: Into<AB::Expr>, I2: Into<AB::Expr>>(
-    builder: &mut AB,
-    x: [I1; EXT_DEG],
-    y: [I2; EXT_DEG],
-) {
-    for (x, y) in zip_eq(x, y) {
-        builder.assert_eq(x, y);
-    }
-}
-
 impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -168,13 +158,13 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             );
         }
 
-        assert_eq_ext(&mut when_is_not_last, next.alpha, alpha);
-        assert_eq_ext(
+        assert_array_eq(&mut when_is_not_last, next.alpha, alpha);
+        assert_array_eq(
             &mut when_is_not_last,
             next.alpha_pow_original,
             alpha_pow_original,
         );
-        assert_eq_ext(
+        assert_array_eq(
             &mut when_is_not_last,
             next.alpha_pow_current,
             FieldExtension::multiply(alpha, alpha_pow_current),
@@ -184,7 +174,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
         when_is_not_last.assert_eq(next.start_timestamp, start_timestamp);
 
         // first row constraint
-        assert_eq_ext(
+        assert_array_eq(
             &mut builder.when(is_first),
             alpha_pow_current,
             alpha_pow_original,
