@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow};
+use std::{array::from_fn, borrow::Borrow, iter::zip};
 
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
@@ -324,11 +324,6 @@ impl KeccakVmAir {
             })
         });
 
-        let pre_absorb_state_bytes = updated_state_bytes.map(|b| not(next.is_new_start()) * b);
-        // TODO[jpw]: if we assume block_bytes input are bytes, then we can switch
-        // the constraints to check when(next.is_new_start).assert_eq(next.sponge.block_bytes, post_absorb_state_bytes);
-        // Then we can use the xor lookup to check 0 ^ updated_state_bytes = updated_state_bytes to range check the output are bytes
-
         let post_absorb_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
             let x = i % 5;
@@ -340,23 +335,47 @@ impl KeccakVmAir {
             })
         });
 
-        // only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
+        // Only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
+        // However we xor on last round of each block, even if next is_enabled_first_round == true,
+        // because we use xor to range check the output bytes (= updated_state_bytes)
         let should_absorb = next.instruction.is_enabled_first_round;
-        for (input, pre, post) in izip!(
+        for (input, prev, post) in izip!(
             next.sponge.block_bytes,
-            pre_absorb_state_bytes,
+            updated_state_bytes,
             post_absorb_state_bytes
         ) {
             // Add new send interaction to lookup (x, y, x ^ y) where x, y, z
             // will all be range checked to be 8-bits (assuming the bus is
             // received by an 8-bit xor chip).
 
-            // this should even work when `local` is the last row since
-            // `next` becomes row 0 which `is_new_start`
+            // When absorb, input ^ prev = post
+            // Otherwise, 0 ^ prev = prev
+            // The interaction fields are degree 2, leading to degree 3 constraint
             self.bitwise_lookup_bus
-                .send_xor(input, pre, post)
-                .eval(builder, should_absorb);
+                .send_xor(
+                    input * should_absorb,
+                    prev.clone(),
+                    select(should_absorb, post, prev),
+                )
+                .eval(builder, local.is_last_round());
         }
+
+        // We separately constrain that when(local.is_new_start), the preimage (u16s) equals the block bytes
+        let local_preimage_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
+            let y = i / 5;
+            let x = i % 5;
+            (0..U64_LIMBS).flat_map(move |limb| {
+                let state_limb = local.inner.preimage[y][x][limb];
+                let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
+                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                [lo, hi.into()]
+            })
+        });
+        let mut when_is_new_start = builder.when(local.is_new_start());
+        for (preimage_byte, block_byte) in zip(local_preimage_bytes, local.sponge.block_bytes) {
+            when_is_new_start.assert_eq(preimage_byte, block_byte);
+        }
+
         // constrain transition on the state outside rate
         let mut reset_builder = builder.when(local.is_new_start());
         for i in KECCAK_RATE_U16S..KECCAK_WIDTH_U16S {
@@ -551,7 +570,8 @@ impl KeccakVmAir {
             instruction.is_enabled * is_final_block * local.is_last_round(),
         );
         // See `constrain_absorb` on how we derive the postimage bytes from u16 limbs
-        // **SAFETY:** because we never XOR the final state, these bytes are NOT range checked.
+        // **SAFETY:** we always XOR the final state with 0 in `constrain_absorb`,
+        // so the output bytes **are** range checked.
         let updated_state_bytes = (0..NUM_ABSORB_ROUNDS).flat_map(|i| {
             let y = i / 5;
             let x = i % 5;
@@ -594,7 +614,7 @@ impl KeccakVmAir {
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
         len.into()
             + T::from_canonical_usize(
-                KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
+                KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
             )
     }
 }
