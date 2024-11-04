@@ -9,7 +9,12 @@ repository = { workspace = true }
 
 [dependencies]
 stability = "0.2"
-strum_macros = "0.24.1"
+bincode = { version = "2.0.0-rc", default-features = false, features = [
+    "derive",
+    "alloc",
+    "serde",
+] }
+strum_macros.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.

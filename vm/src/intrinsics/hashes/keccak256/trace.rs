@@ -6,6 +6,7 @@ use ax_stark_backend::{
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
+use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, PrimeField32};
 use p3_keccak_air::{
@@ -17,9 +18,10 @@ use tiny_keccak::keccakf;
 
 use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::{
-    intrinsics::hashes::keccak::hasher::{
-        columns::{KeccakOpcodeCols, KeccakVmCols},
-        KECCAK_ABSORB_READS, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    intrinsics::hashes::keccak256::{
+        columns::{KeccakInstructionCols, KeccakVmCols},
+        KECCAK_ABSORB_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S, KECCAK_REGISTER_READS,
+        NUM_ABSORB_ROUNDS,
     },
     system::memory::{MemoryReadRecord, MemoryWriteRecord},
 };
@@ -38,7 +40,7 @@ where
         let records = self.records;
         let total_num_blocks: usize = records.iter().map(|r| r.input_blocks.len()).sum();
         let mut states = Vec::with_capacity(total_num_blocks);
-        let mut opcode_blocks = Vec::with_capacity(total_num_blocks);
+        let mut instruction_blocks = Vec::with_capacity(total_num_blocks);
 
         #[derive(Clone)]
         struct StateDiff<F> {
@@ -47,7 +49,8 @@ where
             /// hi-byte of post-state
             post_hi: [u8; KECCAK_RATE_U16S],
             /// if first block
-            op_reads: Option<[MemoryReadRecord<F, 1>; 3]>,
+            register_reads:
+                Option<[MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS]>,
             /// if last block
             digest_writes: Option<[MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES]>,
         }
@@ -57,7 +60,7 @@ where
                 Self {
                     pre_hi: [0; KECCAK_RATE_U16S],
                     post_hi: [0; KECCAK_RATE_U16S],
-                    op_reads: None,
+                    register_reads: None,
                     digest_writes: None,
                 }
             }
@@ -67,21 +70,26 @@ where
         let mut state: [u64; 25];
         for record in records {
             state = [0u64; 25];
-            let [a, b, c, d, e, f] = record.operands();
-            let mut opcode = KeccakOpcodeCols {
+            let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] =
+                from_fn(|i| record.src_read.data[i + 1]);
+            let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] =
+                from_fn(|i| record.len_read.data[i + 1]);
+            let mut instruction = KeccakInstructionCols {
                 pc: record.pc,
                 is_enabled: Val::<SC>::one(),
                 is_enabled_first_round: Val::<SC>::zero(),
                 start_timestamp: Val::<SC>::from_canonical_u32(record.start_timestamp()),
-                a,
-                b,
-                c,
-                d,
-                e,
-                f,
-                dst: record.dst(),
-                src: record.src(),
-                len: record.len(),
+                dst_ptr: record.dst_read.pointer,
+                src_ptr: record.src_read.pointer,
+                len_ptr: record.len_read.pointer,
+                e: record.digest_addr_space(),
+                dst: record.dst_read.data,
+                src_limbs,
+                src: Val::<SC>::from_canonical_usize(record.input_blocks[0].src),
+                len_limbs,
+                remaining_len: Val::<SC>::from_canonical_usize(
+                    record.input_blocks[0].remaining_len,
+                ),
             };
             let num_blocks = record.input_blocks.len();
             for (idx, block) in record.input_blocks.into_iter().enumerate() {
@@ -91,8 +99,10 @@ where
                     for (i, &byte) in bytes.iter().enumerate() {
                         let s_byte = (*s >> (i * 8)) as u8;
                         // Update bitwise lookup (i.e. xor) chip state: order matters!
-                        self.bitwise_lookup_chip
-                            .request_xor(byte as u32, s_byte as u32);
+                        if idx != 0 {
+                            self.bitwise_lookup_chip
+                                .request_xor(byte as u32, s_byte as u32);
+                        }
                         *s ^= (byte as u64) << (i * 8);
                     }
                 }
@@ -102,35 +112,44 @@ where
                 keccakf(&mut state);
                 let post_hi: [u8; KECCAK_RATE_U16S] =
                     from_fn(|i| (state[i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8)) as u8);
-                let op_reads =
+                // Range check the final state
+                if idx == num_blocks - 1 {
+                    for s in state.into_iter().take(NUM_ABSORB_ROUNDS) {
+                        for s_byte in s.to_le_bytes() {
+                            self.bitwise_lookup_chip.request_xor(0, s_byte as u32);
+                        }
+                    }
+                }
+                let register_reads =
                     (idx == 0).then_some([record.dst_read, record.src_read, record.len_read]);
                 let digest_writes = (idx == num_blocks - 1).then_some(record.digest_writes);
                 let diff = StateDiff {
                     pre_hi,
                     post_hi,
-                    op_reads,
+                    register_reads,
                     digest_writes,
                 };
-                opcode_blocks.push((opcode, diff, block));
-                opcode.len -= Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
-                opcode.src += Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
-                opcode.start_timestamp +=
-                    Val::<SC>::from_canonical_usize(KECCAK_EXECUTION_READS + KECCAK_ABSORB_READS);
+                instruction_blocks.push((instruction, diff, block));
+                instruction.remaining_len -= Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
+                instruction.src += Val::<SC>::from_canonical_usize(KECCAK_RATE_BYTES);
+                instruction.start_timestamp +=
+                    Val::<SC>::from_canonical_usize(KECCAK_REGISTER_READS + KECCAK_ABSORB_READS);
             }
         }
 
         let p3_keccak_trace: RowMajorMatrix<Val<SC>> = generate_trace_rows(states);
         let num_rows = p3_keccak_trace.height();
         // Every `NUM_ROUNDS` rows corresponds to one input block
-        let num_blocks = (num_rows + NUM_ROUNDS - 1) / NUM_ROUNDS;
-        // Resize with dummy `is_opcode = 0`
-        opcode_blocks.resize(num_blocks, Default::default());
+        let num_blocks = num_rows.div_ceil(NUM_ROUNDS);
+        // Resize with dummy `is_enabled = 0`
+        instruction_blocks.resize(num_blocks, Default::default());
 
         let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace =
             RowMajorMatrix::new(vec![Val::<SC>::zero(); num_rows * trace_width], trace_width);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.ptr_max_bits;
 
         trace
             .values
@@ -140,8 +159,8 @@ where
                     .values
                     .par_chunks(NUM_KECCAK_PERM_COLS * NUM_ROUNDS),
             )
-            .zip(opcode_blocks.into_par_iter())
-            .for_each(|((rows, p3_keccak_mat), (opcode, diff, block))| {
+            .zip(instruction_blocks.into_par_iter())
+            .for_each(|((rows, p3_keccak_mat), (instruction, diff, block))| {
                 let height = rows.len() / trace_width;
                 let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
                     block.reads[partial_read_idx].data
@@ -155,7 +174,7 @@ where
                     // Safety: `KeccakPermCols` **must** be the first field in `KeccakVmCols`
                     row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
                     let row_mut: &mut KeccakVmCols<Val<SC>> = row.borrow_mut();
-                    row_mut.opcode = opcode;
+                    row_mut.instruction = instruction;
 
                     row_mut.sponge.block_bytes =
                         block.padded_bytes.map(Val::<SC>::from_canonical_u8);
@@ -170,12 +189,26 @@ where
                 let first_row: &mut KeccakVmCols<Val<SC>> = rows[..trace_width].borrow_mut();
                 first_row.sponge.is_new_start = Val::<SC>::from_bool(block.is_new_start);
                 first_row.sponge.state_hi = diff.pre_hi.map(Val::<SC>::from_canonical_u8);
-                first_row.opcode.is_enabled_first_round = first_row.opcode.is_enabled;
+                first_row.instruction.is_enabled_first_round = first_row.instruction.is_enabled;
                 // Make memory access aux columns. Any aux column not explicitly defined defaults to all 0s
-                if let Some(op_reads) = diff.op_reads {
-                    for (i, record) in op_reads.into_iter().enumerate() {
+                if let Some(register_reads) = diff.register_reads {
+                    let need_range_check = [
+                        &register_reads[0], // dst
+                        &register_reads[1], // src
+                        &register_reads[2], // len
+                        &register_reads[2],
+                    ]
+                    .map(|r| r.data.last().unwrap().as_canonical_u32());
+                    for bytes in need_range_check.chunks(2) {
+                        self.bitwise_lookup_chip.request_range(
+                            bytes[0] << limb_shift_bits,
+                            bytes[1] << limb_shift_bits,
+                        );
+                    }
+                    for (i, record) in register_reads.into_iter().enumerate() {
                         // TODO[jpw] make_read_aux_cols should directly write into slice
-                        first_row.mem_oc.op_reads[i] = aux_cols_factory.make_read_aux_cols(record);
+                        first_row.mem_oc.register_aux[i] =
+                            aux_cols_factory.make_read_aux_cols(record);
                     }
                 }
                 for (i, record) in block.reads.into_iter().enumerate() {
@@ -186,7 +219,7 @@ where
                 let last_row: &mut KeccakVmCols<Val<SC>> =
                     rows[(height - 1) * trace_width..].borrow_mut();
                 last_row.sponge.state_hi = diff.post_hi.map(Val::<SC>::from_canonical_u8);
-                last_row.inner.export = opcode.is_enabled
+                last_row.inner.export = instruction.is_enabled
                     * Val::<SC>::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
                     for (i, record) in digest_writes.into_iter().enumerate() {

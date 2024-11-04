@@ -1,7 +1,8 @@
-use std::{borrow::BorrowMut, cmp::Reverse, collections::HashSet, sync::Arc};
+use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
 
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
+use rustc_hash::FxHashSet;
 
 use crate::{
     arch::hasher::HasherChip,
@@ -61,11 +62,11 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
-    touched_nodes: &'a HashSet<(usize, usize, usize)>,
+    touched_nodes: &'a FxHashSet<(usize, usize, usize)>,
     trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
-impl<'a, const CHUNK: usize, F: PrimeField32> TreeHelper<'a, CHUNK, F> {
+impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
     fn recur(
         &mut self,
         height: usize,

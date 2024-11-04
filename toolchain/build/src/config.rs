@@ -49,9 +49,8 @@ pub struct GuestBuildOptions {
     /// Features for cargo to build the guest with.
     pub(crate) features: Vec<String>,
 
-    /// Use a docker environment for building.
+    // Use a docker environment for building.
     // pub(crate) use_docker: Option<DockerOptions>,
-
     /// Configuration flags to build the guest with.
     pub(crate) rustc_flags: Vec<String>,
 }

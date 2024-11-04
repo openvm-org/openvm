@@ -1,12 +1,14 @@
 use core::mem::size_of;
 
 use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils::assert_array_eq;
+use axvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 
 use super::{
-    KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES,
-    KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+    KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    KECCAK_REGISTER_READS, KECCAK_WORD_SIZE,
 };
 use crate::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 
@@ -17,18 +19,18 @@ pub struct KeccakVmCols<T> {
     pub inner: KeccakPermCols<T>,
     /// Columns for sponge and padding
     pub sponge: KeccakSpongeCols<T>,
-    /// Columns for opcode interface and operand memory access
-    pub opcode: KeccakOpcodeCols<T>,
+    /// Columns for instruction interface and register access
+    pub instruction: KeccakInstructionCols<T>,
     /// Auxiliary columns for offline memory checking
     pub mem_oc: KeccakMemoryCols<T>,
 }
 
-/// Columns specific to the KECCAK256 opcode.
-/// The opcode instruction format is (a, b, len, d, e, f)
+/// Columns for KECCAK256_RV32 instruction parsing.
+/// Includes columns for instruction execution and register reads.
 #[allow(clippy::too_many_arguments)]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
-pub struct KeccakOpcodeCols<T> {
+pub struct KeccakInstructionCols<T> {
     /// Program counter
     pub pc: T,
     /// True for all rows that are part of opcode execution.
@@ -40,22 +42,31 @@ pub struct KeccakOpcodeCols<T> {
     /// The starting timestamp to use for memory access in this row.
     /// A single row will do multiple memory accesses.
     pub start_timestamp: T,
-    // Operands:
-    pub a: T,
-    pub b: T,
-    pub c: T,
-    pub d: T,
+    /// Pointer to address space 1 `dst` register
+    pub dst_ptr: T,
+    /// Pointer to address space 1 `src` register
+    pub src_ptr: T,
+    /// Pointer to address space 1 `len` register
+    pub len_ptr: T,
+    /// Memory address space
     pub e: T,
-    pub f: T,
-    // Memory values
-    /// dst <- [a]_d
-    pub dst: T,
-    /// src <- [b]_d
+    // Register values
+    /// dst <- [dst_ptr:4]_1
+    pub dst: [T; RV32_REGISTER_NUM_LIMBS],
+    /// src <- [src_ptr:4]_1
+    /// We store src_limbs[i] = [src_ptr + i + 1]_1 and src = u32([src_ptr:4]_1) from which [src_ptr]_1
+    /// can be recovered by linear combination.
+    /// We do this because `src` needs to be incremented between keccak-f permutations.
+    pub src_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     pub src: T,
+    /// len <- [len_ptr:4]_1
+    /// We store len_limbs[i] = [len_ptr + i + 1]_1 and remaining_len = u32([len_ptr:4]_1)
+    /// from which [len_ptr]_1 can be recovered by linear combination.
+    /// We do this because `remaining_len` needs to be decremented between keccak-f permutations.
+    pub len_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     /// The remaining length of the unpadded input, in bytes.
-    /// If this row is receiving from opcode bus, then
-    /// len <- [c]_f
-    pub len: T,
+    /// If `is_new_start` is true and `is_enabled` is true, this must be equal to `u32(len)`.
+    pub remaining_len: T,
 }
 
 #[repr(C)]
@@ -85,7 +96,7 @@ pub struct KeccakSpongeCols<T> {
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct KeccakMemoryCols<T> {
-    pub op_reads: [MemoryReadAuxCols<T, 1>; KECCAK_EXECUTION_READS],
+    pub register_aux: [MemoryReadAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS],
     pub absorb_reads: [MemoryReadAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_ABSORB_READS],
     pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
     /// The input bytes are batch read in blocks of [KECCAK_WORD_SIZE] bytes. However
@@ -99,7 +110,7 @@ pub struct KeccakMemoryCols<T> {
 
 impl<T: Copy> KeccakVmCols<T> {
     pub const fn remaining_len(&self) -> T {
-        self.opcode.len
+        self.instruction.remaining_len
     }
 
     pub const fn is_new_start(&self) -> T {
@@ -120,25 +131,26 @@ impl<T: Copy> KeccakVmCols<T> {
     }
 }
 
-impl<T: Copy> KeccakOpcodeCols<T> {
+impl<T: Copy> KeccakInstructionCols<T> {
     pub fn assert_eq<AB: AirBuilder>(&self, builder: &mut AB, other: Self)
     where
         T: Into<AB::Expr>,
     {
         builder.assert_eq(self.is_enabled, other.is_enabled);
         builder.assert_eq(self.start_timestamp, other.start_timestamp);
-        builder.assert_eq(self.a, other.a);
-        builder.assert_eq(self.b, other.b);
-        builder.assert_eq(self.c, other.c);
-        builder.assert_eq(self.d, other.d);
+        builder.assert_eq(self.dst_ptr, other.dst_ptr);
+        builder.assert_eq(self.src_ptr, other.src_ptr);
+        builder.assert_eq(self.len_ptr, other.len_ptr);
         builder.assert_eq(self.e, other.e);
-        builder.assert_eq(self.dst, other.dst);
+        assert_array_eq(builder, self.dst, other.dst);
+        assert_array_eq(builder, self.src_limbs, other.src_limbs);
         builder.assert_eq(self.src, other.src);
-        builder.assert_eq(self.len, other.len);
+        assert_array_eq(builder, self.len_limbs, other.len_limbs);
+        builder.assert_eq(self.remaining_len, other.remaining_len);
     }
 }
 
 pub const NUM_KECCAK_VM_COLS: usize = size_of::<KeccakVmCols<u8>>();
-pub const NUM_KECCAK_OPCODE_COLS: usize = size_of::<KeccakOpcodeCols<u8>>();
+pub const NUM_KECCAK_INSTRUCTION_COLS: usize = size_of::<KeccakInstructionCols<u8>>();
 pub const NUM_KECCAK_SPONGE_COLS: usize = size_of::<KeccakSpongeCols<u8>>();
 pub const NUM_KECCAK_MEMORY_COLS: usize = size_of::<KeccakMemoryCols<u8>>();

@@ -110,7 +110,7 @@ impl<F: Field> BaseAir<F> for Rv32HintStoreAdapterAir {
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
     /// The HintStoreAdapter handles memory writes and getting the intermediate memory pointer.
     /// This chip handles the HintStoreW instruction, so it doesn't constrain the data read from memory.
-
+    ///
     /// Here 1 write represents the data that needs to be written to memory
     /// Getting the intermediate pointer is completely internal to the adapter
     /// and shouldn't be a part of the AdapterInterface

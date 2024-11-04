@@ -185,9 +185,9 @@ All load/store instructions always do block accesses of block size `4`, even for
 | LOADW_RV32  | `a,b,c,1,e` | `[a:4]_1 = [r32{c}(b):4]_e`                                                                                                    |
 | LOADBU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):1]_e)` Must zero-extend the number read from memory.                                         |
 | LOADHU_RV32 | `a,b,c,1,e` | `[a:4]_1 = zero_extend([r32{c}(b):2]_e)` Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,e` | `[r32{c}(b):1]_e <- [b:1]_1`                                                                                                   |
-| STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [b:2]_1`                                                                                                   |
-| STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [b:4]_1`                                                                                                   |
+| STOREB_RV32 | `a,b,c,1,e` | `[r32{c}(b):1]_e <- [a:1]_1`                                                                                                   |
+| STOREH_RV32 | `a,b,c,1,e` | `[r32{c}(b):2]_e <- [a:2]_1`                                                                                                   |
+| STOREW_RV32 | `a,b,c,1,e` | `[r32{c}(b):4]_e <- [a:4]_1`                                                                                                   |
 
 ### Branch/Jump/Upper Immediate
 

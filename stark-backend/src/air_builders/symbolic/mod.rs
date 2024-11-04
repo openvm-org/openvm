@@ -380,9 +380,7 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
             assert!(self.challenges.is_empty());
             assert!(self.exposed_values_after_challenge.is_empty());
 
-            let perm_width = (num_interactions + self.interaction_chunk_size - 1)
-                / self.interaction_chunk_size
-                + 1;
+            let perm_width = num_interactions.div_ceil(self.interaction_chunk_size) + 1;
             self.after_challenge = Self::new_after_challenge(&[perm_width]);
             self.challenges = Self::new_challenges(&[NUM_PERM_CHALLENGES]);
             self.exposed_values_after_challenge =

@@ -127,38 +127,17 @@ pub enum Poseidon2Opcode {
     COMP_POS2,
 }
 
-// to be replaced by KECCAK256_RV32
+/// Opcodes for FRI opening proofs.
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
 #[opcode_offset = 0x160]
 #[repr(usize)]
-pub enum Keccak256Opcode {
-    KECCAK256,
-}
-
-// to be deleted and replaced by Rv32PrimeFieldArithOpcode
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x170]
-#[repr(usize)]
-pub enum ModularArithmeticOpcode {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-}
-
-// to be deleted and replaced by Rv32SwOpcode
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x190]
-#[repr(usize)]
-pub enum EccOpcode {
-    EC_ADD_NE,
-    EC_DOUBLE,
+#[allow(non_camel_case_types)]
+pub enum FriOpcode {
+    /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
+    /// for a single matrix.
+    FRI_MAT_OPENING,
 }
 
 // =================================================================================================
@@ -326,6 +305,15 @@ pub enum Rv32HintStoreOpcode {
     HINT_STOREW,
 }
 
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x310]
+#[repr(usize)]
+pub enum Rv32KeccakOpcode {
+    KECCAK256,
+}
+
 // =================================================================================================
 // Intrinsics: 256-bit Integers
 // =================================================================================================
@@ -368,6 +356,17 @@ pub enum Rv32ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
+}
+
+// to be deleted and replaced by Rv32SwOpcode
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x190]
+#[repr(usize)]
+pub enum EccOpcode {
+    EC_ADD_NE,
+    EC_DOUBLE,
 }
 
 #[derive(
@@ -419,5 +418,5 @@ pub enum PairingOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum UnimplementedOpcode {
-    KECCAK256_RV32,
+    REPLACE_ME,
 }

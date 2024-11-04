@@ -6,17 +6,22 @@ use std::{
 use ax_stark_sdk::config::setup_tracing;
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, VmConfig, VmExecutor},
+    system::memory::tree::public_values::compute_user_public_values_proof,
     utils::{air_test, air_test_with_min_segments},
 };
-use axvm_platform::memory::MEM_SIZE;
+use axvm_platform::{bincode, memory::MEM_SIZE};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use tempfile::tempdir;
 use test_case::test_case;
 
-use crate::{elf::Elf, rrs::transpile, AxVmExe};
+use crate::{
+    elf::{Elf, ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES},
+    rrs::transpile,
+    AxVmExe,
+};
 
 type F = BabyBear;
 
@@ -91,7 +96,7 @@ fn test_rv32i_prove(examples_path: &str, min_segments: usize) -> Result<()> {
 }
 
 #[test]
-fn test_rv32i_prove_with_hint() -> Result<()> {
+fn test_read_vec_runtime() -> Result<()> {
     let pkg = get_package(get_examples_dir().join("hint/program"));
     let target_dir = tempdir()?;
     let guest_opts = GuestOptions::default().into();
@@ -101,12 +106,75 @@ fn test_rv32i_prove_with_hint() -> Result<()> {
         max_segment_len: (1 << 18) - 1,
         ..VmConfig::rv32i()
     };
-    let (_, exe) = setup_executor_from_elf(elf_path, config.clone())?;
-    air_test_with_min_segments(
-        config,
-        exe,
-        vec![[0, 1, 2, 3].map(F::from_canonical_u32).to_vec()],
-        1,
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    executor.execute(exe, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
+    Ok(())
+}
+
+#[test]
+fn test_read_runtime() -> Result<()> {
+    let pkg = get_package(get_examples_dir().join("read/program"));
+    let target_dir = tempdir()?;
+    let guest_opts = GuestOptions::default().into();
+    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+
+    #[derive(serde::Serialize)]
+    struct Foo {
+        bar: u32,
+        baz: Vec<u32>,
+    }
+    let foo = Foo {
+        bar: 42,
+        baz: vec![0, 1, 2, 3],
+    };
+    let serialized_foo = bincode::serde::encode_to_vec(&foo, bincode::config::standard())
+        .expect("serialize to vec failed");
+    executor
+        .execute(
+            exe,
+            vec![serialized_foo
+                .into_iter()
+                .map(F::from_canonical_u8)
+                .collect()],
+        )
+        .unwrap();
+    Ok(())
+}
+
+#[test]
+fn test_reveal_runtime() -> Result<()> {
+    let pkg = get_package(get_examples_dir().join("reveal/program"));
+    let target_dir = tempdir()?;
+    let guest_opts = GuestOptions::default().into();
+    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let num_public_values = ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES;
+    let config = VmConfig {
+        max_segment_len: (1 << 18) - 1,
+        ..VmConfig::rv32i()
+    };
+    let (executor, exe) = setup_executor_from_elf(elf_path, config.clone())?;
+    let final_memory = executor.execute(exe, vec![])?.unwrap();
+    let hasher = vm_poseidon2_hasher();
+    let pv_proof = compute_user_public_values_proof(
+        config.memory_config.memory_dimensions(),
+        num_public_values,
+        &hasher,
+        &final_memory,
+    );
+    assert_eq!(
+        pv_proof.public_values,
+        [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
+            .into_iter()
+            .flat_map(|x| x.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect::<Vec<_>>()
     );
     Ok(())
 }

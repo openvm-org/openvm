@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashSet,
     iter,
 };
 
@@ -13,6 +12,7 @@ use ax_stark_backend::{
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rustc_hash::FxHashSet;
 
 use crate::{
     arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
@@ -40,6 +40,7 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 
 /// Imposes the following constraints:
 /// - `expand_direction` should be -1, 0, 1
+///
 /// Sends the following interactions:
 /// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from `merkle_bus`.
@@ -113,7 +114,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 #[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: HashSet<(F, usize)>,
+    touched_labels: FxHashSet<(F, usize)>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -128,7 +129,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 memory_bus,
                 merkle_bus,
             },
-            touched_labels: HashSet::new(),
+            touched_labels: FxHashSet::default(),
         }
     }
 
