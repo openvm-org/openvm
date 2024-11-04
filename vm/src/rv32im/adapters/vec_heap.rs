@@ -17,7 +17,7 @@ use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use super::{abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -251,25 +251,15 @@ impl<
         // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
         //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
-        for i in 0..need_range_check.len() / 2 {
+        for pair in need_range_check.chunks_exact(2) {
             self.bus
-                .send_range(
-                    need_range_check[i * 2] * limb_shift,
-                    need_range_check[i * 2 + 1] * limb_shift,
-                )
+                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the u32 register value into single field element, with
-        let register_to_field = |r: [AB::Var; RV32_REGISTER_NUM_LIMBS]| {
-            r.into_iter()
-                .enumerate()
-                .fold(AB::Expr::zero(), |acc, (i, limb)| {
-                    acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
-                })
-        };
-        let rd_val_f = register_to_field(cols.rd_val);
-        let rs_val_f = cols.rs_val.map(register_to_field);
+        // Compose the u32 register value into single field element, with `abstract_compose`
+        let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let e = AB::F::from_canonical_usize(2);
         // Reads from heap
@@ -383,6 +373,7 @@ impl<
         debug_assert_eq!(d.as_canonical_u32(), 1);
         debug_assert_eq!(e.as_canonical_u32(), 2);
 
+        // Read register values
         let mut rs_vals = [0; NUM_READS];
         let rs_records: [_; NUM_READS] = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
@@ -392,6 +383,7 @@ impl<
         });
         let (rd_record, rd_val) = read_rv32_register(memory, d, a);
 
+        // Read memory values
         let read_records = rs_vals.map(|address| {
             assert!(
                 address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.air.address_bits)
@@ -400,19 +392,6 @@ impl<
                 memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
             })
         });
-        let need_range_check: Vec<u32> = rs_records
-            .iter()
-            .chain(std::iter::repeat(&rd_record).take(2))
-            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .collect();
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
-        for i in 0..need_range_check.len() / 2 {
-            self.bitwise_lookup_chip.request_range(
-                need_range_check[i * 2] * limb_shift,
-                need_range_check[i * 2 + 1] * limb_shift,
-            );
-        }
-
         let read_data = read_records.map(|r| r.map(|x| x.data));
 
         let record = Rv32VecHeapReadRecord {
@@ -461,7 +440,14 @@ impl<
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
-        vec_heap_generate_trace_row_impl(row_slice, &read_record, &write_record, aux_cols_factory)
+        vec_heap_generate_trace_row_impl(
+            row_slice,
+            &read_record,
+            &write_record,
+            aux_cols_factory,
+            &self.bitwise_lookup_chip,
+            self.air.address_bits,
+        )
     }
 
     fn air(&self) -> &Self::Air {
@@ -481,6 +467,8 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
     write_record: &Rv32VecHeapWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>,
     aux_cols_factory: &MemoryAuxColsFactory<F>,
+    bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
+    address_bits: usize,
 ) {
     let row_slice: &mut Rv32VecHeapAdapterCols<
         F,
@@ -508,4 +496,20 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     row_slice.writes_aux = write_record
         .writes
         .map(|w| aux_cols_factory.make_write_aux_cols(w));
+
+    // Range checks:
+    let need_range_check: Vec<u32> = read_record
+        .rs
+        .iter()
+        .chain(std::iter::repeat(&read_record.rd).take(2))
+        .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+        .collect();
+    debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
+    let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits) as u32;
+    for i in 0..need_range_check.len() / 2 {
+        bitwise_lookup_chip.request_range(
+            need_range_check[i * 2] * limb_shift,
+            need_range_check[i * 2 + 1] * limb_shift,
+        );
+    }
 }

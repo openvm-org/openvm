@@ -186,8 +186,12 @@ impl<F: Field> BaseAir<F> for FieldExpr {
 
 impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
     /// The sub-row slice owned by the expression builder.
-    type AirContext<'a> = &'a [AB::Var]
-    where AB: 'a, AB::Var: 'a, AB::Expr: 'a;
+    type AirContext<'a>
+        = &'a [AB::Var]
+    where
+        AB: 'a,
+        AB::Var: 'a,
+        AB::Expr: 'a;
 
     fn eval<'a>(&'a self, builder: &'a mut AB, local: &'a [AB::Var])
     where

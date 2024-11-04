@@ -1,7 +1,5 @@
 use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
-#[cfg(feature = "sdk")]
-pub use sdk::*;
 
 use crate::arch::{ExecutorName, VmConfig, VmExecutor};
 
@@ -28,6 +26,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
+        .add_executor(ExecutorName::FriMatOpening)
         .add_executor(ExecutorName::BaseAlu256Rv32)
         .add_executor(ExecutorName::LessThan256Rv32)
         .add_executor(ExecutorName::Multiplication256Rv32)

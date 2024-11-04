@@ -46,6 +46,7 @@ cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
 thiserror.workspace = true
+rustc-hash.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
@@ -68,6 +69,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
 ax-ecc-execution = { workspace = true }
 halo2curves-axiom = { workspace = true }
+hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]

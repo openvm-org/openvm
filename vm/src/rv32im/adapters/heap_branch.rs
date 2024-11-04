@@ -38,7 +38,6 @@ use crate::{
 /// * The data is read from the heap (address space 2), and the pointers
 ///   are read from registers (address space 1).
 /// * Reads are from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Rv32HeapBranchAdapterCols<T, const NUM_READS: usize, const READ_SIZE: usize> {
