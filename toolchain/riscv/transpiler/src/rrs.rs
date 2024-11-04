@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, BaseAluOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode, MulOpcode,
-    PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode,
+    MulOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
     Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LessThan256Opcode,
     Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32ModularEqualOpcode, Rv32Mul256Opcode,
     Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
