@@ -4,9 +4,9 @@ use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, BaseAluOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode, MulOpcode,
     PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
-    Rv32BranchLessThan256Opcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-    Rv32LessThan256Opcode, Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode,
-    Rv32ModularEqualOpcode, Rv32Mul256Opcode, Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
+    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LessThan256Opcode,
+    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32ModularEqualOpcode, Rv32Mul256Opcode,
+    Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
 };
 use axvm_platform::constants::{
     Custom0Funct3::{self, *},
@@ -249,23 +249,34 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
     match opcode {
         CUSTOM_0 => match Custom0Funct3::from_repr(funct3) {
             Some(Terminate) => {
-                let instr = IType::new(instruction_u32);
+                let dec_insn = IType::new(instruction_u32);
                 Some(terminate(
-                    instr.imm.try_into().expect("exit code must be byte"),
+                    dec_insn.imm.try_into().expect("exit code must be byte"),
                 ))
             }
-            Some(Reveal) => {
-                unimplemented!()
-            }
             Some(HintStoreW) => {
-                let instr = IType::new(instruction_u32);
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 Some(Instruction::from_isize(
                     Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
                     0,
-                    (RV32_REGISTER_NUM_LIMBS * instr.rd) as isize,
-                    instr.imm as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
                     1,
                     2,
+                ))
+            }
+            Some(Reveal) => {
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
+                // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
+                Some(Instruction::from_isize(
+                    Rv32LoadStoreOpcode::STOREW.with_default_offset(),
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
+                    1,
+                    3,
                 ))
             }
             Some(HintInput) => Some(Instruction::phantom(
@@ -278,104 +289,57 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                 unimplemented!()
             }
             Some(Int256) => {
-                let instr = RType::new(instruction_u32);
-                let (is_branch, global_opcode) = match Int256Funct7::from_repr(instr.funct7 as u8) {
-                    Some(Int256Funct7::Add) => (
-                        false,
-                        BaseAluOpcode::ADD as usize + Rv32BaseAlu256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Sub) => (
-                        false,
-                        BaseAluOpcode::SUB as usize + Rv32BaseAlu256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Xor) => (
-                        false,
-                        BaseAluOpcode::XOR as usize + Rv32BaseAlu256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Or) => (
-                        false,
-                        BaseAluOpcode::OR as usize + Rv32BaseAlu256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::And) => (
-                        false,
-                        BaseAluOpcode::AND as usize + Rv32BaseAlu256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Sll) => (
-                        false,
-                        ShiftOpcode::SLL as usize + Rv32Shift256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Srl) => (
-                        false,
-                        ShiftOpcode::SRL as usize + Rv32Shift256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Sra) => (
-                        false,
-                        ShiftOpcode::SRA as usize + Rv32Shift256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Slt) => (
-                        false,
-                        LessThanOpcode::SLT as usize + Rv32LessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Sltu) => (
-                        false,
-                        LessThanOpcode::SLTU as usize + Rv32LessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Beq) => (
-                        true,
-                        BranchEqualOpcode::BEQ as usize
-                            + Rv32BranchEqual256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Bne) => (
-                        true,
-                        BranchEqualOpcode::BNE as usize
-                            + Rv32BranchEqual256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Blt) => (
-                        true,
-                        BranchLessThanOpcode::BLT as usize
-                            + Rv32BranchLessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Bge) => (
-                        true,
-                        BranchLessThanOpcode::BGE as usize
-                            + Rv32BranchLessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Bltu) => (
-                        true,
-                        BranchLessThanOpcode::BLTU as usize
-                            + Rv32BranchLessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Bgeu) => (
-                        true,
-                        BranchLessThanOpcode::BGEU as usize
-                            + Rv32BranchLessThan256Opcode::default_offset(),
-                    ),
-                    Some(Int256Funct7::Mul) => (
-                        false,
-                        MulOpcode::MUL as usize + Rv32Mul256Opcode::default_offset(),
-                    ),
+                let dec_insn = RType::new(instruction_u32);
+                let global_opcode = match Int256Funct7::from_repr(dec_insn.funct7 as u8) {
+                    Some(Int256Funct7::Add) => {
+                        BaseAluOpcode::ADD as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sub) => {
+                        BaseAluOpcode::SUB as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Xor) => {
+                        BaseAluOpcode::XOR as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Or) => {
+                        BaseAluOpcode::OR as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::And) => {
+                        BaseAluOpcode::AND as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sll) => {
+                        ShiftOpcode::SLL as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Srl) => {
+                        ShiftOpcode::SRL as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sra) => {
+                        ShiftOpcode::SRA as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Slt) => {
+                        LessThanOpcode::SLT as usize + Rv32LessThan256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sltu) => {
+                        LessThanOpcode::SLTU as usize + Rv32LessThan256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Mul) => {
+                        MulOpcode::MUL as usize + Rv32Mul256Opcode::default_offset()
+                    }
                     _ => unimplemented!(),
                 };
-                if is_branch {
-                    // When branch instruction, we will treat rd as the imm[6:2]
-                    let uimm: i32 = (instr.rd as i32) << 2;
-                    let imm = if (uimm & 0x40) != 0 {
-                        uimm - (1 << 7)
-                    } else {
-                        uimm
-                    };
-                    Some(from_b_type(
-                        global_opcode,
-                        &BType {
-                            imm,
-                            rs2: instr.rs2,
-                            rs1: instr.rs1,
-                            funct3: funct3 as u32,
-                        },
-                    ))
-                } else {
-                    Some(from_r_type(global_opcode, 2, &RType::new(instruction_u32)))
-                }
+                Some(from_r_type(global_opcode, 2, &dec_insn))
+            }
+            Some(Beq256) => {
+                let dec_insn = BType::new(instruction_u32);
+                Some(Instruction::new(
+                    BranchEqualOpcode::BEQ as usize + Rv32BranchEqual256Opcode::default_offset(),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    isize_to_field(dec_insn.imm as isize),
+                    F::one(),
+                    F::two(),
+                    F::zero(),
+                    F::zero(),
+                ))
             }
             _ => unimplemented!(),
         },
@@ -383,8 +347,8 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
             match Custom1Funct3::from_repr(funct3) {
                 Some(ModularArithmetic) => {
                     // mod operations
-                    let instr = RType::new(instruction_u32);
-                    let base_funct7 = (instr.funct7 as u8) % MODULAR_ARITHMETIC_MAX_KINDS;
+                    let dec_insn = RType::new(instruction_u32);
+                    let base_funct7 = (dec_insn.funct7 as u8) % MODULAR_ARITHMETIC_MAX_KINDS;
                     let mut e_as = 2;
                     let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
                         Some(ModArithBaseFunct7::AddMod) => {
@@ -411,19 +375,15 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         }
                         _ => unimplemented!(),
                     };
-                    let mod_idx_shift = ((instr.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
+                    let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
                         * MODULAR_ARITHMETIC_MAX_KINDS;
                     let global_opcode = global_opcode + mod_idx_shift as usize;
-                    Some(from_r_type(
-                        global_opcode,
-                        e_as,
-                        &RType::new(instruction_u32),
-                    ))
+                    Some(from_r_type(global_opcode, e_as, &dec_insn))
                 }
                 Some(ShortWeierstrass) => {
                     // short weierstrass ec
-                    let instr = RType::new(instruction_u32);
-                    let base_funct7 = (instr.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
+                    let dec_insn = RType::new(instruction_u32);
+                    let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
                     let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                         Some(SwBaseFunct7::SwAddNe) => {
                             EccOpcode::EC_ADD_NE as usize + EccOpcode::default_offset()
@@ -433,10 +393,10 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         }
                         _ => unimplemented!(),
                     };
-                    let curve_idx_shift = ((instr.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
+                    let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
                         * SHORT_WEIERSTRASS_MAX_KINDS;
                     let global_opcode = global_opcode + curve_idx_shift as usize;
-                    Some(from_r_type(global_opcode, 2, &RType::new(instruction_u32)))
+                    Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 _ => unimplemented!(),
             }
