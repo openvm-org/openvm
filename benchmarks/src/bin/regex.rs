@@ -3,13 +3,14 @@
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
+    engine::StarkFriEngine, p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program};
 use axvm_circuit::arch::VmConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use eyre::Result;
+use p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {
@@ -24,7 +25,8 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, VmConfig::rv32im(), elf, vec![])
+                let fe_bytes = "test@example.com".to_owned().into_bytes().into_iter().map(AbstractField::from_canonical_u8).collect::<Vec<BabyBear>>();
+                bench_from_exe(engine, VmConfig::rv32im(), elf, vec![fe_bytes])
             })?;
 
         #[cfg(feature = "aggregation")]

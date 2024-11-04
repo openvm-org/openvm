@@ -1,8 +1,9 @@
 #![no_main]
 #![no_std]
 
-use regex::Regex;
 use core::hint::black_box;
+
+use regex::Regex;
 
 axvm::entry!(main);
 
