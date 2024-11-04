@@ -12,7 +12,7 @@ use ax_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::{instruction::Instruction, Rv32ModularEqualOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode, UsizeOpcode};
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -24,7 +24,7 @@ use crate::arch::{
 
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
-// at runtime.
+// at runtime (i.e. when chip is instantiated).
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -205,8 +205,9 @@ where
             )
             .eval(builder, cols.is_valid);
 
-        let expected_opcode =
-            AB::Expr::from_canonical_usize(Rv32ModularEqualOpcode::EQ as usize + self.offset);
+        let expected_opcode = AB::Expr::from_canonical_usize(
+            Rv32ModularArithmeticOpcode::IS_EQ as usize + self.offset,
+        );
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::zero());
         a[0] = cols.cmp_result.into();
 
@@ -317,7 +318,7 @@ where
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32ModularEqualOpcode::from_usize(opcode - self.air.offset)
+            Rv32ModularArithmeticOpcode::from_usize(opcode - self.air.offset)
         )
     }
 

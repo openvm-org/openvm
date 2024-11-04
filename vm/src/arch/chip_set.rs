@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip};
+use adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip, Rv32IsEqualModAdapterChip};
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
@@ -47,7 +47,8 @@ use crate::{
             Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
         },
         modular::{
-            ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
+            ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
+            ModularMulDivChip, ModularMulDivCoreChip,
         },
     },
     kernels::{
@@ -1037,6 +1038,26 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::ModularMulDivRv32_1x32(new_chip));
                 }
+                ExecutorName::ModularIsEqualRv32_1x32 => {
+                    let new_chip = Rc::new(RefCell::new(ModularIsEqualChip::new(
+                        Rv32IsEqualModAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        ModularIsEqualCoreChip::new(
+                            config32.modulus,
+                            bitwise_lookup_chip.clone(),
+                            class_offset,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularIsEqualRv32_1x32(new_chip));
+                }
                 ExecutorName::ModularAddSubRv32_3x16 => {
                     let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
                         Rv32VecHeapAdapterChip::new(
@@ -1076,6 +1097,26 @@ impl VmConfig {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
                     chips.push(AxVmChip::ModularMulDivRv32_3x16(new_chip));
+                }
+                ExecutorName::ModularIsEqualRv32_3x16 => {
+                    let new_chip = Rc::new(RefCell::new(ModularIsEqualChip::new(
+                        Rv32IsEqualModAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        ModularIsEqualCoreChip::new(
+                            config48.modulus,
+                            bitwise_lookup_chip.clone(),
+                            class_offset,
+                        ),
+                        memory_controller.clone(),
+                    )));
+                    for global_opcode in range {
+                        executors.insert(global_opcode, new_chip.clone().into());
+                    }
+                    chips.push(AxVmChip::ModularIsEqualRv32_3x16(new_chip));
                 }
                 _ => unreachable!(
                     "modular_executors should only contain ModularAddSub and ModularMultDiv"
@@ -1225,6 +1266,13 @@ fn gen_modular_executor_tuple(
                             ..=(Rv32ModularArithmeticOpcode::DIV as usize),
                         ExecutorName::ModularMulDivRv32_1x32,
                         class_offset,
+                        modulus.clone(),
+                    ),
+                    (
+                        Rv32ModularArithmeticOpcode::IS_EQ as usize
+                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                        ExecutorName::ModularIsEqualRv32_1x32,
+                        class_offset,
                         modulus,
                     ),
                 ])
@@ -1241,6 +1289,13 @@ fn gen_modular_executor_tuple(
                         Rv32ModularArithmeticOpcode::MUL as usize
                             ..=(Rv32ModularArithmeticOpcode::DIV as usize),
                         ExecutorName::ModularMulDivRv32_3x16,
+                        class_offset,
+                        modulus.clone(),
+                    ),
+                    (
+                        Rv32ModularArithmeticOpcode::IS_EQ as usize
+                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                        ExecutorName::ModularIsEqualRv32_3x16,
                         class_offset,
                         modulus,
                     ),

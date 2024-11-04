@@ -44,10 +44,16 @@ pub type ModularMulDivChip<F, const NUM_LANES: usize, const LANE_SIZE: usize> = 
     ModularMulDivCoreChip,
 >;
 
-pub type ModularIsEqualChip<F, const NUM_LIMBS: usize> = VmChipWrapper<
+// Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
+pub type ModularIsEqualChip<
     F,
-    Rv32IsEqualModAdapterChip<F, 2, NUM_LIMBS>,
-    ModularIsEqualCoreChip<NUM_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    const NUM_LANES: usize,
+    const LANE_SIZE: usize,
+    const TOTAL_LIMBS: usize,
+> = VmChipWrapper<
+    F,
+    Rv32IsEqualModAdapterChip<F, 2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    ModularIsEqualCoreChip<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
 pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {

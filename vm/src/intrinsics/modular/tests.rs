@@ -8,6 +8,7 @@ use ax_circuit_primitives::{
 };
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
+use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
 };
@@ -284,47 +285,53 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     tester.simple_test().expect("Verification failed");
 }
 
-fn test_is_equal(opcode_offset: usize, modulus: BigUint, num_tests: usize) {
+fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>(
+    opcode_offset: usize,
+    modulus: BigUint,
+    num_tests: usize,
+) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let mut chip = ModularIsEqualChip::<F, NUM_LIMBS>::new(
+    let mut chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
         Rv32IsEqualModAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
+            bitwise_chip.clone(),
         ),
         ModularIsEqualCoreChip::new(modulus.clone(), bitwise_chip.clone(), opcode_offset),
         tester.memory_controller(),
     );
 
     for _ in 0..num_tests {
-        let b = generate_field_element::<NUM_LIMBS, LIMB_BITS>(&modulus, &mut rng);
+        let b = generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(&modulus, &mut rng);
         let c = if rng.gen_bool(0.5) {
             b
         } else {
-            generate_field_element::<NUM_LIMBS, LIMB_BITS>(&modulus, &mut rng)
+            generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(&modulus, &mut rng)
         };
 
-        let instruction = rv32_write_heap_default::<NUM_LIMBS>(
+        let instruction = rv32_write_heap_default::<TOTAL_LIMBS>(
             &mut tester,
             vec![b.map(F::from_canonical_u32)],
             vec![c.map(F::from_canonical_u32)],
-            opcode_offset + Rv32ModularEqualOpcode::EQ as usize,
+            opcode_offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
         );
         tester.execute(&mut chip, instruction);
     }
-    // Special case where b and c are close to the prime
+
+    // Special case where b == c are close to the prime
     let b_vec = big_uint_to_limbs(&modulus, LIMB_BITS);
     let mut b = from_fn(|i| if i < b_vec.len() { b_vec[i] as u32 } else { 0 });
     b[0] -= 1;
-    let instruction = rv32_write_heap_default::<NUM_LIMBS>(
+    let instruction = rv32_write_heap_default::<TOTAL_LIMBS>(
         &mut tester,
         vec![b.map(F::from_canonical_u32)],
         vec![b.map(F::from_canonical_u32)],
-        opcode_offset + Rv32ModularEqualOpcode::EQ as usize,
+        opcode_offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
     );
     tester.execute(&mut chip, instruction);
 
@@ -333,6 +340,11 @@ fn test_is_equal(opcode_offset: usize, modulus: BigUint, num_tests: usize) {
 }
 
 #[test]
-fn test_modular_is_equal() {
-    test_is_equal(17, secp256k1_coord_prime(), 100);
+fn test_modular_is_equal_1x32() {
+    test_is_equal::<1, 32, 32>(17, secp256k1_coord_prime(), 100);
+}
+
+#[test]
+fn test_modular_is_equal_3x16() {
+    test_is_equal::<3, 16, 48>(17, BLS12381.MODULUS.clone(), 100);
 }

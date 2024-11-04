@@ -356,6 +356,7 @@ pub enum Rv32ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
+    IS_EQ,
 }
 
 // to be deleted and replaced by Rv32SwOpcode
