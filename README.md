@@ -18,6 +18,7 @@ where `<name>` is a benchmark implemented as a rust binary (located in `src/bin`
 
 - `verify_fibair`
 - `fibonacci`
+- `regex`
   in the `benchmarks` crate.
   The benchmark outputs a JSON of metrics. You can process this into markdown with:
 
