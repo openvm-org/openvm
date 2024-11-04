@@ -70,11 +70,11 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(EnumDiscriminants, ChipUsageGetter, Chip, IntoStaticStr)]
+#[derive(EnumDiscriminants, ChipUsageGetter, Chip)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
-pub enum AxVmInstructionExecutor<F: PrimeField32> {
+pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     // Native kernel:
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
@@ -139,5 +139,5 @@ pub enum AxVmChip<F: PrimeField32> {
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors
-    Executor(AxVmInstructionExecutor<F>),
+    Executor(AxVmExecutor<F>),
 }

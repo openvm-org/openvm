@@ -32,7 +32,7 @@ use strum::EnumCount;
 
 use super::{vm_poseidon2_config, EcCurve, Streams};
 use crate::{
-    arch::{AxVmChip, AxVmInstructionExecutor, ExecutionBus, ExecutorName, VmConfig},
+    arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
         ecc::{
             pairing::{
@@ -110,7 +110,7 @@ pub const PUBLIC_VALUES_AIR_ID: usize = 2;
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 pub struct VmChipSet<F: PrimeField32> {
-    pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
+    pub executors: BTreeMap<usize, AxVmExecutor<F>>,
 
     // ATTENTION: chip destruction should follow the following field order:
     pub program_chip: ProgramChip<F>,
@@ -130,15 +130,13 @@ impl<F: PrimeField32> VmChipSet<F> {
         for chip in self.chips.iter_mut() {
             if let AxVmChip::Executor(chip) = chip {
                 match chip {
-                    AxVmInstructionExecutor::LoadStore(chip) => {
+                    AxVmExecutor::LoadStore(chip) => {
                         chip.borrow_mut().core.set_streams(streams.clone())
                     }
-                    AxVmInstructionExecutor::HintStoreRv32(chip) => {
+                    AxVmExecutor::HintStoreRv32(chip) => {
                         chip.borrow_mut().core.set_streams(streams.clone())
                     }
-                    AxVmInstructionExecutor::Phantom(chip) => {
-                        chip.borrow_mut().set_streams(streams.clone())
-                    }
+                    AxVmExecutor::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
                     _ => {}
                 }
             }
@@ -254,7 +252,7 @@ impl VmConfig {
         };
         let program_chip = ProgramChip::default();
 
-        let mut executors: BTreeMap<usize, AxVmInstructionExecutor<F>> = BTreeMap::new();
+        let mut executors: BTreeMap<usize, AxVmExecutor<F>> = BTreeMap::new();
 
         // Use BTreeSet to ensure deterministic order.
         // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
@@ -1022,7 +1020,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularAddSubRv32_1x32(new_chip).into());
+                    chips.push(AxVmExecutor::ModularAddSubRv32_1x32(new_chip).into());
                 }
                 ExecutorName::ModularMulDivRv32_1x32 => {
                     let new_chip = Rc::new(RefCell::new(ModularMulDivChip::new(
@@ -1042,7 +1040,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularMulDivRv32_1x32(new_chip).into());
+                    chips.push(AxVmExecutor::ModularMulDivRv32_1x32(new_chip).into());
                 }
                 ExecutorName::ModularIsEqualRv32_1x32 => {
                     let new_chip = Rc::new(RefCell::new(ModularIsEqualChip::new(
@@ -1062,7 +1060,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularIsEqualRv32_1x32(new_chip).into());
+                    chips.push(AxVmExecutor::ModularIsEqualRv32_1x32(new_chip).into());
                 }
                 ExecutorName::ModularAddSubRv32_3x16 => {
                     let new_chip = Rc::new(RefCell::new(ModularAddSubChip::new(
@@ -1082,7 +1080,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularAddSubRv32_3x16(new_chip).into());
+                    chips.push(AxVmExecutor::ModularAddSubRv32_3x16(new_chip).into());
                 }
                 ExecutorName::ModularMulDivRv32_3x16 => {
                     let new_chip = Rc::new(RefCell::new(ModularMulDivChip::new(
@@ -1102,7 +1100,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularMulDivRv32_3x16(new_chip).into());
+                    chips.push(AxVmExecutor::ModularMulDivRv32_3x16(new_chip).into());
                 }
                 ExecutorName::ModularIsEqualRv32_3x16 => {
                     let new_chip = Rc::new(RefCell::new(ModularIsEqualChip::new(
@@ -1122,7 +1120,7 @@ impl VmConfig {
                     for global_opcode in range {
                         executors.insert(global_opcode, new_chip.clone().into());
                     }
-                    chips.push(AxVmInstructionExecutor::ModularIsEqualRv32_3x16(new_chip).into());
+                    chips.push(AxVmExecutor::ModularIsEqualRv32_3x16(new_chip).into());
                 }
                 _ => unreachable!(
                     "modular_executors should only contain ModularAddSub and ModularMultDiv"

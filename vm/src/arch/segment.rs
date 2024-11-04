@@ -12,7 +12,7 @@ use itertools::{zip_eq, Itertools};
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
-use super::{AxVmInstructionExecutor, Streams, VmChipSet, VmConfig};
+use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -239,11 +239,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         // Finalize memory.
         let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
         self.final_memory = if self.config.continuation_enabled {
-            let poseidon_chip = find_chip!(
-                self.chip_set,
-                AxVmChip::Executor,
-                AxVmInstructionExecutor::Poseidon2
-            );
+            let poseidon_chip =
+                find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
             let mut hasher = poseidon_chip.borrow_mut();
             memory_controller.finalize(Some(hasher.deref_mut()))
         } else {
