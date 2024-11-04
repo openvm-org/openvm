@@ -370,8 +370,8 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         Some(ModArithBaseFunct7::IsEqMod) => {
                             // e = 1 for IsEqMod
                             e_as = 1;
-                            Rv32ModularEqualOpcode::IS_EQ as usize
-                                + Rv32ModularEqualOpcode::default_offset()
+                            Rv32ModularArithmeticOpcode::IS_EQ as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
                         }
                         _ => unimplemented!(),
                     };
