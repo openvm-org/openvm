@@ -44,15 +44,15 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
     let (reg1, _) =
-        tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr1_writes);
+        tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 1024, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
         let (reg2, _) =
-            tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr2_writes);
+            tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 1024, addr2_writes);
         reg2
     };
-    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 128);
+    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 1024);
 
     Instruction::from_isize(
         opcode_with_offset,
