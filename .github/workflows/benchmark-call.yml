@@ -99,6 +99,12 @@ jobs:
         run: |
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'regex'
+        working-directory: benchmarks
+        run: |
+          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
