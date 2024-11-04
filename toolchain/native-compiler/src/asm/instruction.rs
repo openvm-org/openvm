@@ -111,13 +111,6 @@ pub enum AsmInstruction<F, EF> {
     /// (a, b, c) are memory pointers to (dst, lhs, rhs)
     Poseidon2Compress(i32, i32, i32),
 
-    /// Perform keccak256 hash on variable length byte array input starting at address `src`.
-    /// Writes output as array of `u16` limbs to address `dst`.
-    /// (a, b, c) are memory pointers to (dst, src, len)
-    Keccak256(i32, i32, i32),
-    /// Same as `Keccak256`, but with fixed length input (hence length is an immediate value).
-    Keccak256FixLen(i32, i32, F),
-
     /// (a, b, res, len, alpha, alpha_pow)
     FriMatOpening(i32, i32, i32, i32, i32, i32),
 
@@ -324,12 +317,6 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                     "poseidon2_compress ({})fp, ({})fp, ({})fp",
                     result, src1, src2
                 )
-            }
-            AsmInstruction::Keccak256(dst, src, len) => {
-                write!(f, "keccak256 ({dst})fp, ({src})fp, ({len})fp",)
-            }
-            AsmInstruction::Keccak256FixLen(dst, src, len) => {
-                write!(f, "keccak256 ({dst})fp, ({src})fp, {len}",)
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({})fp", dst)

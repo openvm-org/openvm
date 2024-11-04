@@ -13,6 +13,7 @@ pub enum Custom0Funct3 {
     HintInput,
     Keccak256 = 0b100,
     Int256 = 0b101,
+    Beq256,
 }
 
 /// Different funct3 for custom RISC-V instructions using the [CUSTOM_1] 7-bit opcode prefix.
@@ -37,12 +38,6 @@ pub enum Int256Funct7 {
     Sra,
     Slt,
     Sltu,
-    Beq,
-    Bne,
-    Blt,
-    Bge,
-    Bltu,
-    Bgeu,
     Mul,
 }
 

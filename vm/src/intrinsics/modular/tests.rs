@@ -6,7 +6,9 @@ use ax_circuit_primitives::{
 };
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
+use axvm_instructions::{
+    instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
+};
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -15,9 +17,7 @@ use rand::Rng;
 use super::{ModularAddSubCoreChip, ModularMulDivCoreChip};
 use crate::{
     arch::{
-        instructions::{ModularArithmeticOpcode, UsizeOpcode},
-        testing::VmChipTestBuilder,
-        VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::test_utils::write_ptr_reg,
     rv32im::adapters::{Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS},
@@ -52,7 +52,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let core = ModularAddSubCoreChip::new(
         config,
         tester.memory_controller().borrow().range_checker.clone(),
-        ModularArithmeticOpcode::default_offset() + opcode_offset,
+        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
@@ -177,7 +177,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let core = ModularMulDivCoreChip::new(
         config,
         tester.memory_controller().borrow().range_checker.clone(),
-        ModularArithmeticOpcode::default_offset() + opcode_offset,
+        Rv32ModularArithmeticOpcode::default_offset() + opcode_offset,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(

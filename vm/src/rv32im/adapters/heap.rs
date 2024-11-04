@@ -4,10 +4,7 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-};
+use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
@@ -169,19 +166,6 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             debug_assert!(address < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
-        let need_range_check: Vec<u32> = rs_records
-            .iter()
-            .chain(std::iter::repeat(&rd_record).take(2))
-            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .collect();
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
-        for i in 0..need_range_check.len() / 2 {
-            self.bitwise_lookup_chip.request_range(
-                need_range_check[i * 2] * limb_shift,
-                need_range_check[i * 2 + 1] * limb_shift,
-            );
-        }
-
         let read_data = read_records.map(|r| r[0].data);
 
         let record = Rv32VecHeapReadRecord {
@@ -228,7 +212,14 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
     ) {
-        vec_heap_generate_trace_row_impl(row_slice, &read_record, &write_record, aux_cols_factory);
+        vec_heap_generate_trace_row_impl(
+            row_slice,
+            &read_record,
+            &write_record,
+            aux_cols_factory,
+            &self.bitwise_lookup_chip,
+            self.air.address_bits,
+        );
     }
 
     fn air(&self) -> &Self::Air {

@@ -1,4 +1,3 @@
-#![cfg(feature = "revm")]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 use ax_stark_sdk::{

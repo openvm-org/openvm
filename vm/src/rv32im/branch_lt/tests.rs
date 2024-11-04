@@ -71,7 +71,7 @@ fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
             1,
             1,
         ),
-        rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
+        rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
     let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);

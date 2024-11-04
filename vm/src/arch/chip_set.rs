@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use adapters::Rv32HeapAdapterChip;
+use adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip};
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
@@ -41,9 +41,10 @@ use crate::{
             },
             sw::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
-            Rv32BaseAlu256Chip, Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
+            Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
+            Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
         },
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularMulDivChip, ModularMulDivCoreChip,
@@ -386,7 +387,7 @@ impl VmConfig {
                 }
                 ExecutorName::PublicValues => {}
                 ExecutorName::Poseidon2 => {}
-                ExecutorName::Keccak256 => {
+                ExecutorName::Keccak256Rv32 => {
                     let chip = Rc::new(RefCell::new(KeccakVmChip::new(
                         execution_bus,
                         program_bus,
@@ -397,7 +398,7 @@ impl VmConfig {
                     for opcode in range {
                         executors.insert(opcode, chip.clone().into());
                     }
-                    chips.push(AxVmChip::Keccak256(chip));
+                    chips.push(AxVmChip::Keccak256Rv32(chip));
                 }
                 ExecutorName::FriMatOpening => {
                     let chip = Rc::new(RefCell::new(FriMatOpeningChip::new(
@@ -709,6 +710,38 @@ impl VmConfig {
                         executors.insert(opcode, chip.clone().into());
                     }
                     chips.push(AxVmChip::Shift256Rv32(chip));
+                }
+                ExecutorName::BranchEqual256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32BranchEqual256Chip::new(
+                        Rv32HeapBranchAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BranchEqual256Rv32(chip));
+                }
+                ExecutorName::BranchLessThan256Rv32 => {
+                    let chip = Rc::new(RefCell::new(Rv32BranchLessThan256Chip::new(
+                        Rv32HeapBranchAdapterChip::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        BranchLessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
+                        memory_controller.clone(),
+                    )));
+                    for opcode in range {
+                        executors.insert(opcode, chip.clone().into());
+                    }
+                    chips.push(AxVmChip::BranchLessThan256Rv32(chip));
                 }
                 ExecutorName::CastF => {
                     let chip = Rc::new(RefCell::new(CastFChip::new(
@@ -1270,10 +1303,10 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Poseidon2Opcode::COUNT,
             Poseidon2Opcode::default_offset(),
         ),
-        ExecutorName::Keccak256 => (
-            Keccak256Opcode::default_offset(),
-            Keccak256Opcode::COUNT,
-            Keccak256Opcode::default_offset(),
+        ExecutorName::Keccak256Rv32 => (
+            Rv32KeccakOpcode::KECCAK256.with_default_offset(),
+            Rv32KeccakOpcode::COUNT,
+            Rv32KeccakOpcode::default_offset(),
         ),
         ExecutorName::FriMatOpening => (
             FriOpcode::default_offset(),
@@ -1317,20 +1350,10 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32AuipcOpcode::COUNT,
             Rv32AuipcOpcode::default_offset(),
         ),
-        ExecutorName::BaseAlu256Rv32 => (
-            Rv32BaseAlu256Opcode::default_offset(),
-            BaseAluOpcode::COUNT,
-            Rv32BaseAlu256Opcode::default_offset(),
-        ),
         ExecutorName::LessThanRv32 => (
             LessThanOpcode::default_offset(),
             LessThanOpcode::COUNT,
             LessThanOpcode::default_offset(),
-        ),
-        ExecutorName::LessThan256Rv32 => (
-            Rv32LessThan256Opcode::default_offset(),
-            LessThanOpcode::COUNT,
-            Rv32LessThan256Opcode::default_offset(),
         ),
         ExecutorName::MultiplicationRv32 => (
             MulOpcode::default_offset(),
@@ -1342,11 +1365,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             MulHOpcode::COUNT,
             MulHOpcode::default_offset(),
         ),
-        ExecutorName::Multiplication256Rv32 => (
-            Rv32Mul256Opcode::default_offset(),
-            MulOpcode::COUNT,
-            Rv32Mul256Opcode::default_offset(),
-        ),
         ExecutorName::DivRemRv32 => (
             DivRemOpcode::default_offset(),
             DivRemOpcode::COUNT,
@@ -1357,11 +1375,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             ShiftOpcode::COUNT,
             ShiftOpcode::default_offset(),
         ),
-        ExecutorName::Shift256Rv32 => (
-            Rv32Shift256Opcode::default_offset(),
-            ShiftOpcode::COUNT,
-            Rv32Shift256Opcode::default_offset(),
-        ),
         ExecutorName::BranchEqualRv32 => (
             BranchEqualOpcode::default_offset(),
             BranchEqualOpcode::COUNT,
@@ -1371,6 +1384,36 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             BranchLessThanOpcode::default_offset(),
             BranchLessThanOpcode::COUNT,
             BranchLessThanOpcode::default_offset(),
+        ),
+        ExecutorName::BaseAlu256Rv32 => (
+            Rv32BaseAlu256Opcode::default_offset(),
+            BaseAluOpcode::COUNT,
+            Rv32BaseAlu256Opcode::default_offset(),
+        ),
+        ExecutorName::LessThan256Rv32 => (
+            Rv32LessThan256Opcode::default_offset(),
+            LessThanOpcode::COUNT,
+            Rv32LessThan256Opcode::default_offset(),
+        ),
+        ExecutorName::Multiplication256Rv32 => (
+            Rv32Mul256Opcode::default_offset(),
+            MulOpcode::COUNT,
+            Rv32Mul256Opcode::default_offset(),
+        ),
+        ExecutorName::Shift256Rv32 => (
+            Rv32Shift256Opcode::default_offset(),
+            ShiftOpcode::COUNT,
+            Rv32Shift256Opcode::default_offset(),
+        ),
+        ExecutorName::BranchEqual256Rv32 => (
+            Rv32BranchEqual256Opcode::default_offset(),
+            BranchEqualOpcode::COUNT,
+            Rv32BranchEqual256Opcode::default_offset(),
+        ),
+        ExecutorName::BranchLessThan256Rv32 => (
+            Rv32BranchLessThan256Opcode::default_offset(),
+            BranchLessThanOpcode::COUNT,
+            Rv32BranchLessThan256Opcode::default_offset(),
         ),
         ExecutorName::CastF => (
             CastfOpcode::default_offset(),
