@@ -743,6 +743,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-native-compiler-derive",
+ "axvm-recursion",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",
