@@ -3,16 +3,38 @@
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-#[thread_local]
+/// Simulated input stream on host
+pub enum HostInputStream {
+    /// Read directly from stdin
+    #[cfg(feature = "std")]
+    Stdin,
+    /// Directly set from a test using [`set_hints`].
+    Internal(Vec<Vec<u8>>),
+}
+
+impl HostInputStream {
+    const fn new() -> Self {
+        #[cfg(feature = "std")]
+        {
+            Self::Stdin
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Self::Internal(Vec::new())
+        }
+    }
+}
+
 /// Hint streams in the non-zkVM environment.
-pub static HINTS: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
 #[thread_local]
+pub static HINTS: RefCell<HostInputStream> = RefCell::new(HostInputStream::new());
 /// Current hint stream in the non-zkVM environment.
+#[thread_local]
 pub static HINT_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
 
 /// Set the hints and reset the current hint stream.
 pub fn set_hints(hints: Vec<Vec<u8>>) {
-    HINTS.replace(
+    HINTS.replace(HostInputStream::Internal(
         hints
             .into_iter()
             .rev()
@@ -24,14 +46,29 @@ pub fn set_hints(hints: Vec<Vec<u8>>) {
                     .collect()
             })
             .collect(),
-    );
+    ));
     HINT_STREAM.replace(Vec::new());
 }
 
 /// Read the next hint stream from the hints.
 pub fn hint_input() {
-    let hint = HINTS.borrow_mut().pop().expect("No hint stream available");
-    HINT_STREAM.replace(hint);
+    let mut hints = HINTS.borrow_mut();
+    match &mut (*hints) {
+        #[cfg(feature = "std")]
+        HostInputStream::Stdin => {
+            use std::io::Read;
+            let mut buf = Vec::new();
+            std::io::stdin()
+                .read_to_end(&mut buf)
+                .expect("Failed to read from stdin");
+            let hint = [&(buf.len() as u32).to_le_bytes(), &buf[..]].concat();
+            HINT_STREAM.replace(hint);
+        }
+        HostInputStream::Internal(hints) => {
+            let hint = hints.pop().expect("No hint stream available");
+            HINT_STREAM.replace(hint);
+        }
+    }
 }
 
 /// Read the next `n` bytes from the hint stream.

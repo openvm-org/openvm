@@ -76,6 +76,6 @@ pub fn reveal(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
     #[cfg(target_os = "zkvm")]
     crate::reveal!(byte_index, x, 0);
-    #[cfg(not(target_os = "zkvm"))]
-    todo!()
+    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
+    println!("reveal {} at byte location {}", x, index * 4);
 }

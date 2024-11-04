@@ -28,6 +28,9 @@ core::arch::global_asm!(include_str!("memset.s"));
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memcpy.s"));
 
+#[cfg(all(feature = "std", target_os = "zkvm"))]
+compile_error!("std not yet supported by axvm");
+
 fn _fault() -> ! {
     #[cfg(target_os = "zkvm")]
     unsafe {
@@ -64,6 +67,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
+#[cfg(target_os = "zkvm")]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -79,6 +83,13 @@ macro_rules! entry {
             }
         }
     };
+}
+/// This macro does nothing. You should name the function `main` so that the normal rust main function
+/// setup is used.
+#[cfg(not(target_os = "zkvm"))]
+#[macro_export]
+macro_rules! entry {
+    ($path:path) => {};
 }
 
 #[cfg(target_os = "zkvm")]
