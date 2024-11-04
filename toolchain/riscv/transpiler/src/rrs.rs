@@ -5,8 +5,8 @@ use axvm_instructions::{
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode,
     MulOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
     Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LessThan256Opcode,
-    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32ModularEqualOpcode, Rv32Mul256Opcode,
-    Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
+    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
+    ShiftOpcode, UsizeOpcode,
 };
 use axvm_platform::constants::{
     Custom0Funct3::{self, *},
