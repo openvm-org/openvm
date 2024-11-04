@@ -299,7 +299,6 @@ impl Fp12 {
             .add(&mut self.c4.mul(o0))
             .add(&mut self.c2.mul(o5).add(&mut self.c5.mul(o2)).int_mul(xi));
 
-        // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
         let c5 = self
             .c0
             .mul(o5)
@@ -319,7 +318,7 @@ impl Fp12 {
     }
 
     pub fn div(&mut self, _other: &mut Fp12, _xi: [isize; 2]) -> Fp12 {
-        todo!()
+        unimplemented!()
     }
 
     pub fn scalar_mul(&mut self, fp: &mut FieldVariable) -> Fp12 {
