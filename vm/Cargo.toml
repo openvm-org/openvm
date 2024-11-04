@@ -36,6 +36,7 @@ itertools.workspace = true
 tracing.workspace = true
 strum_macros.workspace = true
 derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
 backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
