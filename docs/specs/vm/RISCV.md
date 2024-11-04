@@ -42,13 +42,13 @@ We start with the instructions using _custom-0_ opcode[6:0] prefix **0001011**..
 | sra256      | R   | 0001011     | 101    | 0x07   | `[rd:32]_2 = [rs1:32]_2 >> [rs2:32]_2` MSB extends        |
 | slt256      | R   | 0001011     | 101    | 0x08   | `[rd:32]_2 = i256([rs1:32]_2) < i256([rs2:32]_2) ? 1 : 0` |
 | sltu256     | R   | 0001011     | 101    | 0x09   | `[rd:32]_2 = u256([rs1:32]_2) < u256([rs2:32]_2) ? 1 : 0` |
-| beq256      | R   | 0001011     | 101    | 0x0a   | `if([rs1:32]_2 == [rs2:32]_2) pc += imm`                  |
-| bne256      | R   | 0001011     | 101    | 0x0b   | `if([rs1:32]_2 != [rs2:32]_2) pc += imm`                  |
-| blt256      | R   | 0001011     | 101    | 0x0c   | `if(i256([rs1:32]_2) < i256([rs2:32]_2)) pc += imm`       |
-| bge256      | R   | 0001011     | 101    | 0x0d   | `if(i256([rs1:32]_2) >= i256([rs2:32]_2)) pc += imm`      |
-| bltu256     | R   | 0001011     | 101    | 0x0e   | `if(u256([rs1:32]_2) < u256([rs2:32]_2)) pc += imm`       |
-| bgeu256     | R   | 0001011     | 101    | 0x0f   | `if(u256([rs1:32]_2) >= u256([rs2:32]_2)) pc += imm`      |
 | mul256      | R   | 0001011     | 101    | 0x10   | `[rd:32]_2 = ([rs1:32]_2 * [rs2:32]_2)[0:255]`            |
+
+We support a single branch instruction, `beq256`, which is B-type.
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | RISC-V description and notes             |
+| ----------- | --- | ----------- | ------ | ---------------------------------------- |
+| beq256      | B   | 0001011     | 110    | `if([rs1:32]_2 == [rs2:32]_2) pc += imm` |
 
 ## Modular Arithmetic
 
@@ -153,34 +153,29 @@ The transpilation will only be valid for programs where:
 
 ## Custom Instruction Transpilation
 
-| RISC-V Inst    | axVM Instruction                                                 |
-| -------------- | ---------------------------------------------------------------- |
-| terminate      | TERMINATE `_, _, utof(imm)`                                      |
-| hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
-| reveal         | REVEAL_RV32 `ind(rs1), ind(rd), utof(sign_extend_16(imm)), 1, 3` |
-| hintinput      | PHANTOM `_, _, HintInput as u16`                                 |
-| keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| or256          | OR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                   |
-| and256         | AND256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| sll256         | SLL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| srl256         | SRL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| sra256         | SRA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| slt256         | SLT256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| sltu256        | SLTU256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                 |
-| beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
-| bne256         | BNE256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
-| blt256         | BLT256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
-| bge256         | BGE256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
-| bltu256        | BLTU256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`               |
-| bgeu256        | BGEU256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`               |
-| mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
-| addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
-| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
-| sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
+| RISC-V Inst    | axVM Instruction                                              |
+| -------------- | ------------------------------------------------------------- |
+| terminate      | TERMINATE `_, _, utof(imm)`                                   |
+| hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2` |
+| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`     |
+| hintinput      | PHANTOM `_, _, HintInput as u16`                              |
+| keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
+| add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| or256          | OR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                |
+| and256         | AND256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| sll256         | SLL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| srl256         | SRL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| sra256         | SRA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| slt256         | SLT256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| sltu256        | SLTU256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`              |
+| mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`             |
+| addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`         |
+| sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`       |
+| sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`              |
