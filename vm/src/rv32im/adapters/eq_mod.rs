@@ -39,7 +39,6 @@ use crate::{
 /// * Reads are of size BLOCK_SIZE from the heap, starting from the address
 ///   in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * Writes are to 32-bit register rd.
-
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Rv32IsEqualModAdapterCols<
