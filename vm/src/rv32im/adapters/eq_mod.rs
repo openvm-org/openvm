@@ -326,19 +326,6 @@ impl<
             record
         });
 
-        let need_range_check: [u32; 2] = from_fn(|i| {
-            if i < NUM_READS {
-                rs_records[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-            } else {
-                0
-            }
-        });
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
-        self.bitwise_lookup_chip.request_range(
-            need_range_check[0] * limb_shift,
-            need_range_check[1] * limb_shift,
-        );
-
         let read_records = rs_vals.map(|address| {
             debug_assert!(address < (1 << self.air.address_bits));
             from_fn(|i| {
@@ -413,6 +400,20 @@ impl<
 
         row_slice.rd_ptr = write_record.rd.pointer;
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+
+        // Range checks
+        let need_range_check: [u32; 2] = from_fn(|i| {
+            if i < NUM_READS {
+                read_record.rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+            } else {
+                0
+            }
+        });
+        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        self.bitwise_lookup_chip.request_range(
+            need_range_check[0] * limb_shift,
+            need_range_check[1] * limb_shift,
+        );
     }
 
     fn air(&self) -> &Self::Air {
