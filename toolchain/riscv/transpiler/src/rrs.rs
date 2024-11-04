@@ -349,7 +349,6 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     // mod operations
                     let dec_insn = RType::new(instruction_u32);
                     let base_funct7 = (dec_insn.funct7 as u8) % MODULAR_ARITHMETIC_MAX_KINDS;
-                    let mut e_as = 2;
                     let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
                         Some(ModArithBaseFunct7::AddMod) => {
                             Rv32ModularArithmeticOpcode::ADD as usize
@@ -368,8 +367,6 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                                 + Rv32ModularArithmeticOpcode::default_offset()
                         }
                         Some(ModArithBaseFunct7::IsEqMod) => {
-                            // e = 1 for IsEqMod
-                            e_as = 1;
                             Rv32ModularArithmeticOpcode::IS_EQ as usize
                                 + Rv32ModularArithmeticOpcode::default_offset()
                         }
@@ -378,7 +375,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
                         * MODULAR_ARITHMETIC_MAX_KINDS;
                     let global_opcode = global_opcode + mod_idx_shift as usize;
-                    Some(from_r_type(global_opcode, e_as, &dec_insn))
+                    Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 Some(ShortWeierstrass) => {
                     // short weierstrass ec

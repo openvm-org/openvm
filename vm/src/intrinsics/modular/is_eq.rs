@@ -173,7 +173,7 @@ where
             );
 
             // Constrain b < N. Note lt_marker_sum is either 1 or 3, and that lt_marker[i]
-            // being 1 indicates b[i] != N[i].
+            // being 1 indicates b[i] < N[i].
             builder
                 .when_ne(prefix_sum.clone(), AB::F::one())
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
@@ -183,7 +183,7 @@ where
                 .when_ne(cols.lt_marker[i], AB::F::from_canonical_u8(2))
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.b[i], cols.b_lt_diff);
 
-            // Constrain c < N. Note lt_marker[i] being c_lt_mark indicates c[i] != N[i],
+            // Constrain c < N. Note lt_marker[i] being c_lt_mark indicates c[i] < N[i],
             // and that c_lt_mark is either 1 or 2.
             builder
                 .when_ne(prefix_sum.clone(), cols.c_lt_mark)
