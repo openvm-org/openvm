@@ -506,10 +506,7 @@ pub(super) fn vec_heap_generate_trace_row_impl<
         .collect();
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
     let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits) as u32;
-    for i in 0..need_range_check.len() / 2 {
-        bitwise_lookup_chip.request_range(
-            need_range_check[i * 2] * limb_shift,
-            need_range_check[i * 2 + 1] * limb_shift,
-        );
+    for pair in need_range_check.chunks_exact(2) {
+        bitwise_lookup_chip.request_range(pair[0] * limb_shift, pair[1] * limb_shift);
     }
 }

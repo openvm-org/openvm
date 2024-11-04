@@ -98,11 +98,10 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
         // We constrain the highest limbs of heap pointers to be less than 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).
         // This ensures that no overflow occurs when computing memory pointers. Since the number of cells accessed with each address
         // will be small enough, and combined with the memory argument, it ensures that all the cells accessed in the memory are less than 2^addr_bits.
-        let need_range_check: Vec<AB::Expr> = cols
+        let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
-            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1].into())
-            .chain(once(AB::Expr::zero())) // in case NUM_READS is odd
+            .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1])
             .collect();
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain the correct amount of bits
@@ -113,11 +112,11 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
         // Note: since limbs are read from memory we alread know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
         //       limb[i] < 2^(addr_bits - (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
-        for i in 0..need_range_check.len() / 2 {
+        for pair in need_range_check.chunks(2) {
             self.bus
                 .send_range(
-                    need_range_check[i * 2].clone() * limb_shift,
-                    need_range_check[i * 2 + 1].clone() * limb_shift,
+                    pair[0] * limb_shift,
+                    pair.get(1).map(|x| (*x).into()).unwrap_or(AB::Expr::zero()) * limb_shift, // in case NUM_READS is odd
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
@@ -228,19 +227,6 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
             record
         });
 
-        let need_range_check: Vec<u32> = rs_records
-            .iter()
-            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(once(0)) // in case NUM_READS is odd
-            .collect();
-
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
-        for i in 0..need_range_check.len() / 2 {
-            self.bitwise_lookup_chip.request_range(
-                need_range_check[i * 2] * limb_shift,
-                need_range_check[i * 2 + 1] * limb_shift,
-            );
-        }
         let heap_records = rs_vals.map(|address| {
             assert!(address as usize + READ_SIZE - 1 < (1 << self.air.address_bits));
             memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))
@@ -295,6 +281,20 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         row_slice.heap_read_aux = read_record
             .heap_reads
             .map(|r| aux_cols_factory.make_read_aux_cols(r));
+
+        // Range checks:
+        let need_range_check: Vec<u32> = read_record
+            .rs_reads
+            .iter()
+            .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .chain(once(0)) // in case NUM_READS is odd
+            .collect();
+        debug_assert!(self.air.address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
+        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+        }
     }
 
     fn air(&self) -> &Self::Air {
