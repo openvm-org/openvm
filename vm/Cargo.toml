@@ -69,6 +69,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
 ax-ecc-execution = { workspace = true }
 halo2curves-axiom = { workspace = true }
+hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]

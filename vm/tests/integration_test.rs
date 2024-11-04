@@ -772,7 +772,8 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
     ));
 
-    let [a, b, c] = [1, 0, (1 << LIMB_BITS) - 1];
+    let [a, b, c] = [4, 0, (1 << LIMB_BITS) - 4];
+    // [jpw] Cheating here and assuming src, dst, len all bit in a byte so we skip writing the other register bytes
     // src = word[b]_1 <- 0
     let src = 0;
     instructions.push(Instruction::from_isize(
@@ -793,7 +794,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
         1,
     ));
-    // word[2^29 - 1]_1 <- len // emulate stack
+    // word[c]_1 <- len // emulate stack
     instructions.push(Instruction::from_isize(
         STOREW.with_default_offset(),
         input.len() as isize,
@@ -818,15 +819,13 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     }
     // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
     // read and write io to address space 2
-    instructions.push(Instruction::large_from_isize(
+    instructions.push(Instruction::from_isize(
         KECCAK256.with_default_offset(),
         a,
         b,
         c,
         1,
         2,
-        1,
-        0,
     ));
 
     // read expected result to check correctness

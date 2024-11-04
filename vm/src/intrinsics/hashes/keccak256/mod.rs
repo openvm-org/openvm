@@ -25,6 +25,7 @@ use crate::{
         instructions::{Rv32KeccakOpcode, UsizeOpcode},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
     },
+    rv32im::adapters::read_rv32_register,
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::{ExecutionError, ProgramBus},
@@ -92,6 +93,7 @@ pub struct KeccakInputBlock<F> {
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
     pub padded_bytes: [u8; KECCAK_RATE_BYTES],
     pub remaining_len: usize,
+    pub src: usize,
     pub is_new_start: bool,
 }
 
@@ -103,12 +105,14 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
     ) -> Self {
+        let ptr_max_bits = memory_controller.borrow().mem_config.pointer_max_bits;
         let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: KeccakVmAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
                 bitwise_lookup_chip.bus(),
+                ptr_max_bits,
                 offset,
             ),
             memory_controller,
@@ -132,7 +136,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             c,
             d,
             e,
-            f,
             ..
         } = instruction;
         let local_opcode = Rv32KeccakOpcode::from_usize(opcode - self.offset);
@@ -141,19 +144,21 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory.timestamp());
 
-        let dst_read = memory.read(d, a);
-        let src_read = memory.read(d, b);
-        let len_read = memory.read(f, c);
+        let (dst_read, dst) = read_rv32_register(&mut memory, d, a);
+        let (src_read, src) = read_rv32_register(&mut memory, d, b);
+        let (len_read, len) = read_rv32_register(&mut memory, d, c);
+        #[cfg(debug_assertions)]
+        {
+            assert!(dst < (1 << self.air.ptr_max_bits));
+            assert!(src < (1 << self.air.ptr_max_bits));
+            assert!(len < (1 << self.air.ptr_max_bits));
+        }
 
-        let dst = dst_read.value();
-        let mut src = src_read.value();
-        let len = len_read.value();
-        let byte_len = len.as_canonical_u32() as usize;
-
-        let num_blocks = num_keccak_f(byte_len);
+        let mut remaining_len = len as usize;
+        let num_blocks = num_keccak_f(remaining_len);
         let mut input_blocks = Vec::with_capacity(num_blocks);
-        let mut remaining_len = byte_len;
         let mut hasher = Keccak::v256();
+        let mut src = src as usize;
 
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
@@ -165,7 +170,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             let mut bytes = [0u8; KECCAK_RATE_BYTES];
             for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
                 if i < remaining_len {
-                    let read = memory.read(e, src + F::from_canonical_usize(i));
+                    let read = memory.read(e, F::from_canonical_usize(src + i));
                     let chunk = read.data.map(|x| {
                         x.as_canonical_u32()
                             .try_into()
@@ -187,10 +192,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 partial_read_idx,
                 padded_bytes: bytes,
                 remaining_len,
+                src,
                 is_new_start: block_idx == 0,
             };
             if block_idx != num_blocks - 1 {
-                src += F::from_canonical_usize(KECCAK_RATE_BYTES);
+                src += KECCAK_RATE_BYTES;
                 remaining_len -= KECCAK_RATE_BYTES;
                 hasher.update(&block.padded_bytes);
             } else {
@@ -209,10 +215,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         }
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
+        let dst = dst as usize;
         let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
             memory.write::<KECCAK_WORD_SIZE>(
                 e,
-                dst + F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
                 from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
             )
         });
@@ -230,7 +237,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         // Add the events to chip state for later trace generation usage
         self.records.push(record);
 
-        let timestamp_change = KeccakVmAir::timestamp_change::<F>(len).as_canonical_u32();
+        // NOTE: Check this is consistent with KeccakVmAir::timestamp_change (we don't use it to avoid
+        // unnecessary conversions here)
+        let timestamp_change =
+            len + (KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
         let to_timestamp = from_state.timestamp + timestamp_change;
         memory.increase_timestamp_to(to_timestamp);
 
@@ -257,34 +267,17 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
             remaining_len: 0,
             is_new_start: true,
             reads: Vec::new(),
+            src: 0,
         }
     }
 }
 
 impl<F: Copy> KeccakRecord<F> {
-    pub fn operands(&self) -> [F; 6] {
-        let a = self.dst_read.pointer;
-        let b = self.src_read.pointer;
-        let c = self.len_read.pointer;
-        let d = self.dst_read.address_space;
-        let e = self.digest_writes[0].address_space;
-        let f = self.len_read.address_space;
-        [a, b, c, d, e, f]
+    pub fn digest_addr_space(&self) -> F {
+        self.digest_writes[0].address_space
     }
 
     pub fn start_timestamp(&self) -> u32 {
         self.dst_read.timestamp
-    }
-
-    pub fn src(&self) -> F {
-        self.src_read.value()
-    }
-
-    pub fn dst(&self) -> F {
-        self.dst_read.value()
-    }
-
-    pub fn len(&self) -> F {
-        self.len_read.value()
     }
 }

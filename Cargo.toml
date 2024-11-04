@@ -140,7 +140,8 @@ strum = { version = "0.26.3", features = ["derive"] }
 enum-utils = "0.1.1"
 backtrace = "0.3.71"
 rand = "0.8.5"
-hex-literal = "0.4.1"
+hex-literal = { version = "0.4.1", default-features = false }
+hex = { version = "0.4.3", default-features = false }
 metrics = "0.23.0"
 cfg-if = "1.0.0"
 inferno = "0.11.21"

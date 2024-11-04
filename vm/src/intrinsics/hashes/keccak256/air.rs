@@ -18,9 +18,9 @@ use p3_matrix::Matrix;
 
 use super::{
     columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
-    KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS,
-    KECCAK_RATE_BYTES, KECCAK_RATE_U16S, KECCAK_REGISTER_READS, KECCAK_WIDTH_U16S,
-    KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
+    KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES,
+    KECCAK_RATE_U16S, KECCAK_REGISTER_READS, KECCAK_WIDTH_U16S, KECCAK_WORD_SIZE,
+    NUM_ABSORB_ROUNDS,
 };
 use crate::{
     arch::{instructions::Rv32KeccakOpcode, ExecutionBridge, ExecutionState},
@@ -38,7 +38,7 @@ pub struct KeccakVmAir {
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Maximum number of bits allowed for an address pointer
-    pub address_bits: usize,
+    pub ptr_max_bits: usize,
     // TODO: add configuration for enabling direct non-memory interactions
     pub(super) offset: usize,
 }
@@ -150,9 +150,8 @@ impl KeccakVmAir {
         // Move the src pointer over based on the number of bytes read.
         // This should always be RATE_BYTES since it's a non-final block.
         block_transition.assert_eq(
-            abstract_compose::<AB::Expr, _>(next.instruction.src),
-            abstract_compose::<AB::Expr, _>(local.instruction.src)
-                + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+            next.instruction.src,
+            local.instruction.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
         );
         // Advance timestamp by the number of memory accesses from reading
         // `dst, src, len` and block input bytes.
@@ -335,10 +334,9 @@ impl KeccakVmAir {
             })
         });
 
-        // Only absorb if next is first round and enabled (so don't constrain absorbs on non-enabled rows)
-        // However we xor on last round of each block, even if next is_enabled_first_round == true,
+        // We xor on last round of each block, even if it is a final block,
         // because we use xor to range check the output bytes (= updated_state_bytes)
-        let should_absorb = next.instruction.is_enabled_first_round;
+        let is_final_block = *local.sponge.is_padding_byte.last().unwrap();
         for (input, prev, post) in izip!(
             next.sponge.block_bytes,
             updated_state_bytes,
@@ -353,11 +351,14 @@ impl KeccakVmAir {
             // The interaction fields are degree 2, leading to degree 3 constraint
             self.bitwise_lookup_bus
                 .send_xor(
-                    input * should_absorb,
+                    input * not(is_final_block),
                     prev.clone(),
-                    select(should_absorb, post, prev),
+                    select(is_final_block, prev, post),
                 )
-                .eval(builder, local.is_last_round());
+                .eval(
+                    builder,
+                    local.is_last_round() * local.instruction.is_enabled,
+                );
         }
 
         // We separately constrain that when(local.is_new_start), the preimage (u16s) equals the block bytes
@@ -371,7 +372,8 @@ impl KeccakVmAir {
                 [lo, hi.into()]
             })
         });
-        let mut when_is_new_start = builder.when(local.is_new_start());
+        let mut when_is_new_start =
+            builder.when(local.is_new_start() * local.instruction.is_enabled);
         for (preimage_byte, block_byte) in zip(local_preimage_bytes, local.sponge.block_bytes) {
             when_is_new_start.assert_eq(preimage_byte, block_byte);
         }
@@ -439,11 +441,31 @@ impl KeccakVmAir {
             .eval(builder, should_receive.clone());
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
+        let recover_limbs = |limbs: [AB::Var; RV32_REGISTER_NUM_LIMBS - 1],
+                             val: AB::Var|
+         -> [AB::Expr; RV32_REGISTER_NUM_LIMBS] {
+            from_fn(|i| {
+                if i == 0 {
+                    limbs
+                        .into_iter()
+                        .enumerate()
+                        .fold(val.into(), |acc, (j, limb)| {
+                            acc - limb
+                                * AB::Expr::from_canonical_usize(1 << ((j + 1) * RV32_CELL_BITS))
+                        })
+                } else {
+                    limbs[i - 1].into()
+                }
+            })
+        };
         // Only when it is an input do we want to do memory read for
         // dst <- word[a]_d, src <- word[b]_d
+        let dst_data = instruction.dst.map(Into::into);
+        let src_data = recover_limbs(instruction.src_limbs, instruction.src);
+        let len_data = recover_limbs(instruction.len_limbs, instruction.remaining_len);
         for (ptr, value, aux) in izip!(
             [dst_ptr, src_ptr, len_ptr],
-            [instruction.dst, instruction.src, instruction.len],
+            [dst_data, src_data, len_data],
             register_aux,
         ) {
             self.memory_bridge
@@ -460,26 +482,22 @@ impl KeccakVmAir {
         // See Rv32VecHeapAdapterAir
         // TODO[jpw]: reduce code duplication
         // repeat len for even number
+        // We range check `len` to `max_ptr_bits` to ensure `remaining_len` doesn't overflow.
+        // We could range check it to some other size, but `max_ptr_bits` is convenient.
         let need_range_check = [
-            &instruction.dst,
-            &instruction.src,
-            &instruction.len,
-            &instruction.len,
-        ]
-        .map(|val| val[RV32_REGISTER_NUM_LIMBS - 1]);
+            *instruction.dst.last().unwrap(),
+            *instruction.src_limbs.last().unwrap(),
+            *instruction.len_limbs.last().unwrap(),
+            *instruction.len_limbs.last().unwrap(),
+        ];
         let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
         );
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, should_receive.clone());
         }
-
-        builder.when(should_receive).assert_eq(
-            abstract_compose::<AB::Expr, _>(instruction.len),
-            instruction.remaining_len,
-        );
 
         timestamp
     }
@@ -513,8 +531,7 @@ impl KeccakVmAir {
         )
         .enumerate()
         {
-            let ptr = abstract_compose::<AB::Expr, _>(local.instruction.src)
-                + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            let ptr = local.instruction.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
             // Only read block i if it is not entirely padding bytes
             // count is degree 2
             let count = is_input * not(is_padding[0]);
@@ -583,6 +600,7 @@ impl KeccakVmAir {
                 [lo, hi.into()]
             })
         });
+        let dst = abstract_compose::<AB::Expr, _>(instruction.dst);
         for (i, digest_bytes) in updated_state_bytes
             .take(KECCAK_DIGEST_BYTES)
             .chunks(KECCAK_WORD_SIZE)
@@ -595,8 +613,7 @@ impl KeccakVmAir {
                 .write(
                     MemoryAddress::new(
                         instruction.e,
-                        abstract_compose::<AB::Expr, _>(instruction.dst)
-                            + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                        dst.clone() + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
                     ),
                     digest_bytes.try_into().unwrap(),
                     timestamp,

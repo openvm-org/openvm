@@ -21,7 +21,6 @@ use ax_stark_backend::{
 use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, FriOpcode::FRI_MAT_OPENING,
 };
-use itertools::zip_eq;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};

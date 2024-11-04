@@ -6,13 +6,14 @@ use ax_circuit_primitives::bitwise_op_lookup::{
 use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
 use ax_stark_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
 use axvm_instructions::instruction::Instruction;
+use hex::FromHex;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
-use super::{utils::num_keccak_f, KeccakVmChip};
+use super::{utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
 use crate::{
     arch::{
         instructions::Rv32KeccakOpcode,
@@ -22,10 +23,12 @@ use crate::{
     intrinsics::hashes::keccak256::columns::KeccakVmCols,
 };
 
-// io is vector of (input, prank_output) where prank_output is Some if the trace
+type F = BabyBear;
+// io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
 // will be replaced
+#[allow(clippy::type_complexity)]
 fn build_keccak256_test(
-    io: Vec<(Vec<u8>, Option<[u8; 32]>)>,
+    io: Vec<(Vec<u8>, Option<[u8; 32]>, Option<[u8; 32]>)>,
 ) -> VmChipTester<BabyBearBlake3Config> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<8>::new(bitwise_bus));
@@ -42,58 +45,62 @@ fn build_keccak256_test(
     let mut dst = 0;
     let src = 0;
 
-    for (input, prank_output) in &io {
-        let [a, b, c] = [0, 1, 2];
-        let [d, e, f] = [1, 2, 1];
+    for (input, expected_output, prank_output) in &io {
+        let [a, b, c] = [0, 4, 8]; // space apart for register limbs
+        let [d, e] = [1, 2];
 
-        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
-        tester.write_cell(d, b, BabyBear::from_canonical_usize(src));
-        tester.write_cell(f, c, BabyBear::from_canonical_usize(input.len()));
+        tester.write(d, a, (dst as u32).to_le_bytes().map(F::from_canonical_u8));
+        tester.write(d, b, (src as u32).to_le_bytes().map(F::from_canonical_u8));
+        tester.write(
+            d,
+            c,
+            (input.len() as u32).to_le_bytes().map(F::from_canonical_u8),
+        );
         for (i, byte) in input.iter().enumerate() {
-            tester.write_cell(e, src + i, BabyBear::from_canonical_usize(*byte as usize));
+            tester.write_cell(e, src + i, F::from_canonical_u8(*byte));
         }
 
         tester.execute(
             &mut chip,
-            Instruction::large_from_isize(
+            Instruction::from_isize(
                 Rv32KeccakOpcode::KECCAK256 as usize,
                 a as isize,
                 b as isize,
                 c as isize,
                 d as isize,
                 e as isize,
-                f as isize,
-                0,
             ),
         );
+        if let Some(output) = expected_output {
+            for (i, byte) in output.iter().enumerate() {
+                assert_eq!(tester.read_cell(e, dst + i), F::from_canonical_u8(*byte));
+            }
+        }
         if let Some(output) = prank_output {
-            for i in 0..16 {
-                chip.records.last_mut().unwrap().digest_writes[i / 8].data[i % 8] =
-                    BabyBear::from_canonical_u16(
-                        output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),
-                    );
+            for (i, output_byte) in output.iter().enumerate() {
+                chip.records.last_mut().unwrap().digest_writes[i / KECCAK_WORD_SIZE].data
+                    [i % KECCAK_WORD_SIZE] = F::from_canonical_u8(*output_byte);
             }
         }
         // shift dst to not deal with timestamps for pranking
-        dst += 16;
+        dst += 32;
     }
     let mut tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     let keccak_trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
     let mut row = 0;
-    for (input, output) in io {
+    for (input, _, prank_output) in io {
         let num_blocks = num_keccak_f(input.len());
         let num_rows = NUM_ROUNDS * num_blocks;
         row += num_rows;
-        if output.is_none() {
+        if prank_output.is_none() {
             continue;
         }
-        let output = output.unwrap();
+        let output = prank_output.unwrap();
         let digest_row: &mut KeccakVmCols<_> = keccak_trace.row_mut(row - 1).borrow_mut();
         for i in 0..16 {
-            let out_limb = BabyBear::from_canonical_u16(
-                output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8),
-            );
+            let out_limb =
+                F::from_canonical_u16(output[2 * i] as u16 + ((output[2 * i + 1] as u16) << 8));
             let x = i / 4;
             let y = 0;
             let limb = i % 4;
@@ -117,7 +124,7 @@ fn test_keccak256_negative() {
     let mut out = [0u8; 32];
     hasher.finalize(&mut out);
     out[0] = rng.gen();
-    let tester = build_keccak256_test(vec![(input, Some(out))]);
+    let tester = build_keccak256_test(vec![(input, None, Some(out))]);
     disable_debug_builder();
     assert_eq!(
         tester.simple_test().err(),
@@ -141,17 +148,13 @@ fn test_keccak256_positive_kat_vectors() {
         ("7ADC0B6693E61C269F278E6944A5A2D8300981E40022F839AC644387BFAC9086650085C2CDC585FEA47B9D2E52D65A2B29A7DC370401EF5D60DD0D21F9E2B90FAE919319B14B8C5565B0423CEFB827D5F1203302A9D01523498A4DB10374", "4CC2AFF141987F4C2E683FA2DE30042BACDCD06087D7A7B014996E9CFEAA58CE"), // ShortMsgKAT_256 Len = 752
     ];
 
-    // let mut inputs = vec![];
-    // let mut outputs = vec![];
-    // for (input, output) in test_vectors {
-    //     let input = Vec::from_hex(input).unwrap();
-    //     let output = Vec::from_hex(output).unwrap();
-    //     // test against native sha3 implementation because that's what we will test circuit against
-    //     let native_out = keccak256(&input);
-    //     assert_eq!(&output[..], &native_out[..]);
-    //     inputs.push(input);
-    //     outputs.push(native_out);
-    // }
+    let mut io = vec![];
+    for (input, output) in test_vectors {
+        let input = Vec::from_hex(input).unwrap();
+        let output = Vec::from_hex(output).unwrap();
+        io.push((input, Some(output.try_into().unwrap()), None));
+    }
 
-    // run_e2e_keccak_test(inputs, outputs);
+    let tester = build_keccak256_test(io);
+    tester.simple_test().expect("Verification failed");
 }

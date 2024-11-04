@@ -581,6 +581,7 @@ dependencies = [
  "enum-utils",
  "enum_dispatch",
  "halo2curves-axiom 0.7.0",
+ "hex",
  "hex-literal",
  "inferno",
  "itertools 0.13.0",

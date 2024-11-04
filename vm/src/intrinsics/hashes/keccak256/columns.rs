@@ -7,8 +7,8 @@ use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 
 use super::{
-    KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_EXECUTION_READS, KECCAK_RATE_BYTES,
-    KECCAK_RATE_U16S, KECCAK_REGISTER_READS, KECCAK_WORD_SIZE,
+    KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    KECCAK_REGISTER_READS, KECCAK_WORD_SIZE,
 };
 use crate::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 
@@ -54,9 +54,16 @@ pub struct KeccakInstructionCols<T> {
     /// dst <- [dst_ptr:4]_1
     pub dst: [T; RV32_REGISTER_NUM_LIMBS],
     /// src <- [src_ptr:4]_1
-    pub src: [T; RV32_REGISTER_NUM_LIMBS],
+    /// We store src_limbs[i] = [src_ptr + i + 1]_1 and src = u32([src_ptr:4]_1) from which [src_ptr]_1
+    /// can be recovered by linear combination.
+    /// We do this because `src` needs to be incremented between keccak-f permutations.
+    pub src_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
+    pub src: T,
     /// len <- [len_ptr:4]_1
-    pub len: [T; RV32_REGISTER_NUM_LIMBS],
+    /// We store len_limbs[i] = [len_ptr + i + 1]_1 and remaining_len = u32([len_ptr:4]_1)
+    /// from which [len_ptr]_1 can be recovered by linear combination.
+    /// We do this because `remaining_len` needs to be decremented between keccak-f permutations.
+    pub len_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
     /// The remaining length of the unpadded input, in bytes.
     /// If `is_new_start` is true and `is_enabled` is true, this must be equal to `u32(len)`.
     pub remaining_len: T,
@@ -136,8 +143,9 @@ impl<T: Copy> KeccakInstructionCols<T> {
         builder.assert_eq(self.len_ptr, other.len_ptr);
         builder.assert_eq(self.e, other.e);
         assert_array_eq(builder, self.dst, other.dst);
-        assert_array_eq(builder, self.src, other.src);
-        assert_array_eq(builder, self.len, other.len);
+        assert_array_eq(builder, self.src_limbs, other.src_limbs);
+        builder.assert_eq(self.src, other.src);
+        assert_array_eq(builder, self.len_limbs, other.len_limbs);
         builder.assert_eq(self.remaining_len, other.remaining_len);
     }
 }
