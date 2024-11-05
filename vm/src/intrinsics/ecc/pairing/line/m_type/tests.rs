@@ -30,7 +30,7 @@ use crate::{
         field_expression::FieldExpressionCoreChip,
     },
     rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
+    utils::{biguint_to_limbs, rv32_write_heap_default_with_increment},
 };
 
 type F = BabyBear;
@@ -140,10 +140,11 @@ fn test_mul_023_by_023() {
         })
         .collect::<Vec<_>>();
 
-    let instruction = rv32_write_heap_default(
+    let instruction = rv32_write_heap_default_with_increment(
         &mut tester,
         input_line0_limbs,
         input_line1_limbs,
+        512,
         chip.core.air.offset + PairingOpcode::MUL_023_BY_023 as usize,
     );
 
@@ -152,7 +153,9 @@ fn test_mul_023_by_023() {
     tester.simple_test().expect("Verification failed");
 }
 
+// NOTE[yj]: this test requires `RUST_MIN_STACK=8388608` to run otherwise it will overflow the stack
 #[test]
+#[ignore]
 fn test_mul_by_02345() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let expr = mul_by_02345_expr(
@@ -245,10 +248,11 @@ fn test_mul_by_02345() {
         })
         .collect::<Vec<_>>();
 
-    let instruction = rv32_write_heap_default(
+    let instruction = rv32_write_heap_default_with_increment(
         &mut tester,
         input_f_limbs,
         input_x_limbs,
+        1024,
         chip.core.air.offset + PairingOpcode::MUL_BY_02345 as usize,
     );
 

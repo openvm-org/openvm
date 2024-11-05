@@ -25,7 +25,7 @@ use crate::{
         field_expression::FieldExpressionCoreChip,
     },
     rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
+    utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
 };
 
 type F = BabyBear;
@@ -233,10 +233,11 @@ fn test_mul_by_01234() {
         })
         .collect::<Vec<_>>();
 
-    let instruction = rv32_write_heap_default(
+    let instruction = rv32_write_heap_default_with_increment(
         &mut tester,
         input_f_limbs,
         input_x_limbs,
+        512,
         chip.core.air.offset + PairingOpcode::MUL_BY_01234 as usize,
     );
 

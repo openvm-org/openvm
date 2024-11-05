@@ -44,15 +44,49 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
     opcode_with_offset: usize,
 ) -> Instruction<BabyBear> {
     let (reg1, _) =
-        tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 1024, addr1_writes);
+        tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
         0
     } else {
         let (reg2, _) =
-            tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 1024, addr2_writes);
+            tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr2_writes);
         reg2
     };
-    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 1024);
+    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 128);
+
+    Instruction::from_isize(
+        opcode_with_offset,
+        reg3 as isize,
+        reg1 as isize,
+        reg2 as isize,
+        1_isize,
+        2_isize,
+    )
+}
+
+pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
+    tester: &mut VmChipTestBuilder<BabyBear>,
+    addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    pointer_increment: usize,
+    opcode_with_offset: usize,
+) -> Instruction<BabyBear> {
+    let (reg1, _) = tester.write_heap_default::<NUM_LIMBS>(
+        RV32_REGISTER_NUM_LIMBS,
+        pointer_increment,
+        addr1_writes,
+    );
+    let reg2 = if addr2_writes.is_empty() {
+        0
+    } else {
+        let (reg2, _) = tester.write_heap_default::<NUM_LIMBS>(
+            RV32_REGISTER_NUM_LIMBS,
+            pointer_increment,
+            addr2_writes,
+        );
+        reg2
+    };
+    let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, pointer_increment);
 
     Instruction::from_isize(
         opcode_with_offset,
