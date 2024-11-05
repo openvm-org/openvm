@@ -26,7 +26,6 @@ fn main() -> Result<()> {
                 FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
             );
 
-            
             panic!("test");
 
             let fe_bytes = DATA
