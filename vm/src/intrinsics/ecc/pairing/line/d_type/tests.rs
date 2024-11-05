@@ -3,7 +3,10 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::{common::EcPoint, curves::bn254::tangent_line_013};
+use ax_ecc_execution::{
+    common::{EcPoint, UnevaluatedLine},
+    curves::bn254::tangent_line_013,
+};
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
@@ -20,8 +23,8 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    intrinsics::ecc::pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
+    intrinsics::ecc::pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip, EvaluateLineChip},
+    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
     utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
 };
 
@@ -222,5 +225,67 @@ fn test_mul_by_01234() {
 
     tester.execute(&mut chip, instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn test_evaluate_line() {
+    let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let config = ExprBuilderConfig {
+        modulus: BN254.MODULUS.clone(),
+        limb_bits: LIMB_BITS,
+        num_limbs: NUM_LIMBS,
+    };
+    let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, BLOCK_SIZE, BLOCK_SIZE>::new(
+        tester.execution_bus(),
+        tester.program_bus(),
+        tester.memory_controller(),
+    );
+    let mut chip = EvaluateLineChip::new(
+        adapter,
+        tester.memory_controller(),
+        config,
+        PairingOpcode::default_offset(),
+    );
+
+    let mut rng = StdRng::seed_from_u64(42);
+    let uneval_b = Fq2::random(&mut rng);
+    let uneval_c = Fq2::random(&mut rng);
+    let x_over_y = Fq::random(&mut rng);
+    let y_inv = Fq::random(&mut rng);
+    let mut inputs = vec![];
+    inputs.extend(bn254_fq2_to_biguint_vec(uneval_b));
+    inputs.extend(bn254_fq2_to_biguint_vec(uneval_c));
+    inputs.push(bn254_fq_to_biguint(x_over_y));
+    inputs.push(bn254_fq_to_biguint(y_inv));
+    let input_limbs = inputs
+        .iter()
+        .map(|x| {
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+        })
+        .collect();
+
+    let uneval: UnevaluatedLine<Fq, Fq2> = UnevaluatedLine {
+        b: uneval_b,
+        c: uneval_c,
+    };
+    let evaluated = uneval.evaluate(x_over_y, y_inv);
+
+    let result = chip.0.core.expr().execute_with_output(inputs, vec![]);
+    assert_eq!(result.len(), 4);
+    assert_eq!(result[0], bn254_fq_to_biguint(evaluated.b.c0));
+    assert_eq!(result[1], bn254_fq_to_biguint(evaluated.b.c1));
+    assert_eq!(result[2], bn254_fq_to_biguint(evaluated.c.c0));
+    assert_eq!(result[3], bn254_fq_to_biguint(evaluated.c.c1));
+
+    let instruction = rv32_write_heap_default(
+        &mut tester,
+        input_limbs,
+        vec![],
+        chip.0.core.air.offset + PairingOpcode::EVALUATE_LINE as usize,
+    );
+
+    tester.execute(&mut chip, instruction);
+    let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

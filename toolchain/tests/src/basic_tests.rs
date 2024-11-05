@@ -97,3 +97,11 @@ fn test_keccak256_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+#[test]
+fn test_print_runtime() -> Result<()> {
+    let elf = build_example_program("print")?;
+    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    executor.execute(elf, vec![])?;
+    Ok(())
+}

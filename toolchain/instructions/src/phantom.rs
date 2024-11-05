@@ -21,4 +21,6 @@ pub enum PhantomInstruction {
     CtStart,
     /// End tracing
     CtEnd,
+    /// Peek string from memory and print it to stdout.
+    PrintStrRv32,
 }

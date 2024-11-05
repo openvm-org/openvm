@@ -48,6 +48,7 @@ metrics = { workspace = true, optional = true }
 inferno = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
+eyre.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }

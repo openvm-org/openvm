@@ -151,7 +151,8 @@ pub fn memory_barrier<T>(ptr: *const T) {
 // panic handler must not be included.
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
-fn panic_impl(_panic_info: &core::panic::PanicInfo) -> ! {
+fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
+    crate::io::print(alloc::format!("{}", panic_info));
     axvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }

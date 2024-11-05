@@ -8,3 +8,9 @@ mod io;
 pub use hash::*;
 #[cfg(target_os = "zkvm")]
 pub use io::*;
+
+mod modular;
+pub use modular::*;
+
+mod utils;
+use utils::*;

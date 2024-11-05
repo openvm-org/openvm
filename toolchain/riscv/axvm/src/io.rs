@@ -79,3 +79,12 @@ pub fn reveal(x: u32, index: usize) {
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 4);
 }
+
+/// Print a UTF-8 string to stdout on host machine for debugging purposes.
+#[allow(unused_variables)]
+pub fn print<S: AsRef<str>>(s: S) {
+    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
+    println!("{}", s.as_ref());
+    #[cfg(target_os = "zkvm")]
+    crate::intrinsics::print_str_from_bytes(s.as_ref().as_bytes());
+}

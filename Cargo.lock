@@ -524,6 +524,9 @@ dependencies = [
  "axvm-platform",
  "axvm-setup-macro",
  "chrono",
+ "hex-literal",
+ "num-bigint-dig",
+ "num-traits",
  "serde",
  "tiny-keccak",
 ]
@@ -584,6 +587,7 @@ dependencies = [
  "derive_more 1.0.0",
  "enum-utils",
  "enum_dispatch",
+ "eyre",
  "halo2curves-axiom 0.7.0",
  "hex",
  "hex-literal",

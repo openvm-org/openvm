@@ -9,6 +9,7 @@ mod loadstore;
 mod mul;
 mod rdwrite;
 mod vec_heap;
+mod vec_heap_two_reads;
 
 use std::ops::Mul;
 
@@ -24,6 +25,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use rdwrite::*;
 pub use vec_heap::*;
+pub use vec_heap_two_reads::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
 pub const INT256_NUM_LIMBS: usize = 32;
@@ -62,6 +64,12 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
+}
+
+/// Peeks at the value of a register without updating the memory state or incrementing the timestamp.
+pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
+    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::one(), pointer);
+    compose(data)
 }
 
 pub fn abstract_compose<T: AbstractField, V: Mul<T, Output = T>>(

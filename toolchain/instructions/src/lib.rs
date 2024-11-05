@@ -388,6 +388,19 @@ pub enum Fp12Opcode {
 #[opcode_offset = 0x710]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
+pub enum Fp2Opcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x720]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
 pub enum PairingOpcode {
     MILLER_DOUBLE_STEP,
     MILLER_DOUBLE_AND_ADD_STEP,
@@ -397,6 +410,7 @@ pub enum PairingOpcode {
     MUL_023_BY_023,
     MUL_BY_023,
     MUL_BY_02345,
+    EVALUATE_LINE,
 }
 
 // =================================================================================================
