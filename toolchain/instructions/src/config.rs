@@ -15,7 +15,7 @@ pub struct IntrinsicsOpConfig {
     pub field_arithmetic: FieldArithmeticOpConfig,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FieldArithmeticOpConfig {
     /// **Ordered** list of enabled prime moduli.
     pub primes: Vec<String>,

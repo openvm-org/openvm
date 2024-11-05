@@ -30,6 +30,14 @@ fn test_read_vec_runtime() -> Result<()> {
 }
 
 #[test]
+fn test_moduli_setup_runtime() -> Result<()> {
+    let elf = build_example_program("moduli_setup")?;
+    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
     let executor = VmExecutor::<F>::new(VmConfig::rv32i());

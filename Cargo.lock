@@ -814,6 +814,7 @@ dependencies = [
  "axvm-platform",
  "elf",
  "eyre",
+ "num-bigint 0.4.6",
  "p3-baby-bear",
  "p3-field",
  "rrs-lib",

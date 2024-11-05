@@ -1,6 +1,7 @@
 //! A transpiler from custom RISC-V ELFs to axVM machine code.
 
 use axvm_instructions::{
+    config::FieldArithmeticOpConfig,
     exe::AxVmExe,
     program::{Program, DEFAULT_PC_STEP},
 };
@@ -31,6 +32,9 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
             program,
             pc_start: elf.pc_start,
             init_memory,
+            field_arithmetic_config: FieldArithmeticOpConfig {
+                primes: elf.supported_moduli,
+            },
         }
     }
 }
