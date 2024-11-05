@@ -7,3 +7,7 @@ edition = "2021"
 [dependencies]
 axvm = { path = "../../../toolchain/riscv/axvm" }
 regex = { version = "1.11.1", default-features = false }
+
+[features]
+default = []
+std = ["axvm/std"]
