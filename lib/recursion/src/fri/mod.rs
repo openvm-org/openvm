@@ -288,7 +288,7 @@ pub fn verify_batch<C: Config>(
         );
 
         builder.poseidon2_compress_x(
-            &mut Array::Dyn(root_ptr, Usize::from(0)),
+            &Array::Dyn(root_ptr, Usize::from(0)),
             &Array::Dyn(left, Usize::from(0)),
             &Array::Dyn(right, Usize::from(0)),
         );
@@ -311,7 +311,7 @@ pub fn verify_batch<C: Config>(
                             current_height.clone(),
                         );
                         builder.poseidon2_compress_x(
-                            &mut root.clone(),
+                            &root.clone(),
                             &root.clone(),
                             &next_height_openings_digest,
                         );

@@ -63,7 +63,7 @@ impl<C: Config> Builder<C> {
     /// Reference: [p3_symmetric::TruncatedPermutation]
     pub fn poseidon2_compress_x(
         &mut self,
-        result: &mut Array<C, Felt<C::F>>,
+        result: &Array<C, Felt<C::F>>,
         left: &Array<C, Felt<C::F>>,
         right: &Array<C, Felt<C::F>>,
     ) {

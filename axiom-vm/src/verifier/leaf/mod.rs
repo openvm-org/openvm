@@ -1,5 +1,3 @@
-use std::array;
-
 use ax_stark_sdk::{
     ax_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, p3_util::log2_strict_usize,
@@ -8,18 +6,12 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use axvm_circuit::{
-    arch::{
-        instructions::program::Program, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-        PROGRAM_CACHED_TRACE_INDEX,
-    },
-    system::{
-        connector::VmConnectorPvs, memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
-    },
+    arch::{instructions::program::Program, VmConfig},
+    system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{
     challenger::duplex::DuplexChallengerVariable,
-    digest::DigestVariable,
     fri::TwoAdicFriPcsVariable,
     hints::{Hintable, InnerVal},
     stark::StarkVerifier,
@@ -27,9 +19,15 @@ use axvm_recursion::{
     utils::const_fri_config,
     vars::StarkProofVariable,
 };
-use types::LeafVmVerifierPvs;
 
-use crate::{config::AxiomVmConfig, verifier::leaf::types::UserPublicValuesRootProof};
+use crate::verifier::{
+    common::{
+        assert_or_assign_connector_pvs, assert_or_assign_memory_pvs, get_connector_pvs,
+        get_memory_pvs, get_program_commit, types::VmVerifierPvs,
+    },
+    leaf::types::UserPublicValuesRootProof,
+    utils::VariableP2Compressor,
+};
 
 pub mod types;
 mod vars;
@@ -37,7 +35,7 @@ mod vars;
 type C = InnerConfig;
 type F = InnerVal;
 
-/// Config to generate
+/// Config to generate leaf VM verifier program.
 pub struct LeafVmVerifierConfig {
     pub fri_params: FriParameters,
     pub app_vm_config: VmConfig,
@@ -47,10 +45,10 @@ pub struct LeafVmVerifierConfig {
 impl LeafVmVerifierConfig {
     pub fn build_program(
         &self,
-        app_vm_vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> Program<F> {
         self.app_vm_config.memory_config.memory_dimensions();
-        let m_advice = new_from_inner_multi_vk(&app_vm_vk);
+        let m_advice = new_from_inner_multi_vk(app_vm_vk);
         let mut builder = Builder::<C>::default();
 
         {
@@ -62,86 +60,27 @@ impl LeafVmVerifierConfig {
             // At least 1 proof should be provided.
             builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
 
-            let pvs = LeafVmVerifierPvs::<Felt<F>>::uninit(&mut builder);
+            let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             builder.range(0, proofs.len()).for_each(|i, builder| {
                 let proof = builder.get(&proofs, i);
                 StarkVerifier::verify::<DuplexChallengerVariable<C>>(
                     builder, &pcs, &m_advice, &proof,
                 );
                 {
-                    let t_id = RVar::from(PROGRAM_CACHED_TRACE_INDEX);
-                    let commit = builder.get(&proof.commitments.main_trace, t_id);
-                    let commit = if let DigestVariable::Felt(commit) = commit {
-                        commit
-                    } else {
-                        unreachable!()
-                    };
-                    builder.if_eq(i, RVar::zero()).then_or_else(
-                        |builder| assign_slice(builder, &pvs.app_commit, &commit, 0),
-                        |builder| assert_slice(builder, &pvs.app_commit, &commit, 0),
-                    );
-                }
-                {
-                    let a_id = RVar::from(CONNECTOR_AIR_ID);
-                    let a_input = builder.get(&proof.per_air, a_id);
-                    let connector_pvs = &pvs.connector;
-                    let input_pvs = &a_input.public_values;
-                    builder.if_eq(i, RVar::zero()).then_or_else(
-                        |builder| assign_connector(builder, connector_pvs, input_pvs),
-                        |builder| {
-                            // assert prev.final_pc == curr.initial_pc
-                            let initial_pc = builder.get(input_pvs, 0);
-                            builder.assert_felt_eq(connector_pvs.final_pc, initial_pc);
-                            // Update final_pc
-                            let final_pc = builder.get(input_pvs, 1);
-                            builder.assign(&connector_pvs.final_pc, final_pc);
-                            // assert prev.is_terminate == 0
-                            builder.assert_felt_eq(connector_pvs.is_terminate, F::zero());
-                            // Update is_terminate
-                            let is_terminate = builder.get(input_pvs, 3);
-                            builder.assign(&connector_pvs.is_terminate, is_terminate);
-                            // Update exit_code
-                            let exit_code = builder.get(input_pvs, 2);
-                            builder.assign(&connector_pvs.exit_code, exit_code);
-                        },
-                    );
-                }
-                {
-                    let a_id = RVar::from(MERKLE_AIR_ID);
-                    let a_input = builder.get(&proof.per_air, a_id);
+                    let commit = get_program_commit(builder, &proof);
                     builder.if_eq(i, RVar::zero()).then_or_else(
                         |builder| {
-                            assign_slice(
-                                builder,
-                                &pvs.memory.initial_root,
-                                &a_input.public_values,
-                                0,
-                            );
-                            assign_slice(
-                                builder,
-                                &pvs.memory.final_root,
-                                &a_input.public_values,
-                                DIGEST_SIZE,
-                            );
+                            builder.assign(&pvs.app_commit, commit);
                         },
-                        |builder| {
-                            // assert prev.final_root == curr.initial_root
-                            assert_slice(
-                                builder,
-                                &pvs.memory.final_root,
-                                &a_input.public_values,
-                                0,
-                            );
-                            // Update final_root
-                            assign_slice(
-                                builder,
-                                &pvs.memory.final_root,
-                                &a_input.public_values,
-                                DIGEST_SIZE,
-                            );
-                        },
+                        |builder| builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.app_commit, commit),
                     );
                 }
+
+                let proof_connector_pvs = get_connector_pvs(builder, &proof);
+                assert_or_assign_connector_pvs(builder, &pvs.connector, i, &proof_connector_pvs);
+
+                let proof_memory_pvs = get_memory_pvs(builder, &proof);
+                assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
             });
 
             let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
@@ -162,7 +101,7 @@ impl LeafVmVerifierConfig {
     }
 
     /// Read the public values root proof from the input stream and verify it.
-    // This verification must be consistent `axvm-circuit::system::memory::tree::public_values`.
+    /// This verification must be consistent `axvm-circuit::system::memory::tree::public_values`.
     /// Returns the public values commit and the corresponding memory state root.
     fn verify_user_public_values_root(
         &self,
@@ -182,7 +121,7 @@ impl LeafVmVerifierConfig {
         builder.assert_eq::<Usize<_>>(root_proof.sibling_hashes.len(), Usize::from(proof_len));
         let mut curr_commit = root_proof.public_values_commit;
         // Share the same state array to avoid unnecessary allocations.
-        let state: Array<C, Felt<_>> = builder.array(PERMUTATION_WIDTH);
+        let compressor = VariableP2Compressor::new(builder);
         for i in 0..proof_len {
             let sibling_hash = builder.get(&root_proof.sibling_hashes, i);
             let (l_hash, r_hash) = if idx_prefix & (1 << i) != 0 {
@@ -190,67 +129,8 @@ impl LeafVmVerifierConfig {
             } else {
                 (curr_commit, sibling_hash)
             };
-            for j in 0..DIGEST_SIZE {
-                builder.set(&state, j, l_hash[j]);
-                builder.set(&state, DIGEST_SIZE + j, r_hash[j]);
-            }
-            builder.poseidon2_permute_mut(&state);
-            curr_commit = array::from_fn(|j| builder.get(&state, j));
+            curr_commit = compressor.compress(builder, &l_hash, &r_hash);
         }
         (root_proof.public_values_commit, curr_commit)
     }
-}
-
-impl AxiomVmConfig {
-    pub fn leaf_verifier_vm_config(&self) -> VmConfig {
-        VmConfig::aggregation(
-            LeafVmVerifierPvs::<u8>::width(),
-            self.poseidon2_max_constraint_degree,
-        )
-    }
-}
-
-fn assign_slice<const CHUNK: usize>(
-    builder: &mut Builder<C>,
-    dst_slice: &[Felt<F>; CHUNK],
-    src: &Array<C, Felt<F>>,
-    src_offset: usize,
-) {
-    for (i, dst) in dst_slice.iter().enumerate() {
-        let pv = builder.get(src, i + src_offset);
-        builder.assign(dst, pv);
-    }
-}
-
-fn assert_slice<const CHUNK: usize>(
-    builder: &mut Builder<C>,
-    dst_slice: &[Felt<F>; CHUNK],
-    src: &Array<C, Felt<F>>,
-    src_offset: usize,
-) {
-    for (i, &dst) in dst_slice.iter().enumerate() {
-        let pv = builder.get(src, i + src_offset);
-        builder.assert_felt_eq(dst, pv);
-    }
-}
-
-fn assign_connector(
-    builder: &mut Builder<C>,
-    dst: &VmConnectorPvs<Felt<F>>,
-    src: &Array<C, Felt<F>>,
-) {
-    let VmConnectorPvs {
-        initial_pc,
-        final_pc,
-        exit_code,
-        is_terminate,
-    } = dst;
-    let v = builder.get(src, RVar::from(0));
-    builder.assign(initial_pc, v);
-    let v = builder.get(src, RVar::from(1));
-    builder.assign(final_pc, v);
-    let v = builder.get(src, RVar::from(2));
-    builder.assign(exit_code, v);
-    let v = builder.get(src, RVar::from(3));
-    builder.assign(is_terminate, v);
 }
