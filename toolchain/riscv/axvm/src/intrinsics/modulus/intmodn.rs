@@ -61,7 +61,7 @@ impl IntModN {
     }
 
     #[inline]
-    pub(super) fn add_assign_impl(&mut self, other: &Self) {
+    fn add_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             self.0 = Self::biguint_to_limbs(
@@ -75,7 +75,7 @@ impl IntModN {
     }
 
     #[inline]
-    pub(super) fn sub_assign_impl(&mut self, other: &Self) {
+    fn sub_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             self.0 = Self::biguint_to_limbs(
@@ -89,7 +89,7 @@ impl IntModN {
     }
 
     #[inline]
-    pub(super) fn mul_assign_impl(&mut self, other: &Self) {
+    fn mul_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             self.0 = Self::biguint_to_limbs(
@@ -103,7 +103,7 @@ impl IntModN {
     }
 
     #[inline]
-    pub(super) fn div_assign_impl(&mut self, other: &Self) {
+    fn div_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             self.0 = Self::biguint_to_limbs(
