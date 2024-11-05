@@ -43,7 +43,7 @@ pub struct GenericVerifierConstraintFolder<'a, F, EF, PubVar, Var, Expr> {
     pub _marker: PhantomData<(F, EF)>,
 }
 
-impl<'a, F, EF, PubVar, Var, Expr> GenericVerifierConstraintFolder<'a, F, EF, PubVar, Var, Expr>
+impl<F, EF, PubVar, Var, Expr> GenericVerifierConstraintFolder<'_, F, EF, PubVar, Var, Expr>
 where
     F: Field,
     EF: ExtensionField<F>,
@@ -65,8 +65,8 @@ where
     }
 }
 
-impl<'a, F, EF, PubVar, Var, Expr> SymbolicEvaluator<F, Expr>
-    for GenericVerifierConstraintFolder<'a, F, EF, PubVar, Var, Expr>
+impl<F, EF, PubVar, Var, Expr> SymbolicEvaluator<F, Expr>
+    for GenericVerifierConstraintFolder<'_, F, EF, PubVar, Var, Expr>
 where
     F: Field,
     EF: ExtensionField<F>,

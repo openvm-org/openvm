@@ -10,7 +10,7 @@ pub(crate) struct PublicValuesCoreColsView<'a, T, R> {
     pub(crate) _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T, R> PublicValuesCoreColsView<'a, T, R> {
+impl<T, R> PublicValuesCoreColsView<'_, T, R> {
     pub(crate) fn width(&self) -> usize {
         3 + self.custom_pv_flags.len()
     }

@@ -9,7 +9,6 @@ use ax_ecc_primitives::{
     field_extension::{Fp12, Fp2},
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_ecc_constants::BN254;
 use axvm_instructions::PairingOpcode;
 use p3_field::PrimeField32;
 
@@ -28,7 +27,7 @@ pub struct EcLineMulBy01234Chip<
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -46,13 +45,18 @@ impl<
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
+        xi: [isize; 2],
         offset: usize,
     ) -> Self {
-        let expr = mul_by_01234_expr(
-            config,
-            memory_controller.borrow().range_checker.bus(),
-            BN254.XI,
+        assert!(
+            xi[0].unsigned_abs() < 1 << config.limb_bits,
+            "expect xi to be small"
+        ); // not a hard rule, but we expect xi to be small
+        assert!(
+            xi[1].unsigned_abs() < 1 << config.limb_bits,
+            "expect xi to be small"
         );
+        let expr = mul_by_01234_expr(config, memory_controller.borrow().range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,

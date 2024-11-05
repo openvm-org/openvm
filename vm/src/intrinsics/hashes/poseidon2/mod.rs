@@ -1,3 +1,12 @@
+//! Chip to handle **native kernel** instructions for Poseidon2 `compress` and `permute`.
+//! This chip is put in [intrinsics](crate::intrinsics) for organizational convenience, but
+//! it is used as a system chip for persistent memory and as a native kernel chip for aggregation.
+//!
+//! Note that neither `compress` nor `permute` on its own
+//! is a cryptographic hash. `permute` is a cryptographic permutation, which can be made
+//! into a hash by applying a sponge construction. `compress` can be used as a hash in the
+//! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
+//! add any padding.
 use std::array;
 
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};

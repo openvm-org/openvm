@@ -145,11 +145,11 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
     )
 }
 
-/// Create a new [`Instruction`] that exits with code 1.
+/// Create a new [`Instruction`] that exits with code 2. This is equivalent to program panic but with a special exit code for debugging.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
         opcode: SystemOpcode::TERMINATE.with_default_offset(),
-        c: F::one(),
+        c: F::two(),
         ..Default::default()
     }
 }

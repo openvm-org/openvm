@@ -37,10 +37,14 @@ impl AxiomVmProvingKey {
         let app_vm_pk = config.app_vm_config.generate_pk(engine.keygen_builder());
         assert!(app_vm_pk.max_constraint_degree < 1 << config.fri_params.log_blowup);
         assert!(config.poseidon2_max_constraint_degree < 1 << config.fri_params.log_blowup);
+        assert_eq!(
+            config.max_num_user_public_values,
+            config.app_vm_config.num_public_values
+        );
+        assert!(config.app_vm_config.continuation_enabled);
         let leaf_vm_config = config.leaf_verifier_vm_config();
         let leaf_verifier_pk = leaf_vm_config.generate_pk(engine.keygen_builder());
         let leaf_program = LeafVmVerifierConfig {
-            max_num_user_public_values: config.max_num_user_public_values,
             fri_params: config.fri_params,
             app_vm_config: config.app_vm_config.clone(),
             compiler_options: config.compiler_options.clone(),

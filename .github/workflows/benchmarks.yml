@@ -36,3 +36,9 @@ jobs:
     with:
       benchmark_name: fibonacci
     secrets: inherit
+
+  benchmark-revm:
+    uses: ./.github/workflows/benchmark-call.yml
+    with:
+      benchmark_name: revm_contract_deployment
+    secrets: inherit

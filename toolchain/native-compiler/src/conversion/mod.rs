@@ -4,11 +4,14 @@ use axvm_circuit::arch::{
     instructions::{program::Program, *},
     Modulus,
 };
-use axvm_instructions::instruction::{DebugInfo, Instruction};
+use axvm_instructions::{
+    instruction::{DebugInfo, Instruction},
+    program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
+    FriOpcode::FRI_MAT_OPENING,
+};
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
-use strum::EnumCount;
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
@@ -40,21 +43,6 @@ impl CompilerOptions {
     pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
         let offset = Opcode::default_offset();
         offset + opcode.as_usize()
-    }
-
-    pub fn modular_opcode_with_offset<Opcode: UsizeOpcode>(
-        &self,
-        opcode: Opcode,
-        modulus: BigUint,
-    ) -> usize {
-        let res = self.opcode_with_offset(opcode);
-        let modulus_id = self
-            .enabled_modulus
-            .iter()
-            .position(|m| m == &modulus)
-            .unwrap_or_else(|| panic!("unsupported modulus: {}", modulus));
-        let modular_shift = modulus_id * ModularArithmeticOpcode::COUNT;
-        res + modular_shift
     }
 }
 
@@ -332,13 +320,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            0,
+            2,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
             PhantomInstruction::PrintF,
             i32_f(src),
             F::zero(),
-            0,
+            2,
         )],
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
             .map(|i| {
@@ -346,7 +334,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                     PhantomInstruction::PrintF,
                     i32_f(src + i * word_size_i32),
                     F::zero(),
-                    0,
+                    2,
                 )
             })
             .collect(),
@@ -629,27 +617,6 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
-        AsmInstruction::Keccak256(dst, src, len) => vec![inst_med(
-            options.opcode_with_offset(Keccak256Opcode::KECCAK256),
-            i32_f(dst),
-            i32_f(src),
-            i32_f(len),
-            AS::Memory,
-            AS::Memory,
-            AS::Memory,
-        )],
-        AsmInstruction::Keccak256FixLen(_dst, _src, _len) => {
-            todo!("len as immediate needs to be handled");
-            // inst_med(
-            //     KECCAK256,
-            //     i32_f(dst),
-            //     i32_f(src),
-            //     i32_f(len),
-            //     AS::Memory,
-            //     AS::Memory,
-            //     AS::Immediate,
-            // )
-        }
         AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
                 vec![Instruction::debug(PhantomInstruction::CtStart)]
@@ -673,6 +640,16 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
             AS::Memory,
         )],
+        AsmInstruction::FriMatOpening(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
+            opcode: options.opcode_with_offset(FRI_MAT_OPENING),
+            a: i32_f(a),
+            b: i32_f(b),
+            c: i32_f(res),
+            d: AS::Memory.to_field(),
+            e: i32_f(len),
+            f: i32_f(alpha),
+            g: i32_f(alpha_pow),
+        }],
     };
 
     let debug_infos = vec![debug_info; instructions.len()];
@@ -742,5 +719,6 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         instructions_and_debug_infos,
         step: DEFAULT_PC_STEP,
         pc_base: 0,
+        max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
     }
 }

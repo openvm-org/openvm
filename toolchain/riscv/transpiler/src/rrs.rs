@@ -1,20 +1,24 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RvIntrinsic, RV32_REGISTER_NUM_LIMBS},
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode,
-    LessThanOpcode, MulHOpcode, MulOpcode, PhantomInstruction, Rv32AuipcOpcode,
-    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
-    Rv32ModularArithmeticOpcode, ShiftOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode,
+    MulOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
+    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LessThan256Opcode,
+    Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
+    ShiftOpcode, UsizeOpcode,
 };
-use axvm_platform::constants::{CUSTOM_0, CUSTOM_1};
+use axvm_platform::constants::{
+    Custom0Funct3::{self, *},
+    Custom1Funct3::{self, *},
+    Int256Funct7, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_0, CUSTOM_1,
+    MODULAR_ARITHMETIC_MAX_KINDS, SHORT_WEIERSTRASS_MAX_KINDS,
+};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     process_instruction, InstructionProcessor,
 };
-use strum::EnumCount;
 
 use crate::util::*;
 
@@ -233,77 +237,185 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        eprintln!("trying to transpile fence ({:?})", dec_insn);
+        eprintln!("Transpiling fence ({:?}) to nop", dec_insn);
         nop()
     }
 }
 
 fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruction<F> {
     let opcode = (instruction_u32 & 0x7f) as u8;
-    let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R- or I-type
+    let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or B-type
 
     match opcode {
-        CUSTOM_0 => match funct3 {
-            0b000 => {
-                let imm = (instruction_u32 >> 20) & 0xfff;
-                Some(terminate(imm.try_into().expect("exit code must be byte")))
+        CUSTOM_0 => match Custom0Funct3::from_repr(funct3) {
+            Some(Terminate) => {
+                let dec_insn = IType::new(instruction_u32);
+                Some(terminate(
+                    dec_insn.imm.try_into().expect("exit code must be byte"),
+                ))
             }
-            0b001 => {
-                let rd = (instruction_u32 >> 7) & 0x1f;
-                let imm = (instruction_u32 >> 20) & 0xfff;
+            Some(HintStoreW) => {
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 Some(Instruction::from_isize(
                     Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
                     0,
-                    (RV32_REGISTER_NUM_LIMBS * rd as usize) as isize,
-                    imm as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
                     1,
                     2,
                 ))
             }
-            0b011 => Some(Instruction::phantom(
+            Some(Reveal) => {
+                let dec_insn = IType::new(instruction_u32);
+                let imm_u16 = (dec_insn.imm as u32) & 0xffff;
+                // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
+                Some(Instruction::from_isize(
+                    Rv32LoadStoreOpcode::STOREW.with_default_offset(),
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    imm_u16 as isize,
+                    1,
+                    3,
+                ))
+            }
+            Some(HintInput) => Some(Instruction::phantom(
                 PhantomInstruction::HintInputRv32,
                 F::zero(),
                 F::zero(),
                 0,
             )),
+            Some(Keccak256) => {
+                unimplemented!()
+            }
+            Some(Int256) => {
+                let dec_insn = RType::new(instruction_u32);
+                let global_opcode = match Int256Funct7::from_repr(dec_insn.funct7 as u8) {
+                    Some(Int256Funct7::Add) => {
+                        BaseAluOpcode::ADD as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sub) => {
+                        BaseAluOpcode::SUB as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Xor) => {
+                        BaseAluOpcode::XOR as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Or) => {
+                        BaseAluOpcode::OR as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::And) => {
+                        BaseAluOpcode::AND as usize + Rv32BaseAlu256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sll) => {
+                        ShiftOpcode::SLL as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Srl) => {
+                        ShiftOpcode::SRL as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sra) => {
+                        ShiftOpcode::SRA as usize + Rv32Shift256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Slt) => {
+                        LessThanOpcode::SLT as usize + Rv32LessThan256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Sltu) => {
+                        LessThanOpcode::SLTU as usize + Rv32LessThan256Opcode::default_offset()
+                    }
+                    Some(Int256Funct7::Mul) => {
+                        MulOpcode::MUL as usize + Rv32Mul256Opcode::default_offset()
+                    }
+                    _ => unimplemented!(),
+                };
+                Some(from_r_type(global_opcode, 2, &dec_insn))
+            }
+            Some(Beq256) => {
+                let dec_insn = BType::new(instruction_u32);
+                Some(Instruction::new(
+                    BranchEqualOpcode::BEQ as usize + Rv32BranchEqual256Opcode::default_offset(),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    isize_to_field(dec_insn.imm as isize),
+                    F::one(),
+                    F::two(),
+                    F::zero(),
+                    F::zero(),
+                ))
+            }
             _ => unimplemented!(),
         },
         CUSTOM_1 => {
-            match funct3 {
-                Rv32ModularArithmeticOpcode::FUNCT3 => {
+            match Custom1Funct3::from_repr(funct3) {
+                Some(ModularArithmetic) => {
                     // mod operations
-                    let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let size = Rv32ModularArithmeticOpcode::COUNT as u32;
-                    let prime_idx = funct7 / size;
-                    let local_opcode_idx = funct7 % size;
-                    let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
-                        + Rv32ModularArithmeticOpcode::default_offset();
-                    Some(from_r_type(
-                        global_opcode_idx,
-                        2,
-                        &RType::new(instruction_u32),
-                    ))
+                    let dec_insn = RType::new(instruction_u32);
+                    let base_funct7 = (dec_insn.funct7 as u8) % MODULAR_ARITHMETIC_MAX_KINDS;
+                    let global_opcode = match ModArithBaseFunct7::from_repr(base_funct7) {
+                        Some(ModArithBaseFunct7::AddMod) => {
+                            Rv32ModularArithmeticOpcode::ADD as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
+                        }
+                        Some(ModArithBaseFunct7::SubMod) => {
+                            Rv32ModularArithmeticOpcode::SUB as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
+                        }
+                        Some(ModArithBaseFunct7::MulMod) => {
+                            Rv32ModularArithmeticOpcode::MUL as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
+                        }
+                        Some(ModArithBaseFunct7::DivMod) => {
+                            Rv32ModularArithmeticOpcode::DIV as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
+                        }
+                        Some(ModArithBaseFunct7::IsEqMod) => {
+                            Rv32ModularArithmeticOpcode::IS_EQ as usize
+                                + Rv32ModularArithmeticOpcode::default_offset()
+                        }
+                        _ => unimplemented!(),
+                    };
+                    let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
+                        * MODULAR_ARITHMETIC_MAX_KINDS;
+                    let global_opcode = global_opcode + mod_idx_shift as usize;
+                    Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
-                EccOpcode::FUNCT3 => {
+                Some(ShortWeierstrass) => {
                     // short weierstrass ec
-                    let funct7 = (instruction_u32 >> 25) & 0x7f;
-                    let size = EccOpcode::COUNT as u32;
-                    let prime_idx = funct7 / size;
-                    let local_opcode_idx = funct7 % size;
-                    let global_opcode_idx = (local_opcode_idx + prime_idx * size) as usize
-                        + EccOpcode::default_offset();
-                    Some(from_r_type(
-                        global_opcode_idx,
-                        2,
-                        &RType::new(instruction_u32),
-                    ))
+                    let dec_insn = RType::new(instruction_u32);
+                    let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
+                    let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
+                        Some(SwBaseFunct7::SwAddNe) => {
+                            EccOpcode::EC_ADD_NE as usize + EccOpcode::default_offset()
+                        }
+                        Some(SwBaseFunct7::SwDouble) => {
+                            EccOpcode::EC_DOUBLE as usize + EccOpcode::default_offset()
+                        }
+                        _ => unimplemented!(),
+                    };
+                    let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
+                        * SHORT_WEIERSTRASS_MAX_KINDS;
+                    let global_opcode = global_opcode + curve_idx_shift as usize;
+                    Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
-                _ => None,
+                _ => unimplemented!(),
             }
         }
         _ => None,
     }
     .unwrap_or_else(|| {
+        if opcode == 0b1110011 {
+            let dec_insn = IType::new(instruction_u32);
+            if dec_insn.funct3 == 0b001 {
+                // CSRRW
+                if dec_insn.rs1 == 0 && dec_insn.rd == 0 {
+                    // This resets the CSR counter to zero. Since we don't have any CSR registers, this is a nop.
+                    return nop();
+                }
+            }
+            eprintln!(
+                "Transpiling system / CSR instruction: {:b} (opcode = {:07b}, funct3 = {:03b}) to unimp",
+                instruction_u32, opcode, funct3
+            );
+            return unimp();
+        }
         panic!(
             "Failed to transpile custom instruction: {:b} (opcode = {:07b}, funct3 = {:03b})",
             instruction_u32, opcode, funct3

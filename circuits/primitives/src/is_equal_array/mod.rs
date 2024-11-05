@@ -33,7 +33,12 @@ pub struct IsEqArraySubAir<const NUM: usize>;
 
 impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArraySubAir<NUM> {
     /// `(io, diff_inv_marker)`
-    type AirContext<'a> = (IsEqArrayIo<AB::Expr, NUM>, [AB::Var; NUM]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsEqArrayIo<AB::Expr, NUM>, [AB::Var; NUM])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Constrain that out == (x == y) when condition != 0
     fn eval<'a>(

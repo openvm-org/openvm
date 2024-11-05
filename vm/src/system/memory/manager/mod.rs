@@ -1,11 +1,4 @@
-use std::{
-    array,
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    marker::PhantomData,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{array, cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
@@ -27,6 +20,7 @@ use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
+use rustc_hash::FxHashMap;
 
 use self::interface::MemoryInterface;
 use super::volatile::VolatileBoundaryChip;
@@ -34,7 +28,7 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig, RANGE_CHECKER_BUS},
     system::memory::{
         adapter::AccessAdapterAir,
-        manager::memory::{AccessAdapterRecord, Memory},
+        manager::memory::AccessAdapterRecord,
         offline_checker::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
             MemoryWriteAuxCols, AUX_LEN,
@@ -49,7 +43,7 @@ mod trace;
 
 use crate::system::memory::{
     dimensions::MemoryDimensions,
-    manager::memory::INITIAL_TIMESTAMP,
+    manager::memory::{Memory, INITIAL_TIMESTAMP},
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     tree::MemoryNode,
@@ -100,7 +94,7 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     memory: Memory<F>,
     /// Maps a length to a list of access adapters with that block length as th larger size.
-    adapter_records: HashMap<usize, Vec<AccessAdapterRecord<F>>>,
+    adapter_records: FxHashMap<usize, Vec<AccessAdapterRecord<F>>>,
 
     // Filled during finalization.
     result: Option<MemoryControllerResult<F>>,
@@ -123,8 +117,8 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: Memory::new(&Equipartition::<_, 1>::new(), mem_config.pointer_max_bits),
-            adapter_records: HashMap::new(),
+            memory: Memory::new(&Equipartition::<_, 1>::new()),
+            adapter_records: FxHashMap::default(),
             range_checker,
             result: None,
         }
@@ -142,7 +136,7 @@ impl<F: PrimeField32> MemoryController<F> {
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
             as_offset: 1,
         };
-        let memory = Memory::new(&initial_memory, mem_config.pointer_max_bits);
+        let memory = Memory::new(&initial_memory);
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(memory_dims, memory_bus, merkle_bus),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus),
@@ -153,7 +147,7 @@ impl<F: PrimeField32> MemoryController<F> {
             mem_config,
             interface_chip,
             memory,
-            adapter_records: HashMap::new(),
+            adapter_records: FxHashMap::default(),
             range_checker,
             result: None,
         }
@@ -171,7 +165,7 @@ impl<F: PrimeField32> MemoryController<F> {
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
-                self.memory = Memory::new(initial_memory, self.mem_config.pointer_max_bits);
+                self.memory = Memory::new(initial_memory);
             }
         }
     }
@@ -189,11 +183,10 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
+        let ptr_u32 = pointer.as_canonical_u32();
         assert!(
-            address_space == F::zero()
-                || pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            address_space == F::zero() || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
+            "memory out of bounds: {ptr_u32:?}",
         );
 
         if address_space == F::zero() {
@@ -213,7 +206,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         let (record, adapter_records) = self
             .memory
-            .read::<N>(address_space, pointer.as_canonical_u32() as usize);
+            .read::<N>(address_space.as_canonical_u32() as usize, ptr_u32 as usize);
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -222,7 +215,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(ptr_u32 + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 
@@ -233,13 +226,10 @@ impl<F: PrimeField32> MemoryController<F> {
     ///
     /// Any value returned is unconstrained.
     pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
-        match self
-            .memory
-            .get(addr_space, pointer.as_canonical_u32() as usize)
-        {
-            Some((_, &value)) => value,
-            None => F::zero(),
-        }
+        self.memory.get(
+            addr_space.as_canonical_u32() as usize,
+            pointer.as_canonical_u32() as usize,
+        )
     }
 
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
@@ -253,15 +243,17 @@ impl<F: PrimeField32> MemoryController<F> {
         data: [F; N],
     ) -> MemoryWriteRecord<F, N> {
         assert_ne!(address_space, F::zero());
+        let ptr_u32 = pointer.as_canonical_u32();
         assert!(
-            pointer.as_canonical_u32() < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {:?}",
-            pointer.as_canonical_u32()
+            ptr_u32 < (1 << self.mem_config.pointer_max_bits),
+            "memory out of bounds: {ptr_u32:?}",
         );
 
-        let (record, adapter_records) =
-            self.memory
-                .write(address_space, pointer.as_canonical_u32() as usize, data);
+        let (record, adapter_records) = self.memory.write(
+            address_space.as_canonical_u32() as usize,
+            ptr_u32 as usize,
+            data,
+        );
         for record in adapter_records {
             self.adapter_records
                 .entry(record.data.len())
@@ -270,7 +262,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
 
         for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(pointer.as_canonical_u32() + i);
+            let ptr = F::from_canonical_u32(ptr_u32 + i);
             self.interface_chip.touch_address(address_space, ptr);
         }
 

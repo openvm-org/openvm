@@ -19,11 +19,8 @@ use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
-    intrinsics::{
-        ecc::pairing::{mul_013_by_013_expr, mul_by_01234_expr},
-        field_expression::FieldExpressionCoreChip,
-    },
+    arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    intrinsics::ecc::pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip},
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
 };
@@ -36,24 +33,6 @@ const BLOCK_SIZE: usize = 32;
 #[test]
 fn test_mul_013_by_013() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let expr = mul_013_by_013_expr(
-        ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        },
-        tester.memory_controller().borrow().range_checker.bus(),
-        BN254.XI,
-    );
-    let core = FieldExpressionCoreChip::new(
-        expr,
-        PairingOpcode::default_offset(),
-        vec![PairingOpcode::MUL_013_BY_013 as usize],
-        vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
-        "Mul013By013",
-    );
-
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -63,6 +42,17 @@ fn test_mul_013_by_013() {
         tester.program_bus(),
         tester.memory_controller(),
         bitwise_chip.clone(),
+    );
+    let mut chip = EcLineMul013By013Chip::new(
+        adapter,
+        tester.memory_controller(),
+        ExprBuilderConfig {
+            modulus: BN254.MODULUS.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        },
+        BN254.XI,
+        PairingOpcode::default_offset(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(8);
@@ -90,14 +80,12 @@ fn test_mul_013_by_013() {
     ]
     .concat();
 
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
-
     let vars = chip
+        .0
         .core
-        .air
-        .expr
+        .expr()
         .execute([input_line0.clone(), input_line1.clone()].concat(), vec![]);
-    let output_indices = chip.core.air.expr.builder.output_indices.clone();
+    let output_indices = chip.0.core.expr().builder.output_indices.clone();
     let output = output_indices
         .iter()
         .map(|i| vars[*i].clone())
@@ -134,7 +122,7 @@ fn test_mul_013_by_013() {
         &mut tester,
         input_line0_limbs,
         input_line1_limbs,
-        chip.core.air.offset + PairingOpcode::MUL_013_BY_013 as usize,
+        chip.0.core.air.offset + PairingOpcode::MUL_013_BY_013 as usize,
     );
 
     tester.execute(&mut chip, instruction);
@@ -145,24 +133,6 @@ fn test_mul_013_by_013() {
 #[test]
 fn test_mul_by_01234() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let expr = mul_by_01234_expr(
-        ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        },
-        tester.memory_controller().borrow().range_checker.bus(),
-        BN254.XI,
-    );
-    let core = FieldExpressionCoreChip::new(
-        expr,
-        PairingOpcode::default_offset(),
-        vec![PairingOpcode::MUL_BY_01234 as usize],
-        vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
-        "MulBy01234",
-    );
-
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -172,6 +142,17 @@ fn test_mul_by_01234() {
         tester.program_bus(),
         tester.memory_controller(),
         bitwise_chip.clone(),
+    );
+    let mut chip = EcLineMulBy01234Chip::new(
+        adapter,
+        tester.memory_controller(),
+        ExprBuilderConfig {
+            modulus: BN254.MODULUS.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        },
+        BN254.XI,
+        PairingOpcode::default_offset(),
     );
 
     let mut rng = StdRng::seed_from_u64(8);
@@ -198,14 +179,12 @@ fn test_mul_by_01234() {
     ]
     .concat();
 
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
-
     let vars = chip
+        .0
         .core
-        .air
-        .expr
+        .expr()
         .execute([input_f.clone(), input_x.clone()].concat(), vec![]);
-    let output_indices = chip.core.air.expr.builder.output_indices.clone();
+    let output_indices = chip.0.core.expr().builder.output_indices.clone();
     let output = output_indices
         .iter()
         .map(|i| vars[*i].clone())
@@ -238,7 +217,7 @@ fn test_mul_by_01234() {
         input_f_limbs,
         input_x_limbs,
         512,
-        chip.core.air.offset + PairingOpcode::MUL_BY_01234 as usize,
+        chip.0.core.air.offset + PairingOpcode::MUL_BY_01234 as usize,
     );
 
     tester.execute(&mut chip, instruction);
