@@ -523,6 +523,7 @@ version = "0.1.0"
 dependencies = [
  "axvm-platform",
  "chrono",
+ "num-bigint-dig",
  "serde",
  "tiny-keccak",
 ]
