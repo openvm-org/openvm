@@ -146,13 +146,13 @@ fn rand_loadstore_test() {
     tester.simple_test().expect("Verification failed");
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_loadstore_test(

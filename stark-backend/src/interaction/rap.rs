@@ -57,7 +57,7 @@ where
     let all_interactions = builder.all_interactions().to_vec();
     let interaction_chunk_size = builder.interaction_chunk_size();
     let num_interactions = all_interactions.len();
-    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
+    let perm_width = num_interactions.div_ceil(interaction_chunk_size) + 1;
     debug_assert_eq!(perm_width, perm_local.len());
     debug_assert_eq!(perm_width, perm_next.len());
     let phi_local = *perm_local.last().unwrap();

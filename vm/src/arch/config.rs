@@ -15,19 +15,13 @@ use crate::{
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 
-pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 25) - 100;
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 21) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum PersistenceType {
-    Persistent,
-    Volatile,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
@@ -39,12 +33,11 @@ pub struct MemoryConfig {
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
-    pub persistence_type: PersistenceType,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 16, PersistenceType::Volatile)
+        Self::new(29, 1, 29, 29, 16)
     }
 }
 
@@ -60,7 +53,20 @@ pub struct VmConfig {
     pub supported_pairing_curves: Vec<EcCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
+    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
+    /// each segment is proved by a proof. Each proof commits the before and after state of the
+    /// corresponding segment.
+    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
+    /// proof.
+    pub continuation_enabled: bool,
     pub memory_config: MemoryConfig,
+    /// `num_public_values` has different meanings in single segment mode and continuation mode.
+    /// In single segment mode, `num_public_values` is the number of public values of
+    /// PublicValuesChips. In this case, verifier can read public values directly.
+    /// In continuation mode, public values are stored in a special address space.
+    /// `number_public_values` indicates the number of allowed addresses in that address space. The verifier
+    /// cannot read public values directly, but they can decommit the public values from the memory
+    /// state commit.
     pub num_public_values: usize,
     pub max_segment_len: usize,
     /*pub max_program_length: usize,
@@ -72,6 +78,7 @@ impl VmConfig {
     #[allow(clippy::too_many_arguments)]
     pub fn from_parameters(
         poseidon2_max_constraint_degree: usize,
+        continuation_enabled: bool,
         memory_config: MemoryConfig,
         num_public_values: usize,
         max_segment_len: usize,
@@ -83,6 +90,7 @@ impl VmConfig {
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
+            continuation_enabled,
             poseidon2_max_constraint_degree,
             memory_config,
             num_public_values,
@@ -92,10 +100,6 @@ impl VmConfig {
             supported_ec_curves,
             supported_pairing_curves,
         }
-    }
-
-    pub fn continuation_enabled(&self) -> bool {
-        self.memory_config.persistence_type == PersistenceType::Persistent
     }
 
     pub fn add_executor(mut self, executor: ExecutorName) -> Self {
@@ -109,6 +113,11 @@ impl VmConfig {
         self.add_executor(ExecutorName::BaseAlu256Rv32)
             .add_executor(ExecutorName::LessThan256Rv32)
             .add_executor(ExecutorName::Shift256Rv32)
+    }
+
+    pub fn add_int256_branch(self) -> Self {
+        self.add_executor(ExecutorName::BranchEqual256Rv32)
+            .add_executor(ExecutorName::BranchLessThan256Rv32)
     }
 
     pub fn add_int256_m(self) -> Self {
@@ -150,6 +159,7 @@ impl Default for VmConfig {
     fn default() -> Self {
         Self::from_parameters(
             DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            false,
             Default::default(),
             0,
             DEFAULT_MAX_SEGMENT_LEN,
@@ -165,10 +175,7 @@ impl VmConfig {
     pub fn rv32i() -> Self {
         VmConfig {
             poseidon2_max_constraint_degree: 3,
-            memory_config: MemoryConfig {
-                persistence_type: PersistenceType::Persistent,
-                ..Default::default()
-            },
+            continuation_enabled: true,
             ..Default::default()
         }
         .add_executor(ExecutorName::Phantom)
@@ -195,6 +202,7 @@ impl VmConfig {
     pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
         VmConfig {
             poseidon2_max_constraint_degree,
+            continuation_enabled: false,
             num_public_values,
             ..VmConfig::default()
         }
@@ -205,6 +213,7 @@ impl VmConfig {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
+        .add_executor(ExecutorName::FriMatOpening)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {

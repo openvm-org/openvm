@@ -1,5 +1,6 @@
 use std::array;
 
+use ax_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use axvm_instructions::instruction::Instruction;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
@@ -64,6 +65,33 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
     )
 }
 
+pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
+    tester: &mut VmChipTestBuilder<BabyBear>,
+    addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    imm: isize,
+    opcode_with_offset: usize,
+) -> Instruction<BabyBear> {
+    let (reg1, _) =
+        tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr1_writes);
+    let reg2 = if addr2_writes.is_empty() {
+        0
+    } else {
+        let (reg2, _) =
+            tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr2_writes);
+        reg2
+    };
+
+    Instruction::from_isize(
+        opcode_with_offset,
+        reg1 as isize,
+        reg2 as isize,
+        imm,
+        1_isize,
+        2_isize,
+    )
+}
+
 // Returns (instruction, rd)
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     tester: &mut VmChipTestBuilder<BabyBear>,
@@ -97,6 +125,16 @@ pub fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     rng: &mut StdRng,
 ) -> [u32; NUM_LIMBS] {
     array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+}
+
+pub fn generate_field_element<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    modulus: &BigUint,
+    rng: &mut StdRng,
+) -> [u32; NUM_LIMBS] {
+    let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(rng);
+    let bigint = BigUint::new(x.to_vec()) % modulus;
+    let vec = big_uint_to_limbs(&bigint, LIMB_BITS);
+    array::from_fn(|i| if i < vec.len() { vec[i] as u32 } else { 0 })
 }
 
 pub fn generate_rv32_is_type_immediate(

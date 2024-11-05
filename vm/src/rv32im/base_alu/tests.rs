@@ -35,12 +35,12 @@ use crate::{
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 fn run_rv32_alu_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
@@ -110,13 +110,13 @@ fn rv32_alu_and_rand_test() {
     run_rv32_alu_rand_test(BaseAluOpcode::AND, 100);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32BaseAluTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, BaseAluCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;

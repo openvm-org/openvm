@@ -413,6 +413,7 @@ fn commit_perm_traces<SC: StarkGenericConfig>(
     }
 }
 
+#[allow(dead_code)]
 fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     raps: &[Arc<dyn AnyRap<SC>>],
     mpk: &MultiStarkProvingKeyView<SC>,
@@ -438,6 +439,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                         .preprocessed_data
                         .as_ref()
                         .map(|data| data.trace.as_view());
+                    tracing::debug!("Checking constraints for {}", rap.name());
                     check_constraints(
                         rap.as_ref(),
                         &preprocessed_trace,

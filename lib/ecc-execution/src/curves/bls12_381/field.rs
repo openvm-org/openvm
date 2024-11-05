@@ -73,7 +73,6 @@ impl FieldExtension for Fq2 {
 ///
 /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the intermediate points manually.
 ///
-
 /// FieldExtension for Fq12 with Fq2 as base field since halo2curves does not implement `Field` for Fq6.
 impl FieldExtension for Fq12 {
     type BaseField = Fq2;

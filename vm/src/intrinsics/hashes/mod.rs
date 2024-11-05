@@ -1,2 +1,2 @@
-pub mod keccak;
+pub mod keccak256;
 pub mod poseidon2;

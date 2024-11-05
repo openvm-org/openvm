@@ -1,6 +1,7 @@
-use std::{collections::HashSet, marker::PhantomData};
+use std::marker::PhantomData;
 
 use p3_field::PrimeField32;
+use rustc_hash::FxHashSet;
 
 use super::manager::dimensions::MemoryDimensions;
 mod air;
@@ -18,7 +19,7 @@ mod tests;
 #[derive(Debug)]
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: HashSet<(usize, usize, usize)>,
+    touched_nodes: FxHashSet<(usize, usize, usize)>,
     num_touched_nonleaves: usize,
     _marker: PhantomData<F>,
 }
@@ -27,7 +28,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn new(memory_dimensions: MemoryDimensions, merkle_bus: MemoryMerkleBus) -> Self {
         assert!(memory_dimensions.as_height > 0);
         assert!(memory_dimensions.address_height > 0);
-        let mut touched_nodes = HashSet::new();
+        let mut touched_nodes = FxHashSet::default();
         touched_nodes.insert((memory_dimensions.overall_height(), 0, 0));
         Self {
             air: MemoryMerkleAir {

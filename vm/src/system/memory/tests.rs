@@ -33,8 +33,8 @@ use rand::{
 use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRecord};
 use crate::{
     arch::{
-        testing::memory::gen_pointer, ExecutionBus, MemoryConfig, PersistenceType, EXECUTION_BUS,
-        MEMORY_BUS, MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+        testing::memory::gen_pointer, ExecutionBus, MemoryConfig, EXECUTION_BUS, MEMORY_BUS,
+        MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
@@ -227,10 +227,7 @@ fn generate_trace<F: PrimeField32>(
 #[test]
 fn test_memory_controller() {
     let memory_bus = MemoryBus(MEMORY_BUS);
-    let memory_config = MemoryConfig {
-        persistence_type: PersistenceType::Volatile,
-        ..Default::default()
-    };
+    let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
@@ -261,10 +258,7 @@ fn test_memory_controller() {
 fn test_memory_controller_persistent() {
     let memory_bus = MemoryBus(MEMORY_BUS);
     let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
-    let memory_config = MemoryConfig {
-        persistence_type: PersistenceType::Persistent,
-        ..Default::default()
-    };
+    let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 

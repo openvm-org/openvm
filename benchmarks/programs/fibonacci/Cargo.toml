@@ -1,8 +1,12 @@
 [workspace]
 [package]
-version = "0.1.0"
 name = "axvm-fibonacci-program"
+version = "0.0.0"
 edition = "2021"
 
 [dependencies]
 axvm = { path = "../../../toolchain/riscv/axvm" }
+
+[features]
+default = []
+std = ["axvm/std"]

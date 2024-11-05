@@ -9,7 +9,7 @@ pub const PC_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
 /// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
 pub const DEFAULT_PC_STEP: u32 = 4;
-
+pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
 #[derive(Clone, Debug, Default)]
@@ -20,13 +20,18 @@ pub struct Program<F> {
     pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
     pub step: u32,
     pub pc_base: u32,
+    /// The upper bound of the number of public values the program would publish.
+    /// Currently, this won't result any constraint. But users should always be aware of the limit
+    /// of public values when they write programs.
+    pub max_num_public_values: usize,
 }
 
 impl<F: Field> Program<F> {
-    pub fn from_instructions_and_step(
+    pub fn new_without_debug_infos(
         instructions: &[Instruction<F>],
         step: u32,
         pc_base: u32,
+        max_num_public_values: usize,
     ) -> Self {
         assert!(
             instructions.is_empty()
@@ -45,6 +50,7 @@ impl<F: Field> Program<F> {
                 .collect(),
             step,
             pc_base,
+            max_num_public_values,
         }
     }
 
@@ -69,11 +75,17 @@ impl<F: Field> Program<F> {
                 .collect(),
             step: DEFAULT_PC_STEP,
             pc_base: 0,
+            max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
         }
     }
 
     pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
-        Self::from_instructions_and_step(instructions, DEFAULT_PC_STEP, 0)
+        Self::new_without_debug_infos(
+            instructions,
+            DEFAULT_PC_STEP,
+            0,
+            DEFAULT_MAX_NUM_PUBLIC_VALUES,
+        )
     }
 
     pub fn len(&self) -> usize {

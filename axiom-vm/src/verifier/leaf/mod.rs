@@ -1,8 +1,9 @@
-use std::{array, borrow::BorrowMut};
+use std::array;
 
 use ax_stark_sdk::{
     ax_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, prover::types::Proof,
+        keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, p3_util::log2_strict_usize,
+        prover::types::Proof,
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
@@ -11,8 +12,9 @@ use axvm_circuit::{
         instructions::program::Program, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
         PROGRAM_CACHED_TRACE_INDEX,
     },
-    circuit_derive::AlignedBorrow,
-    system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
+    system::{
+        connector::VmConnectorPvs, memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
+    },
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{
@@ -25,52 +27,18 @@ use axvm_recursion::{
     utils::const_fri_config,
     vars::StarkProofVariable,
 };
+use types::LeafVmVerifierPvs;
 
-use crate::config::AxiomVmConfig;
+use crate::{config::AxiomVmConfig, verifier::leaf::types::UserPublicValuesRootProof};
+
+pub mod types;
+mod vars;
 
 type C = InnerConfig;
 type F = InnerVal;
 
-#[derive(Debug, AlignedBorrow)]
-#[repr(C)]
-pub struct LeafVmVerifierPvs<T, const CHUNK: usize> {
-    pub app_commit: [T; CHUNK],
-    pub connector: VmConnectorPvs<T>,
-    pub memory: MemoryMerklePvs<T, CHUNK>,
-    pub public_values_commit: [T; CHUNK],
-}
-
-impl<const CHUNK: usize> LeafVmVerifierPvs<Felt<F>, { CHUNK }> {
-    fn uninit(builder: &mut Builder<C>) -> Self {
-        Self {
-            app_commit: array::from_fn(|_| builder.uninit()),
-            connector: VmConnectorPvs {
-                initial_pc: builder.uninit(),
-                final_pc: builder.uninit(),
-                exit_code: builder.uninit(),
-                is_terminate: builder.uninit(),
-            },
-            memory: MemoryMerklePvs {
-                initial_root: array::from_fn(|_| builder.uninit()),
-                final_root: array::from_fn(|_| builder.uninit()),
-            },
-            public_values_commit: array::from_fn(|_| builder.uninit()),
-        }
-    }
-}
-
-impl<const CHUNK: usize> LeafVmVerifierPvs<Felt<F>, { CHUNK }> {
-    pub fn flatten(self) -> Vec<Felt<F>> {
-        let mut v = vec![Felt(0, Default::default()); LeafVmVerifierPvs::<u8, CHUNK>::width()];
-        *v.as_mut_slice().borrow_mut() = self;
-        v
-    }
-}
-
 /// Config to generate
 pub struct LeafVmVerifierConfig {
-    #[allow(unused)]
-    pub max_num_user_public_values: usize,
     pub fri_params: FriParameters,
     pub app_vm_config: VmConfig,
     pub compiler_options: CompilerOptions,
@@ -78,7 +46,7 @@ pub struct LeafVmVerifierConfig {
 
 impl LeafVmVerifierConfig {
     pub fn build_program(
-        self,
+        &self,
         app_vm_vk: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> Program<F> {
         self.app_vm_config.memory_config.memory_dimensions();
@@ -94,7 +62,7 @@ impl LeafVmVerifierConfig {
             // At least 1 proof should be provided.
             builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
 
-            let pvs = LeafVmVerifierPvs::<Felt<F>, { DIGEST_SIZE }>::uninit(&mut builder);
+            let pvs = LeafVmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             builder.range(0, proofs.len()).for_each(|i, builder| {
                 let proof = builder.get(&proofs, i);
                 StarkVerifier::verify::<DuplexChallengerVariable<C>>(
@@ -174,10 +142,14 @@ impl LeafVmVerifierConfig {
                         },
                     );
                 }
-                // TODO: decommit user public value address space.
-                for j in 0..DIGEST_SIZE {
-                    builder.assign(&pvs.public_values_commit[j], F::zero());
-                }
+            });
+
+            let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
+            builder.if_eq(is_terminate, F::one()).then(|builder| {
+                let (pv_commit, expected_memory_root) =
+                    self.verify_user_public_values_root(builder);
+                builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.memory.final_root, expected_memory_root);
+                builder.assign(&pvs.public_values_commit, pv_commit);
             });
             for pv in pvs.flatten() {
                 builder.commit_public_value(pv);
@@ -186,14 +158,53 @@ impl LeafVmVerifierConfig {
             builder.halt();
         }
 
-        builder.compile_isa_with_options(self.compiler_options)
+        builder.compile_isa_with_options(self.compiler_options.clone())
+    }
+
+    /// Read the public values root proof from the input stream and verify it.
+    // This verification must be consistent `axvm-circuit::system::memory::tree::public_values`.
+    /// Returns the public values commit and the corresponding memory state root.
+    fn verify_user_public_values_root(
+        &self,
+        builder: &mut Builder<C>,
+    ) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
+        let memory_dimensions = self.app_vm_config.memory_config.memory_dimensions();
+        let pv_as = F::from_canonical_usize(
+            PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset,
+        );
+        let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
+        let pv_height = log2_strict_usize(self.app_vm_config.num_public_values / DIGEST_SIZE);
+        let proof_len = memory_dimensions.overall_height() - pv_height;
+        let idx_prefix = pv_start_idx >> pv_height;
+
+        // Read the public values root proof from the input stream.
+        let root_proof = UserPublicValuesRootProof::<F>::read(builder);
+        builder.assert_eq::<Usize<_>>(root_proof.sibling_hashes.len(), Usize::from(proof_len));
+        let mut curr_commit = root_proof.public_values_commit;
+        // Share the same state array to avoid unnecessary allocations.
+        let state: Array<C, Felt<_>> = builder.array(PERMUTATION_WIDTH);
+        for i in 0..proof_len {
+            let sibling_hash = builder.get(&root_proof.sibling_hashes, i);
+            let (l_hash, r_hash) = if idx_prefix & (1 << i) != 0 {
+                (sibling_hash, curr_commit)
+            } else {
+                (curr_commit, sibling_hash)
+            };
+            for j in 0..DIGEST_SIZE {
+                builder.set(&state, j, l_hash[j]);
+                builder.set(&state, DIGEST_SIZE + j, r_hash[j]);
+            }
+            builder.poseidon2_permute_mut(&state);
+            curr_commit = array::from_fn(|j| builder.get(&state, j));
+        }
+        (root_proof.public_values_commit, curr_commit)
     }
 }
 
 impl AxiomVmConfig {
     pub fn leaf_verifier_vm_config(&self) -> VmConfig {
         VmConfig::aggregation(
-            LeafVmVerifierPvs::<u8, DIGEST_SIZE>::width(),
+            LeafVmVerifierPvs::<u8>::width(),
             self.poseidon2_max_constraint_degree,
         )
     }
