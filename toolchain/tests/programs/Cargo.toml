@@ -10,6 +10,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
 [features]
 default = []

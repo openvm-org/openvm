@@ -4,7 +4,7 @@ use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
     BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode, LessThanOpcode, MulHOpcode,
     MulOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
-    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LessThan256Opcode,
+    Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32KeccakOpcode, Rv32LessThan256Opcode,
     Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
     ShiftOpcode, UsizeOpcode,
 };
@@ -23,7 +23,6 @@ use rrs_lib::{
 use crate::util::*;
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
-#[allow(dead_code)]
 pub(crate) struct InstructionTranspiler<F>(PhantomData<F>);
 
 impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
@@ -286,7 +285,8 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                 0,
             )),
             Some(Keccak256) => {
-                unimplemented!()
+                let dec_insn = RType::new(instruction_u32);
+                Some(from_r_type(Rv32KeccakOpcode::KECCAK256.with_default_offset(), 2, &dec_insn))
             }
             Some(Int256) => {
                 let dec_insn = RType::new(instruction_u32);

@@ -274,6 +274,7 @@ pub fn build_guest_package<P>(
 
     let mut child = cmd
         .stderr(Stdio::piped())
+        .env("CARGO_TERM_COLOR", "always")
         .spawn()
         .expect("cargo build failed");
     let stderr = child.stderr.take().unwrap();

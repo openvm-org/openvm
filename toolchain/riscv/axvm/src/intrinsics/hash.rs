@@ -1,3 +1,9 @@
+#[cfg(target_os = "zkvm")]
+use core::mem::MaybeUninit;
+
+#[cfg(target_os = "zkvm")]
+use axvm_platform::constants::{Custom0Funct3, CUSTOM_0};
+
 /// The keccak256 cryptographic hash function.
 #[inline(always)]
 pub fn keccak256(input: &[u8]) -> [u8; 32] {
@@ -9,7 +15,16 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
     }
     #[cfg(target_os = "zkvm")]
     {
-        todo!()
+        let output = MaybeUninit::<[u8; 32]>::uninit();
+        axvm_platform::custom_insn_r!(
+            CUSTOM_0,
+            Custom0Funct3::Keccak256 as u8,
+            0x0,
+            output.as_ptr(),
+            input.as_ptr(),
+            input.len()
+        );
+        unsafe { output.assume_init() }
     }
 }
 
@@ -25,6 +40,13 @@ pub fn set_keccak256(input: &[u8], output: &mut [u8; 32]) {
     }
     #[cfg(target_os = "zkvm")]
     {
-        todo!()
+        axvm_platform::custom_insn_r!(
+            CUSTOM_0,
+            Custom0Funct3::Keccak256 as u8,
+            0x0,
+            output.as_ptr(),
+            input.as_ptr(),
+            input.len()
+        );
     }
 }

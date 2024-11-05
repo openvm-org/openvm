@@ -1,6 +1,6 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, VmConfig, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
     system::memory::tree::public_values::compute_user_public_values_proof,
     utils::air_test_with_min_segments,
 };
@@ -78,5 +78,14 @@ fn test_reveal_runtime() -> Result<()> {
             .map(F::from_canonical_u8)
             .collect::<Vec<_>>()
     );
+    Ok(())
+}
+
+#[test]
+fn test_keccak256_runtime() -> Result<()> {
+    let elf = build_example_program("keccak")?;
+    let executor =
+        VmExecutor::<F>::new(VmConfig::rv32i().add_executor(ExecutorName::Keccak256Rv32));
+    executor.execute(elf, vec![])?;
     Ok(())
 }
