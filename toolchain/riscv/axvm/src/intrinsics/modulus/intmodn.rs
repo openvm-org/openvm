@@ -268,6 +268,7 @@ impl<'a> Mul<&'a IntModN> for &IntModN {
 }
 
 impl<'a> DivAssign<&'a IntModN> for IntModN {
+    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div_assign(&mut self, other: &'a IntModN) {
         self.div_assign_impl(other);
@@ -275,6 +276,7 @@ impl<'a> DivAssign<&'a IntModN> for IntModN {
 }
 
 impl DivAssign for IntModN {
+    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div_assign(&mut self, other: Self) {
         self.div_assign_impl(&other);
@@ -283,6 +285,7 @@ impl DivAssign for IntModN {
 
 impl Div for IntModN {
     type Output = Self;
+    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div(mut self, other: Self) -> Self::Output {
         self /= other;
@@ -292,6 +295,7 @@ impl Div for IntModN {
 
 impl<'a> Div<&'a IntModN> for IntModN {
     type Output = Self;
+    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div(mut self, other: &'a IntModN) -> Self::Output {
         self /= other;
@@ -301,6 +305,7 @@ impl<'a> Div<&'a IntModN> for IntModN {
 
 impl<'a> Div<&'a IntModN> for &IntModN {
     type Output = IntModN;
+    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div(self, other: &'a IntModN) -> Self::Output {
         #[cfg(not(target_os = "zkvm"))]
