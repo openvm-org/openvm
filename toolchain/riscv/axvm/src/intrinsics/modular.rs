@@ -35,9 +35,21 @@ impl IntModN {
         Self(bytes)
     }
 
+    /// Creates a new IntModN from a u32.
+    pub fn from_u32(val: u32) -> Self {
+        let mut bytes = [0; LIMBS];
+        bytes[..4].copy_from_slice(&val.to_le_bytes());
+        Self(bytes)
+    }
+
     /// Value of this IntModN as an array of bytes.
     pub fn as_bytes(&self) -> &[u8; LIMBS] {
         &(self.0)
+    }
+
+    /// Returns MODULUS as an array of bytes.
+    pub fn modulus() -> [u8; LIMBS] {
+        Self::MODULUS
     }
 
     /// Creates a new IntModN from a BigUint.
