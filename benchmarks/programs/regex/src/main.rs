@@ -38,9 +38,9 @@ pub fn main() {
     let email_hash = unsafe { transmute::<[u8; 32], [u32; 8]>(email_hash) };
 
     email_hash.into_iter().enumerate().for_each(|(i, x)| {
-        // axvm::io::reveal(x, i);
-        black_box(x);
-        black_box(i);
+        axvm::io::reveal(x, i);
+        // black_box(x);
+        // black_box(i);
     });
 }
 
