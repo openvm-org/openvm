@@ -9,7 +9,9 @@ use axvm_benchmarks::utils::{bench_from_exe, build_bench_program};
 use axvm_circuit::arch::VmConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_transpiler::axvm_platform::bincode;
 use eyre::Result;
+use p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {
@@ -24,7 +26,17 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, VmConfig::rv32im(), elf, vec![])
+                let n = 100_000u64;
+                let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
+                bench_from_exe(
+                    engine,
+                    VmConfig::rv32im(),
+                    elf,
+                    vec![input
+                        .into_iter()
+                        .map(AbstractField::from_canonical_u8)
+                        .collect()],
+                )
             })?;
 
         #[cfg(feature = "aggregation")]

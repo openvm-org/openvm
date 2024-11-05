@@ -37,13 +37,13 @@ jobs:
           submodules: recursive
 
       - name: Run Makefile
-        working-directory: toolchain/riscv/transpiler/rv32im-test-vectors
+        working-directory: toolchain/tests/rv32im-test-vectors
         run: |
           export PATH=/opt/riscv/bin:$PATH
           make
 
       - name: Run RISC-V test vector tests
-        working-directory: toolchain/riscv/transpiler
+        working-directory: toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo nextest run --cargo-profile=fast --run-ignored only -- test_rv32im_riscv_vector_runtime

@@ -29,7 +29,7 @@ mod tests;
 /// But we will use this value when generating the proof.
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
@@ -171,7 +171,7 @@ where
     Val<SC>: PrimeField32,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {

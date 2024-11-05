@@ -1,8 +1,5 @@
-mod mul_013_by_013;
-mod mul_by_01234;
+mod d_type;
+mod m_type;
 
-pub use mul_013_by_013::*;
-pub use mul_by_01234::*;
-
-#[cfg(test)]
-mod tests;
+pub use d_type::*;
+pub use m_type::*;

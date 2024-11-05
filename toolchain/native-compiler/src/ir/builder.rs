@@ -206,6 +206,23 @@ impl<C: Config> Builder<C> {
         dst.assign(expr.into(), self);
     }
 
+    /// Casts a Felt to a Var. Please use carefully.
+    pub fn cast_felt_to_var(&mut self, felt: Felt<C::F>) -> Var<C::N> {
+        if self.flags.static_only {
+            panic!("Cannot cast a Felt to a Var in static mode");
+        }
+        let var: Var<_> = self.uninit();
+        let buffer = self.alloc(1, 1);
+        let idx = MemIndex {
+            index: RVar::zero(),
+            offset: 0,
+            size: 1,
+        };
+        felt.store(buffer, idx, self);
+        var.load(buffer, idx, self);
+        var
+    }
+
     /// Asserts that two expressions are equal.
     pub fn assert_eq<V: Variable<C>>(
         &mut self,
@@ -622,7 +639,7 @@ enum IfCondition<N> {
     NeI(Var<N>, N),
 }
 
-impl<'a, C: Config> IfBuilder<'a, C> {
+impl<C: Config> IfBuilder<'_, C> {
     pub fn then(&mut self, mut f: impl FnMut(&mut Builder<C>)) {
         self.then_may_break(|builder| {
             f(builder);
@@ -953,7 +970,7 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
 /// A builder for the DSL that handles for loops with breaks.
 pub struct RangeBuilderWithBreaks<'a, C: Config>(RangeBuilder<'a, C>);
 
-impl<'a, C: Config> RangeBuilderWithBreaks<'a, C> {
+impl<C: Config> RangeBuilderWithBreaks<'_, C> {
     pub const fn step_by(mut self, step_size: usize) -> Self {
         self.0 = self.0.step_by(step_size);
         self

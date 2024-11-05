@@ -12,9 +12,9 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, ExitCode, MemoryConfig,
-        PersistenceType, SingleSegmentVmExecutor, VirtualMachine, VmConfig,
+        SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
-    intrinsics::hashes::keccak::hasher::utils::keccak256,
+    intrinsics::hashes::keccak256::utils::keccak256,
     system::{
         memory::{tree::public_values::compute_user_public_values_proof, CHUNK},
         program::trace::AxVmCommittedExe,
@@ -28,13 +28,13 @@ use axvm_instructions::{
     BranchEqualOpcode::*,
     FieldArithmeticOpcode::*,
     FieldExtensionOpcode::*,
-    Keccak256Opcode::*,
     NativeBranchEqualOpcode,
     NativeJalOpcode::*,
     NativeLoadStoreOpcode::*,
     PhantomInstruction,
     Poseidon2Opcode::*,
     PublishOpcode::PUBLISH,
+    Rv32KeccakOpcode::*,
     SystemOpcode::*,
     UsizeOpcode,
 };
@@ -66,7 +66,7 @@ fn vm_config_with_field_arithmetic() -> VmConfig {
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
     program: Program<BabyBear>,
-    memory_persistence: PersistenceType,
+    continuation_enabled: bool,
 ) {
     let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
@@ -81,10 +81,7 @@ fn air_test_with_compress_poseidon2(
 
     let vm_config = VmConfig {
         poseidon2_max_constraint_degree,
-        memory_config: MemoryConfig {
-            persistence_type: memory_persistence,
-            ..Default::default()
-        },
+        continuation_enabled,
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -181,7 +178,7 @@ fn test_vm_1_optional_air() {
             "Expect less used AIRs"
         );
         let proofs = vm.prove(&pk, result);
-        vm.verify(&pk.get_vk(), proofs)
+        vm.verify_single(&pk.get_vk(), &proofs[0])
             .expect("Verification failed");
     }
 }
@@ -252,10 +249,7 @@ fn test_vm_initial_memory() {
 
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig {
-            persistence_type: PersistenceType::Persistent,
-            ..Default::default()
-        },
+        continuation_enabled: true,
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::BranchEqual)
@@ -273,7 +267,8 @@ fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, PersistenceType::Persistent),
+        continuation_enabled: true,
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -382,11 +377,8 @@ fn test_vm_continuations() {
     let config = VmConfig {
         num_public_values: 0,
         poseidon2_max_constraint_degree: 3,
+        continuation_enabled: true,
         max_segment_len: 200000,
-        memory_config: MemoryConfig {
-            persistence_type: PersistenceType::Persistent,
-            ..Default::default()
-        },
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::FieldArithmetic)
@@ -604,7 +596,8 @@ fn test_vm_field_extension_arithmetic_persistent() {
     let program = Program::from_instructions(&instructions);
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, PersistenceType::Persistent),
+        continuation_enabled: true,
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -753,10 +746,10 @@ fn test_vm_compress_poseidon2_as2() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Volatile);
-    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Volatile);
-    air_test_with_compress_poseidon2(7, program.clone(), PersistenceType::Persistent);
-    air_test_with_compress_poseidon2(3, program.clone(), PersistenceType::Persistent);
+    air_test_with_compress_poseidon2(7, program.clone(), false);
+    air_test_with_compress_poseidon2(3, program.clone(), false);
+    air_test_with_compress_poseidon2(7, program.clone(), true);
+    air_test_with_compress_poseidon2(3, program.clone(), true);
 }
 
 /// Add instruction to write input to memory, call KECCAK256 opcode, then check against expected output
@@ -779,7 +772,8 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
     ));
 
-    let [a, b, c] = [1, 0, (1 << LIMB_BITS) - 1];
+    let [a, b, c] = [4, 0, (1 << LIMB_BITS) - 4];
+    // [jpw] Cheating here and assuming src, dst, len all bit in a byte so we skip writing the other register bytes
     // src = word[b]_1 <- 0
     let src = 0;
     instructions.push(Instruction::from_isize(
@@ -800,7 +794,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
         0,
         1,
     ));
-    // word[2^29 - 1]_1 <- len // emulate stack
+    // word[c]_1 <- len // emulate stack
     instructions.push(Instruction::from_isize(
         STOREW.with_default_offset(),
         input.len() as isize,
@@ -825,15 +819,13 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     }
     // dst = word[a]_1, src = word[b]_1, len = word[c]_1,
     // read and write io to address space 2
-    instructions.push(Instruction::large_from_isize(
+    instructions.push(Instruction::from_isize(
         KECCAK256.with_default_offset(),
         a,
         b,
         c,
         1,
         2,
-        1,
-        0,
     ));
 
     // read expected result to check correctness
@@ -877,7 +869,7 @@ fn test_vm_keccak() {
     air_test(
         VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::Keccak256Rv32)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal),
         program,
@@ -906,7 +898,7 @@ fn test_vm_keccak_non_full_round() {
     air_test(
         VmConfig::default()
             .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::Keccak256)
+            .add_executor(ExecutorName::Keccak256Rv32)
             .add_executor(ExecutorName::BranchEqual)
             .add_executor(ExecutorName::Jal),
         program,

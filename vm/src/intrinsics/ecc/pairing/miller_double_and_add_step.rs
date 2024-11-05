@@ -25,7 +25,7 @@ pub struct MillerDoubleAndAddStepChip<
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -118,11 +118,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        arch::{
-            instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        intrinsics::field_expression::FieldExpressionCoreChip,
+        arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         rv32im::adapters::Rv32VecHeapAdapterChip,
         utils::{biguint_to_limbs, rv32_write_heap_default},
     };
@@ -130,38 +126,32 @@ mod tests {
     type F = BabyBear;
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    const BLOCK_SIZE: usize = 32;
+
     #[test]
     #[allow(non_snake_case)]
     fn test_miller_double_and_add() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let config = ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
-            limb_bits: LIMB_BITS,
-            num_limbs: NUM_LIMBS,
-        };
-        let expr = miller_double_and_add_step_expr(
-            config,
-            tester.memory_controller().borrow().range_checker.bus(),
-        );
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            PairingOpcode::default_offset(),
-            vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
-            vec![],
-            tester.memory_controller().borrow().range_checker.clone(),
-            "MillerDoubleAndAdd",
-        );
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
         ));
-        let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, NUM_LIMBS, NUM_LIMBS>::new(
+        let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
             bitwise_chip.clone(),
         );
-        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+        let mut chip = MillerDoubleAndAddStepChip::new(
+            adapter,
+            tester.memory_controller(),
+            ExprBuilderConfig {
+                modulus: BN254.MODULUS.clone(),
+                limb_bits: LIMB_BITS,
+                num_limbs: NUM_LIMBS,
+            },
+            PairingOpcode::default_offset(),
+        );
 
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
@@ -169,28 +159,29 @@ mod tests {
         let inputs = [
             Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1, Q2.x.c0, Q2.x.c1, Q2.y.c0, Q2.y.c1,
         ]
-        .map(|x| bn254_fq_to_biguint(&x));
+        .map(bn254_fq_to_biguint);
 
         let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
         let Q_ecpoint2 = EcPoint { x: Q2.x, y: Q2.y };
         let (Q_daa, l_qa, l_sqs) = miller_double_and_add_step::<Fq, Fq2>(Q_ecpoint, Q_ecpoint2);
         let result = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
         assert_eq!(result.len(), 12); // EcPoint<Fp2> and 4 Fp2 coefficients
-        assert_eq!(result[0], bn254_fq_to_biguint(&Q_daa.x.c0));
-        assert_eq!(result[1], bn254_fq_to_biguint(&Q_daa.x.c1));
-        assert_eq!(result[2], bn254_fq_to_biguint(&Q_daa.y.c0));
-        assert_eq!(result[3], bn254_fq_to_biguint(&Q_daa.y.c1));
-        assert_eq!(result[4], bn254_fq_to_biguint(&l_qa.b.c0));
-        assert_eq!(result[5], bn254_fq_to_biguint(&l_qa.b.c1));
-        assert_eq!(result[6], bn254_fq_to_biguint(&l_qa.c.c0));
-        assert_eq!(result[7], bn254_fq_to_biguint(&l_qa.c.c1));
-        assert_eq!(result[8], bn254_fq_to_biguint(&l_sqs.b.c0));
-        assert_eq!(result[9], bn254_fq_to_biguint(&l_sqs.b.c1));
-        assert_eq!(result[10], bn254_fq_to_biguint(&l_sqs.c.c0));
-        assert_eq!(result[11], bn254_fq_to_biguint(&l_sqs.c.c1));
+        assert_eq!(result[0], bn254_fq_to_biguint(Q_daa.x.c0));
+        assert_eq!(result[1], bn254_fq_to_biguint(Q_daa.x.c1));
+        assert_eq!(result[2], bn254_fq_to_biguint(Q_daa.y.c0));
+        assert_eq!(result[3], bn254_fq_to_biguint(Q_daa.y.c1));
+        assert_eq!(result[4], bn254_fq_to_biguint(l_qa.b.c0));
+        assert_eq!(result[5], bn254_fq_to_biguint(l_qa.b.c1));
+        assert_eq!(result[6], bn254_fq_to_biguint(l_qa.c.c0));
+        assert_eq!(result[7], bn254_fq_to_biguint(l_qa.c.c1));
+        assert_eq!(result[8], bn254_fq_to_biguint(l_sqs.b.c0));
+        assert_eq!(result[9], bn254_fq_to_biguint(l_sqs.b.c1));
+        assert_eq!(result[10], bn254_fq_to_biguint(l_sqs.c.c0));
+        assert_eq!(result[11], bn254_fq_to_biguint(l_sqs.c.c1));
 
         let input1_limbs = inputs[0..4]
             .iter()
@@ -212,7 +203,7 @@ mod tests {
             &mut tester,
             input1_limbs,
             input2_limbs,
-            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+            chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
         );
 
         tester.execute(&mut chip, instruction);

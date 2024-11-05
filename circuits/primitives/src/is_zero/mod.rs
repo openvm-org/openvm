@@ -31,7 +31,12 @@ pub struct IsZeroSubAir;
 
 impl<AB: AirBuilder> SubAir<AB> for IsZeroSubAir {
     /// (io, inv)
-    type AirContext<'a> = (IsZeroIo<AB::Expr>, AB::Var) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsZeroIo<AB::Expr>, AB::Var)
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     fn eval<'a>(&'a self, builder: &'a mut AB, (io, inv): (IsZeroIo<AB::Expr>, AB::Var))
     where

@@ -1,12 +1,12 @@
-#![no_main]
-#![no_std]
+#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use core::hint::black_box;
+use axvm::io::{read, reveal};
 
 axvm::entry!(main);
 
 pub fn main() {
-    let n: u64 = black_box(100000);
+    let n: u64 = read();
     let mut a: u64 = 0;
     let mut b: u64 = 1;
     for _ in 0..n {
@@ -14,5 +14,6 @@ pub fn main() {
         a = b;
         b = c;
     }
-    let _ = black_box(a);
+    reveal(a as u32, 0);
+    reveal((a >> 32) as u32, 1);
 }

@@ -64,7 +64,7 @@ pub struct LoadStoreInstruction<T> {
 /// and it must have an AB::Var type in AIR as to satisfy the memory_bridge interface.
 /// This is achived by having different types for reads and writes in Air AdapterInterface.
 /// This method ensures that there are no modifications to the global interfaces.
-
+///
 /// Here 2 reads represent read_data and prev_data,
 /// The second element of the tuple in Reads is the shift amount needed to be passed to the core chip
 /// Getting the intermediate pointer is completely internal to the adapter and shouldn't be a part of the AdapterInterface

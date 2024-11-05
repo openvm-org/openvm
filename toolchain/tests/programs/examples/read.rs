@@ -1,0 +1,22 @@
+#![no_main]
+#![no_std]
+extern crate alloc;
+use axvm::io::read;
+
+axvm::entry!(main);
+
+#[derive(serde::Deserialize)]
+struct Foo {
+    bar: u32,
+    baz: alloc::vec::Vec<u32>,
+}
+
+pub fn main() {
+    let foo: Foo = read();
+    if foo.baz.len() != 4 {
+        axvm::process::panic();
+    }
+    if foo.bar != 42 {
+        axvm::process::panic();
+    }
+}

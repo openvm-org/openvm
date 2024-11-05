@@ -20,7 +20,7 @@ use crate::{
 // Output: Fp2
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct Fp2AddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -90,13 +90,9 @@ mod tests {
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
 
-    use super::fp2_addsub_expr;
     use crate::{
-        arch::{
-            instructions::Fp2Opcode, testing::VmChipTestBuilder, VmChipWrapper,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        intrinsics::field_expression::FieldExpressionCoreChip,
+        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        intrinsics::ecc::fp2::Fp2AddSubChip,
         rv32im::adapters::Rv32VecHeapAdapterChip,
         utils::{biguint_to_limbs, rv32_write_heap_default},
     };
@@ -113,19 +109,6 @@ mod tests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let (expr, flag_idx) = fp2_addsub_expr(
-            config,
-            tester.memory_controller().borrow().range_checker.bus(),
-        );
-
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            Fp2Opcode::default_offset(),
-            vec![Fp2Opcode::ADD as usize, Fp2Opcode::SUB as usize],
-            vec![flag_idx],
-            tester.memory_controller().borrow().range_checker.clone(),
-            "Fp2AddSub",
-        );
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
@@ -136,15 +119,21 @@ mod tests {
             tester.memory_controller(),
             bitwise_chip.clone(),
         );
-        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+        let mut chip = Fp2AddSubChip::new(
+            adapter,
+            tester.memory_controller(),
+            config,
+            Fp2Opcode::default_offset(),
+        );
 
         let mut rng = StdRng::seed_from_u64(42);
         let x = Fq2::random(&mut rng);
         let y = Fq2::random(&mut rng);
-        let inputs = [x.c0, x.c1, y.c0, y.c1].map(|x| bn254_fq_to_biguint(&x));
+        let inputs = [x.c0, x.c1, y.c0, y.c1].map(bn254_fq_to_biguint);
 
-        let expected_sum = bn254_fq2_to_biguint_vec(&(x + y));
+        let expected_sum = bn254_fq2_to_biguint_vec(x + y);
         let r_sum = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![true]);
@@ -152,8 +141,9 @@ mod tests {
         assert_eq!(r_sum[0], expected_sum[0]);
         assert_eq!(r_sum[1], expected_sum[1]);
 
-        let expected_sub = bn254_fq2_to_biguint_vec(&(x - y));
+        let expected_sub = bn254_fq2_to_biguint_vec(x - y);
         let r_sub = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![false]);
@@ -179,13 +169,13 @@ mod tests {
             &mut tester,
             x_limbs.clone(),
             y_limbs.clone(),
-            chip.core.air.offset + Fp2Opcode::ADD as usize,
+            chip.0.core.air.offset + Fp2Opcode::ADD as usize,
         );
         let instruction2 = rv32_write_heap_default(
             &mut tester,
             x_limbs,
             y_limbs,
-            chip.core.air.offset + Fp2Opcode::SUB as usize,
+            chip.0.core.air.offset + Fp2Opcode::SUB as usize,
         );
         tester.execute(&mut chip, instruction1);
         tester.execute(&mut chip, instruction2);
