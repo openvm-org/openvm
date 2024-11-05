@@ -26,6 +26,7 @@ use crate::{
     arch::{
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet, Streams,
     },
+    rv32im::adapters::unsafe_read_rv32_register,
     system::{
         memory::MemoryControllerRef,
         program::{ExecutionError, ProgramBus},
@@ -180,6 +181,31 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     val >>= 1;
                 }
                 drop(streams);
+            }
+            PhantomInstruction::PrintStrRv32 => {
+                let memory = RefCell::borrow(&self.memory);
+                let rd = unsafe_read_rv32_register(&memory, a);
+                let rs1 = unsafe_read_rv32_register(&memory, b);
+                let peek_str = || -> eyre::Result<String> {
+                    let bytes = (0..rs1)
+                        .map(|i| -> eyre::Result<u8> {
+                            let val =
+                                memory.unsafe_read_cell(F::two(), F::from_canonical_u32(rd + i));
+                            let byte: u8 = val.as_canonical_u32().try_into()?;
+                            Ok(byte)
+                        })
+                        .collect::<eyre::Result<Vec<u8>>>()?;
+                    let str = String::from_utf8(bytes)?;
+                    Ok(str)
+                };
+                match peek_str() {
+                    Ok(peeked) => {
+                        println!("{peeked}");
+                    }
+                    Err(err) => {
+                        println!("Error peeking string: {err}");
+                    }
+                }
             }
             _ => {}
         };

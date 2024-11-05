@@ -159,7 +159,7 @@ The transpilation will only be valid for programs where:
 | terminate      | TERMINATE `_, _, utof(imm)`                                   |
 | hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2` |
 | reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`     |
-| hintinput      | PHANTOM `_, _, HintInput as u16`                              |
+| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                          |
 | printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`              |
 | keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
 | add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |

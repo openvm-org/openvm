@@ -11,7 +11,7 @@ use axvm_instructions::{
 use axvm_platform::constants::{
     Custom0Funct3::{self, *},
     Custom1Funct3::{self, *},
-    Int256Funct7, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_0, CUSTOM_1,
+    Int256Funct7, ModArithBaseFunct7, PhantomImm, SwBaseFunct7, CUSTOM_0, CUSTOM_1,
     MODULAR_ARITHMETIC_MAX_KINDS, SHORT_WEIERSTRASS_MAX_KINDS,
 };
 use p3_field::PrimeField32;
@@ -278,12 +278,9 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     3,
                 ))
             }
-            Some(HintInput) => Some(Instruction::phantom(
-                PhantomInstruction::HintInputRv32,
-                F::zero(),
-                F::zero(),
-                0,
-            )),
+            Some(Phantom) => {
+                process_phantom(instruction_u32)
+            },
             Some(Keccak256) => {
                 let dec_insn = RType::new(instruction_u32);
                 Some(from_r_type(Rv32KeccakOpcode::KECCAK256.with_default_offset(), 2, &dec_insn))
@@ -420,6 +417,21 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
             "Failed to transpile custom instruction: {:b} (opcode = {:07b}, funct3 = {:03b})",
             instruction_u32, opcode, funct3
         )
+    })
+}
+
+fn process_phantom<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<F>> {
+    let dec_insn = IType::new(instruction_u32);
+    PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
+        PhantomImm::HintInput => {
+            Instruction::phantom(PhantomInstruction::HintInputRv32, F::zero(), F::zero(), 0)
+        }
+        PhantomImm::PrintStr => Instruction::phantom(
+            PhantomInstruction::PrintStrRv32,
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+            0,
+        ),
     })
 }
 

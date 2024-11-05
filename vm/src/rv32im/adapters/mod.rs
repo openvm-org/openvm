@@ -66,6 +66,12 @@ pub fn read_rv32_register<F: PrimeField32>(
     (record, val)
 }
 
+/// Peeks at the value of a register without updating the memory state or incrementing the timestamp.
+pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
+    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::one(), pointer);
+    compose(data)
+}
+
 pub fn abstract_compose<T: AbstractField, V: Mul<T, Output = T>>(
     data: [V; RV32_REGISTER_NUM_LIMBS],
 ) -> T {
