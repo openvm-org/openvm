@@ -6,6 +6,7 @@ use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::{traits::ModInverse, BigUint, Sign, ToBigInt};
 
+#[cfg(not(target_os = "zkvm"))]
 use crate::intrinsics::biguint_to_limbs;
 
 const LIMBS: usize = 32;
