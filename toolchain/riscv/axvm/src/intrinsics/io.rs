@@ -1,4 +1,4 @@
-use axvm_platform::constants::{Custom0Funct3, CUSTOM_0};
+use axvm_platform::constants::{Custom0Funct3, PhantomImm, CUSTOM_0};
 
 /// Store the next 4 bytes from the hint stream to [[rd] + imm]_2.
 #[macro_export]
@@ -17,7 +17,13 @@ macro_rules! hint_store_u32 {
 /// Reset the hint stream with the next hint.
 #[inline(always)]
 pub fn hint_input() {
-    axvm_platform::custom_insn_i!(CUSTOM_0, Custom0Funct3::HintInput as u8, "x0", "x0", 0);
+    axvm_platform::custom_insn_i!(
+        CUSTOM_0,
+        Custom0Funct3::Phantom as u8,
+        "x0",
+        "x0",
+        PhantomImm::HintInput as u16
+    );
 }
 
 /// Store rs1 to [[rd] + imm]_2.
@@ -32,4 +38,16 @@ macro_rules! reveal {
             $imm
         )
     };
+}
+
+/// Print UTF-8 string encoded as bytes to host stdout for debugging purposes.
+#[inline(always)]
+pub(crate) fn print_str_from_bytes(str_as_bytes: &[u8]) {
+    axvm_platform::custom_insn_i!(
+        CUSTOM_0,
+        Custom0Funct3::Phantom as u8,
+        str_as_bytes.as_ptr(),
+        str_as_bytes.len(),
+        PhantomImm::PrintStr as u16
+    );
 }

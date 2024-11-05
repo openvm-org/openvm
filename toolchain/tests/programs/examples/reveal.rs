@@ -1,5 +1,6 @@
-#![no_main]
-#![no_std]
+#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use axvm::io::reveal;
 
 axvm::entry!(main);

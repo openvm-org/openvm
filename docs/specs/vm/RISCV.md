@@ -15,12 +15,13 @@ We start with the instructions using _custom-0_ opcode[6:0] prefix **0001011**..
 
 ## System
 
-| RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                |
-| ----------- | --- | ----------- | ------ | --------- | ------------------------------------------------------------------------------------------- |
-| terminate   | I   | 0001011     | 000    | `code`    | terminate with exit code `code`                                                             |
-| hintstorew  | I   | 0001011     | 001    |           | Stores next 4-byte word from hint stream in user memory at `[rd + imm]_2` (`i32` addition). |
-| reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                        |
-| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                      |
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | imm[0:11] | RISC-V description and notes                                                                                                |
+| ----------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| terminate   | I   | 0001011     | 000    | `code`    | terminate with exit code `code`                                                                                             |
+| hintstorew  | I   | 0001011     | 001    |           | Stores next 4-byte word from hint stream in user memory at `[rd + imm]_2` (`i32` addition).                                 |
+| reveal      | I   | 0001011     | 010    |           | Stores the 4-byte word `rs1` at address `rd + imm` in user IO space.                                                        |
+| hintinput   | I   | 0001011     | 011    | 0x0       | Pop next vector from input stream and reset hint stream to the vector.                                                      |
+| printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails. |
 
 ## Hashes
 
@@ -158,7 +159,8 @@ The transpilation will only be valid for programs where:
 | terminate      | TERMINATE `_, _, utof(imm)`                                   |
 | hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2` |
 | reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`     |
-| hintinput      | PHANTOM `_, _, HintInput as u16`                              |
+| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                          |
+| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`              |
 | keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
 | add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
 | sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
