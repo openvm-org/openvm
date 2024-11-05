@@ -13,7 +13,7 @@ const LIMBS: usize = 32;
 
 /// Class to represent an integer modulo N, which is currently hard-coded to be the
 /// secp256k1 prime.
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 #[repr(C, align(32))]
 pub struct IntModN([u8; LIMBS]);
 
@@ -30,6 +30,11 @@ impl IntModN {
     /// Value of this IntModN as an array of bytes.
     pub fn as_bytes(&self) -> &[u8; LIMBS] {
         &(self.0)
+    }
+
+    /// The zero element of the field.
+    pub const fn zero() -> Self {
+        Self([0; LIMBS])
     }
 
     /// Creates a new IntModN from a BigUint.
@@ -258,6 +263,44 @@ impl<'a> Mul<&'a IntModN> for &IntModN {
         {
             let mut res = self.clone();
             res *= other;
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+}
+
+impl Mul<usize> for IntModN {
+    type Output = IntModN;
+    #[inline(always)]
+    fn mul(self, other: usize) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..8].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+}
+
+impl Mul<usize> for &IntModN {
+    type Output = IntModN;
+    #[inline(always)]
+    fn mul(self, other: usize) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..8].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
             res
         }
         #[cfg(target_os = "zkvm")]
