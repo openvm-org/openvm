@@ -27,7 +27,7 @@ fn main() -> Result<()> {
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
                 let n = 100_000u64;
-                let input = bincode::serde::encode_to_vec(&n, bincode::config::standard())?;
+                let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
                 bench_from_exe(
                     engine,
                     VmConfig::rv32im(),
