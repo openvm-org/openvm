@@ -11,7 +11,6 @@ use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
-use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::ExecutionState,
@@ -137,7 +136,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(IntoStaticStr, From, ChipUsageGetter, Chip)]
+#[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
     // Lookup tables that are not executors:
     RangeChecker(Arc<VariableRangeCheckerChip>),

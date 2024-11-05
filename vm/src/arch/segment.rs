@@ -321,8 +321,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics.insert(format!("Memory {air_name}"), height);
         }
         for chip in self.chip_set.chips.iter() {
-            let chip_name: &'static str = chip.into();
-            metrics.insert(chip_name.into(), chip.current_trace_height());
+            metrics.insert(chip.air_name(), chip.current_trace_height());
         }
         metrics
     }
