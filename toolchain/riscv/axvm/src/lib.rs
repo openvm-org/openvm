@@ -155,3 +155,5 @@ fn panic_impl(_panic_info: &core::panic::PanicInfo) -> ! {
     axvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }
+
+pub use axvm_setup_macro::*;
