@@ -9,8 +9,6 @@ pub use hash::*;
 #[cfg(target_os = "zkvm")]
 pub use io::*;
 
-mod modular;
-pub use modular::*;
-
 mod utils;
+#[allow(unused_imports)] // This is used in the rust-v programs
 use utils::*;

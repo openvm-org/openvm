@@ -68,39 +68,39 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     #[derive(Clone)]
                                     #[repr(C, align(32))]
                                     pub struct #struct_name([u8; #limbs]);
-                                    
+
                                     impl #struct_name {
                                         const MODULUS: [u8; #limbs] = [#(#modulus_bytes),*];
                                         const MOD_IDX: usize = #mod_idx;
-                                    
+
                                         /// Creates a new #struct_name from an array of bytes.
                                         pub fn from_bytes(bytes: [u8; #limbs]) -> Self {
                                             Self(bytes)
                                         }
-                                    
+
                                         /// Value of this #struct_name as an array of bytes.
                                         pub fn as_bytes(&self) -> &[u8; #limbs] {
                                             &(self.0)
                                         }
-                                    
+
                                         /// Creates a new #struct_name from a BigUint.
                                         #[cfg(not(target_os = "zkvm"))]
                                         pub fn from_biguint(biguint: BigUint) -> Self {
                                             Self(biguint_to_limbs(biguint))
                                         }
-                                    
+
                                         /// Value of this #struct_name as a BigUint.
                                         #[cfg(not(target_os = "zkvm"))]
                                         pub fn as_biguint(&self) -> BigUint {
                                             BigUint::from_bytes_le(self.as_bytes())
                                         }
-                                    
+
                                         /// Modulus N as a BigUint.
                                         #[cfg(not(target_os = "zkvm"))]
                                         pub fn modulus_biguint() -> BigUint {
                                             BigUint::from_bytes_be(&Self::MODULUS)
                                         }
-                                    
+
                                         #[inline(always)]
                                         fn add_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
@@ -114,7 +114,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 todo!()
                                             }
                                         }
-                                    
+
                                         #[inline(always)]
                                         fn sub_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
@@ -129,7 +129,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 todo!()
                                             }
                                         }
-                                    
+
                                         #[inline(always)]
                                         fn mul_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
@@ -143,7 +143,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 todo!()
                                             }
                                         }
-                                    
+
                                         #[inline(always)]
                                         fn div_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
@@ -165,21 +165,21 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                     impl<'a> AddAssign<&'a #struct_name> for #struct_name {
                                         #[inline(always)]
                                         fn add_assign(&mut self, other: &'a #struct_name) {
                                             self.add_assign_impl(other);
                                         }
                                     }
-                                    
+
                                     impl AddAssign for #struct_name {
                                         #[inline(always)]
                                         fn add_assign(&mut self, other: Self) {
                                             self.add_assign_impl(&other);
                                         }
                                     }
-                                    
+
                                     impl Add for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -188,7 +188,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Add<&'a #struct_name> for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -197,7 +197,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Add<&'a #struct_name> for &#struct_name {
                                         type Output = #struct_name;
                                         #[inline(always)]
@@ -219,21 +219,21 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                     impl<'a> SubAssign<&'a #struct_name> for #struct_name {
                                         #[inline(always)]
                                         fn sub_assign(&mut self, other: &'a #struct_name) {
                                             self.sub_assign_impl(other);
                                         }
                                     }
-                                    
+
                                     impl SubAssign for #struct_name {
                                         #[inline(always)]
                                         fn sub_assign(&mut self, other: Self) {
                                             self.sub_assign_impl(&other);
                                         }
                                     }
-                                    
+
                                     impl Sub for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -242,7 +242,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Sub<&'a #struct_name> for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -251,7 +251,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Sub<&'a #struct_name> for &#struct_name {
                                         type Output = #struct_name;
                                         #[inline(always)]
@@ -268,21 +268,21 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                     impl<'a> MulAssign<&'a #struct_name> for #struct_name {
                                         #[inline(always)]
                                         fn mul_assign(&mut self, other: &'a #struct_name) {
                                             self.mul_assign_impl(other);
                                         }
                                     }
-                                    
+
                                     impl MulAssign for #struct_name {
                                         #[inline(always)]
                                         fn mul_assign(&mut self, other: Self) {
                                             self.mul_assign_impl(&other);
                                         }
                                     }
-                                    
+
                                     impl Mul for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -291,7 +291,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Mul<&'a #struct_name> for #struct_name {
                                         type Output = Self;
                                         #[inline(always)]
@@ -300,7 +300,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Mul<&'a #struct_name> for &#struct_name {
                                         type Output = #struct_name;
                                         #[inline(always)]
@@ -317,7 +317,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                     impl<'a> DivAssign<&'a #struct_name> for #struct_name {
                                         /// Undefined behaviour when denominator is not coprime to N
                                         #[inline(always)]
@@ -325,7 +325,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self.div_assign_impl(other);
                                         }
                                     }
-                                    
+
                                     impl DivAssign for #struct_name {
                                         /// Undefined behaviour when denominator is not coprime to N
                                         #[inline(always)]
@@ -333,7 +333,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self.div_assign_impl(&other);
                                         }
                                     }
-                                    
+
                                     impl Div for #struct_name {
                                         type Output = Self;
                                         /// Undefined behaviour when denominator is not coprime to N
@@ -343,7 +343,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Div<&'a #struct_name> for #struct_name {
                                         type Output = Self;
                                         /// Undefined behaviour when denominator is not coprime to N
@@ -353,7 +353,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             self
                                         }
                                     }
-                                    
+
                                     impl<'a> Div<&'a #struct_name> for &#struct_name {
                                         type Output = #struct_name;
                                         /// Undefined behaviour when denominator is not coprime to N
@@ -371,7 +371,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                     impl PartialEq for #struct_name {
                                         #[inline(always)]
                                         fn eq(&self, other: &Self) -> bool {
@@ -385,7 +385,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }
-                                    
+
                                 }));
 
                                 moduli.push(modulus_bytes);
