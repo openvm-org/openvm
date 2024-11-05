@@ -89,3 +89,11 @@ fn test_keccak256_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+#[test]
+fn test_matrix_mult_runtime() -> Result<()> {
+    let elf = build_example_program("matrix-mult")?;
+    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_int256_alu().add_int256_m());
+    executor.execute(elf, vec![])?;
+    Ok(())
+}

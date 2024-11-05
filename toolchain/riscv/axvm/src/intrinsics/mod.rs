@@ -11,7 +11,7 @@ pub use hash::*;
 pub use io::*;
 
 mod u256;
-// pub use u256::*;
+pub use u256::*;
 
 mod modular;
 pub use modular::*;
