@@ -1,27 +1,18 @@
 use std::{
-    fs::{read, read_dir},
+    fs::read,
     path::{Path, PathBuf},
 };
 
-use ax_stark_sdk::config::setup_tracing;
-use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, VmConfig, VmExecutor},
-    system::memory::tree::public_values::compute_user_public_values_proof,
-    utils::{air_test, air_test_with_min_segments},
+    arch::{VmConfig, VmExecutor},
+    utils::air_test,
 };
-use axvm_platform::{bincode, memory::MEM_SIZE};
+use axvm_platform::memory::MEM_SIZE;
 use eyre::Result;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use tempfile::tempdir;
 use test_case::test_case;
 
-use crate::{
-    elf::{Elf, ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES},
-    rrs::transpile,
-    AxVmExe,
-};
+use crate::{elf::Elf, rrs::transpile, AxVmExe};
 
 type F = BabyBear;
 
@@ -34,15 +25,6 @@ fn setup_executor_from_elf(
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let executor = VmExecutor::new(config);
     Ok((executor, elf.into()))
-}
-
-fn get_examples_dir() -> PathBuf {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    dir.push("examples");
-    dir
 }
 
 // An "eyeball test" only: prints the decoded ELF for eyeball inspection
