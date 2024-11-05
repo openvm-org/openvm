@@ -1,10 +1,10 @@
-#![no_main]
-#![no_std]
+#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 axvm::entry!(main);
 
 pub fn main() {
-    let n = 1 << 10;
+    let n = core::hint::black_box(1 << 10);
     let mut a: u32 = 0;
     let mut b: u32 = 1;
     for _ in 1..n {
@@ -13,6 +13,6 @@ pub fn main() {
         b = sum;
     }
     if a == 0 {
-        loop {}
+        panic!();
     }
 }
