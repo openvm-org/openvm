@@ -19,12 +19,12 @@ struct U256 {
 
 impl U256 {
     #[cfg(not(target_os = "zkvm"))]
-    fn as_biguint(&self) -> BigUint {
+    pub fn as_biguint(&self) -> BigUint {
         BigUint::from_bytes_le(&self.limbs)
     }
 
     #[cfg(not(target_os = "zkvm"))]
-    fn from_biguint(value: &BigUint) -> Self {
+    pub fn from_biguint(value: &BigUint) -> Self {
         Self {
             limbs: biguint_to_limbs(value),
         }
