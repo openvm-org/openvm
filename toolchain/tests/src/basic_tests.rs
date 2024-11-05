@@ -16,10 +16,7 @@ type F = BabyBear;
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
-    let config = VmConfig {
-        max_segment_len: (1 << 18) - 1,
-        ..VmConfig::rv32i()
-    };
+    let config = VmConfig::rv32i();
     air_test_with_min_segments(config, elf, vec![], min_segments);
     Ok(())
 }

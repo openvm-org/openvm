@@ -15,6 +15,13 @@ The guest program should be a `no_std` Rust crate. As long as it is `no_std`, yo
 
 The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `axvm::entry!` macro. You should still create a `main` function, and then add `axvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
 
+To support host machine execution, the top of your guest program should have:
+
+```rust
+#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+```
+
 You can copy from [fibonacci](./programs/fibonacci) to get started.
 The guest program crate should **not** be included in the main repository workspace. Instead the guest
 `Cargo.toml` should have `[workspace]` at the top to keep it standalone. Your IDE will likely not

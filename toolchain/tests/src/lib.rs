@@ -3,4 +3,4 @@
 pub mod utils;
 
 #[cfg(test)]
-pub mod unit_tests;
+pub mod basic_tests;
