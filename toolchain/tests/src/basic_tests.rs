@@ -21,6 +21,14 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     Ok(())
 }
 
+#[test_case("collatz", 1)]
+fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    let elf = build_example_program(example_name)?;
+    let config = VmConfig::rv32im();
+    air_test_with_min_segments(config, elf, vec![], min_segments);
+    Ok(())
+}
+
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
