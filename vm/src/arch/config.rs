@@ -204,6 +204,7 @@ impl VmConfig {
             poseidon2_max_constraint_degree,
             continuation_enabled: false,
             num_public_values,
+            max_segment_len: (1 << 22) - 100,
             ..VmConfig::default()
         }
         .add_executor(ExecutorName::Phantom)
