@@ -6,37 +6,35 @@ use ax_circuit_primitives::{
     var_range::VariableRangeCheckerChip,
 };
 use axvm_instructions::instruction::Instruction;
+use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
-use strum_macros::IntoStaticStr;
 
 use crate::{
     arch::ExecutionState,
     intrinsics::{
         ecc::{
+            fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
-                EcLineMul013By013Chip, EcLineMulBy01234Chip, EvaluateLineChip,
-                MillerDoubleAndAddStepChip, MillerDoubleStepChip,
+                EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
+                EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
+                MillerDoubleStepChip,
             },
             sw::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::{keccak::hasher::KeccakVmChip, poseidon2::Poseidon2Chip},
+        hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
-            Rv32BaseAlu256Chip, Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
+            Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
+            Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
         },
-        modular::{ModularAddSubChip, ModularMulDivChip},
+        modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
     kernels::{
-        branch_eq::KernelBranchEqChip,
-        castf::CastFChip,
-        field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip,
-        jal::KernelJalChip,
-        loadstore::KernelLoadStoreChip,
-        modular::{KernelModularAddSubChip, KernelModularMulDivChip},
-        public_values::PublicValuesChip,
+        branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
+        field_extension::FieldExtensionChip, fri::FriMatOpeningChip, jal::KernelJalChip,
+        loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
     system::{phantom::PhantomChip, program::ExecutionError},
@@ -73,12 +71,13 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(EnumDiscriminants)]
+#[derive(EnumDiscriminants, ChipUsageGetter, Chip)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
 #[enum_dispatch(InstructionExecutor<F>)]
-pub enum AxVmInstructionExecutor<F: PrimeField32> {
+pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
+    // Native kernel:
     LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
     BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
     Jal(Rc<RefCell<KernelJalChip<F>>>),
@@ -86,104 +85,74 @@ pub enum AxVmInstructionExecutor<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
-    /// Rv32 (for standard 32-bit integers):
+    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
+    CastF(Rc<RefCell<CastFChip<F>>>),
+    // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
-    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
-    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
     LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
     LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
-    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
     BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
     BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
     JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
     JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
     AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
-    /// 256Rv32 (for 256-bit integers):
-    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
-    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
-    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
-    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
+    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
+    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
+    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     // Intrinsics:
+    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
+    Keccak256Rv32(Rc<RefCell<KeccakVmChip<F>>>),
+    // 256Rv32 (for 256-bit integers):
+    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
+    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
+    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
+    BranchEqual256Rv32(Rc<RefCell<Rv32BranchEqual256Chip<F>>>),
+    BranchLessThan256Rv32(Rc<RefCell<Rv32BranchLessThan256Chip<F>>>),
+    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
+    // Modular arithmetic:
+    // 32-bytes or 48-bytes modulus.
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
     ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
     ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
     ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
+    ModularIsEqualRv32_1x32(Rc<RefCell<ModularIsEqualChip<F, 1, 32, 32>>>),
+    ModularIsEqualRv32_3x16(Rc<RefCell<ModularIsEqualChip<F, 3, 16, 48>>>),
     EcAddNeRv32_2x32(Rc<RefCell<EcAddNeChip<F, 2, 32>>>),
     EcDoubleRv32_2x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
     EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
     EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
+    // Pairing:
+    // Fp2 for 32-bytes or 48-bytes prime.
+    Fp2AddSubRv32_32(Rc<RefCell<Fp2AddSubChip<F, 1, 32>>>),
+    Fp2AddSubRv32_48(Rc<RefCell<Fp2AddSubChip<F, 3, 16>>>),
+    Fp2MulDivRv32_32(Rc<RefCell<Fp2MulDivChip<F, 1, 32>>>),
+    Fp2MulDivRv32_48(Rc<RefCell<Fp2MulDivChip<F, 3, 16>>>),
+    /// Only for BN254 for now
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
+    /// Only for BN254 for now
     EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
-    // 32-bytes or 48-bytes prime.
+    /// Only for BLS12-381 for now
+    EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 12, 30, 16>>>),
+    /// Only for BLS12-381 for now
+    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 36, 16>>>),
     MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
     MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
     EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
-    // TO BE REPLACED:
-    CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
-    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(IntoStaticStr, ChipUsageGetter, Chip)]
+#[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    Phantom(Rc<RefCell<PhantomChip<F>>>),
-    LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
-    BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
-    Jal(Rc<RefCell<KernelJalChip<F>>>),
-    FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
-    Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
+    // Lookup tables that are not executors:
     RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
-    Keccak256(Rc<RefCell<KeccakVmChip<F>>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
-    BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
-    LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
-    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
-    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
-    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
-    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
-    ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
-    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
-    LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
-    LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
-    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
-    BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
-    BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
-    JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
-    JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
-    AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
-    // Intrinsics:
-    ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
-    ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
-    ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
-    ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
-    EcAddNeRv32_2x32(Rc<RefCell<EcAddNeChip<F, 2, 32>>>),
-    EcDoubleRv32_2x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
-    EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
-    EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
-    EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
-    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
-    // 32-bytes or 48-bytes prime.
-    MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
-    MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
-    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
-    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
-    EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
-    EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
-    // TO BE REPLACED:
-    CastF(Rc<RefCell<CastFChip<F>>>),
-    ModularAddSub(Rc<RefCell<KernelModularAddSubChip<F, 32>>>),
-    ModularMultDiv(Rc<RefCell<KernelModularMulDivChip<F, 32>>>),
+    // Instruction Executors
+    Executor(AxVmExecutor<F>),
 }

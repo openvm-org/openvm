@@ -20,9 +20,19 @@ pub struct DockerOptions {
 pub struct GuestOptions {
     /// Features for cargo to build the guest with.
     pub features: Vec<String>,
-
+    /// Custom options to pass as args to `cargo build`.
+    pub options: Vec<String>,
     /// Use a docker environment for building.
     pub use_docker: Option<DockerOptions>,
+}
+
+impl GuestOptions {
+    /// Add custom options to pass to `cargo build`.
+    pub fn with_options<S: AsRef<str>>(mut self, options: impl IntoIterator<Item = S>) -> Self {
+        self.options
+            .extend(options.into_iter().map(|s| s.as_ref().to_string()));
+        self
+    }
 }
 
 /// Metadata defining options to build a guest
@@ -48,10 +58,10 @@ impl From<&Package> for GuestMetadata {
 pub struct GuestBuildOptions {
     /// Features for cargo to build the guest with.
     pub(crate) features: Vec<String>,
-
-    /// Use a docker environment for building.
+    /// Custom options to pass as args to `cargo build`.
+    pub(crate) options: Vec<String>,
+    // Use a docker environment for building.
     // pub(crate) use_docker: Option<DockerOptions>,
-
     /// Configuration flags to build the guest with.
     pub(crate) rustc_flags: Vec<String>,
 }
@@ -60,6 +70,7 @@ impl From<GuestOptions> for GuestBuildOptions {
     fn from(value: GuestOptions) -> Self {
         Self {
             features: value.features,
+            options: value.options,
             // use_docker: value.use_docker,
             ..Default::default()
         }

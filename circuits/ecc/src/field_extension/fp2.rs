@@ -16,6 +16,16 @@ impl Fp2 {
         Fp2 { c0, c1 }
     }
 
+    pub fn new_var(builder: Rc<RefCell<ExprBuilder>>) -> ((usize, usize), Fp2) {
+        let (c0_idx, c0) = builder.borrow_mut().new_var();
+        let (c1_idx, c1) = builder.borrow_mut().new_var();
+        let fp2 = Fp2 {
+            c0: FieldVariable::from_var(builder.clone(), c0),
+            c1: FieldVariable::from_var(builder.clone(), c1),
+        };
+        ((c0_idx, c1_idx), fp2)
+    }
+
     pub fn save(&mut self) -> [usize; 2] {
         let c0_idx = self.c0.save();
         let c1_idx = self.c1.save();
@@ -145,6 +155,13 @@ impl Fp2 {
     pub fn neg(&mut self) -> Fp2 {
         self.int_mul([-1, 0])
     }
+
+    pub fn select(flag_id: usize, a: &Fp2, b: &Fp2) -> Fp2 {
+        Fp2 {
+            c0: FieldVariable::select(flag_id, &a.c0, &b.c0),
+            c1: FieldVariable::select(flag_id, &a.c1, &b.c1),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -168,10 +185,10 @@ mod tests {
 
     fn two_fp2_input(x: &Fq2, y: &Fq2) -> Vec<BigUint> {
         vec![
-            bn254_fq_to_biguint(&x.c0),
-            bn254_fq_to_biguint(&x.c1),
-            bn254_fq_to_biguint(&y.c0),
-            bn254_fq_to_biguint(&y.c1),
+            bn254_fq_to_biguint(x.c0),
+            bn254_fq_to_biguint(x.c1),
+            bn254_fq_to_biguint(y.c0),
+            bn254_fq_to_biguint(y.c1),
         ]
     }
 
@@ -207,8 +224,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
@@ -260,12 +277,12 @@ mod tests {
         let z_fp2 = bn254_fq2_random(95);
         let r_fp2 = z_fp2.invert().unwrap() * x_fp2 * y_fp2;
         let inputs = vec![
-            bn254_fq_to_biguint(&x_fp2.c0),
-            bn254_fq_to_biguint(&x_fp2.c1),
-            bn254_fq_to_biguint(&y_fp2.c0),
-            bn254_fq_to_biguint(&y_fp2.c1),
-            bn254_fq_to_biguint(&z_fp2.c0),
-            bn254_fq_to_biguint(&z_fp2.c1),
+            bn254_fq_to_biguint(x_fp2.c0),
+            bn254_fq_to_biguint(x_fp2.c1),
+            bn254_fq_to_biguint(y_fp2.c0),
+            bn254_fq_to_biguint(y_fp2.c1),
+            bn254_fq_to_biguint(z_fp2.c0),
+            bn254_fq_to_biguint(z_fp2.c1),
         ];
         let mut row = vec![BabyBear::zero(); width];
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
@@ -275,8 +292,8 @@ mod tests {
         assert_eq!(vars.len(), 2);
         let r_c0 = evaluate_biguint(&vars[0], LIMB_BITS);
         let r_c1 = evaluate_biguint(&vars[1], LIMB_BITS);
-        let expected_c0 = bn254_fq_to_biguint(&r_fp2.c0);
-        let expected_c1 = bn254_fq_to_biguint(&r_fp2.c1);
+        let expected_c0 = bn254_fq_to_biguint(r_fp2.c0);
+        let expected_c1 = bn254_fq_to_biguint(r_fp2.c1);
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 

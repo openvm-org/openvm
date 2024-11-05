@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
-    arch::{ExecutionSegment, PersistenceType, VmConfig},
+    arch::{ExecutionSegment, VmConfig},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
@@ -73,7 +73,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     }
 
     pub fn continuation_enabled(&self) -> bool {
-        self.config.continuation_enabled()
+        self.config.continuation_enabled
     }
 
     fn execute_segments(
@@ -149,9 +149,10 @@ impl<F: PrimeField32> VmExecutor<F> {
         let end_state =
             last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
         // TODO[jpw]: add these as execution errors
-        assert!(end_state.is_terminate == 1, "program must terminate");
-        assert!(
-            end_state.exit_code == ExitCode::Success as u32,
+        assert_eq!(end_state.is_terminate, 1, "program must terminate");
+        assert_eq!(
+            end_state.exit_code,
+            ExitCode::Success as u32,
             "program did not exit successfully"
         );
         Ok(final_memory)
@@ -205,10 +206,9 @@ pub struct SingleSegmentVmExecutor<F: PrimeField32> {
 
 impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn new(config: VmConfig) -> Self {
-        assert_eq!(
-            config.memory_config.persistence_type,
-            PersistenceType::Volatile,
-            "Single segment VM only supports volatile memory"
+        assert!(
+            !config.continuation_enabled,
+            "Single segment VM doesn't support continuation mode"
         );
         Self {
             config,
@@ -411,13 +411,12 @@ where
     where
         Val<SC>: PrimeField32,
     {
-        match self.config.memory_config.persistence_type {
-            PersistenceType::Volatile => {
-                assert_eq!(proofs.len(), 1);
-                self.verify_single(vk, &proofs.into_iter().next().unwrap())
-                    .map_err(VmVerificationError::StarkError)
-            }
-            PersistenceType::Persistent => self.verify_segments(vk, proofs),
+        if self.config.continuation_enabled {
+            self.verify_segments(vk, proofs)
+        } else {
+            assert_eq!(proofs.len(), 1);
+            self.verify_single(vk, &proofs.into_iter().next().unwrap())
+                .map_err(VmVerificationError::StarkError)
         }
     }
 

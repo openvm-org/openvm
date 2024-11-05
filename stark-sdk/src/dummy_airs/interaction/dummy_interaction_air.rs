@@ -123,7 +123,7 @@ pub struct DummyInteractionChip<'a, SC: StarkGenericConfig> {
     pub air: DummyInteractionAir,
 }
 
-impl<'pcs, SC: StarkGenericConfig> Clone for DummyInteractionChip<'pcs, SC> {
+impl<SC: StarkGenericConfig> Clone for DummyInteractionChip<'_, SC> {
     fn clone(&self) -> Self {
         Self {
             trace_committer: self.trace_committer.clone(),
@@ -233,7 +233,7 @@ where
     }
 }
 
-impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
+impl<SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'_, SC> {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         Arc::new(self.air)
     }
@@ -267,7 +267,7 @@ impl<'a, SC: StarkGenericConfig> Chip<SC> for DummyInteractionChip<'a, SC> {
     }
 }
 
-impl<'a, SC: StarkGenericConfig> ChipUsageGetter for DummyInteractionChip<'a, SC> {
+impl<SC: StarkGenericConfig> ChipUsageGetter for DummyInteractionChip<'_, SC> {
     fn air_name(&self) -> String {
         "DummyInteractionAir".to_string()
     }

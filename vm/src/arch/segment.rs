@@ -12,7 +12,7 @@ use itertools::{zip_eq, Itertools};
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
-use super::{PersistenceType, Streams, VmChipSet, VmConfig};
+use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -45,6 +45,19 @@ macro_rules! find_chip {
         let mut found_chip = None;
         for chip in &$chip_set.chips {
             if let $chip_type(c) = chip {
+                assert!(
+                    found_chip.is_none(),
+                    concat!("Multiple ", stringify!($chip_type), " chips found")
+                );
+                found_chip = Some(c.clone());
+            }
+        }
+        found_chip.unwrap()
+    }};
+    ($chip_set:expr, $chip_type:path, $chip_type2:path) => {{
+        let mut found_chip = None;
+        for chip in &$chip_set.chips {
+            if let $chip_type($chip_type2(c)) = chip {
                 assert!(
                     found_chip.is_none(),
                     concat!("Multiple ", stringify!($chip_type), " chips found")
@@ -225,14 +238,13 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
         // Finalize memory.
         let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
-        self.final_memory = match self.config.memory_config.persistence_type {
-            PersistenceType::Persistent => {
-                let poseidon_chip = find_chip!(self.chip_set, AxVmChip::Poseidon2);
-                let mut hasher = poseidon_chip.borrow_mut();
-
-                memory_controller.finalize(Some(hasher.deref_mut()))
-            }
-            PersistenceType::Volatile => memory_controller.finalize(None::<&mut Poseidon2Chip<F>>),
+        self.final_memory = if self.config.continuation_enabled {
+            let poseidon_chip =
+                find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
+            let mut hasher = poseidon_chip.borrow_mut();
+            memory_controller.finalize(Some(hasher.deref_mut()))
+        } else {
+            memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
         };
 
         Ok(ExecutionSegmentState {
@@ -309,8 +321,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             metrics.insert(format!("Memory {air_name}"), height);
         }
         for chip in self.chip_set.chips.iter() {
-            let chip_name: &'static str = chip.into();
-            metrics.insert(chip_name.into(), chip.current_trace_height());
+            metrics.insert(chip.air_name(), chip.current_trace_height());
         }
         metrics
     }

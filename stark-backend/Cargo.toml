@@ -23,7 +23,7 @@ serde = { workspace = true, default-features = false, features = [
     "alloc",
     "rc",
 ] }
-derivative = "2.2.0"
+derivative = { workspace = true }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 thiserror.workspace = true

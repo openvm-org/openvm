@@ -1,10 +1,7 @@
+mod d_type;
 mod evaluate_line;
-mod mul_013_by_013;
-mod mul_by_01234;
+mod m_type;
 
+pub use d_type::*;
 pub use evaluate_line::*;
-pub use mul_013_by_013::*;
-pub use mul_by_01234::*;
-
-#[cfg(test)]
-mod tests;
+pub use m_type::*;

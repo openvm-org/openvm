@@ -196,18 +196,6 @@ pub enum DslIr<C: Config> {
     /// Permutes an array of Bn254 elements using Poseidon2 (output = p2_permute(array)). Should only
     /// be used when target is a gnark circuit.
     CircuitPoseidon2Permute([Var<C::N>; 3]),
-    /// Permutates an array of BabyBear elements in the circuit.
-    // CircuitPoseidon2PermuteBabyBear([Felt<C::F>; 16]),
-
-    /// ```ignore
-    /// Keccak256(output, input)
-    /// ```
-    ///
-    /// Computes the keccak256 hash of variable length `input` where `input` does not have the
-    /// keccak padding bits. `input` will be constrained to be bytes. The `output` pointers can
-    /// overwrite the `input` memory. The `output` is in `u16` limbs, with conversion to bytes being
-    /// **little-endian**. The `output` is exactly 16 limbs (32 bytes).
-    Keccak256(Array<C, Var<C::N>>, Array<C, Var<C::N>>),
 
     // Miscellaneous instructions.
     /// Prints a variable.
@@ -268,6 +256,14 @@ pub enum DslIr<C: Config> {
     CircuitExt2Felt([Felt<C::F>; 4], Ext<C::F, C::EF>),
     /// Converts a slice of felts to an ext. Should only be used when target is a gnark circuit.
     CircuitFelts2Ext([Felt<C::F>; 4], Ext<C::F, C::EF>),
+    /// FriMatOpening(alpha, curr_alpha_pow, at_x_array, at_z_array, result)
+    FriMatOpening(
+        Ext<C::F, C::EF>,
+        Ext<C::F, C::EF>,
+        Array<C, Felt<C::F>>,
+        Array<C, Ext<C::F, C::EF>>,
+        Ext<C::F, C::EF>,
+    ),
 
     // Debugging instructions.
     /// Executes less than (var = var < var).  This operation is NOT constrained.

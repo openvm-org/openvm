@@ -27,14 +27,17 @@ pub struct IsZeroCols<T> {
     pub inv: T,
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for IsZeroSubAir {}
-impl<F: Field> PartitionedBaseAir<F> for IsZeroSubAir {}
-impl<F: Field> BaseAir<F> for IsZeroSubAir {
+#[derive(Copy, Clone)]
+pub struct IsZeroTestAir(IsZeroSubAir);
+
+impl<F: Field> BaseAirWithPublicValues<F> for IsZeroTestAir {}
+impl<F: Field> PartitionedBaseAir<F> for IsZeroTestAir {}
+impl<F: Field> BaseAir<F> for IsZeroTestAir {
     fn width(&self) -> usize {
         IsZeroCols::<F>::width()
     }
 }
-impl<AB: AirBuilder> Air<AB> for IsZeroSubAir {
+impl<AB: AirBuilder> Air<AB> for IsZeroTestAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -42,15 +45,23 @@ impl<AB: AirBuilder> Air<AB> for IsZeroSubAir {
         let local: &IsZeroCols<_> = (*local).borrow();
         let io = IsZeroIo::new(local.x.into(), local.out.into(), AB::Expr::one());
 
-        SubAir::eval(self, builder, (io, local.inv));
+        self.0.eval(builder, (io, local.inv));
     }
 }
 
 pub struct IsZeroChip<F> {
+    air: IsZeroTestAir,
     x: Vec<F>,
 }
 
 impl<F: Field> IsZeroChip<F> {
+    pub fn new(x: Vec<F>) -> Self {
+        Self {
+            air: IsZeroTestAir(IsZeroSubAir),
+            x,
+        }
+    }
+
     pub fn generate_trace(self) -> RowMajorMatrix<F> {
         let air = IsZeroSubAir;
         assert!(self.x.len().is_power_of_two());
@@ -69,18 +80,14 @@ impl<F: Field> IsZeroChip<F> {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero(x: u32) {
-    let chip = IsZeroChip {
-        x: vec![BabyBear::from_canonical_u32(x)],
-    };
+    let chip = IsZeroChip::new(vec![BabyBear::from_canonical_u32(x)]);
+    let air = chip.air;
     let trace = chip.generate_trace();
 
     assert_eq!(trace.get(0, 1), AbstractField::from_bool(x == 0));
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![IsZeroSubAir],
-        vec![trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case([0, 1, 2, 7], [1, 0, 0, 0] ; "0, 1, 2, 7 => 1, 0, 0, 0")]
@@ -90,9 +97,8 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         .into_iter()
         .map(AbstractField::from_canonical_u32)
         .collect();
-
-    let chip = IsZeroChip { x: x_vec };
-
+    let chip = IsZeroChip::new(x_vec);
+    let air = chip.air;
     let trace = chip.generate_trace();
 
     for (i, value) in expected.iter().enumerate() {
@@ -102,29 +108,23 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![IsZeroSubAir],
-        vec![trace],
-    )
-    .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+        .expect("Verification failed");
 }
 
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero_fail(x: u32) {
     let x = AbstractField::from_canonical_u32(x);
-    let chip = IsZeroChip { x: vec![x] };
-
+    let chip = IsZeroChip::new(vec![x]);
+    let air = chip.air;
     let mut trace = chip.generate_trace();
     trace.values[1] = BabyBear::one() - trace.values[1];
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![IsZeroSubAir],
-            vec![trace]
-        )
-        .err(),
+        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+            .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
@@ -137,9 +137,8 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
         .into_iter()
         .map(BabyBear::from_canonical_u32)
         .collect();
-
-    let chip = IsZeroChip { x: x_vec };
-
+    let chip = IsZeroChip::new(x_vec);
+    let air = chip.air;
     let mut trace = chip.generate_trace();
 
     disable_debug_builder();
@@ -147,7 +146,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
         trace.row_mut(i)[1] = BabyBear::one() - trace.row_mut(i)[1];
         assert_eq!(
             BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-                any_rap_arc_vec![IsZeroSubAir],
+                any_rap_arc_vec![air],
                 vec![trace.clone()]
             )
             .err(),

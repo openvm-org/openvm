@@ -116,6 +116,8 @@ mod tests {
     type F = BabyBear;
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    const BLOCK_SIZE: usize = 32;
+
     #[test]
     #[allow(non_snake_case)]
     fn test_miller_double() {
@@ -141,7 +143,7 @@ mod tests {
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
         ));
-        let adapter = Rv32VecHeapAdapterChip::<F, 1, 4, 8, NUM_LIMBS, NUM_LIMBS>::new(
+        let adapter = Rv32VecHeapAdapterChip::<F, 1, 4, 8, BLOCK_SIZE, BLOCK_SIZE>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_controller(),
@@ -151,7 +153,7 @@ mod tests {
 
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
-        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(|x| bn254_fq_to_biguint(&x));
+        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(bn254_fq_to_biguint);
 
         let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
         let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
@@ -160,14 +162,14 @@ mod tests {
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
         assert_eq!(result.len(), 8); // EcPoint<Fp2> and two Fp2 coefficients
-        assert_eq!(result[0], bn254_fq_to_biguint(&Q_acc_init.x.c0));
-        assert_eq!(result[1], bn254_fq_to_biguint(&Q_acc_init.x.c1));
-        assert_eq!(result[2], bn254_fq_to_biguint(&Q_acc_init.y.c0));
-        assert_eq!(result[3], bn254_fq_to_biguint(&Q_acc_init.y.c1));
-        assert_eq!(result[4], bn254_fq_to_biguint(&l_init.b.c0));
-        assert_eq!(result[5], bn254_fq_to_biguint(&l_init.b.c1));
-        assert_eq!(result[6], bn254_fq_to_biguint(&l_init.c.c0));
-        assert_eq!(result[7], bn254_fq_to_biguint(&l_init.c.c1));
+        assert_eq!(result[0], bn254_fq_to_biguint(Q_acc_init.x.c0));
+        assert_eq!(result[1], bn254_fq_to_biguint(Q_acc_init.x.c1));
+        assert_eq!(result[2], bn254_fq_to_biguint(Q_acc_init.y.c0));
+        assert_eq!(result[3], bn254_fq_to_biguint(Q_acc_init.y.c1));
+        assert_eq!(result[4], bn254_fq_to_biguint(l_init.b.c0));
+        assert_eq!(result[5], bn254_fq_to_biguint(l_init.b.c1));
+        assert_eq!(result[6], bn254_fq_to_biguint(l_init.c.c0));
+        assert_eq!(result[7], bn254_fq_to_biguint(l_init.c.c1));
 
         let input_limbs = inputs
             .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));

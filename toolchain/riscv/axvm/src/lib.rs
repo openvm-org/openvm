@@ -4,15 +4,16 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![feature(asm_const)]
+#![feature(thread_local)]
 
 extern crate alloc;
 
 pub mod intrinsics;
-#[cfg(target_os = "zkvm")]
 pub mod io;
 pub mod process;
-pub mod serde;
+
+#[cfg(not(target_os = "zkvm"))]
+pub mod host;
 
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
@@ -26,6 +27,9 @@ use axvm_platform::rust_rt;
 core::arch::global_asm!(include_str!("memset.s"));
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memcpy.s"));
+
+#[cfg(all(feature = "std", target_os = "zkvm"))]
+compile_error!("std not yet supported by axvm");
 
 fn _fault() -> ! {
     #[cfg(target_os = "zkvm")]
@@ -63,6 +67,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
+#[cfg(target_os = "zkvm")]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -78,6 +83,13 @@ macro_rules! entry {
             }
         }
     };
+}
+/// This macro does nothing. You should name the function `main` so that the normal rust main function
+/// setup is used.
+#[cfg(not(target_os = "zkvm"))]
+#[macro_export]
+macro_rules! entry {
+    ($path:path) => {};
 }
 
 #[cfg(target_os = "zkvm")]

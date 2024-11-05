@@ -39,12 +39,12 @@ use crate::{
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
@@ -71,7 +71,7 @@ fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
             1,
             1,
         ),
-        rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
+        rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
     let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
@@ -158,13 +158,13 @@ fn rv32_bgeu_rand_test() {
     run_rv32_branch_lt_rand_test(BranchLessThanOpcode::BGEU, 12);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32BranchLessThanTestChip<F> = VmChipWrapper<
     F,

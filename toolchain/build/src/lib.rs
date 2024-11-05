@@ -74,11 +74,13 @@ pub fn current_package() -> Package {
     get_package(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
-fn is_debug() -> bool {
+/// Reads the value of the environment variable `AXIOM_BUILD_DEBUG` and returns true if it is set to 1.
+pub fn is_debug() -> bool {
     get_env_var("AXIOM_BUILD_DEBUG") == "1"
 }
 
-fn is_skip_build() -> bool {
+/// Reads the value of the environment variable `AXIOM_SKIP_BUILD` and returns true if it is set to 1.
+pub fn is_skip_build() -> bool {
     !get_env_var("AXIOM_SKIP_BUILD").is_empty()
 }
 
@@ -96,7 +98,12 @@ pub fn guest_methods(
     let profile = if is_debug() { "debug" } else { "release" };
     pkg.targets
         .iter()
-        .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
+        .filter(|target| {
+            target
+                .kind
+                .iter()
+                .any(|kind| kind == "bin" || kind == "example")
+        })
         .filter(|target| {
             target
                 .required_features
@@ -199,7 +206,7 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
 // progress messages from the inner cargo so the user doesn't
 // think it's just hanging.
 fn tty_println(msg: &str) {
-    let tty_file = env::var("RISC0_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
+    let tty_file = env::var("AXIOM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
 
     let mut tty = fs::OpenOptions::new()
         .read(true)
@@ -261,10 +268,13 @@ pub fn build_guest_package<P>(
     if !is_debug() {
         cmd.args(["--release"]);
     }
+
+    cmd.args(&guest_opts.options);
     tty_println(&format!("cargo command: {:?}", cmd));
 
     let mut child = cmd
         .stderr(Stdio::piped())
+        .env("CARGO_TERM_COLOR", "always")
         .spawn()
         .expect("cargo build failed");
     let stderr = child.stderr.take().unwrap();

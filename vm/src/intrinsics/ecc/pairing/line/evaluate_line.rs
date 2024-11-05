@@ -26,7 +26,7 @@ pub struct EvaluateLineChip<
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapTwoReadsAdapterChip<
             F,

@@ -40,7 +40,7 @@ impl std::fmt::Display for SymbolicExpr {
             SymbolicExpr::Var(i) => write!(f, "Var({})", i),
             SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
             SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
-            SymbolicExpr::Mul(lhs, rhs) => write!(f, "({} * {})", lhs, rhs),
+            SymbolicExpr::Mul(lhs, rhs) => write!(f, "{} * {}", lhs, rhs),
             SymbolicExpr::Div(lhs, rhs) => write!(f, "({} / {})", lhs, rhs),
             SymbolicExpr::IntAdd(lhs, s) => write!(f, "({} + {})", lhs, s),
             SymbolicExpr::IntMul(lhs, s) => write!(f, "({} x {})", lhs, s),
@@ -219,7 +219,11 @@ impl SymbolicExpr {
             SymbolicExpr::IntMul(lhs, s) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
                 let scalar = BigUint::from_usize(s.unsigned_abs()).unwrap();
-                (lhs_max_pos * &scalar, lhs_max_neg * &scalar)
+                if *s < 0 {
+                    (lhs_max_neg * &scalar, lhs_max_pos * &scalar)
+                } else {
+                    (lhs_max_pos * &scalar, lhs_max_neg * &scalar)
+                }
             }
             SymbolicExpr::Select(_, lhs, rhs) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
