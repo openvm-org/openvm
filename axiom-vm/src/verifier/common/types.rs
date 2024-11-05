@@ -10,9 +10,14 @@ use axvm_native_compiler::prelude::*;
 #[derive(Debug, AlignedBorrow)]
 #[repr(C)]
 pub struct VmVerifierPvs<T> {
+    /// The commitment of the app program.
     pub app_commit: [T; DIGEST_SIZE],
+    /// The merged execution state of all the segments this circuit aggregates.
     pub connector: VmConnectorPvs<T>,
+    /// The memory state before/after all the segments this circuit aggregates.
     pub memory: MemoryMerklePvs<T, DIGEST_SIZE>,
+    /// The merkle root of all public values. This is only meaningful when the last segment is
+    /// aggregated by this circuit.
     pub public_values_commit: [T; DIGEST_SIZE],
 }
 

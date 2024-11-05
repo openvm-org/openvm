@@ -38,9 +38,15 @@ pub struct VmConnectorAir {
 #[derive(Debug, Clone, AlignedBorrow)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
+    /// The initial PC of this segment.
     pub initial_pc: F,
+    /// The final PC of this segment.
     pub final_pc: F,
+    /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
+    /// `is_terminate` is 1.
     pub exit_code: F,
+    /// Whether the whole program is terminated. 0 means not terminated. 1 means terminated.
+    /// Only the last segment of an execution can have `is_terminate` = 1.
     pub is_terminate: F,
 }
 

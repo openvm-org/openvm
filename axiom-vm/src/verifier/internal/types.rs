@@ -19,6 +19,7 @@ use crate::verifier::common::types::VmVerifierPvs;
 #[repr(C)]
 pub struct InternalVmVerifierPvs<T> {
     pub vm_verifier_pvs: VmVerifierPvs<T>,
+    /// The commitment of the leaf verifier program.
     pub leaf_verifier_commit: [T; DIGEST_SIZE],
     /// For recursion verification, a program need its own commitment, but its own commitment cannot
     /// be hardcoded inside the program itself. So the commitment has to be read from external and
