@@ -1,4 +1,4 @@
-use halo2curves_axiom::ff::Field;
+use ff::Field;
 use rand::Rng;
 
 #[derive(Debug, Clone)]

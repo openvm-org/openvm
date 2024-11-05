@@ -5,6 +5,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+axvm-ecc = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true
 rand_core = "0.6.4"

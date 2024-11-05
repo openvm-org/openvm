@@ -1,6 +1,6 @@
-use halo2curves_axiom::ff::Field;
+use ff::Field;
 
-use super::FieldExtension;
+use crate::field::FieldExtension;
 
 #[derive(Clone, Copy, Debug)]
 pub struct UnevaluatedLine<Fp, Fp2>

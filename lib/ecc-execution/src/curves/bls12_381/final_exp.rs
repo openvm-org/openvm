@@ -2,7 +2,6 @@ use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use num::BigInt;
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
-use crate::common::{EcPoint, ExpBigInt, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {

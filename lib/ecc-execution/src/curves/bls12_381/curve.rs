@@ -1,9 +1,8 @@
+use axvm_ecc::{field::FieldExtension, point::AffineCoords};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine, G2Affine};
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
 use rand::Rng;
-
-use crate::common::{AffineCoords, FieldExtension};
 
 lazy_static! {
     // polyFactor = (1-x)/3

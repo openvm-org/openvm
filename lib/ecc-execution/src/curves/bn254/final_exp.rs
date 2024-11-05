@@ -1,10 +1,13 @@
+use axvm_ecc::{
+    pairing::{AffineCoords, ExpBigInt, FinalExp, MultiMillerLoop},
+    point::EcPoint,
+};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::common::{EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {

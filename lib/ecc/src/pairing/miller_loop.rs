@@ -1,9 +1,13 @@
-use halo2curves_axiom::ff::Field;
+use alloc::vec::Vec;
+
+use ff::Field;
 use itertools::{izip, Itertools};
 
-use crate::common::{
-    fp12_multiply, fp12_square, miller_double_and_add_step, miller_double_step, q_signed, EcPoint,
-    EvaluatedLine, FieldExtension,
+use super::EvaluatedLine;
+use crate::{
+    field::FieldExtension,
+    pairing::miller_step::{miller_double_and_add_step, miller_double_step},
+    point::EcPoint,
 };
 
 #[allow(non_snake_case)]
@@ -84,9 +88,23 @@ where
         f = f_out;
         Q_acc = Q_acc_out;
 
+        fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i8) -> Vec<EcPoint<Fp2>>
+        where
+            Fp: Field,
+            Fp2: FieldExtension<BaseField = Fp>,
+        {
+            Q.iter()
+                .map(|q| match sigma_i {
+                    1 => q.clone(),
+                    -1 => q.neg(),
+                    _ => panic!("Invalid sigma_i"),
+                })
+                .collect()
+        }
+
         let pseudo_binary_encoding = Self::pseudo_binary_encoding();
         for i in (0..pseudo_binary_encoding.len() - 2).rev() {
-            f = fp12_square::<Fp12>(f);
+            f = f.square();
 
             let mut lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();
 
@@ -107,8 +125,8 @@ where
                 // use embedded exponent technique if c is provided
                 f = if let Some(c) = c {
                     match pseudo_binary_encoding[i] {
-                        1 => fp12_multiply(f, c),
-                        -1 => fp12_multiply(f, c_inv),
+                        1 => f * c,
+                        -1 => f * c_inv,
                         _ => panic!("Invalid sigma_i"),
                     }
                 } else {

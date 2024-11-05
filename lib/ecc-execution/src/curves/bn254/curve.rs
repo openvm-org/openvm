@@ -1,5 +1,6 @@
 use std::ops::Mul;
 
+use axvm_ecc::field::{AffineCoords, FieldExtension, ScalarMul};
 use halo2curves_axiom::{
     bn256::{Fq, Fq2, Fr, G1Affine, G2Affine},
     group::prime::PrimeCurveAffine,
@@ -7,8 +8,6 @@ use halo2curves_axiom::{
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
 use rand::Rng;
-
-use crate::common::{AffineCoords, FieldExtension, ScalarMul};
 
 lazy_static! {
     // exp1 = (p^12 - 1) / 3

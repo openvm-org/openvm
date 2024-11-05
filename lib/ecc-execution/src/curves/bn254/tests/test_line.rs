@@ -1,13 +1,14 @@
+use axvm_ecc::{
+    field::{FieldExtension, LineDType},
+    point::EcPoint,
+};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    common::{fp12_square, EcPoint, FieldExtension, LineDType},
-    curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, tangent_line_013, Bn254},
-};
+use crate::curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, tangent_line_013, Bn254};
 
 #[test]
 fn test_fp12_square() {

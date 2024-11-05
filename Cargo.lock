@@ -361,6 +361,7 @@ dependencies = [
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
+ "axvm-ecc",
  "axvm-ecc-constants",
  "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
@@ -638,6 +639,11 @@ dependencies = [
 [[package]]
 name = "axvm-ecc"
 version = "0.1.0"
+dependencies = [
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "rand 0.8.5",
+]
 
 [[package]]
 name = "axvm-ecc-constants"

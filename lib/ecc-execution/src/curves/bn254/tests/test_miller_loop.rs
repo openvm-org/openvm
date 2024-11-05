@@ -1,9 +1,10 @@
+use axvm_ecc::pairing::MultiMillerLoop;
 use halo2curves_axiom::{
     bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
 
-use crate::{common::MultiMillerLoop, curves::bn254::Bn254, tests::utils::generate_test_points};
+use crate::{curves::bn254::Bn254, tests::utils::generate_test_points};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {

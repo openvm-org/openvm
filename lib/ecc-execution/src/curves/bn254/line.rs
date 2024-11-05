@@ -1,6 +1,5 @@
+use axvm_ecc::{field::FieldExtension, pairing::EvaluatedLine, point::EcPoint};
 use halo2curves_axiom::ff::Field;
-
-use crate::common::{EcPoint, EvaluatedLine, FieldExtension};
 
 /// Multiplies two elements in 013 form and outputs the product in 01234 form
 pub fn mul_013_by_013<Fp, Fp2>(

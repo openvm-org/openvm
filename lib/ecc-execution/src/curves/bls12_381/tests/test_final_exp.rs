@@ -1,11 +1,12 @@
+use axvm_ecc::{
+    pairing::{AffineCoords, ExpBigInt, FinalExp, MultiMillerLoop},
+    point::EcPoint,
+};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num::{BigInt, Num};
 
-use crate::{
-    common::{AffineCoords, EcPoint, ExpBigInt, FinalExp, MultiMillerLoop},
-    curves::bls12_381::{Bls12_381, SEED_NEG},
-};
+use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
 
 #[test]
 #[allow(non_snake_case)]

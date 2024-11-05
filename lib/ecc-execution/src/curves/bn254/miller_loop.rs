@@ -1,11 +1,12 @@
+use axvm_ecc::{
+    field::FieldExtension,
+    pairing::{miller_add_step, miller_double_step, EvaluatedLine, MultiMillerLoop},
+    point::EcPoint,
+};
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
 use super::{mul_013_by_013, mul_by_01234, mul_by_013, Bn254, BN254_PBE_BITS};
-use crate::common::{
-    fp12_square, miller_add_step, miller_double_step, EcPoint, EvaluatedLine, FieldExtension,
-    MultiMillerLoop,
-};
 
 #[allow(non_snake_case)]
 impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
@@ -50,7 +51,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         let mut f = f;
 
         if c.is_some() {
-            f = fp12_square(f);
+            f = f.square();
         }
 
         let mut Q_acc = Q_acc;

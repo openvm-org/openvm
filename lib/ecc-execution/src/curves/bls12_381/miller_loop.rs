@@ -1,10 +1,11 @@
+use axvm_ecc::{
+    pairing::{miller_add_step, miller_double_step, EvaluatedLine, MultiMillerLoop},
+    point::EcPoint,
+};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;
 
 use super::{mul_023_by_023, mul_by_023, mul_by_02345, Bls12_381, BLS12_381_PBE_BITS};
-use crate::common::{
-    fp12_square, miller_add_step, miller_double_step, EcPoint, EvaluatedLine, MultiMillerLoop,
-};
 
 #[allow(non_snake_case)]
 impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
@@ -53,7 +54,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
             // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
-            f = fp12_square(f) * c.unwrap();
+            f = f.square() * c.unwrap();
         }
 
         let mut Q_acc = Q_acc;

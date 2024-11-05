@@ -4,3 +4,8 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "axVM elliptic curve cryptography library."
+
+[dependencies]
+ff = "0.13.0"
+itertools.workspace = true
+rand.workspace = true
