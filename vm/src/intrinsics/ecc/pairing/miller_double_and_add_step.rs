@@ -25,7 +25,7 @@ pub struct MillerDoubleAndAddStepChip<
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
-    VmChipWrapper<
+    pub  VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         FieldExpressionCoreChip,
@@ -118,11 +118,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        arch::{
-            instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        intrinsics::field_expression::FieldExpressionCoreChip,
+        arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         rv32im::adapters::Rv32VecHeapAdapterChip,
         utils::{biguint_to_limbs, rv32_write_heap_default},
     };
@@ -136,23 +132,6 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_miller_double_and_add() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-        let config = ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
-            limb_bits: LIMB_BITS,
-            num_limbs: NUM_LIMBS,
-        };
-        let expr = miller_double_and_add_step_expr(
-            config,
-            tester.memory_controller().borrow().range_checker.bus(),
-        );
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            PairingOpcode::default_offset(),
-            vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
-            vec![],
-            tester.memory_controller().borrow().range_checker.clone(),
-            "MillerDoubleAndAdd",
-        );
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
@@ -163,7 +142,16 @@ mod tests {
             tester.memory_controller(),
             bitwise_chip.clone(),
         );
-        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+        let mut chip = MillerDoubleAndAddStepChip::new(
+            adapter,
+            tester.memory_controller(),
+            ExprBuilderConfig {
+                modulus: BN254.MODULUS.clone(),
+                limb_bits: LIMB_BITS,
+                num_limbs: NUM_LIMBS,
+            },
+            PairingOpcode::default_offset(),
+        );
 
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
@@ -177,6 +165,7 @@ mod tests {
         let Q_ecpoint2 = EcPoint { x: Q2.x, y: Q2.y };
         let (Q_daa, l_qa, l_sqs) = miller_double_and_add_step::<Fq, Fq2>(Q_ecpoint, Q_ecpoint2);
         let result = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
@@ -214,7 +203,7 @@ mod tests {
             &mut tester,
             input1_limbs,
             input2_limbs,
-            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+            chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
         );
 
         tester.execute(&mut chip, instruction);
