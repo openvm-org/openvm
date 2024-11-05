@@ -9,9 +9,9 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::BigUint;
+use {super::biguint_to_limbs, num_bigint_dig::BigUint};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 #[repr(align(32), C)]
 struct U256 {
     limbs: [u8; 32],
@@ -26,7 +26,7 @@ impl U256 {
     #[cfg(not(target_os = "zkvm"))]
     fn from_biguint(value: &BigUint) -> Self {
         Self {
-            limbs: value.to_bytes_le().try_into().unwrap(),
+            limbs: biguint_to_limbs(value),
         }
     }
 
@@ -39,7 +39,6 @@ impl U256 {
 }
 
 /// Addition
-
 impl<'a> AddAssign<&'a U256> for U256 {
     #[inline(always)]
     fn add_assign(&mut self, rhs: &'a U256) {
@@ -73,7 +72,7 @@ impl<'a> Add<&'a U256> for &U256 {
 impl<'a> Add<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn add(mut self, rhs: &Self) -> Self::Output {
+    fn add(mut self, rhs: &'a Self) -> Self::Output {
         #[cfg(target_os = "zkvm")]
         todo!();
         #[cfg(not(target_os = "zkvm"))]
@@ -99,7 +98,6 @@ impl Add<U256> for U256 {
 }
 
 /// Subtraction
-
 impl<'a> SubAssign<&'a U256> for U256 {
     #[inline(always)]
     fn sub_assign(&mut self, rhs: &'a U256) {
@@ -133,7 +131,7 @@ impl<'a> Sub<&'a U256> for &U256 {
 impl<'a> Sub<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn sub(mut self, rhs: &Self) -> Self::Output {
+    fn sub(mut self, rhs: &'a Self) -> Self::Output {
         self -= rhs;
         self
     }
@@ -149,7 +147,6 @@ impl Sub<U256> for U256 {
 }
 
 /// Multiplication
-
 impl<'a> MulAssign<&'a U256> for U256 {
     #[inline(always)]
     fn mul_assign(&mut self, rhs: &'a U256) {
@@ -183,7 +180,7 @@ impl<'a> Mul<&'a U256> for &U256 {
 impl<'a> Mul<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn mul(mut self, rhs: &Self) -> Self::Output {
+    fn mul(mut self, rhs: &'a Self) -> Self::Output {
         self *= rhs;
         self
     }
@@ -199,7 +196,6 @@ impl Mul<U256> for U256 {
 }
 
 /// Bitwise XOR
-
 impl<'a> BitXorAssign<&'a U256> for U256 {
     #[inline(always)]
     fn bitxor_assign(&mut self, rhs: &'a U256) {
@@ -233,7 +229,7 @@ impl<'a> BitXor<&'a U256> for &U256 {
 impl<'a> BitXor<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn bitxor(mut self, rhs: &Self) -> Self::Output {
+    fn bitxor(mut self, rhs: &'a Self) -> Self::Output {
         self ^= rhs;
         self
     }
@@ -249,7 +245,6 @@ impl BitXor<U256> for U256 {
 }
 
 /// Bitwise AND
-
 impl<'a> BitAndAssign<&'a U256> for U256 {
     #[inline(always)]
     fn bitand_assign(&mut self, rhs: &'a U256) {
@@ -283,7 +278,7 @@ impl<'a> BitAnd<&'a U256> for &U256 {
 impl<'a> BitAnd<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn bitand(mut self, rhs: &Self) -> Self::Output {
+    fn bitand(mut self, rhs: &'a Self) -> Self::Output {
         self &= rhs;
         self
     }
@@ -299,7 +294,6 @@ impl BitAnd<U256> for U256 {
 }
 
 /// Bitwise OR
-
 impl<'a> BitOrAssign<&'a U256> for U256 {
     #[inline(always)]
     fn bitor_assign(&mut self, rhs: &'a U256) {
@@ -333,7 +327,7 @@ impl<'a> BitOr<&'a U256> for &U256 {
 impl<'a> BitOr<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn bitor(mut self, rhs: &Self) -> Self::Output {
+    fn bitor(mut self, rhs: &'a Self) -> Self::Output {
         self |= rhs;
         self
     }
@@ -349,7 +343,6 @@ impl BitOr<U256> for U256 {
 }
 
 /// Left shift
-
 impl<'a> ShlAssign<&'a U256> for U256 {
     #[inline(always)]
     fn shl_assign(&mut self, rhs: &'a U256) {
@@ -388,7 +381,7 @@ impl<'a> Shl<&'a U256> for &U256 {
 impl<'a> Shl<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn shl(mut self, rhs: &Self) -> Self::Output {
+    fn shl(mut self, rhs: &'a Self) -> Self::Output {
         self <<= rhs;
         self
     }
@@ -404,7 +397,6 @@ impl Shl<U256> for U256 {
 }
 
 /// Right shift
-
 impl<'a> ShrAssign<&'a U256> for U256 {
     #[inline(always)]
     fn shr_assign(&mut self, rhs: &'a U256) {
@@ -438,7 +430,7 @@ impl<'a> Shr<&'a U256> for &U256 {
 impl<'a> Shr<&'a U256> for U256 {
     type Output = Self;
     #[inline(always)]
-    fn shr(mut self, rhs: &Self) -> Self::Output {
+    fn shr(mut self, rhs: &'a Self) -> Self::Output {
         self >>= rhs;
         self
     }
@@ -466,10 +458,7 @@ impl Eq for U256 {}
 
 impl PartialOrd for U256 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        #[cfg(target_os = "zkvm")]
-        todo!();
-        #[cfg(not(target_os = "zkvm"))]
-        return self.as_biguint().partial_cmp(&other.as_biguint());
+        Some(self.cmp(other))
     }
 }
 
