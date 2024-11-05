@@ -1,20 +1,20 @@
-use core::ops::{Add, Div, Mul, Sub};
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+#[cfg(target_os = "zkvm")]
+use core::{borrow::BorrowMut, mem::MaybeUninit};
 
 use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+#[cfg(not(target_os = "zkvm"))]
 use num_traits::{FromPrimitive, ToPrimitive};
 
 const LIMBS: usize = 32;
 
-#[repr(transparent)]
-struct ModularInt([u8; LIMBS]);
-
-/// Class to represent an integer modulo N, which is currently hard-coded to be
-/// the secp256k1 prime. Note that rust cannot support multiple repr attributes
-/// to a single struct when one is transparent, and thus IntModN wraps helper
-/// struct ModularInt.
-#[repr(align(32))]
-pub struct IntModN(ModularInt);
+/// Class to represent an integer modulo N, which is currently hard-coded to be the
+/// secp256k1 prime.
+#[derive(Clone)]
+#[repr(C, align(32))]
+pub struct IntModN([u8; LIMBS]);
 
 impl IntModN {
     const MODULUS: [u8; LIMBS] =
@@ -23,29 +23,33 @@ impl IntModN {
 
     /// Creates a new IntModN from an array of bytes.
     pub fn from_bytes(bytes: [u8; LIMBS]) -> Self {
-        Self(ModularInt(bytes))
-    }
-
-    /// Creates a new IntModN from a BigUint.
-    pub fn from_biguint(biguint: BigUint) -> Self {
-        Self(ModularInt(Self::biguint_to_limbs(biguint)))
+        Self(bytes)
     }
 
     /// Value of this IntModN as an array of bytes.
     pub fn as_bytes(&self) -> &[u8; LIMBS] {
-        &(self.0 .0)
+        &(self.0)
+    }
+
+    /// Creates a new IntModN from a BigUint.
+    #[cfg(not(target_os = "zkvm"))]
+    pub fn from_biguint(biguint: BigUint) -> Self {
+        Self(Self::biguint_to_limbs(biguint))
     }
 
     /// Value of this IntModN as a BigUint.
+    #[cfg(not(target_os = "zkvm"))]
     pub fn as_biguint(&self) -> BigUint {
         BigUint::from_bytes_le(self.as_bytes())
     }
 
     /// Modulus N as a BigUint.
+    #[cfg(not(target_os = "zkvm"))]
     pub fn modulus_biguint() -> BigUint {
         BigUint::from_bytes_be(&Self::MODULUS)
     }
 
+    #[cfg(not(target_os = "zkvm"))]
     fn biguint_to_limbs(mut x: BigUint) -> [u8; LIMBS] {
         let mut result = [0; LIMBS];
         let base = BigUint::from_u32(1 << 8).unwrap();
@@ -55,60 +59,275 @@ impl IntModN {
         }
         result
     }
+
+    #[inline]
+    pub(super) fn add_assign_impl(&mut self, other: &Self) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.0 = Self::biguint_to_limbs(
+                (other.as_biguint() + self.as_biguint()) % Self::modulus_biguint(),
+            );
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+
+    #[inline]
+    pub(super) fn sub_assign_impl(&mut self, other: &Self) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.0 = Self::biguint_to_limbs(
+                (other.as_biguint() - self.as_biguint()) % Self::modulus_biguint(),
+            );
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+
+    #[inline]
+    pub(super) fn mul_assign_impl(&mut self, other: &Self) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.0 = Self::biguint_to_limbs(
+                (other.as_biguint() * self.as_biguint()) % Self::modulus_biguint(),
+            );
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+
+    #[inline]
+    pub(super) fn div_assign_impl(&mut self, other: &Self) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.0 = Self::biguint_to_limbs(
+                (other.as_biguint() / self.as_biguint()) % Self::modulus_biguint(),
+            );
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
 }
 
-impl Add for &IntModN {
-    type Output = IntModN;
-    fn add(self, other: Self) -> Self::Output {
-        IntModN::from_biguint((self.as_biguint() + other.as_biguint()) % IntModN::modulus_biguint())
+impl<'a> AddAssign<&'a IntModN> for IntModN {
+    #[inline]
+    fn add_assign(&mut self, other: &'a IntModN) {
+        self.add_assign_impl(other);
+    }
+}
+
+impl AddAssign for IntModN {
+    #[inline]
+    fn add_assign(&mut self, other: Self) {
+        self.add_assign_impl(&other);
     }
 }
 
 impl Add for IntModN {
     type Output = Self;
-    fn add(self, other: Self) -> Self::Output {
-        &self + &other
+    #[inline]
+    fn add(mut self, other: Self) -> Self::Output {
+        self += other;
+        self
     }
 }
 
-impl Sub for &IntModN {
+impl<'a> Add<&'a IntModN> for IntModN {
+    type Output = Self;
+    #[inline]
+    fn add(mut self, other: &'a IntModN) -> Self::Output {
+        self += other;
+        self
+    }
+}
+
+impl<'a> Add<&'a IntModN> for &IntModN {
     type Output = IntModN;
-    fn sub(self, other: Self) -> Self::Output {
-        IntModN::from_biguint((self.as_biguint() - other.as_biguint()) % IntModN::modulus_biguint())
+    #[inline]
+    fn add(self, other: &'a IntModN) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            res += other;
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            let ptr: *mut IntModN = uninit.as_mut_ptr();
+            unsafe {
+                *ptr = todo!();
+                uninit.assume_init()
+            }
+        }
+    }
+}
+
+impl<'a> SubAssign<&'a IntModN> for IntModN {
+    #[inline]
+    fn sub_assign(&mut self, other: &'a IntModN) {
+        self.sub_assign_impl(other);
+    }
+}
+
+impl SubAssign for IntModN {
+    #[inline]
+    fn sub_assign(&mut self, other: Self) {
+        self.sub_assign_impl(&other);
     }
 }
 
 impl Sub for IntModN {
     type Output = Self;
-    fn sub(self, other: Self) -> Self::Output {
-        &self - &other
+    #[inline]
+    fn sub(mut self, other: Self) -> Self::Output {
+        self -= other;
+        self
     }
 }
 
-impl Mul for &IntModN {
+impl<'a> Sub<&'a IntModN> for IntModN {
+    type Output = Self;
+    #[inline]
+    fn sub(mut self, other: &'a IntModN) -> Self::Output {
+        self -= other;
+        self
+    }
+}
+
+impl<'a> Sub<&'a IntModN> for &IntModN {
     type Output = IntModN;
-    fn mul(self, other: Self) -> Self::Output {
-        IntModN::from_biguint((self.as_biguint() * other.as_biguint()) % IntModN::modulus_biguint())
+    #[inline]
+    fn sub(self, other: &'a IntModN) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            res -= other;
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+}
+
+impl<'a> MulAssign<&'a IntModN> for IntModN {
+    #[inline]
+    fn mul_assign(&mut self, other: &'a IntModN) {
+        self.mul_assign_impl(other);
+    }
+}
+
+impl MulAssign for IntModN {
+    #[inline]
+    fn mul_assign(&mut self, other: Self) {
+        self.mul_assign_impl(&other);
     }
 }
 
 impl Mul for IntModN {
     type Output = Self;
-    fn mul(self, other: Self) -> Self::Output {
-        &self * &other
+    #[inline]
+    fn mul(mut self, other: Self) -> Self::Output {
+        self *= other;
+        self
     }
 }
 
-impl Div for &IntModN {
+impl<'a> Mul<&'a IntModN> for IntModN {
+    type Output = Self;
+    #[inline]
+    fn mul(mut self, other: &'a IntModN) -> Self::Output {
+        self *= other;
+        self
+    }
+}
+
+impl<'a> Mul<&'a IntModN> for &IntModN {
     type Output = IntModN;
-    fn div(self, other: Self) -> Self::Output {
-        IntModN::from_biguint((self.as_biguint() / other.as_biguint()) % IntModN::modulus_biguint())
+    #[inline]
+    fn mul(self, other: &'a IntModN) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            res *= other;
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+}
+
+impl<'a> DivAssign<&'a IntModN> for IntModN {
+    #[inline]
+    fn div_assign(&mut self, other: &'a IntModN) {
+        self.div_assign_impl(other);
+    }
+}
+
+impl DivAssign for IntModN {
+    #[inline]
+    fn div_assign(&mut self, other: Self) {
+        self.div_assign_impl(&other);
     }
 }
 
 impl Div for IntModN {
     type Output = Self;
-    fn div(self, other: Self) -> Self::Output {
-        &self / &other
+    #[inline]
+    fn div(mut self, other: Self) -> Self::Output {
+        self /= other;
+        self
+    }
+}
+
+impl<'a> Div<&'a IntModN> for IntModN {
+    type Output = Self;
+    #[inline]
+    fn div(mut self, other: &'a IntModN) -> Self::Output {
+        self /= other;
+        self
+    }
+}
+
+impl<'a> Div<&'a IntModN> for &IntModN {
+    type Output = IntModN;
+    #[inline]
+    fn div(self, other: &'a IntModN) -> Self::Output {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let mut res = self.clone();
+            res /= other;
+            res
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
+    }
+}
+
+impl PartialEq for IntModN {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.as_bytes() == other.as_bytes()
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            todo!()
+        }
     }
 }
