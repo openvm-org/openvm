@@ -145,6 +145,11 @@ mod tests {
             config,
             Fp2Opcode::default_offset(),
         );
+        assert_eq!(
+            chip.0.core.expr().builder.num_variables,
+            2,
+            "Fp2MulDiv should only introduce new z Fp2 variable (2 Fp var)"
+        );
 
         let mut rng = StdRng::seed_from_u64(42);
         let x = Fq2::random(&mut rng);
