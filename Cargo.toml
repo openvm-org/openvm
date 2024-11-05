@@ -24,6 +24,7 @@ members = [
     "toolchain/riscv/platform",
     "toolchain/riscv/axvm",
     "toolchain/build",
+    "toolchain/tests",
     "lib/ecc",
     "lib/ecc-constants",
     "lib/ecc-execution",

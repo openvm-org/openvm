@@ -778,6 +778,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-toolchain-tests"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-sdk",
+ "axvm-build",
+ "axvm-circuit",
+ "axvm-transpiler",
+ "eyre",
+ "p3-baby-bear",
+ "serde",
+ "tempfile",
+ "test-case",
+]
+
+[[package]]
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [

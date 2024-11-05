@@ -13,6 +13,8 @@ not on the machine doing the compilation (the "host machine"), although we will 
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
 `no_std` crates and write Rust as you normally would. Import the `axvm` library crate to use `axvm` intrinsic functions (for example `axvm::io::*, axvm::intrinsics::*`).
 
+The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `axvm::entry!` macro. You should still create a `main` function, and then add `axvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
+
 You can copy from [fibonacci](./programs/fibonacci) to get started.
 The guest program crate should **not** be included in the main repository workspace. Instead the guest
 `Cargo.toml` should have `[workspace]` at the top to keep it standalone. Your IDE will likely not
@@ -21,7 +23,13 @@ lint or use rust-analyzer on the crate while in the workspace, so the recommende
 ### Adding the Benchmark
 
 Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](./src/bin) by following the [fibonacci example](./bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](./src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `axvm` and reads the output RISC-V ELF file.
-This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any any other `AxVmExe`) from a given `VmConfig`. Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `axvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `AbstractField::from_canonical_u8`.
+This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any any other `AxVmExe`) from a given `VmConfig`.
+
+#### Providing Inputs
+
+Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `axvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `AbstractField::from_canonical_u8`.
+
+You can find an example of passing in a single `Vec<u8>` input in [revm_contract_deployment](./src/bin/revm_contract_deployment.rs).
 
 #### Testing the Guest Program
 

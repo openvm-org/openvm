@@ -1,0 +1,21 @@
+[workspace]
+[package]
+name = "axvm-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../riscv/axvm" }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+
+[features]
+default = []
+std = ["axvm/std"]
+
+[profile.release]
+panic = "abort"
+lto = "fat"     # decrease binary size
+# strip = "symbols"

@@ -21,17 +21,14 @@
 //! * It includes an allocator.
 
 #[cfg(target_os = "zkvm")]
-use core::arch::asm;
-
-#[cfg(target_os = "zkvm")]
-use crate::{constants::CUSTOM_0, custom_insn_i, custom_insn_r};
+use crate::constants::CUSTOM_0;
 
 extern crate alloc;
 
 #[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
-    custom_insn_i!(CUSTOM_0, 0, "x0", "x0", EXIT_CODE);
+    crate::custom_insn_i!(CUSTOM_0, 0, "x0", "x0", EXIT_CODE);
     #[cfg(not(target_os = "zkvm"))]
     {
         unimplemented!()

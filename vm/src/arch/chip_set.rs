@@ -159,8 +159,8 @@ impl<F: PrimeField32> VmChipSet<F> {
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
-        let program_rap: Arc<dyn AnyRap<SC>> = Arc::new(self.program_chip.air.clone());
-        let connector_rap: Arc<dyn AnyRap<SC>> = Arc::new(self.connector_chip.air.clone());
+        let program_rap = Arc::new(self.program_chip.air) as Arc<dyn AnyRap<SC>>;
+        let connector_rap = Arc::new(self.connector_chip.air) as Arc<dyn AnyRap<SC>>;
         [program_rap, connector_rap]
             .into_iter()
             .chain(self.public_values_chip.as_ref().map(|chip| chip.air()))
