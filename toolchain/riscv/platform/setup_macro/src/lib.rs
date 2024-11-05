@@ -86,7 +86,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         /// Creates a new #struct_name from a BigUint.
                                         #[cfg(not(target_os = "zkvm"))]
                                         pub fn from_biguint(biguint: BigUint) -> Self {
-                                            Self(biguint_to_limbs(biguint))
+                                            Self(biguint_to_limbs(&biguint))
                                         }
 
                                         /// Value of this #struct_name as a BigUint.
@@ -105,7 +105,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         fn add_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
                                             {
-                                                self.0 = biguint_to_limbs(
+                                                *self = Self::from_biguint(
                                                     (self.as_biguint() + other.as_biguint()) % Self::modulus_biguint(),
                                                 );
                                             }
@@ -120,7 +120,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             #[cfg(not(target_os = "zkvm"))]
                                             {
                                                 let modulus = Self::modulus_biguint();
-                                                self.0 = biguint_to_limbs(
+                                                *self = Self::from_biguint(
                                                     (self.as_biguint() + modulus.clone() - other.as_biguint()) % modulus,
                                                 );
                                             }
@@ -134,7 +134,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         fn mul_assign_impl(&mut self, other: &Self) {
                                             #[cfg(not(target_os = "zkvm"))]
                                             {
-                                                self.0 = biguint_to_limbs(
+                                                *self = Self::from_biguint(
                                                     (self.as_biguint() * other.as_biguint()) % Self::modulus_biguint(),
                                                 );
                                             }
@@ -157,7 +157,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 }
                                                 .to_biguint()
                                                 .unwrap();
-                                                self.0 = biguint_to_limbs((self.as_biguint() * inv) % modulus);
+                                                *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                                             }
                                             #[cfg(target_os = "zkvm")]
                                             {
