@@ -173,13 +173,16 @@ impl Elf {
             .expect("section table should be parsable");
         let supported_moduli = if let Some(shdr) = axiom_section_header {
             let data = elf.section_data(&shdr).unwrap();
-            let mut ptr = 0;
-            let mut next = move || {
-                let result = *data.0.get(ptr).expect("unexpected end of .axiom section");
-                ptr += 1;
+            let ptr = std::cell::Cell::new(0);
+            let next = || {
+                let result = *data
+                    .0
+                    .get(ptr.get())
+                    .expect("unexpected end of .axiom section");
+                ptr.set(ptr.get() + 1);
                 result
             };
-            let mut next_u32 = move || u32::from_le_bytes(std::array::from_fn(|_| next()));
+            let next_u32 = || u32::from_le_bytes(std::array::from_fn(|_| next()));
             let len = next_u32();
             (0..len)
                 .map(|_| {

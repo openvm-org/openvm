@@ -1,6 +1,6 @@
-use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 #[cfg(target_os = "zkvm")]
-use core::{borrow::BorrowMut, mem::MaybeUninit};
+use core::mem::MaybeUninit;
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]

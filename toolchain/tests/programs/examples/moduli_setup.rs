@@ -7,7 +7,7 @@ axvm::moduli_setup! {
 }
 
 pub fn main() {
-    let x = IntMod_bls12381::new();
+    let x = IntMod_bls12381::from_bytes(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
     core::hint::black_box(AXIOM_SERIALIZED_MODULI);
 }

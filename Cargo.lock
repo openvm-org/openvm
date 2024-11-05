@@ -801,6 +801,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-transpiler",
  "eyre",
+ "num-bigint-dig",
  "p3-baby-bear",
  "serde",
  "tempfile",
