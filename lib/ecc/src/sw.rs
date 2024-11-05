@@ -1,15 +1,36 @@
 use axvm::intrinsics::IntModN;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct EcPoint {
     pub x: IntModN,
     pub y: IntModN,
 }
 
+impl EcPoint {
+    pub fn is_identity(&self) -> bool {
+        self.x == IntModN::zero() && self.y == IntModN::zero()
+    }
+}
+
 // Two points can be equal or not.
-// pub fn add(p1: &EcPoint, p2: &EcPoint) -> EcPoint {
-//     let zero = IntModN::zero();
-// }
+pub fn add(p1: &EcPoint, p2: &EcPoint) -> EcPoint {
+    if p1.is_identity() {
+        p2.clone()
+    } else if p2.is_identity() {
+        p1.clone()
+    } else if p1.x == p2.x {
+        if &p1.y + &p2.y == IntModN::zero() {
+            EcPoint {
+                x: IntModN::zero(),
+                y: IntModN::zero(),
+            }
+        } else {
+            double(p1)
+        }
+    } else {
+        add_ne(p1, p2)
+    }
+}
 
 #[inline(always)]
 pub fn add_ne(p1: &EcPoint, p2: &EcPoint) -> EcPoint {
