@@ -11,8 +11,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct RootVmVerifierPvs<T> {
+    /// The commitment of the App VM executable.
     pub exe_commit: [T; DIGEST_SIZE],
+    /// The commitment of the leaf verifier program, which commits the VM config of App VM.
     pub leaf_verifier_commit: [T; DIGEST_SIZE],
+    /// Raw public values from App VM execution.
     pub public_values: Vec<T>,
 }
 
