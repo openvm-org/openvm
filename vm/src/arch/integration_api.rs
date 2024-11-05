@@ -1048,8 +1048,11 @@ mod conversions {
         for DynArray<T>
     {
         fn from(v: ([[T; N]; M1], [[T; N]; M2])) -> Self {
-            let mut vec: Vec<_> = v.0.into_iter().flatten().collect();
-            vec.extend(v.1.into_iter().flatten());
+            let vec =
+                v.0.into_iter()
+                    .flatten()
+                    .chain(v.1.into_iter().flatten())
+                    .collect();
             Self(vec)
         }
     }
