@@ -17,30 +17,22 @@ use crate::{
 pub struct DuplexChallengerVariable<C: Config> {
     pub sponge_state: Array<C, Felt<C::F>>,
     pub nb_inputs: Var<C::N>,
-    pub input_buffer: Array<C, Felt<C::F>>,
     pub nb_outputs: Var<C::N>,
-    pub output_buffer: Array<C, Felt<C::F>>,
 }
 
 impl<C: Config> DuplexChallengerVariable<C> {
     /// Creates a new duplex challenger with the default state.
     pub fn new(builder: &mut Builder<C>) -> Self {
         let sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
-        let input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
-        let output_buffer = builder.dyn_array(PERMUTATION_WIDTH);
 
         builder.range(0, sponge_state.len()).for_each(|i, builder| {
             builder.set(&sponge_state, i, C::F::zero());
-            builder.set(&input_buffer, i, C::F::zero());
-            builder.set(&output_buffer, i, C::F::zero());
         });
 
         DuplexChallengerVariable::<C> {
             sponge_state,
             nb_inputs: builder.eval(C::N::zero()),
-            input_buffer,
             nb_outputs: builder.eval(C::N::zero()),
-            output_buffer,
         }
     }
     /// Creates a new challenger with the same state as an existing challenger.
@@ -52,23 +44,11 @@ impl<C: Config> DuplexChallengerVariable<C> {
             builder.set(&sponge_state, i, element);
         });
         let nb_inputs = builder.eval(self.nb_inputs);
-        let input_buffer = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.input_buffer, i);
-            builder.set(&input_buffer, i, element);
-        });
         let nb_outputs = builder.eval(self.nb_outputs);
-        let output_buffer = builder.dyn_array(PERMUTATION_WIDTH);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            let element = builder.get(&self.output_buffer, i);
-            builder.set(&output_buffer, i, element);
-        });
         DuplexChallengerVariable::<C> {
             sponge_state,
             nb_inputs,
-            input_buffer,
             nb_outputs,
-            output_buffer,
         }
     }
 
@@ -82,16 +62,6 @@ impl<C: Config> DuplexChallengerVariable<C> {
             let other_element = builder.get(&other.sponge_state, i);
             builder.assert_felt_eq(element, other_element);
         });
-        builder.range(0, self.nb_inputs).for_each(|i, builder| {
-            let element = builder.get(&self.input_buffer, i);
-            let other_element = builder.get(&other.input_buffer, i);
-            builder.assert_felt_eq(element, other_element);
-        });
-        builder.range(0, self.nb_outputs).for_each(|i, builder| {
-            let element = builder.get(&self.output_buffer, i);
-            let other_element = builder.get(&other.output_buffer, i);
-            builder.assert_felt_eq(element, other_element);
-        });
     }
 
     #[allow(dead_code)]
@@ -102,25 +72,14 @@ impl<C: Config> DuplexChallengerVariable<C> {
             builder.set(&self.sponge_state, i, zero_felt);
         });
         builder.assign(&self.nb_inputs, zero);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&self.input_buffer, i, zero_felt);
-        });
         builder.assign(&self.nb_outputs, zero);
-        builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
-            builder.set(&self.output_buffer, i, zero_felt);
-        });
     }
 
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
-        builder.range(0, self.nb_inputs).for_each(|i, builder| {
-            let element = builder.get(&self.input_buffer, i);
-            builder.set(&self.sponge_state, i, element);
-        });
         builder.assign(&self.nb_inputs, C::N::zero());
 
         builder.poseidon2_permute_mut(&self.sponge_state);
 
-        self.output_buffer = self.sponge_state.clone();
         builder.assign(
             &self.nb_outputs,
             C::N::from_canonical_usize(PERMUTATION_WIDTH),
@@ -130,7 +89,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     fn observe(&mut self, builder: &mut Builder<C>, value: Felt<C::F>) {
         builder.assign(&self.nb_outputs, C::N::zero());
 
-        builder.set(&self.input_buffer, self.nb_inputs, value);
+        builder.set(&self.sponge_state, self.nb_inputs, value);
         builder.assign(&self.nb_inputs, self.nb_inputs + C::N::one());
 
         builder
@@ -163,8 +122,8 @@ impl<C: Config> DuplexChallengerVariable<C> {
             },
         );
         let idx: Var<_> = builder.eval(self.nb_outputs - C::N::one());
-        let output = builder.get(&self.output_buffer, idx);
-        builder.assign(&self.nb_outputs, self.nb_outputs - C::N::one());
+        let output = builder.get(&self.sponge_state, idx);
+        builder.assign(&self.nb_outputs, idx);
         output
     }
 
