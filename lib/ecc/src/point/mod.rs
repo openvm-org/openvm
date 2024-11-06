@@ -36,8 +36,3 @@ pub trait AffineCoords<F: Field>: Clone {
     /// Returns the generator point of the elliptic curve.
     fn generator() -> Self;
 }
-
-pub trait ScalarMul<Fr: Field> {
-    /// Scalar multiplication of an elliptic curve point by a scalar.
-    fn scalar_mul(&self, s: Fr) -> Self;
-}

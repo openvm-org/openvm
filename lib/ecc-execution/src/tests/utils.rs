@@ -1,7 +1,8 @@
 use axvm_ecc::{
     field::FieldExtension,
-    point::{AffineCoords, EcPoint, ScalarMul},
+    point::{AffineCoords, EcPoint},
 };
+use group::ScalarMul;
 use halo2curves_axiom::ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
@@ -61,11 +62,11 @@ where
     let mut P_vec = vec![];
     let mut Q_vec = vec![];
     for i in 0..N {
-        let mut p = A1::generator().scalar_mul(a[i]);
+        let mut p = A1::generator() * a[i];
         if i % 2 == 1 {
             p = p.neg();
         }
-        let q = A2::generator().scalar_mul(b[i]);
+        let q = A2::generator() * b[i];
         P_vec.push(p);
         Q_vec.push(q);
     }
