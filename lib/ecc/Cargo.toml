@@ -9,3 +9,9 @@ description = "axVM elliptic curve cryptography library."
 ff = "0.13.0"
 itertools.workspace = true
 rand.workspace = true
+
+# Used for `test-utils` feature
+halo2curves = { version = "0.7.0", optional = true }
+
+[features]
+test-utils = ["dep:halo2curves"]

@@ -1,6 +1,7 @@
 use axvm_ecc::{
-    pairing::{AffineCoords, ExpBigInt, FinalExp, MultiMillerLoop},
-    point::EcPoint,
+    field::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
+    point::{AffineCoords, EcPoint},
 };
 use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;

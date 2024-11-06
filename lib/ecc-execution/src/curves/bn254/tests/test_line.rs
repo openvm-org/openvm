@@ -1,7 +1,4 @@
-use axvm_ecc::{
-    field::{FieldExtension, LineDType},
-    point::EcPoint,
-};
+use axvm_ecc::{field::FieldExtension, pairing::LineDType, point::EcPoint};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
@@ -9,15 +6,6 @@ use halo2curves_axiom::{
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::curves::bn254::{mul_013_by_013, mul_by_01234, mul_by_013, tangent_line_013, Bn254};
-
-#[test]
-fn test_fp12_square() {
-    let mut rng = StdRng::seed_from_u64(8);
-    let rnd = Fq12::random(&mut rng);
-    let sq = fp12_square::<Fq12>(rnd);
-    let sq_native = rnd.square();
-    assert_eq!(sq, sq_native);
-}
 
 #[test]
 fn test_mul_013_by_013() {

@@ -1,6 +1,6 @@
 use axvm_ecc::{
-    pairing::{AffineCoords, ExpBigInt, FinalExp, MultiMillerLoop},
-    point::EcPoint,
+    field::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
 };
 use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use num::{BigInt, Num};

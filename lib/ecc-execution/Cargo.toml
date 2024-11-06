@@ -5,13 +5,14 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-axvm-ecc = { workspace = true }
+axvm-ecc = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true
 rand_core = "0.6.4"
 num = "0.4.3"
 rand.workspace = true
 lazy_static.workspace = true
+subtle = "2.6.1"
 
 [dev-dependencies]
 rng = "0.1.0"

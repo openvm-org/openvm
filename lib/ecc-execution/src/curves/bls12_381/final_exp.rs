@@ -1,4 +1,8 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use axvm_ecc::{
+    curve::bls12381::{Fq, Fq12, Fq2},
+    pairing::FinalExp,
+    point::EcPoint,
+};
 use num::BigInt;
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};

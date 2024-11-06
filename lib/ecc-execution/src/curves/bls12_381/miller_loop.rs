@@ -1,8 +1,8 @@
 use axvm_ecc::{
+    curve::bls12381::{Fq, Fq12, Fq2},
     pairing::{miller_add_step, miller_double_step, EvaluatedLine, MultiMillerLoop},
     point::EcPoint,
 };
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;
 
 use super::{mul_023_by_023, mul_by_023, mul_by_02345, Bls12_381, BLS12_381_PBE_BITS};
