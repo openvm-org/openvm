@@ -5,7 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2DitParallel;
+use p3_dft::Radix2Bowers;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{
     BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs,
@@ -46,8 +46,8 @@ pub type OuterDigest = [Bn254Fr; 1];
 pub type OuterCompress = TruncatedPermutation<OuterPerm, 2, 1, WIDTH>;
 pub type OuterValMmcs = MerkleTreeMmcs<BabyBear, Bn254Fr, OuterHash, OuterCompress, 1>;
 pub type OuterChallengeMmcs = ExtensionMmcs<OuterVal, OuterChallenge, OuterValMmcs>;
-pub type OuterDft = Radix2DitParallel;
-pub type OuterChallenger = MultiField32Challenger<OuterVal, Bn254Fr, OuterPerm, WIDTH>;
+pub type OuterDft = Radix2Bowers;
+pub type OuterChallenger = MultiField32Challenger<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE>;
 pub type OuterPcs = TwoAdicFriPcs<OuterVal, OuterDft, OuterValMmcs, OuterChallengeMmcs>;
 
 pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs, Vec<OuterBatchOpening>>;

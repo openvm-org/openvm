@@ -1,7 +1,7 @@
 use p3_baby_bear::BabyBear;
 use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2DitParallel;
+use p3_dft::{Radix2Bowers, Radix2Dit, Radix2DitParallel};
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -21,7 +21,7 @@ type Compress<H> = CompressionFunctionFromHasher<H, 2, 32>;
 
 type ValMmcs<H> = MerkleTreeMmcs<Val, u8, FieldHash<H>, Compress<H>, 32>;
 type ChallengeMmcs<H> = ExtensionMmcs<Val, Challenge, ValMmcs<H>>;
-type Dft = Radix2DitParallel;
+type Dft = Radix2Bowers;
 type Challenger<H> = SerializingChallenger32<Val, HashChallenger<u8, H, 32>>;
 
 type Pcs<H> = TwoAdicFriPcs<Val, Dft, ValMmcs<H>, ChallengeMmcs<H>>;

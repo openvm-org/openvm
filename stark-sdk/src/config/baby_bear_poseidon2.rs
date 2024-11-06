@@ -3,7 +3,7 @@ use std::any::type_name;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2DitParallel;
+use p3_dft::{Radix2Bowers, Radix2DitParallel};
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -40,7 +40,7 @@ type ValMmcs<P> =
 MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
-type Dft = Radix2DitParallel;
+type Dft = Radix2Bowers;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;

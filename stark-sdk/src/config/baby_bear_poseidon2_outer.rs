@@ -5,7 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254, FFBn254Fr};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2DitParallel;
+use p3_dft::{Radix2Bowers, Radix2DitParallel};
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -37,8 +37,8 @@ type Hash<P> = MultiField32PaddingFreeSponge<Val, Bn254Fr, P, WIDTH, RATE, DIGES
 type Compress<P> = TruncatedPermutation<P, 2, 1, WIDTH>;
 type ValMmcs<P> = MerkleTreeMmcs<BabyBear, Bn254Fr, Hash<P>, Compress<P>, 1>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
-type Dft = Radix2DitParallel;
-type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH>;
+type Dft = Radix2Bowers;
+type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH, RATE>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type BabyBearPermutationOuterConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
