@@ -83,6 +83,3 @@ bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
 jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]
-
-[profile.test]
-default = ["test-utils"]
