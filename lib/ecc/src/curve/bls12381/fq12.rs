@@ -1,10 +1,10 @@
-use halo2curves::{
+pub use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, Fq6},
     ff::Field,
 };
 
 use crate::{
-    field::{ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor},
+    field::{ExpBigInt, FieldExtension, Fp12Constructor},
     pairing::{EvaluatedLine, LineMType},
 };
 
@@ -12,14 +12,14 @@ impl Fp12Constructor<Fq2> for Fq12 {
     fn new(c00: Fq2, c01: Fq2, c02: Fq2, c10: Fq2, c11: Fq2, c12: Fq2) -> Self {
         Fq12 {
             c0: Fq6 {
-                c0: c00.0,
-                c1: c01.0,
-                c2: c02.0,
+                c0: c00,
+                c1: c01,
+                c2: c02,
             },
             c1: Fq6 {
-                c0: c10.0,
-                c1: c11.0,
-                c2: c12.0,
+                c0: c10,
+                c1: c11,
+                c2: c12,
             },
         }
     }
@@ -64,11 +64,11 @@ impl FieldExtension for Fq12 {
     }
 
     fn conjugate(&self) -> Self {
-        Fq12::conjugate(&self.0)
+        Fq12::conjugate(&self)
     }
 
     fn frobenius_map(&self, _power: Option<usize>) -> Self {
-        Fq12::frobenius_map(&self.0)
+        Fq12::frobenius_map(&self)
     }
 
     fn mul_base(&self, rhs: &Self::BaseField) -> Self {
@@ -78,17 +78,15 @@ impl FieldExtension for Fq12 {
             c2: Fq2::zero(),
         };
         Fq12 {
-            c0: self.0.c0 * fq6_pt,
-            c1: self.0.c1 * fq6_pt,
+            c0: self.c0 * fq6_pt,
+            c1: self.c1 * fq6_pt,
         }
     }
 }
 
 impl LineMType<Fq, Fq2, Fq12> for Fq12 {
     fn from_evaluated_line_m_type(line: EvaluatedLine<Fq, Fq2>) -> Fq12 {
-        Fq12::from_coeffs(
-            &[line.c, Fq2::ZERO, line.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO].map(|x| Fq2(x)),
-        )
+        Fq12::from_coeffs(&[line.c, Fq2::ZERO, line.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO])
     }
 }
 

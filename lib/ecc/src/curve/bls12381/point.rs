@@ -1,3 +1,8 @@
+pub use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine, G2Affine};
+use rand::Rng;
+
+use crate::point::AffineCoords;
+
 impl AffineCoords<Fq> for G1Affine {
     fn x(&self) -> Fq {
         self.x

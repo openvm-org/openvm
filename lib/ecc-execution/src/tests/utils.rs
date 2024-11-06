@@ -1,8 +1,10 @@
+use axvm_ecc::{
+    field::FieldExtension,
+    point::{AffineCoords, EcPoint, ScalarMul},
+};
 use halo2curves_axiom::ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
-
-use crate::common::{AffineCoords, EcPoint, FieldExtension, ScalarMul};
 
 /// Generates a set of random G1 and G2 points from a random seed and outputs the vectors of P and Q points as well as
 /// the corresponding P and Q EcPoint structs.

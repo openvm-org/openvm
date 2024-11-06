@@ -1,21 +1,19 @@
-use alloc::vec::Vec;
-
-use halo2curves::{
-    bls12381::{Fq, Fq12, Fq2, Fq6},
+pub use halo2curves_axiom::{
+    bls12_381::{Fq, Fq2},
     ff::Field,
 };
 
-use crate::{
-    field::{ExpBigInt, FieldExtension, Fp12Constructor, Fp2Constructor},
-    pairing::{EvaluatedLine, LineMType},
-};
+use crate::field::{FieldExtension, Fp2Constructor};
 
 impl Fp2Constructor<Fq> for Fq2 {
+    // fn new(c0: Fq, c1: Fq) -> Self {
+    //     let mut b = [0u8; 48 * 2];
+    //     b[..48].copy_from_slice(&c0.to_bytes());
+    //     b[48..].copy_from_slice(&c1.to_bytes());
+    //     Fq2::from_bytes(&b).unwrap()
+    // }
     fn new(c0: Fq, c1: Fq) -> Self {
-        let mut b = [0u8; 48 * 2];
-        b[..48].copy_from_slice(&c0.to_bytes());
-        b[48..].copy_from_slice(&c1.to_bytes());
-        Fq2::from_bytes(&b).unwrap()
+        Fq2 { c0, c1 }
     }
 }
 
@@ -48,13 +46,13 @@ impl FieldExtension for Fq2 {
     }
 
     fn frobenius_map(&self, _power: Option<usize>) -> Self {
-        Fq2::frobenius_map(&self.0)
+        Fq2::frobenius_map(&self)
     }
 
     fn mul_base(&self, rhs: &Self::BaseField) -> Self {
         Fq2 {
-            c0: self.0.c0 * rhs,
-            c1: self.0.c1 * rhs,
+            c0: self.c0 * rhs,
+            c1: self.c1 * rhs,
         }
     }
 }

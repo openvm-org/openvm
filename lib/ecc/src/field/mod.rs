@@ -1,6 +1,8 @@
 use ff::Field;
 
+#[cfg(feature = "test-utils")]
 mod exp_bytes_be;
+#[cfg(feature = "test-utils")]
 pub use exp_bytes_be::*;
 
 pub trait FieldExtension: Field {

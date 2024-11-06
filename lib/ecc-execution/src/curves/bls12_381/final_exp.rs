@@ -1,6 +1,7 @@
 use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2},
-    pairing::FinalExp,
+    field::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
     point::EcPoint,
 };
 use num::BigInt;

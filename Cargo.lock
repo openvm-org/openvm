@@ -642,7 +642,9 @@ version = "0.1.0"
 dependencies = [
  "ff 0.13.0",
  "halo2curves",
+ "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
+ "num",
  "rand 0.8.5",
 ]
 

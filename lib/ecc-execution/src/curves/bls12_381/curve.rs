@@ -1,11 +1,9 @@
 use axvm_ecc::{
     curve::bls12381::{Fq, Fq2, G1Affine, G2Affine},
     field::FieldExtension,
-    point::AffineCoords,
 };
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
-use rand::Rng;
 
 lazy_static! {
     // polyFactor = (1-x)/3
