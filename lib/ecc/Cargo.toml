@@ -25,6 +25,3 @@ default = []
 std = ["axvm/std"]
 # TODO[yj]: Switch to `halo2curves` and remove `num` dependency
 test-utils = ["dep:halo2curves-axiom", "dep:num"]
-
-[profile.test]
-default = ["test-utils"]
