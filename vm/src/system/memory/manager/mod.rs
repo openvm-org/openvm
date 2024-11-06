@@ -1,4 +1,11 @@
-use std::{array, cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
+use std::{
+    array::{self, from_fn},
+    cell::RefCell,
+    collections::BTreeMap,
+    marker::PhantomData,
+    rc::Rc,
+    sync::Arc,
+};
 
 use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
@@ -225,11 +232,17 @@ impl<F: PrimeField32> MemoryController<F> {
     /// Reads a word directly from memory without updating internal state.
     ///
     /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell(&self, addr_space: F, pointer: F) -> F {
-        self.memory.get(
-            addr_space.as_canonical_u32() as usize,
-            pointer.as_canonical_u32() as usize,
-        )
+    pub fn unsafe_read_cell(&self, addr_space: F, ptr: F) -> F {
+        self.unsafe_read::<1>(addr_space, ptr)[0]
+    }
+
+    /// Reads a word directly from memory without updating internal state.
+    ///
+    /// Any value returned is unconstrained.
+    pub fn unsafe_read<const N: usize>(&self, addr_space: F, ptr: F) -> [F; N] {
+        let addr_space = addr_space.as_canonical_u32() as usize;
+        let ptr = ptr.as_canonical_u32() as usize;
+        from_fn(|i| self.memory.get(addr_space, ptr + i))
     }
 
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {

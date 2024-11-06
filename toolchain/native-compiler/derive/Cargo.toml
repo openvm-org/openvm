@@ -2,7 +2,6 @@
 name = "axvm-native-compiler-derive"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 description = "Procedural macros for axVM native compiler."
 
 [lib]

@@ -10,7 +10,7 @@ pub enum Custom0Funct3 {
     Terminate = 0,
     HintStoreW,
     Reveal,
-    HintInput,
+    Phantom,
     Keccak256 = 0b100,
     Int256 = 0b101,
     Beq256,
@@ -22,6 +22,14 @@ pub enum Custom0Funct3 {
 pub enum Custom1Funct3 {
     ModularArithmetic = 0,
     ShortWeierstrass,
+}
+
+/// imm options for system phantom instructions
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum PhantomImm {
+    HintInput = 0,
+    PrintStr,
 }
 
 /// funct7 options for 256-bit integer instructions.

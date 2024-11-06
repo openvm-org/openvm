@@ -94,7 +94,7 @@ where
             Fp2: FieldExtension<BaseField = Fp>,
         {
             Q.iter()
-                .map(|q| match sigma_i {
+                .map(|&q| match sigma_i {
                     1 => q.clone(),
                     -1 => q.neg(),
                     _ => panic!("Invalid sigma_i"),
