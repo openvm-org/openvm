@@ -27,7 +27,7 @@ pub trait AffineCoords<F: Field>: Clone {
     /// Returns the affine representation y-coordinate of the elliptic curve point.
     fn y(&self) -> F;
 
-    // Negates the elliptic curve point (reflection on the x-axis).
+    /// Negates the elliptic curve point (reflection on the x-axis).
     fn neg(&self) -> Self;
 
     /// Generates a random elliptic curve point.

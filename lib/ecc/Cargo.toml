@@ -21,8 +21,7 @@ num = { version = "0.4.3", optional = true }
 group = "0.13.0"
 
 [features]
+default = []
+std = ["axvm/std"]
 # TODO[yj]: Switch to `halo2curves` and remove `num` dependency
 test-utils = ["dep:halo2curves-axiom", "dep:num"]
-default = []
-parallel = ["test-utils"]
-std = ["axvm/std"]
