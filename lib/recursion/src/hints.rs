@@ -45,10 +45,10 @@ pub type InnerValMmcs = MerkleTreeMmcs<
     8,
 >;
 pub type InnerChallengeMmcs = ExtensionMmcs<InnerVal, InnerChallenge, InnerValMmcs>;
-pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs, Vec<InnerBatchOpening>>;
+pub type InnerInputProof = Vec<InnerBatchOpening>;
+pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs, InnerInputProof>;
 pub type InnerCommitPhaseStep = CommitPhaseProofStep<InnerChallenge, InnerChallengeMmcs>;
-pub type InnerFriProof =
-    FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal, Vec<InnerBatchOpening>>;
+pub type InnerFriProof = FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal, InnerInputProof>;
 pub type InnerBatchOpening = BatchOpening<InnerVal, InnerValMmcs>;
 
 pub trait Hintable<C: Config> {

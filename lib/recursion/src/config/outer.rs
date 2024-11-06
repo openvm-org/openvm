@@ -47,11 +47,10 @@ pub type OuterChallengeMmcs = ExtensionMmcs<OuterVal, OuterChallenge, OuterValMm
 pub type OuterDft = Radix2Bowers;
 pub type OuterChallenger = MultiField32Challenger<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE>;
 pub type OuterPcs = TwoAdicFriPcs<OuterVal, OuterDft, OuterValMmcs, OuterChallengeMmcs>;
-
-pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs, Vec<OuterBatchOpening>>;
+pub type OuterInputProof = Vec<OuterBatchOpening>;
+pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs, OuterInputProof>;
 pub type OuterCommitPhaseStep = CommitPhaseProofStep<OuterChallenge, OuterChallengeMmcs>;
-pub type OuterFriProof =
-    FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, Vec<OuterBatchOpening>>;
+pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, OuterInputProof>;
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(

@@ -91,30 +91,31 @@ ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
 # Plonky3
-p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
+# d094850 is jpw's PR: https://github.com/Plonky3/Plonky3/commit/d094850d1740d722fea9130ec5bbff7ff6bc808c
+p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
-], rev = "80f0c8d" }
-p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "80f0c8d" }
+], rev = "d094850" }
+p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
+p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
     "loader_halo2",

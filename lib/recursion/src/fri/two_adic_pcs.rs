@@ -57,7 +57,6 @@ pub fn verify_two_adic_pcs<C: Config>(
         .range(0, proof.query_proofs.len())
         .for_each(|i, builder| {
             let query_proof = builder.get(&proof.query_proofs, i);
-            let input_proof = query_proof.input_proof;
             let index_bits = builder.get(&fri_challenges.query_indices, i);
 
             let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
@@ -79,7 +78,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             }
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
-                let batch_opening = builder.get(&input_proof, j);
+                let batch_opening = builder.get(&query_proof.input_proof, j);
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
