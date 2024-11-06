@@ -68,6 +68,7 @@ test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
 axvm-ecc-constants = { workspace = true }
+axvm-ecc = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
 ax-ecc-execution = { workspace = true }
