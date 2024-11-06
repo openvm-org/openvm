@@ -30,7 +30,11 @@ pub fn main() {
     let two = IntModN::from_u32(2);
     let minus_two = IntModN::from_bytes(pow);
 
-    if (res - minus_two) != (inv + two) {
+    if (res - &minus_two) != (inv + &two) {
+        axvm::process::panic();
+    }
+
+    if two == minus_two {
         axvm::process::panic();
     }
 }

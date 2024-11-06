@@ -24,7 +24,7 @@ pub struct IntModN([u8; LIMBS]);
 
 impl IntModN {
     const MODULUS: [u8; LIMBS] =
-        hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+        hex!("2FFCFFFF FEFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF");
     const _MOD_IDX: usize = 0;
 
     /// The zero element of the field.
@@ -67,7 +67,7 @@ impl IntModN {
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
     pub fn modulus_biguint() -> BigUint {
-        BigUint::from_bytes_be(&Self::MODULUS)
+        BigUint::from_bytes_le(&Self::MODULUS)
     }
 
     #[inline(always)]
@@ -409,16 +409,16 @@ impl PartialEq for IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<u32> = MaybeUninit::uninit();
+            let mut x: u32;
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::ModularArithmetic as usize,
                 ModArithBaseFunct7::IsEqMod as usize,
-                uninit.as_mut_ptr(),
+                x,
                 self as *const IntModN,
                 other as *const IntModN
             );
-            unsafe { uninit.assume_init() != 0 }
+            x != 0
         }
     }
 }
@@ -431,9 +431,7 @@ mod helper {
         #[inline(always)]
         fn mul(self, other: u32) -> Self::Output {
             let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
+            res *= IntModN::from_u32(other);
             res
         }
     }
@@ -443,9 +441,7 @@ mod helper {
         #[inline(always)]
         fn mul(self, other: u32) -> Self::Output {
             let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
+            res *= IntModN::from_u32(other);
             res
         }
     }
