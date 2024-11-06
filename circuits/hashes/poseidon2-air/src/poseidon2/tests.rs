@@ -10,11 +10,10 @@ use ax_stark_sdk::{
     engine::StarkEngine,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::{
-    BabyBear, DiffusionMatrixBabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
-};
+use p3_baby_bear::{BabyBear, BabyBearDiffusionMatrixParameters, DiffusionMatrixBabyBear};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_monty_31::DiffusionMatrixParameters;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::Permutation;
 use p3_util::log2_strict_usize;
@@ -69,7 +68,7 @@ fn test_poseidon2_default() {
         Poseidon2ExternalMatrixGeneral,
         num_int_rounds,
         HL_BABYBEAR_INT_CONST_16.to_vec(),
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
     );
     for output in outputs.iter_mut() {
         poseidon2.permute_mut(output);
@@ -166,7 +165,7 @@ fn test_poseidon2() {
         external_constants.clone(),
         internal_constants.clone(),
         MDS_MAT_4,
-        POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
+        BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
         3,
         0,
@@ -185,7 +184,7 @@ fn test_poseidon2() {
         Poseidon2ExternalMatrixGeneral,
         num_int_rounds,
         internal_constants.clone(),
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
     );
     for output in outputs.iter_mut() {
         poseidon2.permute_mut(output);
@@ -302,7 +301,7 @@ where
         external_constants.clone(),
         internal_constants.clone(),
         MDS_MAT_4,
-        POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY,
+        BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY,
         BabyBear::from_wrapped_u64(1u64 << 32).inverse(), // 943718400
         3,
         0,

@@ -6,7 +6,7 @@ use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
@@ -37,9 +37,9 @@ type InstrPerm = Instrumented<Perm>;
 type Hash<P> = PaddingFreeSponge<P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, DIGEST_WIDTH, WIDTH>;
 type ValMmcs<P> =
-    FieldMerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
+MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
-pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH>;
+pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
 type Dft = Radix2DitParallel;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
@@ -163,7 +163,7 @@ where
         proof_of_work_bits: fri_params.proof_of_work_bits,
         mmcs: challenge_mmcs,
     };
-    let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
     BabyBearPermutationConfig::new(pcs)
 }
 
@@ -179,7 +179,7 @@ pub fn default_perm() -> Perm {
         Poseidon2ExternalMatrixGeneral,
         rounds_p,
         internal_constants,
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
     )
 }
 
@@ -188,7 +188,7 @@ pub fn random_perm() -> Perm {
     let mut rng = StdRng::from_seed(seed);
     Perm::new_from_rng_128(
         Poseidon2ExternalMatrixGeneral,
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
         &mut rng,
     )
 }

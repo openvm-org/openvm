@@ -3,7 +3,8 @@ use axvm_native_compiler::{
     prelude::*,
 };
 
-use crate::{digest::DigestVariable, fri::types::TwoAdicPcsProofVariable, OUTER_DIGEST_SIZE};
+use crate::{digest::DigestVariable, OUTER_DIGEST_SIZE};
+use crate::fri::types::FriProofVariable;
 
 pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
@@ -71,7 +72,7 @@ pub struct CommitmentsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct OpeningProofVariable<C: Config> {
-    pub proof: TwoAdicPcsProofVariable<C>,
+    pub proof: FriProofVariable<C>,
     pub values: OpenedValuesVariable<C>,
 }
 

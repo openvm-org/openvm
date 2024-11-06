@@ -4,7 +4,7 @@ use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher, SerializingHasher32};
 use p3_uni_stark::StarkConfig;
 
@@ -16,10 +16,10 @@ type Challenge = BinomialExtensionField<Val, 4>;
 
 // Generic over H: CryptographicHasher<u8, [u8; 32]>
 type FieldHash<H> = SerializingHasher32<H>;
-type Compress<H> = CompressionFunctionFromHasher<u8, H, 2, 32>;
+type Compress<H> = CompressionFunctionFromHasher<H, 2, 32>;
 // type InstrCompress<H> = Instrumented<Compress<H>>;
 
-type ValMmcs<H> = FieldMerkleTreeMmcs<Val, u8, FieldHash<H>, Compress<H>, 32>;
+type ValMmcs<H> = MerkleTreeMmcs<Val, u8, FieldHash<H>, Compress<H>, 32>;
 type ChallengeMmcs<H> = ExtensionMmcs<Val, Challenge, ValMmcs<H>>;
 type Dft = Radix2DitParallel;
 type Challenger<H> = SerializingChallenger32<Val, HashChallenger<u8, H, 32>>;
@@ -94,7 +94,7 @@ where
         proof_of_work_bits: fri_params.proof_of_work_bits,
         mmcs: challenge_mmcs,
     };
-    let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
     BabyBearByteHashConfig::new(pcs)
 }
 

@@ -7,8 +7,9 @@ pub mod trace;
 pub mod tests;
 
 use lazy_static::lazy_static;
-use p3_baby_bear::{BabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY};
+use p3_baby_bear::{BabyBear, BabyBearDiffusionMatrixParameters};
 use p3_field::{AbstractField, PrimeField32};
+use p3_monty_31::DiffusionMatrixParameters;
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};
 
@@ -106,8 +107,9 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
             .collect();
 
-        let p3_int_diag_f: [F; 16] = POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY
-            .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
+        let p3_int_diag_f = BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY.map(|babybear| {
+            F::from_canonical_u32(babybear.as_canonical_u32())
+        });
 
         Self {
             external_constants: external_round_constants_f,

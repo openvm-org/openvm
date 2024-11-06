@@ -8,9 +8,9 @@ use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{
-    BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs, TwoAdicFriPcsProof,
+    BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs,
 };
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
 
@@ -44,18 +44,16 @@ pub type OuterHash =
     MultiField32PaddingFreeSponge<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE, DIGEST_WIDTH>;
 pub type OuterDigest = [Bn254Fr; 1];
 pub type OuterCompress = TruncatedPermutation<OuterPerm, 2, 1, WIDTH>;
-pub type OuterValMmcs = FieldMerkleTreeMmcs<BabyBear, Bn254Fr, OuterHash, OuterCompress, 1>;
+pub type OuterValMmcs = MerkleTreeMmcs<BabyBear, Bn254Fr, OuterHash, OuterCompress, 1>;
 pub type OuterChallengeMmcs = ExtensionMmcs<OuterVal, OuterChallenge, OuterValMmcs>;
 pub type OuterDft = Radix2DitParallel;
 pub type OuterChallenger = MultiField32Challenger<OuterVal, Bn254Fr, OuterPerm, WIDTH>;
 pub type OuterPcs = TwoAdicFriPcs<OuterVal, OuterDft, OuterValMmcs, OuterChallengeMmcs>;
 
-pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs>;
+pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs, Vec<OuterBatchOpening>>;
 pub type OuterCommitPhaseStep = CommitPhaseProofStep<OuterChallenge, OuterChallengeMmcs>;
-pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal>;
+pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, Vec<OuterBatchOpening>>;
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
-pub type OuterPcsProof =
-    TwoAdicFriPcsProof<OuterVal, OuterChallenge, OuterValMmcs, OuterChallengeMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(
     vk: StarkVerifyingKey<BabyBearPoseidon2OuterConfig>,

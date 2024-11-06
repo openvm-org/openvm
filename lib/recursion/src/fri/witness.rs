@@ -1,10 +1,10 @@
 use axvm_native_compiler::ir::{Builder, Witness};
 use p3_bn254_fr::Bn254Fr;
 
-use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
+use super::types::BatchOpeningVariable;
 use crate::{
     config::outer::{
-        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterFriProof, OuterPcsProof,
+        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterFriProof,
         OuterQueryProof,
     },
     digest::DigestVal,
@@ -42,13 +42,16 @@ impl Witnessable<C> for OuterQueryProof {
     type WitnessVariable = FriQueryProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
+        let input_proof = self.input_proof.read(builder);
         let commit_phase_openings = self.commit_phase_openings.read(builder);
         Self::WitnessVariable {
+            input_proof,
             commit_phase_openings,
         }
     }
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
+        self.input_proof.write(witness);
         self.commit_phase_openings.write(witness);
     }
 }
@@ -99,21 +102,3 @@ impl Witnessable<C> for OuterBatchOpening {
 
 impl VectorWitnessable<C> for OuterBatchOpening {}
 impl VectorWitnessable<C> for Vec<OuterBatchOpening> {}
-
-impl Witnessable<C> for OuterPcsProof {
-    type WitnessVariable = TwoAdicPcsProofVariable<C>;
-
-    fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        let fri_proof = self.fri_proof.read(builder);
-        let query_openings = self.query_openings.read(builder);
-        Self::WitnessVariable {
-            fri_proof,
-            query_openings,
-        }
-    }
-
-    fn write(&self, witness: &mut Witness<OuterConfig>) {
-        self.fri_proof.write(witness);
-        self.query_openings.write(witness);
-    }
-}

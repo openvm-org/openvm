@@ -15,8 +15,8 @@ use itertools::Itertools;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
-use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcsProof};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
@@ -37,7 +37,7 @@ pub type InnerPerm =
 pub type InnerHash = PaddingFreeSponge<InnerPerm, 16, 8, 8>;
 pub type InnerDigest = [InnerVal; DIGEST_SIZE];
 pub type InnerCompress = TruncatedPermutation<InnerPerm, 2, 8, 16>;
-pub type InnerValMmcs = FieldMerkleTreeMmcs<
+pub type InnerValMmcs = MerkleTreeMmcs<
     <InnerVal as Field>::Packing,
     <InnerVal as Field>::Packing,
     InnerHash,
@@ -45,12 +45,10 @@ pub type InnerValMmcs = FieldMerkleTreeMmcs<
     8,
 >;
 pub type InnerChallengeMmcs = ExtensionMmcs<InnerVal, InnerChallenge, InnerValMmcs>;
-pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs>;
+pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs, Vec<InnerBatchOpening>>;
 pub type InnerCommitPhaseStep = CommitPhaseProofStep<InnerChallenge, InnerChallengeMmcs>;
-pub type InnerFriProof = FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal>;
+pub type InnerFriProof = FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal, Vec<InnerBatchOpening>>;
 pub type InnerBatchOpening = BatchOpening<InnerVal, InnerValMmcs>;
-pub type InnerPcsProof =
-    TwoAdicFriPcsProof<InnerVal, InnerChallenge, InnerValMmcs, InnerChallengeMmcs>;
 
 pub trait Hintable<C: Config> {
     type HintVariable: MemVariable<C>;
@@ -376,7 +374,7 @@ impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let proof = InnerPcsProof::read(builder);
+        let proof = InnerFriProof::read(builder);
         let values = OpenedValues::read(builder);
 
         OpeningProofVariable { proof, values }

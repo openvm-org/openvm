@@ -95,7 +95,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder
             .if_eq(
                 self.nb_inputs,
-                C::N::from_canonical_usize(PERMUTATION_WIDTH),
+                C::N::from_canonical_usize(DIGEST_SIZE),
             )
             .then(|builder| {
                 self.duplexing(builder);
@@ -140,6 +140,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         C::N: Field,
     {
         let rand_f = self.sample(builder);
+        builder.print_f(rand_f);
         let bits = builder.num2bits_f(rand_f, C::N::bits() as u32);
 
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
@@ -218,6 +219,7 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
+    use p3_baby_bear::BabyBear;
     use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
@@ -227,37 +229,36 @@ mod tests {
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };
+    use rand::Rng;
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
 
     use super::DuplexChallengerVariable;
 
-    //noinspection RsDetachedFile
-    #[test]
-    fn test_compiler_challenger() {
+    fn test_compiler_challenger_with_num_challenges(num_challenges: usize) {
+        let mut rng = rand::thread_rng();
+        let observations = (0..num_challenges).map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..(1 << 30)))).collect::<Vec<_>>();
+
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
 
         let engine = default_engine(27);
         let mut challenger = engine.new_challenger();
-        challenger.observe(F::one());
-        challenger.observe(F::two());
-        challenger.observe(F::two());
-        challenger.observe(F::two());
+        for observation in &observations {
+            challenger.observe(*observation);
+        }
         let result: F = challenger.sample();
         println!("expected result: {}", result);
 
         let mut builder = AsmBuilder::<F, EF>::default();
 
         let mut challenger = DuplexChallengerVariable::<AsmConfig<F, EF>>::new(&mut builder);
-        let one: Felt<_> = builder.eval(F::one());
-        let two: Felt<_> = builder.eval(F::two());
-        challenger.observe(&mut builder, one);
-        challenger.observe(&mut builder, two);
-        challenger.observe(&mut builder, two);
-        challenger.observe(&mut builder, two);
+        for observation in &observations {
+            let observation: Felt<_> = builder.eval(*observation);
+            challenger.observe(&mut builder, observation);
+        }
         let element = challenger.sample(&mut builder);
 
         let expected_result: Felt<_> = builder.eval(result);
@@ -268,4 +269,16 @@ mod tests {
         let program = builder.compile_isa();
         execute_program(program, vec![]);
     }
+
+    #[test]
+    fn test_compiler_challenger() {
+        test_compiler_challenger_with_num_challenges(1);
+        test_compiler_challenger_with_num_challenges(4);
+        test_compiler_challenger_with_num_challenges(8);
+        test_compiler_challenger_with_num_challenges(10);
+        test_compiler_challenger_with_num_challenges(16);
+        test_compiler_challenger_with_num_challenges(20);
+        test_compiler_challenger_with_num_challenges(50);
+    }
+
 }

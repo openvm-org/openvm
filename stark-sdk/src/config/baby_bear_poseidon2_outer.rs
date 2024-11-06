@@ -8,7 +8,7 @@ use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, MultiField32PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
@@ -35,7 +35,7 @@ type Challenge = BinomialExtensionField<Val, 4>;
 type Perm = Poseidon2<Bn254Fr, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBN254, WIDTH, 5>;
 type Hash<P> = MultiField32PaddingFreeSponge<Val, Bn254Fr, P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, 1, WIDTH>;
-type ValMmcs<P> = FieldMerkleTreeMmcs<BabyBear, Bn254Fr, Hash<P>, Compress<P>, 1>;
+type ValMmcs<P> = MerkleTreeMmcs<BabyBear, Bn254Fr, Hash<P>, Compress<P>, 1>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 type Dft = Radix2DitParallel;
 type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH>;
@@ -151,7 +151,7 @@ where
         proof_of_work_bits: fri_params.proof_of_work_bits,
         mmcs: challenge_mmcs,
     };
-    let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
     BabyBearPermutationOuterConfig::new(pcs)
 }
 

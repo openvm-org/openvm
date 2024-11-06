@@ -45,6 +45,9 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
             builder.set(&betas, i, sample);
         });
 
+    let final_poly_felts = builder.ext2felt(proof.final_poly);
+    challenger.observe_slice(builder, final_poly_felts);
+
     let num_query_proofs = proof.query_proofs.len().clone();
     builder
         .if_ne(num_query_proofs, RVar::from(config.num_queries))

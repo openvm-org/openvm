@@ -91,29 +91,30 @@ ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
 # Plonky3
-p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
-], rev = "95e56fa" }
-p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+], rev = "6036f0c" }
+p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
+p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "6036f0c" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
     "loader_halo2",
