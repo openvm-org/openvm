@@ -93,8 +93,8 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_execution::common::{miller_double_step, EcPoint};
     use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
+    use axvm_ecc::{pairing::miller_double_step, point::EcPoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use halo2curves_axiom::bn256::{Fq, Fq2, G2Affine};

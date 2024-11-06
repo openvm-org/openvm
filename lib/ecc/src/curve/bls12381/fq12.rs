@@ -64,11 +64,11 @@ impl FieldExtension for Fq12 {
     }
 
     fn conjugate(&self) -> Self {
-        Fq12::conjugate(&self)
+        Fq12::conjugate(self)
     }
 
     fn frobenius_map(&self, _power: Option<usize>) -> Self {
-        Fq12::frobenius_map(&self)
+        Fq12::frobenius_map(self)
     }
 
     fn mul_base(&self, rhs: &Self::BaseField) -> Self {

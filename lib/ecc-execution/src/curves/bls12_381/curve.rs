@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    curve::bls12381::{Fq, Fq2, G1Affine, G2Affine},
+    curve::bls12381::{Fq, Fq2},
     field::FieldExtension,
 };
 use lazy_static::lazy_static;

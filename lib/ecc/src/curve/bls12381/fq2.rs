@@ -6,6 +6,7 @@ pub use halo2curves_axiom::{
 use crate::field::{FieldExtension, Fp2Constructor};
 
 impl Fp2Constructor<Fq> for Fq2 {
+    // TODO[yj]: conversion for PSE halo2curves implementation
     // fn new(c0: Fq, c1: Fq) -> Self {
     //     let mut b = [0u8; 48 * 2];
     //     b[..48].copy_from_slice(&c0.to_bytes());
@@ -40,13 +41,15 @@ impl FieldExtension for Fq2 {
     }
 
     fn conjugate(&self) -> Self {
-        let mut res = *self;
-        res.conjugate();
-        res
+        // TODO[yj]: conversion for PSE halo2curves implementation
+        // let mut res = *self;
+        // res.conjugate();
+        // res
+        Fq2::conjugate(self)
     }
 
     fn frobenius_map(&self, _power: Option<usize>) -> Self {
-        Fq2::frobenius_map(&self)
+        Fq2::frobenius_map(self)
     }
 
     fn mul_base(&self, rhs: &Self::BaseField) -> Self {
