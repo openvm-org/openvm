@@ -639,6 +639,9 @@ dependencies = [
 [[package]]
 name = "axvm-ecc"
 version = "0.1.0"
+dependencies = [
+ "axvm",
+]
 
 [[package]]
 name = "axvm-ecc-constants"

@@ -13,7 +13,7 @@ const LIMBS: usize = 32;
 
 /// Class to represent an integer modulo N, which is currently hard-coded to be the
 /// secp256k1 prime.
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 #[repr(C, align(32))]
 pub struct IntModN([u8; LIMBS]);
 
@@ -21,6 +21,9 @@ impl IntModN {
     const MODULUS: [u8; LIMBS] =
         hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
     const _MOD_IDX: usize = 0;
+
+    /// The zero element of the field.
+    pub const ZERO: Self = Self([0; LIMBS]);
 
     /// Creates a new IntModN from an array of bytes.
     pub fn from_bytes(bytes: [u8; LIMBS]) -> Self {
@@ -331,6 +334,34 @@ impl PartialEq for IntModN {
         #[cfg(target_os = "zkvm")]
         {
             todo!()
+        }
+    }
+}
+
+#[cfg(not(target_os = "zkvm"))]
+mod helper {
+    use super::*;
+    impl Mul<u32> for IntModN {
+        type Output = IntModN;
+        #[inline(always)]
+        fn mul(self, other: u32) -> Self::Output {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
+            res
+        }
+    }
+
+    impl Mul<u32> for &IntModN {
+        type Output = IntModN;
+        #[inline(always)]
+        fn mul(self, other: u32) -> Self::Output {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
+            res
         }
     }
 }
