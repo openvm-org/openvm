@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 axvm::entry!(main);
-use axvm::intrinsics::U256;
+use axvm::{intrinsics::U256, io::print};
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
@@ -45,7 +45,7 @@ pub fn main() {
     let a: Matrix = get_identity_matrix();
     let c = bin_exp(a, U256::from_u32(1234567));
     if c != get_identity_matrix() {
-        //print("FAIL: the resulting matrix should have been the identity matrix");
+        print("FAIL: the resulting matrix should have been the identity matrix");
         axvm::process::panic();
     }
 
@@ -59,7 +59,7 @@ pub fn main() {
     for i in 0..N {
         for j in 0..N {
             if c[i][j] != two_to_200 {
-                //print("FAIL: the resulting matrix is incorect");
+                print("FAIL: the resulting matrix is incorect");
                 axvm::process::panic();
             }
         }
@@ -67,56 +67,56 @@ pub fn main() {
 
     // Shift right tests
     if &two_to_200 >> &U256::from_u8(200) != one {
-        //print("FAIL: 2^200 >> 200 == 1 test failed");
+        print("FAIL: 2^200 >> 200 == 1 test failed");
         axvm::process::panic();
     }
     if &two_to_200 >> &U256::from_u8(201) != zero {
-        //print("FAIL: 2^200 >> 201 == 0 test failed");
+        print("FAIL: 2^200 >> 201 == 0 test failed");
         axvm::process::panic();
     }
 
     // Xor tests
     if &two_to_200 ^ &two_to_200 != zero {
-        //print("FAIL: 2^200 ^ 2^200 == 0 test failed");
+        print("FAIL: 2^200 ^ 2^200 == 0 test failed");
         axvm::process::panic();
     }
 
     if &two_to_200 ^ &one != &two_to_200 + &one {
-        //print("FAIL: 2^200 ^ 1 == 2^200 + 1 test failed");
+        print("FAIL: 2^200 ^ 1 == 2^200 + 1 test failed");
         axvm::process::panic();
     }
 
     // Or tests
     if &one | &one != one {
-        //print("FAIL: 1 | 1 == 1 test failed");
+        print("FAIL: 1 | 1 == 1 test failed");
         axvm::process::panic();
     }
 
     if &two_to_200 | &one != &two_to_200 + &one {
-        //print("FAIL: 2^200 | 1 = 2^200 + 1 test failed");
+        print("FAIL: 2^200 | 1 = 2^200 + 1 test failed");
         axvm::process::panic();
     }
 
     // Other tests
     if &zero - &one <= zero {
-        //print("FAIL: 0 - 1 > 0 test failed (should have wrapped)");
+        print("FAIL: 0 - 1 > 0 test failed (should have wrapped)");
         axvm::process::panic();
     }
 
     if &zero - &one + &one != zero {
-        //print("FAIL: 0 - 1 + 1 == 0 test failed (should have wrapped)");
+        print("FAIL: 0 - 1 + 1 == 0 test failed (should have wrapped)");
         axvm::process::panic();
     }
 
     if &one << &U256::from_u32(256) != one {
-        //print("FAIL: 1 << 256 == 1 test failed");
+        print("FAIL: 1 << 256 == 1 test failed");
         axvm::process::panic();
     }
 
     if &one << &U256::from_u32(261) != U256::from_u8(32) {
-        //print("FAIL: 1 << 261 == 32 test failed");
+        print("FAIL: 1 << 261 == 32 test failed");
         axvm::process::panic();
     }
 
-    //print("PASS");
+    print("PASS");
 }
