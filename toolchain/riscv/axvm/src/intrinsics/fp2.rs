@@ -1,5 +1,7 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
+#[cfg(target_os = "zkvm")]
+use axvm_platform::constants::Custom2Funct3;
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
