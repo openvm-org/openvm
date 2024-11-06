@@ -50,7 +50,7 @@ pub struct VmConfig {
     /// List of all supported EC curves
     pub supported_ec_curves: Vec<EcCurve>,
     /// List of all supported pairing curves
-    pub supported_pairing_curves: Vec<EcCurve>,
+    pub supported_pairing_curves: Vec<PairingCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
@@ -86,7 +86,7 @@ impl VmConfig {
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
         supported_ec_curves: Vec<EcCurve>,
-        supported_pairing_curves: Vec<EcCurve>,
+        supported_pairing_curves: Vec<PairingCurve>,
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
@@ -204,7 +204,7 @@ impl VmConfig {
             poseidon2_max_constraint_degree,
             continuation_enabled: false,
             num_public_values,
-            max_segment_len: (1 << 22) - 100,
+            max_segment_len: (1 << 24) - 100,
             ..VmConfig::default()
         }
         .add_executor(ExecutorName::Phantom)
@@ -260,6 +260,21 @@ impl EcCurve {
             EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
             EcCurve::Bn254 => BN254.MODULUS.clone(),
             EcCurve::Bls12_381 => BLS12381.MODULUS.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PairingCurve {
+    Bn254,
+    Bls12_381,
+}
+
+impl PairingCurve {
+    pub fn prime(&self) -> BigUint {
+        match self {
+            PairingCurve::Bn254 => BN254.MODULUS.clone(),
+            PairingCurve::Bls12_381 => BLS12381.MODULUS.clone(),
         }
     }
 }

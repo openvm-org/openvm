@@ -4,3 +4,10 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "axVM elliptic curve cryptography library."
+
+[dependencies]
+axvm = { workspace = true }
+
+[features]
+default = []
+std = ["axvm/std"]

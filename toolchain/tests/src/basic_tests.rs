@@ -23,6 +23,14 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     Ok(())
 }
 
+#[test_case("collatz", 1)]
+fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    let elf = build_example_program(example_name)?;
+    let config = VmConfig::rv32im();
+    air_test_with_min_segments(config, elf, vec![], min_segments);
+    Ok(())
+}
+
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
@@ -114,6 +122,14 @@ fn test_keccak256_runtime() -> Result<()> {
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
     let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_modular_runtime() -> Result<()> {
+    let elf = build_example_program("little")?;
+    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_modulus());
     executor.execute(elf, vec![])?;
     Ok(())
 }
