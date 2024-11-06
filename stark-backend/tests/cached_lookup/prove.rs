@@ -39,7 +39,6 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     ProverBenchmarks,
 )
 where
-    // SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,

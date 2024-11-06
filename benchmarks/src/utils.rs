@@ -52,7 +52,6 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    // SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,

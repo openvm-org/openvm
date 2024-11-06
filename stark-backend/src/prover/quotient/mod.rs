@@ -62,14 +62,12 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
-        // SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
     {
         let raps = raps.iter().map(|rap| rap.as_ref()).collect_vec();
-        let inner = // FIXME: parallelize
-            izip!(raps, qvks, traces, public_values)
+        let inner = izip!(raps, qvks, traces, public_values)
             .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
         QuotientData { inner }
