@@ -19,23 +19,20 @@ pub fn assert_or_assign_connector_pvs<C: Config>(
     builder.if_eq(proof_idx, RVar::zero()).then_or_else(
         |builder| {
             builder.assign(&dst.initial_pc, proof_pvs.initial_pc);
-            builder.assign(&dst.final_pc, proof_pvs.final_pc);
-            builder.assign(&dst.exit_code, proof_pvs.exit_code);
-            builder.assign(&dst.is_terminate, proof_pvs.is_terminate);
         },
         |builder| {
             // assert prev.final_pc == curr.initial_pc
             builder.assert_felt_eq(dst.final_pc, proof_pvs.initial_pc);
-            // Update final_pc
-            builder.assign(&dst.final_pc, proof_pvs.final_pc);
             // assert prev.is_terminate == 0
             builder.assert_felt_eq(dst.is_terminate, C::F::zero());
-            // Update is_terminate
-            builder.assign(&dst.is_terminate, proof_pvs.is_terminate);
-            // Update exit_code
-            builder.assign(&dst.exit_code, proof_pvs.exit_code);
         },
     );
+    // Update final_pc
+    builder.assign(&dst.final_pc, proof_pvs.final_pc);
+    // Update is_terminate
+    builder.assign(&dst.is_terminate, proof_pvs.is_terminate);
+    // Update exit_code
+    builder.assign(&dst.exit_code, proof_pvs.exit_code);
 }
 
 pub fn assert_or_assign_memory_pvs<C: Config>(
@@ -47,15 +44,14 @@ pub fn assert_or_assign_memory_pvs<C: Config>(
     builder.if_eq(proof_idx, RVar::zero()).then_or_else(
         |builder| {
             builder.assign(&dst.initial_root, proof_pvs.initial_root);
-            builder.assign(&dst.final_root, proof_pvs.final_root);
         },
         |builder| {
             // assert prev.final_root == curr.initial_root
             builder.assert_eq::<[_; DIGEST_SIZE]>(dst.final_root, proof_pvs.initial_root);
-            // Update final_root
-            builder.assign(&dst.final_root, proof_pvs.final_root);
         },
     );
+    // Update final_root
+    builder.assign(&dst.final_root, proof_pvs.final_root);
 }
 
 pub fn get_program_commit<C: Config>(

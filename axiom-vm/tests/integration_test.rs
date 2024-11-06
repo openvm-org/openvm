@@ -9,7 +9,7 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axiom_vm::{
-    commit::compute_app_execution_commit,
+    commit::AppExecutionCommit,
     config::{AxiomVmConfig, AxiomVmProvingKey},
     verifier::{
         common::types::VmVerifierPvs,
@@ -233,7 +233,7 @@ fn test_1() {
         let proof = leaf_result.per_segment.pop().unwrap();
         root_agg_vm.prove_single(&axiom_vm_pk.root_agg_vm_pk, proof)
     };
-    let app_exe_commit = compute_app_execution_commit(
+    let app_exe_commit = AppExecutionCommit::compute(
         &axiom_vm_pk.app_vm_config,
         &committed_exe,
         &axiom_vm_pk.committed_leaf_program,
