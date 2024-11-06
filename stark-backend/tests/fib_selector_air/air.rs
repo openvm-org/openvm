@@ -78,7 +78,7 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder + InteractionBuilder> Air<AB>
             .assert_eq(local.right, next.left);
         builder
             .when_transition()
-            .when_ne(preprocessed_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::ONE)
             .assert_eq(local.left, next.left);
 
         // b' <- sel*(a + b) + (1 - sel)*b
@@ -88,7 +88,7 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder + InteractionBuilder> Air<AB>
             .assert_eq(local.left + local.right, next.right);
         builder
             .when_transition()
-            .when_ne(preprocessed_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::ONE)
             .assert_eq(local.right, next.right);
 
         builder.when_last_row().assert_eq(local.right, x);

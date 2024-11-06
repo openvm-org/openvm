@@ -68,7 +68,7 @@ where
     // based on the number of cpu threads available, and then do all
     // computations necessary for that chunk within a single thread.
     let perm_width = num_interactions.div_ceil(interaction_chunk_size) + 1;
-    let mut perm_values = vec![EF::zero(); height * perm_width];
+    let mut perm_values = vec![EF::ZERO; height * perm_width];
     debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
@@ -88,7 +88,7 @@ where
             let num_rows = perm_values.len() / perm_width;
             // the interaction chunking requires more memory because we must
             // allocate separate memory for the denominators and reciprocals
-            let mut denoms = vec![EF::zero(); num_rows * num_interactions];
+            let mut denoms = vec![EF::ZERO; num_rows * num_interactions];
             let row_offset = chunk_idx * height_chunk_size;
             // compute the denominators to be inverted:
             for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {
@@ -134,7 +134,7 @@ where
                         local_index: row_offset + n,
                     };
 
-                    let mut row_sum = EF::zero();
+                    let mut row_sum = EF::ZERO;
                     for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
                         perm_row.iter_mut(),
                         reciprocal_chunk.chunks(interaction_chunk_size),
@@ -159,7 +159,7 @@ where
     // At this point, the trace matrix is complete except that the last column
     // has the row sum but not the partial sum
     tracing::info_span!("compute logup partial sums").in_scope(|| {
-        let mut phi = EF::zero();
+        let mut phi = EF::ZERO;
         for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
             phi += *perm_chunk.last().unwrap();
             *perm_chunk.last_mut().unwrap() = phi;

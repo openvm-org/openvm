@@ -43,7 +43,7 @@ impl<AB: AirBuilder> Air<AB> for IsZeroTestAir {
 
         let local = main.row_slice(0);
         let local: &IsZeroCols<_> = (*local).borrow();
-        let io = IsZeroIo::new(local.x.into(), local.out.into(), AB::Expr::one());
+        let io = IsZeroIo::new(local.x.into(), local.out.into(), AB::Expr::ONE);
 
         self.0.eval(builder, (io, local.inv));
     }
@@ -66,7 +66,7 @@ impl<F: Field> IsZeroChip<F> {
         let air = IsZeroSubAir;
         assert!(self.x.len().is_power_of_two());
         let width = IsZeroCols::<F>::width();
-        let mut rows = vec![F::zero(); width * self.x.len()];
+        let mut rows = vec![F::ZERO; width * self.x.len()];
         rows.par_chunks_mut(width).zip(self.x).for_each(|(row, x)| {
             let row: &mut IsZeroCols<F> = row.borrow_mut();
             row.x = x;
@@ -119,7 +119,7 @@ fn test_single_is_zero_fail(x: u32) {
     let chip = IsZeroChip::new(vec![x]);
     let air = chip.air;
     let mut trace = chip.generate_trace();
-    trace.values[1] = BabyBear::one() - trace.values[1];
+    trace.values[1] = BabyBear::ONE - trace.values[1];
 
     disable_debug_builder();
     assert_eq!(
@@ -143,7 +143,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
 
     disable_debug_builder();
     for (i, _value) in expected.iter().enumerate() {
-        trace.row_mut(i)[1] = BabyBear::one() - trace.row_mut(i)[1];
+        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
         assert_eq!(
             BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
                 any_rap_arc_vec![air],
@@ -153,6 +153,6 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        trace.row_mut(i)[1] = BabyBear::one() - trace.row_mut(i)[1];
+        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
     }
 }

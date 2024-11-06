@@ -52,7 +52,7 @@ impl Poseidon2Config<16, BabyBear> {
             internal_constants: HL_BABYBEAR_INT_CONST_16.to_vec(),
             ext_mds_matrix: HL_MDS_MAT_4,
             int_diag_m1_matrix: *HL_BABYBEAR_INT_DIAG_16,
-            reduction_factor: BabyBear::one(),
+            reduction_factor: BabyBear::ONE,
         }
     }
 }
@@ -85,7 +85,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             internal_constants: internal_round_constants_f,
             ext_mds_matrix: HL_MDS_MAT_4,
             int_diag_m1_matrix: horizen_int_diag_f,
-            reduction_factor: F::one(),
+            reduction_factor: F::ONE,
         }
     }
 

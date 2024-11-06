@@ -38,7 +38,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestSendAir {
         let local = main.row_slice(0);
         self.bus
             .send(local[0], local[1])
-            .eval(builder, AB::F::one());
+            .eval(builder, AB::F::ONE);
     }
 }
 
@@ -73,6 +73,6 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestRangeCheckAir {
         let local = main.row_slice(0);
         self.bus
             .range_check(local[0], self.max_bits)
-            .eval(builder, AB::F::one());
+            .eval(builder, AB::F::ONE);
     }
 }

@@ -84,7 +84,7 @@ impl LeafVmVerifierConfig {
             });
 
             let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
-            builder.if_eq(is_terminate, F::one()).then(|builder| {
+            builder.if_eq(is_terminate, F::ONE).then(|builder| {
                 let (pv_commit, expected_memory_root) =
                     self.verify_user_public_values_root(builder);
                 builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.memory.final_root, expected_memory_root);

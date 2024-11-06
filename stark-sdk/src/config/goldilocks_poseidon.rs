@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::{Radix2Bowers, Radix2DitParallel};
+use p3_dft::Radix2Bowers;
 use p3_field::{extension::BinomialExtensionField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_goldilocks::{Goldilocks, MdsMatrixGoldilocks};
@@ -101,21 +101,20 @@ where
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_engine(pcs_log_degree: usize) -> GoldilocksPoseidonEngine {
+pub fn default_engine() -> GoldilocksPoseidonEngine {
     let perm = random_perm();
     let fri_params = FriParameters::standard_fast();
-    engine_from_perm(perm, pcs_log_degree, fri_params)
+    engine_from_perm(perm, fri_params)
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> GoldilocksPoseidonConfig {
+pub fn default_config(perm: &Perm) -> GoldilocksPoseidonConfig {
     let fri_params = FriParameters::standard_fast();
-    config_from_perm(perm, pcs_log_degree, fri_params)
+    config_from_perm(perm, fri_params)
 }
 
 pub fn engine_from_perm<P>(
     perm: P,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> GoldilocksPermutationEngine<P>
 where
@@ -123,7 +122,7 @@ where
         + CryptographicPermutation<[PackedVal; WIDTH]>
         + Clone,
 {
-    let config = config_from_perm(&perm, pcs_log_degree, fri_params);
+    let config = config_from_perm(&perm, fri_params);
     GoldilocksPermutationEngine {
         config,
         perm,
@@ -133,7 +132,6 @@ where
 
 pub fn config_from_perm<P>(
     perm: &P,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> GoldilocksPermutationConfig<P>
 where

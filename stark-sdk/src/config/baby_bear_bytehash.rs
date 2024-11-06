@@ -1,7 +1,7 @@
 use p3_baby_bear::BabyBear;
 use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_commit::ExtensionMmcs;
-use p3_dft::{Radix2Bowers, Radix2Dit, Radix2DitParallel};
+use p3_dft::Radix2Bowers;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -51,23 +51,22 @@ where
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_engine<H>(pcs_log_degree: usize, byte_hash: H) -> BabyBearByteHashEngine<H>
+pub fn default_engine<H>(byte_hash: H) -> BabyBearByteHashEngine<H>
 where
     H: CryptographicHasher<u8, [u8; 32]> + Clone,
 {
     let fri_params = FriParameters::standard_fast();
-    engine_from_byte_hash(byte_hash, pcs_log_degree, fri_params)
+    engine_from_byte_hash(byte_hash, fri_params)
 }
 
 pub fn engine_from_byte_hash<H>(
     byte_hash: H,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> BabyBearByteHashEngine<H>
 where
     H: CryptographicHasher<u8, [u8; 32]> + Clone,
 {
-    let config = config_from_byte_hash(byte_hash.clone(), pcs_log_degree, fri_params);
+    let config = config_from_byte_hash(byte_hash.clone(), fri_params);
     BabyBearByteHashEngine {
         config,
         byte_hash,
@@ -77,7 +76,6 @@ where
 
 pub fn config_from_byte_hash<H>(
     byte_hash: H,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> BabyBearByteHashConfig<H>
 where
@@ -111,7 +109,7 @@ where
     BabyBearByteHashEngine<H>: BabyBearByteHashEngineWithDefaultHash<H>,
 {
     fn new(fri_params: FriParameters) -> Self {
-        engine_from_byte_hash(Self::default_hash(), 27, fri_params)
+        engine_from_byte_hash(Self::default_hash(), fri_params)
     }
     fn fri_params(&self) -> FriParameters {
         self.fri_params

@@ -31,12 +31,12 @@ pub struct Point<C: Config> {
 //
 //     // Put values statically
 //     for i in 0..len {
-//         builder.set(&static_array, i, F::one());
+//         builder.set(&static_array, i, F::ONE);
 //     }
 //     // Assert values set.
 //     for i in 0..len {
 //         let value = builder.get(&static_array, i);
-//         builder.assert_var_eq(value, F::one());
+//         builder.assert_var_eq(value, F::ONE);
 //     }
 //
 //     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(len));
@@ -84,18 +84,18 @@ pub struct Point<C: Config> {
 //     let point_array = builder.dyn_array::<Point<_>>(len);
 //
 //     builder.range(0, dyn_len).for_each(|i, builder| {
-//         let x: Var<_> = builder.eval(F::two());
-//         let y: Felt<_> = builder.eval(F::one());
-//         let z: Ext<_, _> = builder.eval(EF::one().cons());
+//         let x: Var<_> = builder.eval(F::TWO);
+//         let y: Felt<_> = builder.eval(F::ONE);
+//         let z: Ext<_, _> = builder.eval(EF::ONE.cons());
 //         let point = Point { x, y, z };
 //         builder.set(&point_array, i, point);
 //     });
 //
 //     builder.range(0, dyn_len).for_each(|i, builder| {
 //         let point = builder.get(&point_array, i);
-//         builder.assert_var_eq(point.x, F::two());
-//         builder.assert_felt_eq(point.y, F::one());
-//         builder.assert_ext_eq(point.z, EF::one().cons());
+//         builder.assert_var_eq(point.x, F::TWO);
+//         builder.assert_felt_eq(point.y, F::ONE);
+//         builder.assert_ext_eq(point.z, EF::ONE.cons());
 //     });
 //
 //     let array = builder.dyn_array::<Array<_, Var<_>>>(len);
@@ -159,7 +159,7 @@ fn test_fixed_array_var() {
 
     // Put values statically
     builder.range(0, fixed_array.len()).for_each(|i, builder| {
-        let one: Var<_> = builder.eval(F::one());
+        let one: Var<_> = builder.eval(F::ONE);
         // `len` instructions
         builder.set(&fixed_array, i, Usize::Var(one));
     });
@@ -187,11 +187,11 @@ fn test_array_eq() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let arr1: Array<_, Var<_>> = builder.dyn_array(2);
-    builder.set(&arr1, 0, F::one());
-    builder.set(&arr1, 1, F::two());
+    builder.set(&arr1, 0, F::ONE);
+    builder.set(&arr1, 1, F::TWO);
     let arr2: Array<_, Var<_>> = builder.dyn_array(2);
-    builder.set(&arr2, 0, F::one());
-    builder.set(&arr2, 1, F::two());
+    builder.set(&arr2, 0, F::ONE);
+    builder.set(&arr2, 1, F::TWO);
     builder.assert_var_array_eq(&arr1, &arr2);
 
     builder.halt();
@@ -208,11 +208,11 @@ fn test_array_eq_neg() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let arr1: Array<_, Var<_>> = builder.dyn_array(2);
-    builder.set(&arr1, 0, F::one());
-    builder.set(&arr1, 1, F::two());
+    builder.set(&arr1, 0, F::ONE);
+    builder.set(&arr1, 1, F::TWO);
     let arr2: Array<_, Var<_>> = builder.dyn_array(2);
-    builder.set(&arr2, 0, F::one());
-    builder.set(&arr2, 1, F::one());
+    builder.set(&arr2, 0, F::ONE);
+    builder.set(&arr2, 1, F::ONE);
     builder.assert_var_array_eq(&arr1, &arr2);
 
     builder.halt();
@@ -269,7 +269,7 @@ fn test_slice_assert_eq_neg() {
     for (i, f) in slice1.iter().enumerate() {
         builder.assign(f, F::from_canonical_u32(i as u32));
     }
-    let slice2: [Felt<F>; N] = [builder.eval(F::zero()); N];
+    let slice2: [Felt<F>; N] = [builder.eval(F::ZERO); N];
     // Should panic because slice1 != slice2
     builder.assert_eq::<[_; N]>(slice1, slice2);
 

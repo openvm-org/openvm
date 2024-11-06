@@ -29,9 +29,9 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
         assert_eq!(C::F::bits(), p3_baby_bear::BabyBear::bits());
         let num_f_elms = C::N::bits() / C::F::bits();
         let mut state: [Var<C::N>; SPONGE_SIZE] = [
-            self.eval(C::N::zero()),
-            self.eval(C::N::zero()),
-            self.eval(C::N::zero()),
+            self.eval(C::N::ZERO),
+            self.eval(C::N::ZERO),
+            self.eval(C::N::ZERO),
         ];
         // <Poseidon2 RATE> * <Felt per Var>
         let felt_per_chunk = RATE * num_f_elms;
@@ -52,7 +52,7 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
         let state: [Var<C::N>; SPONGE_SIZE] = [
             self.eval(input[0][0]),
             self.eval(input[1][0]),
-            self.eval(C::N::zero()),
+            self.eval(C::N::ZERO),
         ];
         p2_permute_mut_impl(self, state);
         self.cycle_tracker_end(POSEIDON_CELL_TRACKER_NAME);

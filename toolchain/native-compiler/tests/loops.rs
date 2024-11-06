@@ -12,9 +12,9 @@ fn test_compiler_loop() {
 
     let n = F::from_canonical_usize(100);
 
-    let var: Var<_> = builder.constant(F::zero());
+    let var: Var<_> = builder.constant(F::ZERO);
     builder.do_loop(|builder| {
-        builder.assign(&var, var + F::one());
+        builder.assign(&var, var + F::ONE);
         builder
             .if_eq(var, n)
             .then_may_break(|builder| builder.break_loop())

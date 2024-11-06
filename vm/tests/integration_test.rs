@@ -241,7 +241,7 @@ fn test_vm_initial_memory() {
     ]);
 
     let init_memory: BTreeMap<_, _> = [(
-        (BabyBear::one(), BabyBear::from_canonical_u32(7)),
+        (BabyBear::ONE, BabyBear::from_canonical_u32(7)),
         BabyBear::from_canonical_u32(101),
     )]
     .into_iter()

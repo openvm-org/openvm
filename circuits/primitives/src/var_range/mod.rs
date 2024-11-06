@@ -65,7 +65,7 @@ impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let rows: Vec<F> = [F::zero(); NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
+        let rows: Vec<F> = [F::ZERO; NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
             .into_iter()
             .chain((0..=self.range_max_bits()).flat_map(|bits| {
                 (0..(1 << bits)).flat_map(move |value| {
@@ -149,7 +149,7 @@ impl VariableRangeCheckerChip {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![F::zero(); self.count.len() * NUM_VARIABLE_RANGE_COLS];
+        let mut rows = vec![F::ZERO; self.count.len() * NUM_VARIABLE_RANGE_COLS];
         for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
             let cols: &mut VariableRangeCols<F> = row.borrow_mut();
             cols.mult =

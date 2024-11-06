@@ -124,7 +124,7 @@ where
                 })
                 .collect_vec();
 
-            let accumulator = PackedChallenge::<SC>::zero();
+            let accumulator = PackedChallenge::<SC>::ZERO;
             let mut folder = ProverConstraintFolder {
                 preprocessed: VerticalPair::new(
                     RowMajorMatrixView::new_row(&preprocessed_local),

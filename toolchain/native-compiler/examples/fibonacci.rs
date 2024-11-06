@@ -27,11 +27,11 @@ fn main() {
 
     let n_val = 10;
     let mut builder = AsmBuilder::<F, EF>::default();
-    let a: Felt<_> = builder.eval(F::zero());
-    let b: Felt<_> = builder.eval(F::one());
+    let a: Felt<_> = builder.eval(F::ZERO);
+    let b: Felt<_> = builder.eval(F::ONE);
     let n: Var<_> = builder.eval(F::from_canonical_u32(n_val));
 
-    let start: Var<_> = builder.eval(F::zero());
+    let start: Var<_> = builder.eval(F::ZERO);
     let end = n;
 
     builder.range(start, end).for_each(|_, builder| {

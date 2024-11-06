@@ -192,7 +192,7 @@ impl<F: PrimeField64, Operation: OfflineCheckerOperation<F>> LocalTraceInstructi
 
         let width: usize = OfflineCheckerCols::<F>::width(&self.air);
 
-        let mut row = vec![F::zero(); width];
+        let mut row = vec![F::ZERO; width];
         let mut oc_cols = OfflineCheckerColsMut::<F>::from_slice(&mut row, &self.air);
 
         self.generate_trace_row(

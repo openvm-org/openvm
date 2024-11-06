@@ -124,7 +124,7 @@ pub fn vec_isize_to_f<F: PrimeField64>(x: Vec<isize>) -> Vec<F> {
     x.iter()
         .map(|x| {
             F::from_canonical_usize(x.unsigned_abs())
-                * if x >= &0 { F::one() } else { F::neg_one() }
+                * if x >= &0 { F::ONE } else { F::NEG_ONE }
         })
         .collect()
 }

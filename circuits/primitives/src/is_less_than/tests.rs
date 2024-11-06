@@ -54,7 +54,7 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
         let (io, lower_decomp) = local.split_at(3);
         let [x, y, out] = [io[0], io[1], io[2]];
 
-        let io = IsLessThanIo::new(x, y, out, AB::F::one());
+        let io = IsLessThanIo::new(x, y, out, AB::F::ONE);
         self.0.eval(builder, (io, lower_decomp));
     }
 }
@@ -79,7 +79,7 @@ impl IsLessThanChip {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = BaseAir::<F>::width(&self.air);
 
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = vec![F::ZERO; width * self.pairs.len()];
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

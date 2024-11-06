@@ -65,12 +65,12 @@ pub fn verify_two_adic_pcs<C: Config>(
             if builder.flags.static_only {
                 for j in 0..32 {
                     // ATTENTION: don't use set_value here, Fixed will share the same variable.
-                    builder.set(&ro, j, C::EF::zero().cons());
-                    builder.set(&alpha_pow, j, C::EF::one().cons());
+                    builder.set(&ro, j, C::EF::ZERO.cons());
+                    builder.set(&alpha_pow, j, C::EF::ONE.cons());
                 }
             } else {
-                let zero_ef = builder.eval(C::EF::zero().cons());
-                let one_ef = builder.eval(C::EF::one().cons());
+                let zero_ef = builder.eval(C::EF::ZERO.cons());
+                let one_ef = builder.eval(C::EF::ONE.cons());
                 for j in 0..32 {
                     // Use set_value here to save a copy.
                     builder.set_value(&ro, j, zero_ef);
@@ -359,7 +359,7 @@ pub mod tests {
 
         let mut rng = &mut OsRng;
         let log_degrees = &[nb_log2_rows];
-        let engine = default_engine(27);
+        let engine = default_engine();
         let pcs = engine.config.pcs();
         let perm = engine.perm;
 

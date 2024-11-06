@@ -32,12 +32,12 @@ fn test_compiler_array() {
 
     // Put values statically
     for i in 0..len {
-        builder.set(&static_array, i, F::one());
+        builder.set(&static_array, i, F::ONE);
     }
     // Assert values set.
     for i in 0..len {
         let value = builder.get(&static_array, i);
-        builder.assert_var_eq(value, F::one());
+        builder.assert_var_eq(value, F::ONE);
     }
 
     let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(len));
@@ -88,13 +88,13 @@ fn test_compiler_array() {
     let point_array = builder.dyn_array::<Point<_>>(len);
 
     builder.range(0, dyn_len).for_each(|i, builder| {
-        let x: Var<_> = builder.eval(F::two());
+        let x: Var<_> = builder.eval(F::TWO);
         let mut x_ptr: Ref<_, Var<_>> = builder.uninit();
         builder.set_to_value(&mut x_ptr, x);
-        let y: Felt<_> = builder.eval(F::one());
+        let y: Felt<_> = builder.eval(F::ONE);
         let mut y_ptr: Ref<_, Felt<_>> = builder.uninit();
         builder.set_to_value(&mut y_ptr, y);
-        let z: Ext<_, _> = builder.eval(EF::one().cons());
+        let z: Ext<_, _> = builder.eval(EF::ONE.cons());
         let mut z_ptr: Ref<_, Ext<_, _>> = builder.uninit();
         builder.set_to_value(&mut z_ptr, z);
         let point = Point {
@@ -110,9 +110,9 @@ fn test_compiler_array() {
         let x = builder.deref(&point.x);
         let y = builder.deref(&point.y);
         let z = builder.deref(&point.z);
-        builder.assert_var_eq(x, F::two());
-        builder.assert_felt_eq(y, F::one());
-        builder.assert_ext_eq(z, EF::one().cons());
+        builder.assert_var_eq(x, F::TWO);
+        builder.assert_felt_eq(y, F::ONE);
+        builder.assert_ext_eq(z, EF::ONE.cons());
     });
 
     let array = builder.dyn_array::<Array<_, Var<_>>>(len);

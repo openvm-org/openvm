@@ -91,9 +91,9 @@ fn test<const CHUNK: usize>(
                            address_label: usize,
                            hash: [BabyBear; CHUNK]| {
         let expand_direction = if is_compress {
-            BabyBear::neg_one()
+            BabyBear::NEG_ONE
         } else {
-            BabyBear::one()
+            BabyBear::ONE
         };
         dummy_interaction_trace_rows.push(match interaction_type {
             InteractionType::Send => expand_direction,
@@ -285,7 +285,7 @@ fn expand_test_negative() {
     let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
     for row in trace.rows_mut() {
         let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
-        if row.expand_direction == BabyBear::neg_one() {
+        if row.expand_direction == BabyBear::NEG_ONE {
             row.left_direction_different = BabyBear::ZERO;
             row.right_direction_different = BabyBear::ZERO;
         }

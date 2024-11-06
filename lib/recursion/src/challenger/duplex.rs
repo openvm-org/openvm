@@ -26,13 +26,13 @@ impl<C: Config> DuplexChallengerVariable<C> {
         let sponge_state = builder.dyn_array(PERMUTATION_WIDTH);
 
         builder.range(0, sponge_state.len()).for_each(|i, builder| {
-            builder.set(&sponge_state, i, C::F::zero());
+            builder.set(&sponge_state, i, C::F::ZERO);
         });
 
         DuplexChallengerVariable::<C> {
             sponge_state,
-            nb_inputs: builder.eval(C::N::zero()),
-            nb_outputs: builder.eval(C::N::zero()),
+            nb_inputs: builder.eval(C::N::ZERO),
+            nb_outputs: builder.eval(C::N::ZERO),
         }
     }
     /// Creates a new challenger with the same state as an existing challenger.
@@ -66,8 +66,8 @@ impl<C: Config> DuplexChallengerVariable<C> {
 
     #[allow(dead_code)]
     pub fn reset(&mut self, builder: &mut Builder<C>) {
-        let zero: Var<_> = builder.eval(C::N::zero());
-        let zero_felt: Felt<_> = builder.eval(C::F::zero());
+        let zero: Var<_> = builder.eval(C::N::ZERO);
+        let zero_felt: Felt<_> = builder.eval(C::F::ZERO);
         builder.range(0, PERMUTATION_WIDTH).for_each(|i, builder| {
             builder.set(&self.sponge_state, i, zero_felt);
         });
@@ -76,21 +76,21 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
-        builder.assign(&self.nb_inputs, C::N::zero());
+        builder.assign(&self.nb_inputs, C::N::ZERO);
 
         builder.poseidon2_permute_mut(&self.sponge_state);
 
         builder.assign(
             &self.nb_outputs,
-            C::N::from_canonical_usize(PERMUTATION_WIDTH),
+            C::N::from_canonical_usize(DIGEST_SIZE),
         );
     }
 
     fn observe(&mut self, builder: &mut Builder<C>, value: Felt<C::F>) {
-        builder.assign(&self.nb_outputs, C::N::zero());
+        builder.assign(&self.nb_outputs, C::N::ZERO);
 
         builder.set(&self.sponge_state, self.nb_inputs, value);
-        builder.assign(&self.nb_inputs, self.nb_inputs + C::N::one());
+        builder.assign(&self.nb_inputs, self.nb_inputs + C::N::ONE);
 
         builder
             .if_eq(
@@ -110,7 +110,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     fn sample(&mut self, builder: &mut Builder<C>) -> Felt<C::F> {
-        let zero: Var<_> = builder.eval(C::N::zero());
+        let zero: Var<_> = builder.eval(C::N::ZERO);
         builder.if_ne(self.nb_inputs, zero).then_or_else(
             |builder| {
                 self.clone().duplexing(builder);
@@ -121,7 +121,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
                 });
             },
         );
-        let idx: Var<_> = builder.eval(self.nb_outputs - C::N::one());
+        let idx: Var<_> = builder.eval(self.nb_outputs - C::N::ONE);
         let output = builder.get(&self.sponge_state, idx);
         builder.assign(&self.nb_outputs, idx);
         output
@@ -140,11 +140,10 @@ impl<C: Config> DuplexChallengerVariable<C> {
         C::N: Field,
     {
         let rand_f = self.sample(builder);
-        builder.print_f(rand_f);
         let bits = builder.num2bits_f(rand_f, C::N::bits() as u32);
 
         builder.range(nb_bits, bits.len()).for_each(|i, builder| {
-            builder.set(&bits, i, C::N::zero());
+            builder.set(&bits, i, C::N::ZERO);
         });
 
         bits
@@ -155,7 +154,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         builder.range(0, nb_bits).for_each(|i, builder| {
             let element = builder.get(&element_bits, i);
-            builder.assert_var_eq(element, C::N::zero());
+            builder.assert_var_eq(element, C::N::ZERO);
         });
     }
 }
@@ -244,7 +243,7 @@ mod tests {
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
 
-        let engine = default_engine(27);
+        let engine = default_engine();
         let mut challenger = engine.new_challenger();
         for observation in &observations {
             challenger.observe(*observation);

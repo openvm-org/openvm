@@ -316,22 +316,9 @@ where
         self
     }
 
-    fn max_trace_height(&self) -> usize {
-        self.air_proof_inputs
-            .iter()
-            .flat_map(|air_proof_input| {
-                air_proof_input
-                    .raw
-                    .common_main
-                    .as_ref()
-                    .map(|trace| trace.height())
-            })
-            .max()
-            .unwrap()
-    }
     /// Given a function to produce an engine from the max trace height,
     /// runs a simple test on that engine
-    pub fn test<E: StarkEngine<SC>, P: Fn(usize) -> E>(
+    pub fn test<E: StarkEngine<SC>, P: Fn() -> E>(
         &self, // do no take ownership so it's easier to prank
         engine_provider: P,
     ) -> Result<VerificationData<SC>, VerificationError>
@@ -344,7 +331,7 @@ where
         PcsProof<SC>: Send + Sync,
     {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        engine_provider(self.max_trace_height()).run_test_impl(self.air_proof_inputs.clone())
+        engine_provider().run_test_impl(self.air_proof_inputs.clone())
     }
 }
 

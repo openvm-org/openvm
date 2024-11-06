@@ -131,7 +131,7 @@ where
     C::EF: TwoAdicField,
 {
     builder.cycle_tracker_start("verify-query");
-    let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::zero());
+    let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
     let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_height);
 
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
@@ -142,8 +142,8 @@ where
     builder
         .range(0, commit_phase_commits.len())
         .for_each(|i, builder| {
-            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::one());
-            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::one());
+            let log_folded_height = builder.eval_expr(log_max_height - i - C::N::ONE);
+            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
             let commit = builder.get(commit_phase_commits, i);
             let step = builder.get(&proof.commit_phase_openings, i);
             let beta = builder.get(betas, i);
@@ -153,7 +153,7 @@ where
 
             let index_bit = builder.get(index_bits, i);
             let index_sibling_mod_2: Var<C::N> =
-                builder.eval(SymbolicVar::from(C::N::one()) - index_bit);
+                builder.eval(SymbolicVar::from(C::N::ONE) - index_bit);
             let i_plus_one = builder.eval_expr(i + RVar::one());
             let index_pair = index_bits.shift(builder, i_plus_one);
 
@@ -179,7 +179,7 @@ where
             }
 
             let dims = DimensionsVariable::<C> {
-                height: builder.sll(C::N::one(), log_folded_height),
+                height: builder.sll(C::N::ONE, log_folded_height),
             };
             let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
             builder.set_value(&dims_slice, 0, dims);
@@ -260,7 +260,7 @@ pub fn verify_batch<C: Config>(
     };
 
     // The index of which table to process next.
-    let index: Usize<C::N> = builder.eval(C::N::zero());
+    let index: Usize<C::N> = builder.eval(C::N::ZERO);
     // The height of the current layer (padded).
     let current_height = builder.get(&dimensions, index.clone()).height;
     // Reduce all the tables that have the same height to a single root.
@@ -279,7 +279,7 @@ pub fn verify_batch<C: Config>(
         let sibling = builder.get_ptr(&proof, i);
         let bit = builder.get(&index_bits, i);
 
-        builder.if_eq(bit, C::N::one()).then_or_else(
+        builder.if_eq(bit, C::N::ONE).then_or_else(
             |builder| {
                 builder.assign(&left, sibling);
                 builder.assign(&right, root_ptr);
@@ -297,7 +297,7 @@ pub fn verify_batch<C: Config>(
         );
         builder.assign(
             &current_height,
-            current_height.clone() * (C::N::two().inverse()),
+            current_height.clone() * (C::N::TWO.inverse()),
         );
 
         builder
@@ -351,7 +351,7 @@ pub fn verify_batch_static<C: Config>(
         panic!("Expected a Var commitment");
     };
     // The index of which table to process next.
-    let index: Usize<C::N> = builder.eval(C::N::zero());
+    let index: Usize<C::N> = builder.eval(C::N::ZERO);
     // The height of the current layer (padded).
     let current_height = builder.get(&dimensions, index.clone()).height;
     // Reduce all the tables that have the same height to a single root.
@@ -376,7 +376,7 @@ pub fn verify_batch_static<C: Config>(
         root = builder.p2_compress([[left], [right]]);
         builder.assign(
             &current_height,
-            current_height.clone() * (C::N::two().inverse()),
+            current_height.clone() * (C::N::TWO.inverse()),
         );
 
         builder
@@ -412,7 +412,7 @@ where
     Array<C, Array<C, V>>: CanPoseidon2Digest<C>,
 {
     builder.cycle_tracker_start("verify-batch-reduce-fast");
-    let nb_opened_values: Usize<_> = builder.eval(C::N::zero());
+    let nb_opened_values: Usize<_> = builder.eval(C::N::ZERO);
     let nested_opened_values = builder.array(8192);
     let start_dim_idx: Usize<_> = builder.eval(dim_idx.clone());
     builder.cycle_tracker_start("verify-batch-reduce-fast-setup");
@@ -429,8 +429,8 @@ where
                         nb_opened_values.clone(),
                         opened_values.clone(),
                     );
-                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::one());
-                    builder.assign(&dim_idx, dim_idx.clone() + C::N::one());
+                    builder.assign(&nb_opened_values, nb_opened_values.clone() + C::N::ONE);
+                    builder.assign(&dim_idx, dim_idx.clone() + C::N::ONE);
                 });
         });
     builder.cycle_tracker_end("verify-batch-reduce-fast-setup");

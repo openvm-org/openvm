@@ -113,7 +113,7 @@ impl RangeCheckerChip {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![[F::zero(); NUM_RANGE_COLS]; self.air.range_max() as usize];
+        let mut rows = vec![[F::ZERO; NUM_RANGE_COLS]; self.air.range_max() as usize];
         for (n, row) in rows.iter_mut().enumerate() {
             let cols: &mut RangeCols<F> = unsafe { transmute(row) };
 

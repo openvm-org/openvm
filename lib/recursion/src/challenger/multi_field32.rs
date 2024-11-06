@@ -25,9 +25,9 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
         assert!(builder.flags.static_only);
         MultiField32ChallengerVariable::<C> {
             sponge_state: [
-                builder.eval(C::N::zero()),
-                builder.eval(C::N::zero()),
-                builder.eval(C::N::zero()),
+                builder.eval(C::N::ZERO),
+                builder.eval(C::N::ZERO),
+                builder.eval(C::N::ZERO),
             ],
             input_buffer: vec![],
             output_buffer: vec![],

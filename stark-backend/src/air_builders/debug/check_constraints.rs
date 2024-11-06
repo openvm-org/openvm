@@ -87,17 +87,17 @@ pub fn check_constraints<R, SC>(
             challenges,
             public_values,
             exposed_values_after_challenge,
-            is_first_row: Val::<SC>::zero(),
-            is_last_row: Val::<SC>::zero(),
-            is_transition: Val::<SC>::one(),
+            is_first_row: Val::<SC>::ZERO,
+            is_last_row: Val::<SC>::ZERO,
+            is_transition: Val::<SC>::ONE,
             has_common_main: rap.common_main_width() > 0,
         };
         if i == 0 {
-            builder.is_first_row = Val::<SC>::one();
+            builder.is_first_row = Val::<SC>::ONE;
         }
         if i == height - 1 {
-            builder.is_last_row = Val::<SC>::one();
-            builder.is_transition = Val::<SC>::zero();
+            builder.is_last_row = Val::<SC>::ONE;
+            builder.is_transition = Val::<SC>::ZERO;
         }
 
         rap.eval(&mut builder);
@@ -129,7 +129,7 @@ pub fn check_logup<F: Field>(
     // For each bus, check each `fields` key by summing up multiplicities.
     for (bus_idx, bus_interactions) in logical_interactions.at_bus.into_iter() {
         for (fields, connections) in bus_interactions.into_iter() {
-            let mut sum = F::zero();
+            let mut sum = F::ZERO;
             for (_, itype, count) in &connections {
                 match *itype {
                     InteractionType::Send => {

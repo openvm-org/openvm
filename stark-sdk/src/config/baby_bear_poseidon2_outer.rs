@@ -5,7 +5,7 @@ use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254, FFBn254Fr};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::{Radix2Bowers, Radix2DitParallel};
+use p3_dft::Radix2Bowers;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -97,34 +97,32 @@ where
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2OuterEngine {
-    default_engine_impl(pcs_log_degree, FriParameters::standard_fast())
+pub fn default_engine() -> BabyBearPoseidon2OuterEngine {
+    default_engine_impl(FriParameters::standard_fast())
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 fn default_engine_impl(
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> BabyBearPoseidon2OuterEngine {
     let perm = outer_perm();
-    engine_from_perm(perm, pcs_log_degree, fri_params)
+    engine_from_perm(perm, fri_params)
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2OuterConfig {
+pub fn default_config(perm: &Perm) -> BabyBearPoseidon2OuterConfig {
     let fri_params = FriParameters::standard_fast();
-    config_from_perm(perm, pcs_log_degree, fri_params)
+    config_from_perm(perm, fri_params)
 }
 
 pub fn engine_from_perm<P>(
     perm: P,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> BabyBearPermutationOuterEngine<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
-    let config = config_from_perm(&perm, pcs_log_degree, fri_params);
+    let config = config_from_perm(&perm, fri_params);
     BabyBearPermutationOuterEngine {
         config,
         perm,
@@ -134,7 +132,6 @@ where
 
 pub fn config_from_perm<P>(
     perm: &P,
-    pcs_log_degree: usize,
     fri_params: FriParameters,
 ) -> BabyBearPermutationOuterConfig<P>
 where
@@ -246,7 +243,7 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
 
 impl StarkFriEngine<BabyBearPoseidon2OuterConfig> for BabyBearPoseidon2OuterEngine {
     fn new(fri_params: FriParameters) -> Self {
-        default_engine_impl(27, fri_params)
+        default_engine_impl(fri_params)
     }
     fn fri_params(&self) -> FriParameters {
         self.fri_params

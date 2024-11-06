@@ -36,7 +36,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
         let mut operands = operands.map(F::from_canonical_usize).to_vec();
-        operands.resize(NUM_OPERANDS, F::zero());
+        operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
             opcode,
             a: operands[0],

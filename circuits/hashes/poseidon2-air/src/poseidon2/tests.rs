@@ -12,11 +12,10 @@ use ax_stark_sdk::{
 };
 use p3_baby_bear::{BabyBear, BabyBearDiffusionMatrixParameters, DiffusionMatrixBabyBear};
 use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 use p3_monty_31::DiffusionMatrixParameters;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::Permutation;
-use p3_util::log2_strict_usize;
 use rand::{
     distributions::{Distribution, Standard},
     Rng, RngCore, SeedableRng,
@@ -81,7 +80,7 @@ fn test_poseidon2_default() {
             .into_iter()
             .zip(outputs.iter())
             .flat_map(|(state, output)| {
-                [BabyBear::one()]
+                [BabyBear::ONE]
                     .into_iter()
                     .chain(state.to_vec())
                     .chain(output.to_vec())
@@ -94,11 +93,9 @@ fn test_poseidon2_default() {
     let traces = vec![poseidon2_trace.clone(), dummy_trace.clone()];
 
     // engine generation
-    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
-    let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    let engine = engine_from_perm(perm, fri_params);
 
     // positive test
     engine
@@ -197,7 +194,7 @@ fn test_poseidon2() {
             .into_iter()
             .zip(outputs.iter())
             .flat_map(|(state, output)| {
-                [BabyBear::one()]
+                [BabyBear::ONE]
                     .into_iter()
                     .chain(state.to_vec())
                     .chain(output.to_vec())
@@ -210,11 +207,9 @@ fn test_poseidon2() {
     let traces = vec![poseidon2_trace.clone(), dummy_trace.clone()];
 
     // engine generation
-    let max_trace_height = traces.iter().map(|trace| trace.height()).max().unwrap();
-    let max_log_degree = log2_strict_usize(max_trace_height);
     let perm = random_perm();
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
-    let engine = engine_from_perm(perm, max_log_degree, fri_params);
+    let engine = engine_from_perm(perm, fri_params);
 
     // positive test
     engine
@@ -258,7 +253,7 @@ fn test_horizen_poseidon2() {
         internal_round_constants,
         HL_MDS_MAT_4,
         horizen_int_diag,
-        BabyBear::one(),
+        BabyBear::ONE,
         3,
         0,
     );

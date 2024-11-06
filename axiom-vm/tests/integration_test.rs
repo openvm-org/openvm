@@ -64,8 +64,8 @@ fn test_1() {
     let mut program = {
         let n = 200;
         let mut builder = Builder::<C>::default();
-        let a: Felt<F> = builder.eval(F::zero());
-        let b: Felt<F> = builder.eval(F::one());
+        let a: Felt<F> = builder.eval(F::ZERO);
+        let b: Felt<F> = builder.eval(F::ONE);
         let c: Felt<F> = builder.uninit();
         builder.range(0, n).for_each(|_, builder| {
             builder.assign(&c, a + b);
@@ -130,8 +130,8 @@ fn test_1() {
         let leaf_vm_pvs: &VmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
 
         assert_eq!(leaf_vm_pvs.app_commit, expected_program_commit);
-        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::zero());
-        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::zero());
+        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ZERO);
+        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::ZERO);
         (
             leaf_vm_pvs.connector.final_pc,
             leaf_vm_pvs.memory.final_root,
@@ -147,15 +147,15 @@ fn test_1() {
         let leaf_vm_pvs: &VmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
         assert_eq!(leaf_vm_pvs.app_commit, expected_program_commit);
         assert_eq!(leaf_vm_pvs.connector.initial_pc, first_seg_final_pc);
-        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::one());
-        assert_eq!(leaf_vm_pvs.connector.exit_code, F::zero());
+        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ONE);
+        assert_eq!(leaf_vm_pvs.connector.exit_code, F::ZERO);
         assert_eq!(leaf_vm_pvs.memory.initial_root, first_seg_final_mem_root);
         assert_eq!(leaf_vm_pvs.public_values_commit, expected_pv_commit);
     }
     // Failure: The public value root proof has a wrong public values commit.
     {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
-        wrong_pv_root_proof.public_values_commit[0] += F::one();
+        wrong_pv_root_proof.public_values_commit[0] += F::ONE;
         let execution_result = run_leaf_verifier(LeafVmVerifierInput {
             proofs: vec![last_proof.clone()],
             public_values_root_proof: Some(wrong_pv_root_proof),
@@ -168,7 +168,7 @@ fn test_1() {
     // Failure: The public value root proof has a wrong path proof.
     {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
-        wrong_pv_root_proof.sibling_hashes[0][0] += F::one();
+        wrong_pv_root_proof.sibling_hashes[0][0] += F::ONE;
         let execution_result = run_leaf_verifier(LeafVmVerifierInput {
             proofs: vec![last_proof.clone()],
             public_values_root_proof: Some(wrong_pv_root_proof),

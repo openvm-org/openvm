@@ -52,7 +52,7 @@ impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayTestAir<N> {
             x: local.x.map(Into::into),
             y: local.y.map(Into::into),
             out: local.out.into(),
-            condition: AB::Expr::one(),
+            condition: AB::Expr::ONE,
         };
         self.0.eval(builder, (io, local.aux.diff_inv_marker));
     }
@@ -72,7 +72,7 @@ impl<F: Field, const N: usize> IsEqArrayChip<F, N> {
         let air: IsEqArraySubAir<N> = IsEqArraySubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqArrayCols::<F, N>::width();
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = vec![F::ZERO; width * self.pairs.len()];
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
@@ -149,7 +149,7 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
 
     disable_debug_builder();
     let row: &mut IsEqArrayCols<BabyBear, 3> = trace.values.as_mut_slice().borrow_mut();
-    row.out = BabyBear::one() - row.out;
+    row.out = BabyBear::ONE - row.out;
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
             .err(),
