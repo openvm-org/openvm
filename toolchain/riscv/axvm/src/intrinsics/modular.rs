@@ -22,6 +22,9 @@ impl IntModN {
         hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
     const _MOD_IDX: usize = 0;
 
+    /// The zero element of the field.
+    pub const ZERO: Self = Self([0; LIMBS]);
+
     /// Creates a new IntModN from an array of bytes.
     pub fn from_bytes(bytes: [u8; LIMBS]) -> Self {
         Self(bytes)
@@ -30,11 +33,6 @@ impl IntModN {
     /// Value of this IntModN as an array of bytes.
     pub fn as_bytes(&self) -> &[u8; LIMBS] {
         &(self.0)
-    }
-
-    /// The zero element of the field.
-    pub const fn zero() -> Self {
-        Self([0; LIMBS])
     }
 
     /// Creates a new IntModN from a BigUint.
@@ -272,44 +270,6 @@ impl<'a> Mul<&'a IntModN> for &IntModN {
     }
 }
 
-impl Mul<usize> for IntModN {
-    type Output = IntModN;
-    #[inline(always)]
-    fn mul(self, other: usize) -> Self::Output {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..8].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
-            res
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            todo!()
-        }
-    }
-}
-
-impl Mul<usize> for &IntModN {
-    type Output = IntModN;
-    #[inline(always)]
-    fn mul(self, other: usize) -> Self::Output {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..8].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
-            res
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            todo!()
-        }
-    }
-}
-
 impl<'a> DivAssign<&'a IntModN> for IntModN {
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
@@ -374,6 +334,34 @@ impl PartialEq for IntModN {
         #[cfg(target_os = "zkvm")]
         {
             todo!()
+        }
+    }
+}
+
+#[cfg(not(target_os = "zkvm"))]
+mod helper {
+    use super::*;
+    impl Mul<u32> for IntModN {
+        type Output = IntModN;
+        #[inline(always)]
+        fn mul(self, other: u32) -> Self::Output {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
+            res
+        }
+    }
+
+    impl Mul<u32> for &IntModN {
+        type Output = IntModN;
+        #[inline(always)]
+        fn mul(self, other: u32) -> Self::Output {
+            let mut res = self.clone();
+            let mut other_bytes = [0u8; LIMBS];
+            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
+            res *= IntModN::from_bytes(other_bytes);
+            res
         }
     }
 }
