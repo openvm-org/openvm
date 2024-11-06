@@ -124,7 +124,7 @@ fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
             "Last public value is out of bounds"
         );
     }
-    let mut public_values = vec![F::zero(); num_public_values];
+    let mut public_values = vec![F::ZERO; num_public_values];
     for (i, pv) in used_pvs {
         public_values[i] = pv;
     }
@@ -157,11 +157,11 @@ mod tests {
             PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset,
         );
         let num_public_values = 16;
-        let memory: MemoryImage<F> = [((pv_as, F::from_canonical_u32(15)), F::one())]
+        let memory: MemoryImage<F> = [((pv_as, F::from_canonical_u32(15)), F::ONE)]
             .into_iter()
             .collect();
-        let mut expected_pvs = vec![F::zero(); num_public_values];
-        expected_pvs[15] = F::one();
+        let mut expected_pvs = vec![F::ZERO; num_public_values];
+        expected_pvs[15] = F::ONE;
 
         let final_memory = memory_image_to_equipartition(memory);
         let hasher = vm_poseidon2_hasher();

@@ -248,7 +248,7 @@ impl<
         for (ptr, val, aux) in izip!(ptrs, vals, auxs) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::one(), ptr),
+                    MemoryAddress::new(AB::Expr::ONE, ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -261,7 +261,7 @@ impl<
         let register_to_field = |r: [AB::Var; RV32_REGISTER_NUM_LIMBS]| {
             r.into_iter()
                 .enumerate()
-                .fold(AB::Expr::zero(), |acc, (i, limb)| {
+                .fold(AB::Expr::ZERO, |acc, (i, limb)| {
                     acc + limb * AB::Expr::from_canonical_usize(1 << (i * RV32_CELL_BITS))
                 })
         };
@@ -320,7 +320,7 @@ impl<
                     cols.rd_ptr.into(),
                     cols.rs1_ptr.into(),
                     cols.rs2_ptr.into(),
-                    AB::Expr::one(),
+                    AB::Expr::ONE,
                     e.into(),
                 ],
                 cols.from_state,

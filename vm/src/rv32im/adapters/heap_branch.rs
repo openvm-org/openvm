@@ -86,7 +86,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        let d = AB::F::one();
+        let d = AB::F::ONE;
         let e = AB::F::from_canonical_usize(2);
 
         for (ptr, data, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
@@ -116,13 +116,13 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
             self.bus
                 .send_range(
                     pair[0] * limb_shift,
-                    pair.get(1).map(|x| (*x).into()).unwrap_or(AB::Expr::zero()) * limb_shift, // in case NUM_READS is odd
+                    pair.get(1).map(|x| (*x).into()).unwrap_or(AB::Expr::ZERO) * limb_shift, // in case NUM_READS is odd
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
         let heap_ptr = cols.rs_val.map(|r| {
-            r.iter().rev().fold(AB::Expr::zero(), |acc, limb| {
+            r.iter().rev().fold(AB::Expr::ZERO, |acc, limb| {
                 acc * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + (*limb)
             })
         });
@@ -139,11 +139,11 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                     cols.rs_ptr
                         .first()
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.rs_ptr
                         .get(1)
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     ctx.instruction.immediate,
                     d.into(),
                     e.into(),

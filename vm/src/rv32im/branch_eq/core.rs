@@ -66,7 +66,7 @@ where
         let cols: &BranchEqualCoreCols<_, NUM_LIMBS> = local.borrow();
         let flags = [cols.opcode_beq_flag, cols.opcode_bne_flag];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -98,7 +98,7 @@ where
         let expected_opcode = flags
             .iter()
             .zip(BranchEqualOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             })
             + AB::Expr::from_canonical_usize(self.offset);
@@ -205,7 +205,7 @@ where
             if i == record.diff_idx {
                 record.diff_inv_val
             } else {
-                F::zero()
+                F::ZERO
             }
         });
     }
@@ -230,5 +230,5 @@ pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
             );
         }
     }
-    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::zero())
+    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::ZERO)
 }

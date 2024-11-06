@@ -76,7 +76,7 @@ impl ExecutionBus {
         timestamp_change: impl Into<AB::Expr>,
     ) {
         let next_state = ExecutionState {
-            pc: prev_state.pc.clone() + AB::F::one(),
+            pc: prev_state.pc.clone() + AB::F::ONE,
             timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
         };
         self.execute(builder, multiplicity, prev_state, next_state);

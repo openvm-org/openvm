@@ -120,7 +120,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local_cols.rs1_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -129,7 +129,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local_cols.rd_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
@@ -148,8 +148,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::one(),
-                    AB::Expr::zero(),
+                    AB::Expr::ONE,
+                    AB::Expr::ZERO,
                     write_count.into(),
                 ],
                 local_cols.from_state,
@@ -206,7 +206,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         let Instruction {
             a, d, f: enabled, ..
         } = *instruction;
-        let rd = if enabled != F::zero() {
+        let rd = if enabled != F::ZERO {
             Some(memory.write(d, a, output.writes[0]))
         } else {
             memory.increment_timestamp();
@@ -241,9 +241,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
             Some(rd) => (
                 rd.pointer,
                 aux_cols_factory.make_write_aux_cols(rd),
-                F::one(),
+                F::ONE,
             ),
-            None => (F::zero(), MemoryWriteAuxCols::disabled(), F::zero()),
+            None => (F::ZERO, MemoryWriteAuxCols::disabled(), F::ZERO),
         };
     }
 

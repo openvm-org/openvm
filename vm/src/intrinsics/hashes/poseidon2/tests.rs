@@ -43,8 +43,8 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 c,
                 d: BabyBear::one(),
                 e: BabyBear::two(),
-                f: BabyBear::zero(),
-                g: BabyBear::zero(),
+                f: BabyBear::ZERO,
+                g: BabyBear::ZERO,
             }
         })
         .collect()
@@ -209,7 +209,7 @@ fn poseidon2_negative_test() {
 //         width + 1,
 //     );
 //     dummy_direct_cpu_trace.values.extend(vec![
-//         BabyBear::zero();
+//         BabyBear::ZERO;
 //         (width + 1) * (correct_height - NUM_OPS)
 //     ]);
 //

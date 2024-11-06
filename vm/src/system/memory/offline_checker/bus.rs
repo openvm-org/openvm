@@ -71,7 +71,7 @@ impl<T: AbstractField> MemoryBusInteraction<T> {
             .chain(iter::once(self.address.pointer))
             .chain(self.data)
             .chain(iter::once(self.timestamp))
-            .chain(iter::once(AB::Expr::one()));
+            .chain(iter::once(AB::Expr::ONE));
 
         builder.push_interaction(self.bus_index, fields, count, self.interaction_type);
     }

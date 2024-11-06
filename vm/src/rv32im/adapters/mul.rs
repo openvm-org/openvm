@@ -115,7 +115,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -124,7 +124,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs2_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rs2_ptr),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local.rd_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local.writes_aux,
@@ -147,8 +147,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
-                    AB::Expr::one(),
-                    AB::Expr::zero(),
+                    AB::Expr::ONE,
+                    AB::Expr::ZERO,
                 ],
                 local.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),

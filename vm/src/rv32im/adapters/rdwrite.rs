@@ -149,11 +149,11 @@ impl Rv32RdWriteAdapterAir {
         let (write_count, f) = if let Some(needs_write) = needs_write {
             (needs_write.clone(), needs_write)
         } else {
-            (ctx.instruction.is_valid.clone(), AB::Expr::zero())
+            (ctx.instruction.is_valid.clone(), AB::Expr::ZERO)
         };
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local_cols.rd_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp,
                 &local_cols.rd_aux_cols,
@@ -169,10 +169,10 @@ impl Rv32RdWriteAdapterAir {
                 ctx.instruction.opcode,
                 [
                     local_cols.rd_ptr.into(),
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     ctx.instruction.immediate,
-                    AB::Expr::one(),
-                    AB::Expr::zero(),
+                    AB::Expr::ONE,
+                    AB::Expr::ZERO,
                     f,
                 ],
                 local_cols.from_state,
@@ -324,7 +324,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = if instruction.f != F::zero() {
+        let rd = if instruction.f != F::ZERO {
             Some(memory.write(d, a, output.writes[0]))
         } else {
             memory.increment_timestamp();
@@ -353,9 +353,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         if let Some(rd) = write_record.rd {
             adapter_cols.inner.rd_ptr = rd.pointer;
             adapter_cols.inner.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
-            adapter_cols.needs_write = F::one();
+            adapter_cols.needs_write = F::ONE;
         } else {
-            adapter_cols.needs_write = F::zero();
+            adapter_cols.needs_write = F::ZERO;
         }
     }
 

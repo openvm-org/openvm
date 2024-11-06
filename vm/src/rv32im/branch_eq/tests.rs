@@ -294,12 +294,12 @@ fn run_eq_sanity_test() {
     let (cmp_result, _, diff_val) =
         run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &x);
     assert!(cmp_result);
-    assert_eq!(diff_val, F::zero());
+    assert_eq!(diff_val, F::ZERO);
 
     let (cmp_result, _, diff_val) =
         run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &x);
     assert!(!cmp_result);
-    assert_eq!(diff_val, F::zero());
+    assert_eq!(diff_val, F::ZERO);
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn run_ne_sanity_test() {
     assert!(!cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
-        F::one()
+        F::ONE
     );
 
     let (cmp_result, diff_idx, diff_val) =
@@ -319,6 +319,6 @@ fn run_ne_sanity_test() {
     assert!(cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
-        F::one()
+        F::ONE
     );
 }

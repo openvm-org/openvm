@@ -66,16 +66,16 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
-        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
             let expected_limb = if i == 0 {
-                AB::Expr::zero()
+                AB::Expr::ZERO
             } else {
                 carry[i - 1].clone()
             } + (0..=i)
-                .fold(AB::Expr::zero(), |acc, k| acc + (b[k] * c[i - k]));
+                .fold(AB::Expr::ZERO, |acc, k| acc + (b[k] * c[i - k]));
             carry[i] = AB::Expr::from(carry_divide) * (expected_limb - a[i]);
         }
 
@@ -191,7 +191,7 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;
-        row_slice.is_valid = F::one();
+        row_slice.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

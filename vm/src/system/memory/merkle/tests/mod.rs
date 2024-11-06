@@ -111,7 +111,7 @@ fn test<const CHUNK: usize>(
     for (address_space, address_label) in touched_labels {
         let initial_values = *initial_memory
             .get(&(address_space, address_label))
-            .unwrap_or(&[BabyBear::zero(); CHUNK]);
+            .unwrap_or(&[BabyBear::ZERO; CHUNK]);
         let as_label = address_space.as_canonical_u32() as usize - as_offset;
         interaction(
             InteractionType::Send,
@@ -135,7 +135,7 @@ fn test<const CHUNK: usize>(
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
         .is_power_of_two()
     {
-        dummy_interaction_trace_rows.push(BabyBear::zero());
+        dummy_interaction_trace_rows.push(BabyBear::ZERO);
     }
     let dummy_interaction_trace = RowMajorMatrix::new(
         dummy_interaction_trace_rows,
@@ -286,8 +286,8 @@ fn expand_test_negative() {
     for row in trace.rows_mut() {
         let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
         if row.expand_direction == BabyBear::neg_one() {
-            row.left_direction_different = BabyBear::zero();
-            row.right_direction_different = BabyBear::zero();
+            row.left_direction_different = BabyBear::ZERO;
+            row.right_direction_different = BabyBear::ZERO;
         }
     }
 

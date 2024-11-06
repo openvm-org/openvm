@@ -88,7 +88,7 @@ where
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
         // flag = 1 means add (opcode = 0), flag = 0 means sub (opcode = 1)
-        let expected_opcode = AB::Expr::one() - flags[0];
+        let expected_opcode = AB::Expr::ONE - flags[0];
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),

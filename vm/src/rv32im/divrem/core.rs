@@ -101,7 +101,7 @@ where
             cols.opcode_remu_flag,
         ];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -117,11 +117,11 @@ where
         let b_ext = cols.b_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let c_ext = cols.c_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
-        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for i in 0..NUM_LIMBS {
             let expected_limb = if i == 0 {
-                AB::Expr::zero()
+                AB::Expr::ZERO
             } else {
                 carry[i - 1].clone()
             } + (0..=i).fold(r[i].into(), |ac, k| ac + (c[k] * q[i - k]));
@@ -137,18 +137,18 @@ where
         // Constrain that the upper limbs of b = c * q + r' are all equal to b_ext and
         // range check each element in r.
         let q_ext = cols.q_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
-        let mut carry_ext: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry_ext: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for j in 0..NUM_LIMBS {
             let expected_limb = if j == 0 {
                 carry[NUM_LIMBS - 1].clone()
             } else {
                 carry_ext[j - 1].clone()
-            } + ((j + 1)..NUM_LIMBS).fold(AB::Expr::zero(), |acc, k| {
+            } + ((j + 1)..NUM_LIMBS).fold(AB::Expr::ZERO, |acc, k| {
                 acc + (c[k] * q[NUM_LIMBS + j - k])
-            }) + (0..(j + 1)).fold(AB::Expr::zero(), |acc, k| {
+            }) + (0..(j + 1)).fold(AB::Expr::ZERO, |acc, k| {
                 acc + (c[k] * q_ext.clone()) + (q[k] * c_ext.clone())
-            }) + (AB::Expr::one() - cols.r_zero) * b_ext.clone();
+            }) + (AB::Expr::ONE - cols.r_zero) * b_ext.clone();
             // Technically there are ways to constrain that c * q is in range without
             // using a range checker, but because we already have to range check each
             // limb of r it requires no additional columns to also range check each
@@ -204,7 +204,7 @@ where
             cols.sign_xor,
         );
 
-        let nonzero_q = q.iter().fold(AB::Expr::zero(), |acc, q| acc + *q);
+        let nonzero_q = q.iter().fold(AB::Expr::ZERO, |acc, q| acc + *q);
         builder.assert_bool(cols.q_sign);
         builder
             .when(nonzero_q)
@@ -231,7 +231,7 @@ where
         // Because we already constrain that r and q are correct for special cases,
         // we skip the range check when special_case = 1.
         let r_p = &cols.r_prime;
-        let mut carry_lt: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry_lt: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for i in 0..NUM_LIMBS {
             // When the signs of r (i.e. b) and c are the same, r' = r.
@@ -245,11 +245,11 @@ where
             let last_carry = if i > 0 {
                 carry_lt[i - 1].clone()
             } else {
-                AB::Expr::zero()
+                AB::Expr::ZERO
             };
             carry_lt[i] = (last_carry.clone() + r[i] + r_p[i]) * carry_divide;
             builder.when(cols.sign_xor).assert_zero(
-                (carry_lt[i].clone() - last_carry) * (carry_lt[i].clone() - AB::Expr::one()),
+                (carry_lt[i].clone() - last_carry) * (carry_lt[i].clone() - AB::Expr::ONE),
             );
             builder
                 .when(cols.sign_xor)
@@ -264,8 +264,8 @@ where
         let mut prefix_sum = special_case.clone();
 
         for i in (0..NUM_LIMBS).rev() {
-            let diff = r_p[i] * (AB::Expr::from_canonical_u8(2) * cols.c_sign - AB::Expr::one())
-                + c[i] * (AB::Expr::one() - AB::Expr::from_canonical_u8(2) * cols.c_sign);
+            let diff = r_p[i] * (AB::Expr::from_canonical_u8(2) * cols.c_sign - AB::Expr::ONE)
+                + c[i] * (AB::Expr::ONE - AB::Expr::from_canonical_u8(2) * cols.c_sign);
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
@@ -274,12 +274,12 @@ where
 
         builder.when(is_valid.clone()).assert_one(prefix_sum);
         self.bitwise_lookup_bus
-            .send_range(cols.lt_diff - AB::Expr::one(), AB::F::zero())
+            .send_range(cols.lt_diff - AB::Expr::ONE, AB::F::ZERO)
             .eval(builder, is_valid.clone() - special_case);
 
         // Generate expected opcode and output a to pass to the adapter.
         let expected_opcode = flags.iter().zip(DivRemOpcode::iter()).fold(
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             |acc, (flag, local_opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
             },

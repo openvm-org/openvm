@@ -170,7 +170,7 @@ fn run_negative_jal_lui_test(
 
         if let Some(imm) = imm {
             core_cols.imm = if imm < 0 {
-                F::neg_one() * F::from_canonical_u32((-imm) as u32)
+                F::NEG_ONE * F::from_canonical_u32((-imm) as u32)
             } else {
                 F::from_canonical_u32(imm as u32)
             };
@@ -296,7 +296,7 @@ fn overflow_negative_tests() {
         JAL,
         None,
         Some(251),
-        Some([F::neg_one().as_canonical_u32(), 1, 0, 0]),
+        Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
         None,
         None,
         None,

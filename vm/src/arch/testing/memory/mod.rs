@@ -107,7 +107,7 @@ where
         let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
-        let mut values = vec![Val::<SC>::zero(); height * width];
+        let mut values = vec![Val::<SC>::ZERO; height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
         for (row, record) in values.chunks_mut(width).zip(self.records) {
@@ -116,8 +116,8 @@ where
             row.data = record.data.try_into().unwrap();
             row.timestamp = record.timestamp;
             row.count = match record.interaction_type {
-                InteractionType::Send => Val::<SC>::one(),
-                InteractionType::Receive => -Val::<SC>::one(),
+                InteractionType::Send => Val::<SC>::ONE,
+                InteractionType::Receive => -Val::<SC>::ONE,
             };
         }
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))

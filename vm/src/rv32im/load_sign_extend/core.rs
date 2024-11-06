@@ -103,7 +103,7 @@ where
 
         let flags = [is_loadb0, is_loadb1, is_loadh];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag
         });
@@ -154,7 +154,7 @@ where
                 shifted_read_data[i],
             )
         });
-        let load_shift_amount = shift_most_sig_bit * AB::Expr::two() + is_loadb1;
+        let load_shift_amount = shift_most_sig_bit * AB::Expr::TWO + is_loadb1;
 
         AdapterAirContext {
             to_pc: None,
@@ -163,9 +163,9 @@ where
             instruction: LoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
-                is_load: AB::Expr::one(),
+                is_load: AB::Expr::ONE,
                 load_shift_amount,
-                store_shift_amount: AB::Expr::zero(),
+                store_shift_amount: AB::Expr::ZERO,
             }
             .into(),
         }

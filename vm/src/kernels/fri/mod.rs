@@ -168,7 +168,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             next.alpha_pow_current,
             FieldExtension::multiply(alpha, alpha_pow_current),
         );
-        when_is_not_last.assert_eq(next.idx, idx + AB::Expr::one());
+        when_is_not_last.assert_eq(next.idx, idx + AB::Expr::ONE);
         when_is_not_last.assert_eq(next.enabled, enabled);
         when_is_not_last.assert_eq(next.start_timestamp, start_timestamp);
 
@@ -188,14 +188,14 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
         }
 
         // is zero constraint
-        let is_zero_io = IsZeroIo::new(idx.into(), idx_is_zero.into(), AB::Expr::one());
+        let is_zero_io = IsZeroIo::new(idx.into(), idx_is_zero.into(), AB::Expr::ONE);
         IsZeroSubAir.eval(builder, (is_zero_io, is_zero_aux));
 
         // length will only be used on the last row, so it equals 1 + idx
-        let length = AB::Expr::one() + idx;
+        let length = AB::Expr::ONE + idx;
         let num_initial_accesses = AB::F::from_canonical_usize(4);
-        let num_loop_accesses = AB::Expr::two() * length.clone();
-        let num_final_accesses = AB::F::two();
+        let num_loop_accesses = AB::Expr::TWO * length.clone();
+        let num_final_accesses = AB::F::TWO;
 
         // execution interaction
         let total_accesses = num_loop_accesses.clone() + num_initial_accesses + num_final_accesses;
@@ -232,7 +232,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             .read(
                 MemoryAddress::new(addr_space, length_ptr),
                 [length],
-                start_timestamp + AB::F::one(),
+                start_timestamp + AB::F::ONE,
                 &length_aux,
             )
             .eval(builder, enabled * is_last);
@@ -240,7 +240,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             .read(
                 MemoryAddress::new(addr_space, a_ptr_ptr),
                 [a_ptr],
-                start_timestamp + AB::F::two(),
+                start_timestamp + AB::F::TWO,
                 &a_ptr_aux,
             )
             .eval(builder, enabled * is_last);
@@ -254,7 +254,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             .eval(builder, enabled * is_last);
 
         // general reads
-        let timestamp = start_timestamp + num_initial_accesses + (idx * AB::F::two());
+        let timestamp = start_timestamp + num_initial_accesses + (idx * AB::F::TWO);
         self.memory_bridge
             .read(
                 MemoryAddress::new(addr_space, a_ptr + idx),
@@ -270,7 +270,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
                     b_ptr + (idx * AB::F::from_canonical_usize(EXT_DEG)),
                 ),
                 b,
-                timestamp + AB::F::one(),
+                timestamp + AB::F::ONE,
                 &b_aux,
             )
             .eval(builder, enabled);
@@ -292,7 +292,7 @@ impl<AB: InteractionBuilder> Air<AB> for FriMatOpeningAir {
             .write(
                 MemoryAddress::new(addr_space, result_ptr),
                 current,
-                timestamp + AB::F::one(),
+                timestamp + AB::F::ONE,
                 &result_aux,
             )
             .eval(builder, enabled * is_last);
@@ -342,7 +342,7 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
 }
 
 fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
-    let mut ret = [F::zero(); EXT_DEG];
+    let mut ret = [F::ZERO; EXT_DEG];
     ret[0] = elem;
     ret
 }
@@ -382,7 +382,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriMatOpeningChip<F> {
 
         let mut a_reads = Vec::with_capacity(length);
         let mut b_reads = Vec::with_capacity(length);
-        let mut result = [F::zero(); EXT_DEG];
+        let mut result = [F::ZERO; EXT_DEG];
 
         for i in 0..length {
             let a_read = memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i));
@@ -470,7 +470,7 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
         let b_ptr = record.b_ptr_read.data[0];
 
         let mut alpha_pow_current = alpha_pow_original;
-        let mut current = [F::zero(); EXT_DEG];
+        let mut current = [F::ZERO; EXT_DEG];
 
         let alpha_aux = aux_cols_factory.make_read_aux_cols(record.alpha_read);
         let length_aux = aux_cols_factory.make_read_aux_cols(record.length_read);
@@ -493,15 +493,15 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
                 ),
             );
 
-            let mut idx_is_zero = F::zero();
-            let mut is_zero_aux = F::zero();
+            let mut idx_is_zero = F::ZERO;
+            let mut is_zero_aux = F::ZERO;
 
             let idx = F::from_canonical_usize(i);
             IsZeroSubAir.generate_subrow(idx, (&mut is_zero_aux, &mut idx_is_zero));
 
             let cols: &mut FriMatOpeningCols<F> = slice[i * width..(i + 1) * width].borrow_mut();
             *cols = FriMatOpeningCols {
-                enabled: F::one(),
+                enabled: F::ONE,
                 pc: record.pc,
                 a_ptr_ptr,
                 b_ptr_ptr,
@@ -537,7 +537,7 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let mut flat_trace = vec![F::zero(); self.height.next_power_of_two() * self.trace_width()];
+        let mut flat_trace = vec![F::ZERO; self.height.next_power_of_two() * self.trace_width()];
         let width = self.trace_width();
         let aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
 
@@ -557,7 +557,7 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
             .par_chunks_mut(width)
             .for_each(|row| {
                 let row: &mut FriMatOpeningCols<F> = row.borrow_mut();
-                row.idx_is_zero = F::one();
+                row.idx_is_zero = F::ONE;
             });
 
         RowMajorMatrix::new(flat_trace, width)

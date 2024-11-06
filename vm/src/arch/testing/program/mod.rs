@@ -62,12 +62,12 @@ impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
         let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
-        let mut values = vec![Val::<SC>::zero(); height * width];
+        let mut values = vec![Val::<SC>::ZERO; height * width];
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
         for (row, record) in values.chunks_mut(width).zip(self.records) {
             *(row[..width - 1]).borrow_mut() = record;
-            row[width - 1] = Val::<SC>::one();
+            row[width - 1] = Val::<SC>::ONE;
         }
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
     }

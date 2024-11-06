@@ -91,7 +91,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
         ));
     }
 
-    let mut rows = vec![F::zero(); instructions.len() * width];
+    let mut rows = vec![F::ZERO; instructions.len() * width];
     rows.par_chunks_mut(width)
         .zip(instructions)
         .for_each(|(row, (pc, instruction))| {

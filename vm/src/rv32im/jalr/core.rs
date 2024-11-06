@@ -99,7 +99,7 @@ where
         let composed = rd
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
             });
 
@@ -136,7 +136,7 @@ where
 
         builder.assert_bool(to_pc_least_sig_bit);
         let carry =
-            (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::two() - to_pc_least_sig_bit) * inv;
+            (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
         let imm_extend_limb = imm_sign * AB::F::from_canonical_u32((1 << 16) - 1);
@@ -151,7 +151,7 @@ where
             .range_check(to_pc_limbs[0], 15)
             .eval(builder, is_valid);
         let to_pc =
-            to_pc_limbs[0] * AB::F::two() + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
+            to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
 
         let expected_opcode = AB::F::from_canonical_usize(JALR as usize + self.offset);
 
@@ -271,7 +271,7 @@ where
         core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
         core_cols.to_pc_limbs = record.to_pc_limbs;
         core_cols.imm_sign = record.imm_sign;
-        core_cols.is_valid = F::one();
+        core_cols.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

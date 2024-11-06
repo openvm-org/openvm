@@ -55,7 +55,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let width = 10;
     let desired_height = instructions.len().next_power_of_two();
     let cells_to_add = (desired_height - instructions.len()) * width;
-    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+    program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", instructions.len());
@@ -182,7 +182,7 @@ fn test_program_negative() {
         ]);
     }
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
-    counter_trace.row_mut(1)[1] = BabyBear::zero();
+    counter_trace.row_mut(1)[1] = BabyBear::ZERO;
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
         program_proof_input,

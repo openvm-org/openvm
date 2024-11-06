@@ -96,7 +96,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryRequesterAir {
             local.is_read_max,
         ];
 
-        let mut sum = AB::Expr::zero();
+        let mut sum = AB::Expr::ZERO;
         for flag in flags {
             builder.assert_bool(flag);
             sum += flag.into();
@@ -165,7 +165,7 @@ fn generate_trace<F: PrimeField32>(
 ) -> RowMajorMatrix<F> {
     let height = records.len().next_power_of_two();
     let width = mem::size_of::<MemoryRequesterCols<u8>>();
-    let mut values = vec![F::zero(); height * width];
+    let mut values = vec![F::ZERO; height * width];
 
     for (row, record) in values.chunks_mut(width).zip(records) {
         let row: &mut MemoryRequesterCols<F> = row.borrow_mut();
@@ -177,7 +177,7 @@ fn generate_trace<F: PrimeField32>(
 
                 row.data_1 = record.data;
                 row.write_1_aux = aux_factory.make_write_aux_cols(record);
-                row.is_write_1 = F::one();
+                row.is_write_1 = F::ONE;
             }
             Record::Read(record) => {
                 row.address_space = record.address_space;
@@ -186,7 +186,7 @@ fn generate_trace<F: PrimeField32>(
 
                 row.data_1 = record.data;
                 row.read_1_aux = aux_factory.make_read_aux_cols(record);
-                row.is_read_1 = F::one();
+                row.is_read_1 = F::ONE;
             }
             Record::Read4(record) => {
                 row.address_space = record.address_space;
@@ -195,7 +195,7 @@ fn generate_trace<F: PrimeField32>(
 
                 row.data_4 = record.data;
                 row.read_4_aux = aux_factory.make_read_aux_cols(record);
-                row.is_read_4 = F::one();
+                row.is_read_4 = F::ONE;
             }
             Record::Write4(record) => {
                 row.address_space = record.address_space;
@@ -204,7 +204,7 @@ fn generate_trace<F: PrimeField32>(
 
                 row.data_4 = record.data;
                 row.write_4_aux = aux_factory.make_write_aux_cols(record);
-                row.is_write_4 = F::one();
+                row.is_write_4 = F::ONE;
             }
             Record::ReadMax(record) => {
                 row.address_space = record.address_space;
@@ -213,7 +213,7 @@ fn generate_trace<F: PrimeField32>(
 
                 row.data_max = record.data;
                 row.read_max_aux = aux_factory.make_read_aux_cols(record);
-                row.is_read_max = F::one();
+                row.is_read_max = F::ONE;
             }
         }
     }
