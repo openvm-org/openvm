@@ -74,8 +74,7 @@ where
                 AB::Expr::ZERO
             } else {
                 carry[i - 1].clone()
-            } + (0..=i)
-                .fold(AB::Expr::ZERO, |acc, k| acc + (b[k] * c[i - k]));
+            } + (0..=i).fold(AB::Expr::ZERO, |acc, k| acc + (b[k] * c[i - k]));
             carry[i] = AB::Expr::from(carry_divide) * (expected_limb - a[i]);
         }
 

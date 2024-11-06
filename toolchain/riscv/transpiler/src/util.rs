@@ -25,7 +25,7 @@ pub fn from_r_type<F: PrimeField32>(
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-        F::ONE,                      // rd and rs1 are registers
+        F::ONE,                        // rd and rs1 are registers
         F::from_canonical_usize(e_as), // rs2 can be mem (eg modular arith)
         F::ZERO,
         F::ZERO,

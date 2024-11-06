@@ -408,10 +408,7 @@ impl<F: PrimeField32> Memory<F> {
     }
 
     pub fn get(&self, address_space: usize, pointer: usize) -> F {
-        *self
-            .data
-            .get(&(address_space, pointer))
-            .unwrap_or(&F::ZERO)
+        *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
     }
 
     fn range_array<const N: usize>(&self, address_space: usize, pointer: usize) -> [F; N] {

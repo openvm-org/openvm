@@ -4,8 +4,7 @@ use p3_bn254_fr::Bn254Fr;
 use super::types::BatchOpeningVariable;
 use crate::{
     config::outer::{
-        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterFriProof,
-        OuterQueryProof,
+        OuterBatchOpening, OuterCommitPhaseStep, OuterConfig, OuterFriProof, OuterQueryProof,
     },
     digest::DigestVal,
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},

@@ -1,6 +1,6 @@
 use axvm_native_compiler::prelude::*;
 use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
-use p3_field::{AbstractField, TwoAdicField, Field};
+use p3_field::{AbstractField, Field, TwoAdicField};
 
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
@@ -66,8 +66,8 @@ where
         point: Ext<<C as Config>::F, <C as Config>::EF>,
     ) -> LagrangeSelectors<Ext<<C as Config>::F, <C as Config>::EF>> {
         let unshifted_point: Ext<_, _> = builder.eval(point * self.shift.inverse());
-        let z_h_expr = builder.exp_power_of_2_v::<Ext<_, _>>(unshifted_point, self.log_n.clone())
-            - C::EF::ONE;
+        let z_h_expr =
+            builder.exp_power_of_2_v::<Ext<_, _>>(unshifted_point, self.log_n.clone()) - C::EF::ONE;
         let z_h: Ext<_, _> = builder.eval(z_h_expr);
 
         LagrangeSelectors {

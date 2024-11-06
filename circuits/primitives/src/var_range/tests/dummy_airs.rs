@@ -36,9 +36,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestSendAir {
         let main = builder.main();
         // local = [value, max_bits]
         let local = main.row_slice(0);
-        self.bus
-            .send(local[0], local[1])
-            .eval(builder, AB::F::ONE);
+        self.bus.send(local[0], local[1]).eval(builder, AB::F::ONE);
     }
 }
 

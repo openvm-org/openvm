@@ -144,11 +144,12 @@ where
                 carry[NUM_LIMBS - 1].clone()
             } else {
                 carry_ext[j - 1].clone()
-            } + ((j + 1)..NUM_LIMBS).fold(AB::Expr::ZERO, |acc, k| {
-                acc + (c[k] * q[NUM_LIMBS + j - k])
-            }) + (0..(j + 1)).fold(AB::Expr::ZERO, |acc, k| {
-                acc + (c[k] * q_ext.clone()) + (q[k] * c_ext.clone())
-            }) + (AB::Expr::ONE - cols.r_zero) * b_ext.clone();
+            } + ((j + 1)..NUM_LIMBS)
+                .fold(AB::Expr::ZERO, |acc, k| acc + (c[k] * q[NUM_LIMBS + j - k]))
+                + (0..(j + 1)).fold(AB::Expr::ZERO, |acc, k| {
+                    acc + (c[k] * q_ext.clone()) + (q[k] * c_ext.clone())
+                })
+                + (AB::Expr::ONE - cols.r_zero) * b_ext.clone();
             // Technically there are ways to constrain that c * q is in range without
             // using a range checker, but because we already have to range check each
             // limb of r it requires no additional columns to also range check each

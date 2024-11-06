@@ -3,7 +3,7 @@ use axvm_native_compiler::{
     ir::{Builder, Config, DIGEST_SIZE},
 };
 
-use super::types::{BatchOpeningVariable};
+use super::types::BatchOpeningVariable;
 use crate::{
     digest::DigestVariable,
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},

@@ -5,14 +5,15 @@ use p3_symmetric::Hash;
 
 use super::{
     types::{
-        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable,
-        TwoAdicPcsRoundVariable,
+        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable,
     },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
-use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable};
-use crate::fri::types::FriProofVariable;
+use crate::{
+    challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable,
+    fri::types::FriProofVariable,
+};
 
 /// Notes:
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
@@ -43,8 +44,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     let alpha = challenger.sample_ext(builder);
 
     builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
-    let fri_challenges =
-        verify_shape_and_sample_challenges(builder, config, &proof, challenger);
+    let fri_challenges = verify_shape_and_sample_challenges(builder, config, &proof, challenger);
     builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
     let log_global_max_height =
@@ -213,13 +213,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.cycle_tracker_end("stage-d-2-fri-fold");
 
     builder.cycle_tracker_start("stage-d-3-verify-challenges");
-    verify_challenges(
-        builder,
-        config,
-        &proof,
-        &fri_challenges,
-        &reduced_openings,
-    );
+    verify_challenges(builder, config, &proof, &fri_challenges, &reduced_openings);
     builder.cycle_tracker_end("stage-d-3-verify-challenges");
 }
 
@@ -341,10 +335,9 @@ pub mod tests {
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
             TwoAdicMultiplicativeCosetVariable,
         },
-        hints::{Hintable, InnerVal},
+        hints::{Hintable, InnerFriProof, InnerVal},
         utils::const_fri_config,
     };
-    use crate::hints::InnerFriProof;
 
     #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(

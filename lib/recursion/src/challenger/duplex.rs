@@ -80,10 +80,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
 
         builder.poseidon2_permute_mut(&self.sponge_state);
 
-        builder.assign(
-            &self.nb_outputs,
-            C::N::from_canonical_usize(DIGEST_SIZE),
-        );
+        builder.assign(&self.nb_outputs, C::N::from_canonical_usize(DIGEST_SIZE));
     }
 
     fn observe(&mut self, builder: &mut Builder<C>, value: Felt<C::F>) {
@@ -93,10 +90,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
         builder.assign(&self.nb_inputs, self.nb_inputs + C::N::ONE);
 
         builder
-            .if_eq(
-                self.nb_inputs,
-                C::N::from_canonical_usize(DIGEST_SIZE),
-            )
+            .if_eq(self.nb_inputs, C::N::from_canonical_usize(DIGEST_SIZE))
             .then(|builder| {
                 self.duplexing(builder);
             })
@@ -218,7 +212,6 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use p3_baby_bear::BabyBear;
     use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
@@ -228,16 +221,19 @@ mod tests {
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };
-    use rand::Rng;
+    use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
     use p3_uni_stark::{StarkGenericConfig, Val};
+    use rand::Rng;
 
     use super::DuplexChallengerVariable;
 
     fn test_compiler_challenger_with_num_challenges(num_challenges: usize) {
         let mut rng = rand::thread_rng();
-        let observations = (0..num_challenges).map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..(1 << 30)))).collect::<Vec<_>>();
+        let observations = (0..num_challenges)
+            .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..(1 << 30))))
+            .collect::<Vec<_>>();
 
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
@@ -279,5 +275,4 @@ mod tests {
         test_compiler_challenger_with_num_challenges(20);
         test_compiler_challenger_with_num_challenges(50);
     }
-
 }

@@ -3,8 +3,7 @@ use axvm_native_compiler::{
     prelude::*,
 };
 
-use crate::{digest::DigestVariable, OUTER_DIGEST_SIZE};
-use crate::fri::types::FriProofVariable;
+use crate::{digest::DigestVariable, fri::types::FriProofVariable, OUTER_DIGEST_SIZE};
 
 pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 

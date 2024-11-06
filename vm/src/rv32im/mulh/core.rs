@@ -117,11 +117,11 @@ where
                 carry_mul[NUM_LIMBS - 1].clone()
             } else {
                 carry[j - 1].clone()
-            } + ((j + 1)..NUM_LIMBS).fold(AB::Expr::ZERO, |acc, k| {
-                acc + (b[k] * c[NUM_LIMBS + j - k])
-            }) + (0..(j + 1)).fold(AB::Expr::ZERO, |acc, k| {
-                acc + (b[k] * cols.c_ext) + (c[k] * cols.b_ext)
-            });
+            } + ((j + 1)..NUM_LIMBS)
+                .fold(AB::Expr::ZERO, |acc, k| acc + (b[k] * c[NUM_LIMBS + j - k]))
+                + (0..(j + 1)).fold(AB::Expr::ZERO, |acc, k| {
+                    acc + (b[k] * cols.c_ext) + (c[k] * cols.b_ext)
+                });
             carry[j] = AB::Expr::from(carry_divide) * (expected_limb - a[j]);
         }
 

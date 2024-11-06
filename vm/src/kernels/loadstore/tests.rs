@@ -114,7 +114,7 @@ fn get_data_pointer(data: &TestData) -> F {
             + if data.is_extended {
                 data.g * data.fd_val
             } else {
-            F::ZERO
+                F::ZERO
             }
     } else {
         data.c
@@ -122,7 +122,7 @@ fn get_data_pointer(data: &TestData) -> F {
             + if data.is_extended {
                 data.g * data.f
             } else {
-            F::ZERO
+                F::ZERO
             }
     }
 }

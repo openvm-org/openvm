@@ -386,9 +386,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.data_read_as = read_record
             .data_read
             .map_or(F::ZERO, |read| read.address_space);
-        cols.data_read_pointer = read_record
-            .data_read
-            .map_or(F::ZERO, |read| read.pointer);
+        cols.data_read_pointer = read_record.data_read.map_or(F::ZERO, |read| read.pointer);
 
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;

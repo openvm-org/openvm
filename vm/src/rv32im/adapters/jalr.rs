@@ -238,11 +238,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
             adapter_cols.rd_aux_cols,
             adapter_cols.needs_write,
         ) = match write_record.rd {
-            Some(rd) => (
-                rd.pointer,
-                aux_cols_factory.make_write_aux_cols(rd),
-                F::ONE,
-            ),
+            Some(rd) => (rd.pointer, aux_cols_factory.make_write_aux_cols(rd), F::ONE),
             None => (F::ZERO, MemoryWriteAuxCols::disabled(), F::ZERO),
         };
     }

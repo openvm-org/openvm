@@ -103,8 +103,7 @@ where
             is_load,
         } = *cols;
 
-        let get_expr_12 =
-            |x: &AB::Expr| (x.clone() - AB::Expr::ONE) * (x.clone() - AB::Expr::TWO);
+        let get_expr_12 = |x: &AB::Expr| (x.clone() - AB::Expr::ONE) * (x.clone() - AB::Expr::TWO);
 
         builder.assert_bool(is_valid);
         let sum = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {

@@ -232,9 +232,7 @@ impl<N: Field> Var<N> {
         cache: &mut HashMap<SymbolicVar<N>, Self>,
     ) {
         if let Some(v) = cache.get(&src) {
-            builder
-                .operations
-                .push(DslIr::AddVI(*self, *v, C::N::ZERO));
+            builder.operations.push(DslIr::AddVI(*self, *v, C::N::ZERO));
             return;
         }
         match src {
@@ -242,9 +240,7 @@ impl<N: Field> Var<N> {
                 builder.operations.push(DslIr::ImmV(*self, c));
             }
             SymbolicVar::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddVI(*self, v, C::N::ZERO));
+                builder.operations.push(DslIr::AddVI(*self, v, C::N::ZERO));
             }
             SymbolicVar::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
@@ -550,9 +546,7 @@ impl<F: Field> Felt<F> {
         cache: &mut HashMap<SymbolicFelt<F>, Self>,
     ) {
         if let Some(v) = cache.get(&src) {
-            builder
-                .operations
-                .push(DslIr::AddFI(*self, *v, C::F::ZERO));
+            builder.operations.push(DslIr::AddFI(*self, *v, C::F::ZERO));
             return;
         }
         match src {
@@ -560,9 +554,7 @@ impl<F: Field> Felt<F> {
                 builder.operations.push(DslIr::ImmF(*self, c));
             }
             SymbolicFelt::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddFI(*self, v, C::F::ZERO));
+                builder.operations.push(DslIr::AddFI(*self, v, C::F::ZERO));
             }
             SymbolicFelt::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicFelt::Const(lhs, _), SymbolicFelt::Const(rhs, _)) => {
@@ -920,9 +912,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 builder.operations.push(DslIr::ImmE(*self, c));
             }
             SymbolicExt::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddEI(*self, v, C::EF::ZERO));
+                builder.operations.push(DslIr::AddEI(*self, v, C::EF::ZERO));
             }
             SymbolicExt::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicExt::Const(lhs, _), SymbolicExt::Const(rhs, _)) => {

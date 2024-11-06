@@ -37,7 +37,7 @@ type InstrPerm = Instrumented<Perm>;
 type Hash<P> = PaddingFreeSponge<P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, DIGEST_WIDTH, WIDTH>;
 type ValMmcs<P> =
-MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
+    MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
 type Dft = Radix2Bowers;
@@ -110,9 +110,7 @@ pub fn default_engine() -> BabyBearPoseidon2Engine {
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-fn default_engine_impl(
-    fri_params: FriParameters,
-) -> BabyBearPoseidon2Engine {
+fn default_engine_impl(fri_params: FriParameters) -> BabyBearPoseidon2Engine {
     let perm = default_perm();
     engine_from_perm(perm, fri_params)
 }
@@ -123,10 +121,7 @@ pub fn default_config(perm: &Perm) -> BabyBearPoseidon2Config {
     config_from_perm(perm, fri_params)
 }
 
-pub fn engine_from_perm<P>(
-    perm: P,
-    fri_params: FriParameters,
-) -> BabyBearPermutationEngine<P>
+pub fn engine_from_perm<P>(perm: P, fri_params: FriParameters) -> BabyBearPermutationEngine<P>
 where
     P: CryptographicPermutation<[Val; WIDTH]>
         + CryptographicPermutation<[PackedVal; WIDTH]>
@@ -140,10 +135,7 @@ where
     }
 }
 
-pub fn config_from_perm<P>(
-    perm: &P,
-    fri_params: FriParameters,
-) -> BabyBearPermutationConfig<P>
+pub fn config_from_perm<P>(perm: &P, fri_params: FriParameters) -> BabyBearPermutationConfig<P>
 where
     P: CryptographicPermutation<[Val; WIDTH]>
         + CryptographicPermutation<[PackedVal; WIDTH]>

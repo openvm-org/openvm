@@ -135,8 +135,7 @@ where
         let inv = AB::F::from_canonical_u32(1 << 16).inverse();
 
         builder.assert_bool(to_pc_least_sig_bit);
-        let carry =
-            (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
+        let carry = (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
         let imm_extend_limb = imm_sign * AB::F::from_canonical_u32((1 << 16) - 1);

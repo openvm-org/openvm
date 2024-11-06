@@ -7,9 +7,7 @@ use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2Bowers;
 use p3_field::extension::BinomialExtensionField;
-use p3_fri::{
-    BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs,
-};
+use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
@@ -52,7 +50,8 @@ pub type OuterPcs = TwoAdicFriPcs<OuterVal, OuterDft, OuterValMmcs, OuterChallen
 
 pub type OuterQueryProof = QueryProof<OuterChallenge, OuterChallengeMmcs, Vec<OuterBatchOpening>>;
 pub type OuterCommitPhaseStep = CommitPhaseProofStep<OuterChallenge, OuterChallengeMmcs>;
-pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, Vec<OuterBatchOpening>>;
+pub type OuterFriProof =
+    FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, Vec<OuterBatchOpening>>;
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(

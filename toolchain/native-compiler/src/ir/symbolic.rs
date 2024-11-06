@@ -346,9 +346,14 @@ impl<F: Field, EF: ExtensionField<F>> AbstractField for SymbolicExt<F, EF> {
     type F = EF;
 
     const ZERO: Self = SymbolicExt::Const(EF::ZERO, FieldArray([EF::ZERO; 4]));
-    const ONE: Self = SymbolicExt::Const(EF::ONE, FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::ONE]));
-    const TWO: Self = SymbolicExt::Const(EF::TWO, FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::TWO]));
-    const NEG_ONE: Self = SymbolicExt::Const(EF::NEG_ONE, FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::NEG_ONE]));
+    const ONE: Self =
+        SymbolicExt::Const(EF::ONE, FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::ONE]));
+    const TWO: Self =
+        SymbolicExt::Const(EF::TWO, FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::TWO]));
+    const NEG_ONE: Self = SymbolicExt::Const(
+        EF::NEG_ONE,
+        FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::NEG_ONE]),
+    );
 
     fn from_f(f: Self::F) -> Self {
         SymbolicExt::Const(f, f.into())

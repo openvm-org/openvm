@@ -107,9 +107,8 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
             .collect();
 
-        let p3_int_diag_f = BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY.map(|babybear| {
-            F::from_canonical_u32(babybear.as_canonical_u32())
-        });
+        let p3_int_diag_f = BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY
+            .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
 
         Self {
             external_constants: external_round_constants_f,

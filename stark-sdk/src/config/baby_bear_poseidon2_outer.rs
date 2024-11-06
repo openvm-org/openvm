@@ -102,9 +102,7 @@ pub fn default_engine() -> BabyBearPoseidon2OuterEngine {
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-fn default_engine_impl(
-    fri_params: FriParameters,
-) -> BabyBearPoseidon2OuterEngine {
+fn default_engine_impl(fri_params: FriParameters) -> BabyBearPoseidon2OuterEngine {
     let perm = outer_perm();
     engine_from_perm(perm, fri_params)
 }
@@ -115,10 +113,7 @@ pub fn default_config(perm: &Perm) -> BabyBearPoseidon2OuterConfig {
     config_from_perm(perm, fri_params)
 }
 
-pub fn engine_from_perm<P>(
-    perm: P,
-    fri_params: FriParameters,
-) -> BabyBearPermutationOuterEngine<P>
+pub fn engine_from_perm<P>(perm: P, fri_params: FriParameters) -> BabyBearPermutationOuterEngine<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
@@ -130,10 +125,7 @@ where
     }
 }
 
-pub fn config_from_perm<P>(
-    perm: &P,
-    fri_params: FriParameters,
-) -> BabyBearPermutationOuterConfig<P>
+pub fn config_from_perm<P>(perm: &P, fri_params: FriParameters) -> BabyBearPermutationOuterConfig<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
