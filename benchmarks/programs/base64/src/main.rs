@@ -3,7 +3,7 @@
 
 use core::mem::transmute;
 
-use base64::engine::general_purpose;
+use base64::engine::{general_purpose, Engine};
 
 axvm::entry!(main);
 
