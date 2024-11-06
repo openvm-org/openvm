@@ -38,7 +38,7 @@ type Compress<P> = TruncatedPermutation<P, 2, 1, WIDTH>;
 type ValMmcs<P> = MerkleTreeMmcs<BabyBear, Bn254Fr, Hash<P>, Compress<P>, 1>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 type Dft = Radix2DitParallel<Val>;
-type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH, 3>;
+type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH, 2>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type BabyBearPermutationOuterConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
