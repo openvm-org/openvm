@@ -16,14 +16,11 @@ use axvm_native_compiler::ir::DIGEST_SIZE;
 
 type SC = BabyBearPoseidon2Config;
 
-/// This struct is for testing purposes. Users should go through a different flow.
+/// `AppExecutionCommit` has all the commitments users should check against the final proof.
 pub struct AppExecutionCommit<T> {
     /// Commitment of the leaf VM verifier program which commits the VmConfig of App VM.
     /// Internal verifier will verify `leaf_vm_verifier_commit`.
     pub leaf_vm_verifier_commit: [T; DIGEST_SIZE],
-    /// Commitment of the initial memory.
-    /// Root verifier will verify
-    pub initial_memory_commit: [T; DIGEST_SIZE],
     /// Commitment of the executable. It's computed as
     /// compress(
     ///     compress(
@@ -36,8 +33,8 @@ pub struct AppExecutionCommit<T> {
     pub exe_commit: [T; DIGEST_SIZE],
 }
 
-/// This function is for testing purposes. Users should go through a different flow.
-/// `exe_commit`.
+/// Users should use this function to compute `AppExecutionCommit` and check it against the final
+/// proof.
 pub fn compute_app_execution_commit(
     app_vm_config: &VmConfig,
     app_exe: &AxVmCommittedExe<SC>,
@@ -70,7 +67,6 @@ pub fn compute_app_execution_commit(
 
     AppExecutionCommit {
         leaf_vm_verifier_commit: leaf_verifier_program_commit,
-        initial_memory_commit: init_memory_commit,
         exe_commit: user_commit,
     }
 }
