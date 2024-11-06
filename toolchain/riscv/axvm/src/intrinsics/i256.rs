@@ -44,7 +44,7 @@ impl I256 {
     #[cfg(not(target_os = "zkvm"))]
     pub fn from_bigint(value: &BigInt) -> Self {
         Self {
-            limbs: bigint_to_limbs(&value),
+            limbs: bigint_to_limbs(value),
         }
     }
 
