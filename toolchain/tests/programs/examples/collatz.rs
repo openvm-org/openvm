@@ -4,7 +4,7 @@
 axvm::entry!(main);
 
 pub fn main() {
-    let mut x: u32 = 837799;
+    let mut x: u32 = core::hint::black_box(837799);
     let mut count: u32 = 0;
 
     while count < 1000 && x != 1 {
