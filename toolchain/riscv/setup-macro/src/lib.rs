@@ -30,12 +30,19 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
     let mut moduli = Vec::new();
 
     output.push(TokenStream::from(quote::quote! {
-        use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
         #[cfg(target_os = "zkvm")]
-        use core::{borrow::BorrowMut, mem::MaybeUninit};
+        use core::mem::MaybeUninit;
+        use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+
+        #[cfg(target_os = "zkvm")]
+        use axvm_platform::{
+            constants::{Custom1Funct3, ModArithBaseFunct7, CUSTOM_1},
+            custom_insn_r,
+        };
 
         #[cfg(not(target_os = "zkvm"))]
         use num_bigint_dig::{traits::ModInverse, BigUint, Sign, ToBigInt};
+
         #[cfg(not(target_os = "zkvm"))]
         use axvm::intrinsics::biguint_to_limbs;
     }));
@@ -91,8 +98,445 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     proc_macro::Span::call_site().into(),
                                 );
 
+                                // The largest power of two so that at most 10% of all space is wasted
+                                let block_size = (limbs + limbs / 9 + 1).next_power_of_two() / 2;
+                                let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
+                                let block_size =
+                                    syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
+
                                 let result = TokenStream::from(quote::quote! {
-                                    // placeholder
+
+                                    #[derive(Clone, Eq)]
+                                    #[repr(C, align(#block_size))]
+                                    pub struct #struct_name([u8; #limbs]);
+
+                                    impl #struct_name {
+                                        const MODULUS: [u8; #limbs] = [#(#modulus_bytes),*];
+                                        const _MOD_IDX: usize = #mod_idx;
+
+                                        /// The zero element of the field.
+                                        pub const ZERO: Self = Self([0; #limbs]);
+
+                                        /// Creates a new #struct_name from an array of bytes.
+                                        const fn from_bytes(bytes: [u8; #limbs]) -> Self {
+                                            Self(bytes)
+                                        }
+
+                                        /// Creates a new #struct_name from a u32.
+                                        pub fn from_u32(val: u32) -> Self {
+                                            let mut bytes = [0; #limbs];
+                                            bytes[..4].copy_from_slice(&val.to_le_bytes());
+                                            Self(bytes)
+                                        }
+
+                                        /// Value of this #struct_name as an array of bytes.
+                                        pub fn as_bytes(&self) -> &[u8; #limbs] {
+                                            &(self.0)
+                                        }
+
+                                        /// Returns MODULUS as an array of bytes.
+                                        const fn modulus() -> [u8; #limbs] {
+                                            Self::MODULUS
+                                        }
+
+                                        /// Creates a new #struct_name from a BigUint.
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        pub fn from_biguint(biguint: BigUint) -> Self {
+                                            Self(biguint_to_limbs(&biguint))
+                                        }
+
+                                        /// Value of this #struct_name as a BigUint.
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        pub fn as_biguint(&self) -> BigUint {
+                                            BigUint::from_bytes_le(self.as_bytes())
+                                        }
+
+                                        /// Modulus N as a BigUint.
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        pub fn modulus_biguint() -> BigUint {
+                                            BigUint::from_bytes_le(&Self::MODULUS)
+                                        }
+
+                                        #[inline(always)]
+                                        fn add_assign_impl(&mut self, other: &Self) {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                *self = Self::from_biguint(
+                                                    (self.as_biguint() + other.as_biguint()) % Self::modulus_biguint(),
+                                                );
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::AddMod as usize,
+                                                    self as *mut Self,
+                                                    self as *const Self,
+                                                    other as *const Self
+                                                )
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn sub_assign_impl(&mut self, other: &Self) {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let modulus = Self::modulus_biguint();
+                                                *self = Self::from_biguint(
+                                                    (self.as_biguint() + modulus.clone() - other.as_biguint()) % modulus,
+                                                );
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::SubMod as usize,
+                                                    self as *mut Self,
+                                                    self as *const Self,
+                                                    other as *const Self
+                                                )
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn mul_assign_impl(&mut self, other: &Self) {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                *self = Self::from_biguint(
+                                                    (self.as_biguint() * other.as_biguint()) % Self::modulus_biguint(),
+                                                );
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::MulMod as usize,
+                                                    self as *mut Self,
+                                                    self as *const Self,
+                                                    other as *const Self
+                                                )
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn div_assign_impl(&mut self, other: &Self) {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let modulus = Self::modulus_biguint();
+                                                let signed_inv = other.as_biguint().mod_inverse(modulus.clone()).unwrap();
+                                                let inv = if signed_inv.sign() == Sign::Minus {
+                                                    modulus.to_bigint().unwrap() + signed_inv
+                                                } else {
+                                                    signed_inv
+                                                }
+                                                .to_biguint()
+                                                .unwrap();
+                                                *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::DivMod as usize,
+                                                    self as *mut Self,
+                                                    self as *const Self,
+                                                    other as *const Self
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    impl<'a> AddAssign<&'a #struct_name> for #struct_name {
+                                        #[inline(always)]
+                                        fn add_assign(&mut self, other: &'a #struct_name) {
+                                            self.add_assign_impl(other);
+                                        }
+                                    }
+
+                                    impl AddAssign for #struct_name {
+                                        #[inline(always)]
+                                        fn add_assign(&mut self, other: Self) {
+                                            self.add_assign_impl(&other);
+                                        }
+                                    }
+
+                                    impl Add for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn add(mut self, other: Self) -> Self::Output {
+                                            self += other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Add<&'a #struct_name> for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn add(mut self, other: &'a #struct_name) -> Self::Output {
+                                            self += other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Add<&'a #struct_name> for &#struct_name {
+                                        type Output = #struct_name;
+                                        #[inline(always)]
+                                        fn add(self, other: &'a #struct_name) -> Self::Output {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res += other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::AddMod as usize,
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+                                    }
+
+                                    impl<'a> SubAssign<&'a #struct_name> for #struct_name {
+                                        #[inline(always)]
+                                        fn sub_assign(&mut self, other: &'a #struct_name) {
+                                            self.sub_assign_impl(other);
+                                        }
+                                    }
+
+                                    impl SubAssign for #struct_name {
+                                        #[inline(always)]
+                                        fn sub_assign(&mut self, other: Self) {
+                                            self.sub_assign_impl(&other);
+                                        }
+                                    }
+
+                                    impl Sub for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn sub(mut self, other: Self) -> Self::Output {
+                                            self -= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Sub<&'a #struct_name> for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn sub(mut self, other: &'a #struct_name) -> Self::Output {
+                                            self -= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Sub<&'a #struct_name> for &#struct_name {
+                                        type Output = #struct_name;
+                                        #[inline(always)]
+                                        fn sub(self, other: &'a #struct_name) -> Self::Output {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res -= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::SubMod as usize,
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+                                    }
+
+                                    impl<'a> MulAssign<&'a #struct_name> for #struct_name {
+                                        #[inline(always)]
+                                        fn mul_assign(&mut self, other: &'a #struct_name) {
+                                            self.mul_assign_impl(other);
+                                        }
+                                    }
+
+                                    impl MulAssign for #struct_name {
+                                        #[inline(always)]
+                                        fn mul_assign(&mut self, other: Self) {
+                                            self.mul_assign_impl(&other);
+                                        }
+                                    }
+
+                                    impl Mul for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn mul(mut self, other: Self) -> Self::Output {
+                                            self *= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Mul<&'a #struct_name> for #struct_name {
+                                        type Output = Self;
+                                        #[inline(always)]
+                                        fn mul(mut self, other: &'a #struct_name) -> Self::Output {
+                                            self *= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Mul<&'a #struct_name> for &#struct_name {
+                                        type Output = #struct_name;
+                                        #[inline(always)]
+                                        fn mul(self, other: &'a #struct_name) -> Self::Output {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res *= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::MulMod as usize,
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+                                    }
+
+                                    impl<'a> DivAssign<&'a #struct_name> for #struct_name {
+                                        /// Undefined behaviour when denominator is not coprime to N
+                                        #[inline(always)]
+                                        fn div_assign(&mut self, other: &'a #struct_name) {
+                                            self.div_assign_impl(other);
+                                        }
+                                    }
+
+                                    impl DivAssign for #struct_name {
+                                        /// Undefined behaviour when denominator is not coprime to N
+                                        #[inline(always)]
+                                        fn div_assign(&mut self, other: Self) {
+                                            self.div_assign_impl(&other);
+                                        }
+                                    }
+
+                                    impl Div for #struct_name {
+                                        type Output = Self;
+                                        /// Undefined behaviour when denominator is not coprime to N
+                                        #[inline(always)]
+                                        fn div(mut self, other: Self) -> Self::Output {
+                                            self /= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Div<&'a #struct_name> for #struct_name {
+                                        type Output = Self;
+                                        /// Undefined behaviour when denominator is not coprime to N
+                                        #[inline(always)]
+                                        fn div(mut self, other: &'a #struct_name) -> Self::Output {
+                                            self /= other;
+                                            self
+                                        }
+                                    }
+
+                                    impl<'a> Div<&'a #struct_name> for &#struct_name {
+                                        type Output = #struct_name;
+                                        /// Undefined behaviour when denominator is not coprime to N
+                                        #[inline(always)]
+                                        fn div(self, other: &'a #struct_name) -> Self::Output {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res /= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::DivMod as usize,
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+                                    }
+
+                                    impl PartialEq for #struct_name {
+                                        #[inline(always)]
+                                        fn eq(&self, other: &Self) -> bool {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                self.as_bytes() == other.as_bytes()
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut x: u32;
+                                                unsafe {
+                                                    core::arch::asm!(
+                                                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                                                        opcode = const CUSTOM_1,
+                                                        funct3 = const Custom1Funct3::ModularArithmetic as usize,
+                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize,
+                                                        rd = out(reg) x,
+                                                        rs1 = in(reg) self as *const #struct_name,
+                                                        rs2 = in(reg) other as *const #struct_name
+                                                    );
+                                                }
+                                                x != 0
+                                            }
+                                        }
+                                    }
+
+                                    #[cfg(not(target_os = "zkvm"))]
+                                    mod helper {
+                                        use super::*;
+                                        impl Mul<u32> for #struct_name {
+                                            type Output = #struct_name;
+                                            #[inline(always)]
+                                            fn mul(self, other: u32) -> Self::Output {
+                                                let mut res = self.clone();
+                                                res *= #struct_name::from_u32(other);
+                                                res
+                                            }
+                                        }
+
+                                        impl Mul<u32> for &#struct_name {
+                                            type Output = #struct_name;
+                                            #[inline(always)]
+                                            fn mul(self, other: u32) -> Self::Output {
+                                                let mut res = self.clone();
+                                                res *= #struct_name::from_u32(other);
+                                                res
+                                            }
+                                        }
+                                    }
+
                                 });
 
                                 moduli.push(modulus_bytes);

@@ -8,6 +8,9 @@ description = "axVM elliptic curve cryptography library."
 [dependencies]
 axvm = { workspace = true }
 
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+
 [features]
 default = []
 std = ["axvm/std"]

@@ -642,6 +642,7 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "num-bigint-dig",
 ]
 
 [[package]]

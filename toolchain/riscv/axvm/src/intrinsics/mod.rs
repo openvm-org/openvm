@@ -15,4 +15,4 @@ mod u256;
 
 mod utils;
 #[allow(unused_imports)] // This is used in the rust-v programs
-use utils::*;
+pub use utils::*;

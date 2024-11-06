@@ -1,4 +1,7 @@
-use axvm::intrinsics::IntModN;
+axvm::moduli_setup! {
+    IntModN = "0x2FFCFFFF FEFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF";
+}
+
 #[derive(Eq, PartialEq, Clone)]
 pub struct EcPoint {
     pub x: IntModN,
