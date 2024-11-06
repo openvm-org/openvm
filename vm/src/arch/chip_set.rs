@@ -31,7 +31,7 @@ use parking_lot::Mutex;
 use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
-use super::{vm_poseidon2_config, EcCurve, Streams};
+use super::{vm_poseidon2_config, EcCurve, PairingCurve, Streams};
 use crate::{
     arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
@@ -1019,7 +1019,7 @@ impl VmConfig {
                 }
                 ExecutorName::Fp2AddSubRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1034,7 +1034,7 @@ impl VmConfig {
                 }
                 ExecutorName::Fp2MulDivRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 1, 1, 32, 32>::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1049,7 +1049,7 @@ impl VmConfig {
                 }
                 ExecutorName::Fp2AddSubRv32_48 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1064,7 +1064,7 @@ impl VmConfig {
                 }
                 ExecutorName::Fp2MulDivRv32_48 => {
                     let chip = Rc::new(RefCell::new(Fp2MulDivChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 3, 3, 16, 16>::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1325,7 +1325,7 @@ fn gen_ec_executor_tuple(
 
 // Returns (local_opcode_idx, global offset, executor name, modulus)
 fn gen_pairing_executor_tuple(
-    supported_ec_curves: &[EcCurve],
+    supported_ec_curves: &[PairingCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
     supported_ec_curves
         .iter()
