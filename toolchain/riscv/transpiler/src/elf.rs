@@ -167,7 +167,7 @@ impl Elf {
             }
         }
 
-        // Get the number of public values from the .axiom section
+        // Get the prime moduli from the .axiom section.
         let axiom_section_header = elf
             .section_header_by_name(".axiom")
             .expect("section table should be parsable");

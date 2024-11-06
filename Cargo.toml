@@ -81,7 +81,7 @@ axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }
 axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
 axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
-axvm-setup-macro = { path = "toolchain/riscv/platform/setup_macro", default-features = false }
+axvm-setup-macro = { path = "toolchain/riscv/setup-macro", default-features = false }
 axvm-circuit = { path = "vm", default-features = false }
 axvm-circuit-derive = { path = "vm/derive", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
