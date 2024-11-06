@@ -101,7 +101,7 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
 ) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
 where
     Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
-    AggSC::Pcs: Sync,
+    // AggSC::Pcs: Sync,
     Domain<AggSC>: Send + Sync,
     PcsProverData<AggSC>: Send + Sync,
     Com<AggSC>: Send + Sync,

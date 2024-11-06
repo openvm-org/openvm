@@ -323,7 +323,7 @@ where
         engine_provider: P,
     ) -> Result<VerificationData<SC>, VerificationError>
     where
-        SC::Pcs: Sync,
+        // SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,

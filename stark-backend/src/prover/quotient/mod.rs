@@ -1,4 +1,4 @@
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -64,13 +64,14 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC>
     where
-        SC::Pcs: Sync,
+        // SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
     {
         let raps = raps.iter().map(|rap| rap.as_ref()).collect_vec();
-        let inner = parizip!(raps, qvks, traces, public_values)
+        let inner = // FIXME[zach]
+            izip!(raps, qvks, traces, public_values)
             .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
         QuotientData { inner }

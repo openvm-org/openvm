@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
-use p3_dft::Radix2Bowers;
+use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_goldilocks::{Goldilocks, MdsMatrixGoldilocks};
@@ -36,7 +36,7 @@ type ValMmcs<P> =
     MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
-type Dft = Radix2Bowers;
+type Dft = Radix2DitParallel<Val>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type GoldilocksPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
@@ -137,7 +137,7 @@ where
     let compress = Compress::new(perm.clone());
     let val_mmcs = ValMmcs::new(hash, compress);
     let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-    let dft = Dft {};
+    let dft = Dft::default();
     let fri_config = FriConfig {
         log_blowup: fri_params.log_blowup,
         num_queries: fri_params.num_queries,

@@ -374,7 +374,7 @@ where
         results: VmExecutorResult<SC>,
     ) -> Vec<Proof<SC>>
     where
-        SC::Pcs: Sync,
+        // SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,

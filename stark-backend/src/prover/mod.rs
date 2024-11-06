@@ -80,7 +80,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         proof_input: ProofInput<SC>,
     ) -> Proof<SC>
     where
-        SC::Pcs: Sync,
+        // SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -262,7 +262,7 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
     public_values_per_air: Vec<Vec<Val<SC>>>,
 ) -> Proof<SC>
 where
-    SC::Pcs: Sync,
+    // SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,
