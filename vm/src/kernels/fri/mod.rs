@@ -8,7 +8,7 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::{
     is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::{assert_array_eq, not},
+    utils::{assert_array_eq, next_power_of_two_or_zero, not},
     SubAir, TraceSubRowGenerator,
 };
 use ax_stark_backend::{
@@ -537,8 +537,9 @@ impl<F: PrimeField32> FriMatOpeningChip<F> {
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let mut flat_trace = vec![F::ZERO; self.height.next_power_of_two() * self.trace_width()];
         let width = self.trace_width();
+        let height = next_power_of_two_or_zero(self.height);
+        let mut flat_trace = F::zero_vec(width * height);
         let aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
 
         let mut idx = 0;

@@ -254,7 +254,7 @@ where
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let correct_height = self.rows.len().next_power_of_two();
         let width = PhantomCols::<Val<SC>>::width();
-        let mut rows = vec![Val::<SC>::ZERO; width * correct_height];
+        let mut rows = Val::<SC>::zero_vec(width * correct_height);
         rows.par_chunks_mut(width)
             .zip(&self.rows)
             .for_each(|(row, row_record)| {

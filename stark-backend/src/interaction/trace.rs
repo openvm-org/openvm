@@ -68,7 +68,7 @@ where
     // based on the number of cpu threads available, and then do all
     // computations necessary for that chunk within a single thread.
     let perm_width = num_interactions.div_ceil(interaction_chunk_size) + 1;
-    let mut perm_values = vec![EF::ZERO; height * perm_width];
+    let mut perm_values = EF::zero_vec(height * perm_width);
     debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
@@ -88,7 +88,7 @@ where
             let num_rows = perm_values.len() / perm_width;
             // the interaction chunking requires more memory because we must
             // allocate separate memory for the denominators and reciprocals
-            let mut denoms = vec![EF::ZERO; num_rows * num_interactions];
+            let mut denoms = EF::zero_vec(num_rows * num_interactions);
             let row_offset = chunk_idx * height_chunk_size;
             // compute the denominators to be inverted:
             for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {

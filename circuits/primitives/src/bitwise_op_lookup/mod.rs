@@ -154,7 +154,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![F::ZERO; self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS];
+        let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
             cols.mult_range = F::from_canonical_u32(

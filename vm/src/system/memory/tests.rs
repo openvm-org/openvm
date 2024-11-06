@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    mem,
     rc::Rc,
     sync::Arc,
 };
@@ -78,7 +77,7 @@ impl<T> BaseAirWithPublicValues<T> for MemoryRequesterAir {}
 impl<T> PartitionedBaseAir<T> for MemoryRequesterAir {}
 impl<T> BaseAir<T> for MemoryRequesterAir {
     fn width(&self) -> usize {
-        mem::size_of::<MemoryRequesterCols<u8>>()
+        MemoryRequesterCols::<T>::width()
     }
 }
 
@@ -164,8 +163,8 @@ fn generate_trace<F: PrimeField32>(
     aux_factory: MemoryAuxColsFactory<F>,
 ) -> RowMajorMatrix<F> {
     let height = records.len().next_power_of_two();
-    let width = mem::size_of::<MemoryRequesterCols<u8>>();
-    let mut values = vec![F::ZERO; height * width];
+    let width = MemoryRequesterCols::<F>::width();
+    let mut values = F::zero_vec(height * width);
 
     for (row, record) in values.chunks_mut(width).zip(records) {
         let row: &mut MemoryRequesterCols<F> = row.borrow_mut();

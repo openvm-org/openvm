@@ -72,7 +72,7 @@ impl<F: Field, const N: usize> IsEqArrayChip<F, N> {
         let air: IsEqArraySubAir<N> = IsEqArraySubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqArrayCols::<F, N>::width();
-        let mut rows = vec![F::ZERO; width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

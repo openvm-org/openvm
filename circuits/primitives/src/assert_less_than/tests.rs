@@ -79,7 +79,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = AssertLessThanCols::<F, AUX_LEN>::width();
 
-        let mut rows = vec![F::ZERO; width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

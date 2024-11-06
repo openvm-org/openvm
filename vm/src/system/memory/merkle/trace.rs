@@ -48,7 +48,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
 
         let width = MemoryMerkleCols::<F, CHUNK>::width();
         let height = rows.len().next_power_of_two();
-        let mut trace = vec![F::ZERO; width * height];
+        let mut trace = F::zero_vec(width * height);
 
         for (trace_row, row) in trace.chunks_exact_mut(width).zip(rows) {
             *trace_row.borrow_mut() = row;

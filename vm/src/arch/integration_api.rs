@@ -270,7 +270,7 @@ where
         let core_width = self.core.air().width();
         let adapter_width = self.adapter.air().width();
         let width = core_width + adapter_width;
-        let mut values = vec![Val::<SC>::ZERO; height * width];
+        let mut values = Val::<SC>::zero_vec(height * width);
 
         let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
         // This zip only goes through records.

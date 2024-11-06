@@ -190,7 +190,7 @@ where
             self.trace_width(),
         );
 
-        let mut public_values = vec![Val::<SC>::ZERO; VmConnectorPvs::<Val<SC>>::width()];
+        let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
             initial_pc: initial_state.pc,
             final_pc: final_state.pc,

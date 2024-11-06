@@ -63,7 +63,7 @@ impl<F: Field> IsEqualChip<F> {
         let air = IsEqSubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqualCols::<F>::width();
-        let mut rows = vec![F::ZERO; width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

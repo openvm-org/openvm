@@ -41,7 +41,7 @@ fn test_add() {
     let expected = (&x + &y) % prime;
     let inputs = vec![x, y];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
@@ -77,7 +77,7 @@ fn test_div() {
     let expected = (&x * &y_inv) % prime;
     let inputs = vec![x, y];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
@@ -117,7 +117,7 @@ fn test_auto_carry_mul() {
     let expected = (&x * &x * &y) % prime; // x4 = x3 * x1 = (x1 * x2) * x1
     let inputs = vec![x, y];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
@@ -159,7 +159,7 @@ fn test_auto_carry_intmul() {
     let expected = (&x * &x * BigUint::from(9u32)) % prime;
     let inputs = vec![x, y];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
@@ -211,7 +211,7 @@ fn test_auto_carry_add() {
     let expected = (&x * &x * BigUint::from(10u32)) % prime;
     let inputs = vec![x, y];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 2);
@@ -254,7 +254,7 @@ fn test_select() {
     let inputs = vec![x, y];
     let flags = vec![false];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, flags), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
@@ -296,7 +296,7 @@ fn test_select2() {
     let inputs = vec![x, y];
     let flags = vec![true];
 
-    let mut row = vec![BabyBear::ZERO; width];
+    let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, flags), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);

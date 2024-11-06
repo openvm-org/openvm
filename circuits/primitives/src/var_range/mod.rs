@@ -149,7 +149,7 @@ impl VariableRangeCheckerChip {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![F::ZERO; self.count.len() * NUM_VARIABLE_RANGE_COLS];
+        let mut rows = F::zero_vec(self.count.len() * NUM_VARIABLE_RANGE_COLS);
         for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
             let cols: &mut VariableRangeCols<F> = row.borrow_mut();
             cols.mult =

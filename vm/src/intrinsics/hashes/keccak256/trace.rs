@@ -148,7 +148,7 @@ where
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace =
-            RowMajorMatrix::new(vec![Val::<SC>::ZERO; num_rows * trace_width], trace_width);
+            RowMajorMatrix::new(Val::<SC>::zero_vec(num_rows * trace_width), trace_width);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.ptr_max_bits;
 
         trace

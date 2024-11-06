@@ -73,7 +73,7 @@ where
     for (chunk_idx, interaction_chunk) in
         all_interactions.chunks(interaction_chunk_size).enumerate()
     {
-        let mut denoms = vec![AB::ExprEF::ZERO; interaction_chunk.len()];
+        let mut denoms = AB::ExprEF::zero_vec(interaction_chunk.len());
         let interaction_chunk = interaction_chunk.to_vec();
         for (i, interaction) in interaction_chunk.iter().enumerate() {
             assert!(!interaction.fields.is_empty(), "fields should not be empty");

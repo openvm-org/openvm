@@ -66,7 +66,7 @@ impl<F: Field> IsZeroChip<F> {
         let air = IsZeroSubAir;
         assert!(self.x.len().is_power_of_two());
         let width = IsZeroCols::<F>::width();
-        let mut rows = vec![F::ZERO; width * self.x.len()];
+        let mut rows = F::zero_vec(width * self.x.len());
         rows.par_chunks_mut(width).zip(self.x).for_each(|(row, x)| {
             let row: &mut IsZeroCols<F> = row.borrow_mut();
             row.x = x;

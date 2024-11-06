@@ -144,7 +144,7 @@ impl TestCarryAir<N> {
         let expr =
             x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
-        let mut carries_f = vec![F::ZERO; carries.len()];
+        let mut carries_f = F::zero_vec(carries.len());
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for (i, &carry) in carries.iter().enumerate() {

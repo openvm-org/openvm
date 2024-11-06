@@ -190,7 +190,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         let sorted_final_memory: Vec<_> = final_memory.iter().collect();
         assert!(sorted_final_memory.len() <= trace_height);
 
-        let mut rows = vec![F::ZERO; trace_height * width];
+        let mut rows = F::zero_vec(trace_height * width);
         rows.par_chunks_mut(width)
             .zip(&sorted_final_memory)
             .enumerate()

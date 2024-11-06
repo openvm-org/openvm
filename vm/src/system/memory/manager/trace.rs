@@ -19,7 +19,7 @@ impl<F: PrimeField32> MemoryController<F> {
             None => RowMajorMatrix::new(vec![], width),
             Some(records) => {
                 let height = next_power_of_two_or_zero(records.len());
-                let mut values = vec![F::ZERO; height * width];
+                let mut values = F::zero_vec(height * width);
 
                 for (row, record) in values.chunks_mut(width).zip(records) {
                     let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
