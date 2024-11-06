@@ -85,7 +85,7 @@ impl RootVmVerifierConfig {
                 let is_internal =
                     eq_felt_slice(builder, &program_commit, &internal_vm_verifier_commit);
                 let proof_leaf_commit: [Felt<_>; DIGEST_SIZE] = builder.uninit();
-                builder.if_eq(is_internal, F::one()).then_or_else(
+                builder.if_eq(is_internal, F::ONE).then_or_else(
                     |builder| {
                         // assert self_program_commit == program_commit
                         builder.assert_eq::<[_; DIGEST_SIZE]>(
