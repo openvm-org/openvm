@@ -410,14 +410,17 @@ impl PartialEq for IntModN {
         #[cfg(target_os = "zkvm")]
         {
             let mut x: u32;
-            custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ModularArithmetic as usize,
-                ModArithBaseFunct7::IsEqMod as usize,
-                x,
-                self as *const IntModN,
-                other as *const IntModN
-            );
+            unsafe {
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                    opcode = const CUSTOM_1,
+                    funct3 = const Custom1Funct3::ModularArithmetic as usize,
+                    funct7 = const ModArithBaseFunct7::IsEqMod as usize,
+                    rd = out(reg) x,
+                    rs1 = in(reg) self as *const IntModN,
+                    rs2 = in(reg) other as *const IntModN
+                );
+            }
             x != 0
         }
     }
