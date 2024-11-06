@@ -40,6 +40,27 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
         use axvm::intrinsics::biguint_to_limbs;
     }));
 
+    let string_to_bytes = |s: &str| {
+        let mut digits = s
+            .chars()
+            .map(|c| c.to_digit(10).expect("Invalid numeric literal"))
+            .collect::<Vec<_>>();
+        let mut bytes = Vec::new();
+        while !digits.is_empty() {
+            let mut rem = 0u32;
+            let mut new_digits = Vec::new();
+            for &d in digits.iter() {
+                rem = rem * 10 + d;
+                new_digits.push(rem / 256);
+                rem %= 256;
+            }
+            digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
+            bytes.push(rem as u8);
+        }
+        bytes.reverse();
+        bytes
+    };
+
     for stmt in stmts {
         match stmt.clone() {
             Stmt::Expr(expr, _) => {
@@ -49,12 +70,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                         if let syn::Expr::Lit(lit) = &*assign.right {
                             if let syn::Lit::Str(str_lit) = &lit.lit {
-                                let modulus = num_bigint::BigUint::parse_bytes(
-                                    str_lit.value().as_bytes(),
-                                    10,
-                                )
-                                .expect("Failed to parse modulus");
-                                let modulus_bytes = modulus.to_bytes_le();
+                                let modulus_bytes = string_to_bytes(&str_lit.value());
                                 let limbs = modulus_bytes.len();
 
                                 let struct_name = format!("IntMod_{}", ident);

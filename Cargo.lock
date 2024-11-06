@@ -787,7 +787,6 @@ dependencies = [
 name = "axvm-setup-macro"
 version = "0.1.0"
 dependencies = [
- "num-bigint 0.4.6",
  "quote",
  "syn 2.0.85",
 ]
