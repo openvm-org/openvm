@@ -58,7 +58,7 @@ impl AppExecutionCommit<Val<SC>> {
             &hasher,
         )
         .hash();
-        let mut padded_pc_start = [Val::<SC>::zero(); DIGEST_SIZE];
+        let mut padded_pc_start = [Val::<SC>::ZERO; DIGEST_SIZE];
         padded_pc_start[0] = Val::<SC>::from_canonical_u32(app_exe.exe.pc_start);
         let app_hash = hasher.hash(&app_program_commit);
         let init_memory_hash = hasher.hash(&init_memory_commit);

@@ -24,7 +24,7 @@ pub fn assert_or_assign_connector_pvs<C: Config>(
             // assert prev.final_pc == curr.initial_pc
             builder.assert_felt_eq(dst.final_pc, proof_pvs.initial_pc);
             // assert prev.is_terminate == 0
-            builder.assert_felt_eq(dst.is_terminate, C::F::zero());
+            builder.assert_felt_eq(dst.is_terminate, C::F::ZERO);
         },
     );
     // Update final_pc
@@ -103,9 +103,9 @@ pub fn assert_single_segment_vm_exit_successfully<C: Config>(
     let connector_pvs = get_connector_pvs(builder, proof);
     // FIXME: does single segment VM program always have pc_start = 0?
     // Start PC should be 0
-    builder.assert_felt_eq(connector_pvs.initial_pc, C::F::zero());
+    builder.assert_felt_eq(connector_pvs.initial_pc, C::F::ZERO);
     // Terminate should be 1
-    builder.assert_felt_eq(connector_pvs.is_terminate, C::F::one());
+    builder.assert_felt_eq(connector_pvs.is_terminate, C::F::ONE);
     // Exit code should be 0
-    builder.assert_felt_eq(connector_pvs.exit_code, C::F::zero());
+    builder.assert_felt_eq(connector_pvs.exit_code, C::F::ZERO);
 }

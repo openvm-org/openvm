@@ -41,11 +41,11 @@ pub(crate) fn eq_felt_slice<C: Config, const N: usize>(
 ) -> Var<C::N> {
     let sub_res: [Felt<C::F>; N] = array::from_fn(|i| builder.eval(lhs[i] - rhs[i]));
     let var_res = sub_res.map(|f| builder.cast_felt_to_var(f));
-    let ret: Var<C::N> = builder.eval(C::N::one());
+    let ret: Var<C::N> = builder.eval(C::N::ONE);
     var_res.into_iter().for_each(|v| {
         builder
-            .if_ne(v, C::N::zero())
-            .then(|builder| builder.assign(&ret, C::N::zero()))
+            .if_ne(v, C::N::ZERO)
+            .then(|builder| builder.assign(&ret, C::N::ZERO))
     });
     ret
 }
@@ -103,7 +103,7 @@ pub(crate) struct VariableP2Hasher<C: Config> {
 
 impl<C: Config> VariableP2Hasher<C> {
     pub fn new(builder: &mut Builder<C>) -> Self {
-        let const_zero: Felt<C::F> = builder.eval(C::F::zero());
+        let const_zero: Felt<C::F> = builder.eval(C::F::ZERO);
         let const_zeros = builder.array(DIGEST_SIZE);
         for i in 0..DIGEST_SIZE {
             builder.set_value(&const_zeros, i, const_zero);

@@ -140,9 +140,9 @@ impl RootVmVerifierConfig {
                 );
             });
             // App Program should terminate
-            builder.assert_felt_eq(merged_pvs.connector.is_terminate, F::one());
+            builder.assert_felt_eq(merged_pvs.connector.is_terminate, F::ONE);
             // App Program should exit successfully
-            builder.assert_felt_eq(merged_pvs.connector.exit_code, F::zero());
+            builder.assert_felt_eq(merged_pvs.connector.exit_code, F::ZERO);
 
             builder.assert_eq::<Usize<_>>(public_values.len(), RVar::from(self.num_public_values));
             let public_values_vec: Vec<Felt<F>> = (0..self.num_public_values)
