@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use ax_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
     prover::{
         helper::AirProofInputTestHelper,
@@ -9,13 +9,21 @@ use ax_stark_backend::{
     },
 };
 use axvm_instructions::{exe::AxVmExe, program::Program, SystemOpcode, UsizeOpcode};
+use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
+#[derive(Serialize, Deserialize, Derivative)]
+#[serde(bound(
+    serialize = "AxVmExe<Val<SC>>: Serialize, CommittedTraceData<SC>: Serialize",
+    deserialize = "AxVmExe<Val<SC>>: Deserialize<'de>, CommittedTraceData<SC>: Deserialize<'de>"
+))]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct AxVmCommittedExe<SC: StarkGenericConfig> {
     /// Raw executable.
     pub exe: AxVmExe<Val<SC>>,

@@ -16,7 +16,10 @@ use super::{
     instrument::{HashStatistics, Instrumented, StarkHashStatistics},
     FriParameters,
 };
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation};
+use crate::{
+    assert_sc_compatible_with_serde,
+    engine::{StarkEngine, StarkEngineWithHashInstrumentation},
+};
 
 const RATE: usize = 4;
 // permutation width
@@ -42,6 +45,8 @@ type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 pub type GoldilocksPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
 pub type GoldilocksPoseidonConfig = GoldilocksPermutationConfig<Perm>;
 pub type GoldilocksPoseidonEngine = GoldilocksPermutationEngine<Perm>;
+
+assert_sc_compatible_with_serde!(GoldilocksPoseidonConfig);
 
 pub struct GoldilocksPermutationEngine<P>
 where

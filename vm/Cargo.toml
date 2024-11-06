@@ -49,6 +49,8 @@ inferno = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
 eyre.workspace = true
+derivative.workspace = true
+static_assertions.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }

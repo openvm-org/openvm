@@ -1,9 +1,12 @@
 use std::{array, borrow::BorrowMut};
 
-use ax_stark_sdk::ax_stark_backend::{
-    config::{Com, StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::types::Proof,
+use ax_stark_sdk::{
+    ax_stark_backend::{
+        config::{Com, StarkGenericConfig, Val},
+        p3_field::PrimeField32,
+        prover::types::Proof,
+    },
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
 use axvm_circuit::circuit_derive::AlignedBorrow;
 use axvm_native_compiler::{
@@ -11,7 +14,8 @@ use axvm_native_compiler::{
     prelude::DIGEST_SIZE,
 };
 use derivative::Derivative;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use static_assertions::assert_impl_all;
 
 use crate::verifier::common::types::VmVerifierPvs;
 
@@ -36,6 +40,7 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
     /// The proofs of leaf verifier or internal verifier in the execution order.
     pub proofs: Vec<Proof<SC>>,
 }
+assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 impl<F: PrimeField32> InternalVmVerifierPvs<Felt<F>> {
     pub fn uninit<C: Config<F = F>>(builder: &mut Builder<C>) -> Self {

@@ -1,13 +1,17 @@
 use std::array;
 
-use ax_stark_sdk::ax_stark_backend::{
-    config::{Com, StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::types::Proof,
+use ax_stark_sdk::{
+    ax_stark_backend::{
+        config::{Com, StarkGenericConfig, Val},
+        p3_field::PrimeField32,
+        prover::types::Proof,
+    },
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
 use axvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
 use derivative::Derivative;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use static_assertions::assert_impl_all;
 
 #[derive(Debug)]
 pub struct RootVmVerifierPvs<T> {
@@ -29,6 +33,7 @@ pub struct RootVmVerifierInput<SC: StarkGenericConfig> {
     /// Public values to expose directly
     pub public_values: Vec<Val<SC>>,
 }
+assert_impl_all!(RootVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 impl<F: PrimeField32> RootVmVerifierPvs<Felt<F>> {
     pub fn uninit<C: Config<F = F>>(builder: &mut Builder<C>, num_public_values: usize) -> Self {

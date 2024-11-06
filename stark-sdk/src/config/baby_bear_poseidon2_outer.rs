@@ -22,7 +22,10 @@ use super::{
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation, StarkFriEngine};
+use crate::{
+    assert_sc_compatible_with_serde,
+    engine::{StarkEngine, StarkEngineWithHashInstrumentation, StarkFriEngine},
+};
 
 const WIDTH: usize = 3;
 /// Poseidon rate in F. <Poseidon RATE>(2) * <# of F in a N>(8) = 16
@@ -44,6 +47,8 @@ type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 pub type BabyBearPermutationOuterConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
 pub type BabyBearPoseidon2OuterConfig = BabyBearPermutationOuterConfig<Perm>;
 pub type BabyBearPoseidon2OuterEngine = BabyBearPermutationOuterEngine<Perm>;
+
+assert_sc_compatible_with_serde!(BabyBearPoseidon2OuterConfig);
 
 pub struct BabyBearPermutationOuterEngine<P>
 where

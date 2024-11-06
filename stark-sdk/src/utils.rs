@@ -45,3 +45,12 @@ macro_rules! any_rap_arc_vec {
         }
     };
 }
+
+#[macro_export]
+macro_rules! assert_sc_compatible_with_serde {
+    ($sc:ty) => {
+        static_assertions::assert_impl_all!(ax_stark_backend::keygen::types::MultiStarkProvingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_impl_all!(ax_stark_backend::keygen::types::MultiStarkVerifyingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_impl_all!(ax_stark_backend::prover::types::Proof<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+    };
+}

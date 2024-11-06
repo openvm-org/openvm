@@ -6,10 +6,15 @@ use super::{
     },
     FriParameters,
 };
-use crate::config::baby_bear_bytehash::BabyBearByteHashEngineWithDefaultHash;
+use crate::{
+    assert_sc_compatible_with_serde,
+    config::baby_bear_bytehash::BabyBearByteHashEngineWithDefaultHash,
+};
 
 pub type BabyBearBlake3Config = BabyBearByteHashConfig<Blake3>;
 pub type BabyBearBlake3Engine = BabyBearByteHashEngine<Blake3>;
+
+assert_sc_compatible_with_serde!(BabyBearBlake3Config);
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine(pcs_log_degree: usize) -> BabyBearBlake3Engine {
