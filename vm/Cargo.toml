@@ -77,7 +77,7 @@ hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["ax-stark-backend/parallel"]
+parallel = ["ax-stark-backend/parallel", "axvm-ecc/parallel"]
 test-utils = ["dep:ax-stark-sdk"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
