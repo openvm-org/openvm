@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
-use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
@@ -153,7 +152,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
         let air_proof_inputs = proof_input
             .per_air
-            // FIXME[zach]
+            // FIXME: parallelize
             .into_iter()
             .map(|(air_id, mut air_proof_input)| {
                 // Commit cached traces if they are not provided
@@ -163,7 +162,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
                     air_proof_input.cached_mains_pdata = air_proof_input
                         .raw
                         .cached_mains
-                        // FIXME[zach]
+                        // FIXME: parallelize
                         .iter()
                         .map(|trace| committer.commit(vec![trace.as_ref().clone()]))
                         .collect();

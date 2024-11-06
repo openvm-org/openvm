@@ -2,7 +2,6 @@ use itertools::{izip, Itertools};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, PackedChallenge, StarkGenericConfig, Val};
 use tracing::instrument;
 
@@ -11,7 +10,6 @@ use super::trace::SingleRapCommittedTraceView;
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
     config::{Com, PcsProverData},
-    parizip,
     rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 
@@ -70,7 +68,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         Com<SC>: Send + Sync,
     {
         let raps = raps.iter().map(|rap| rap.as_ref()).collect_vec();
-        let inner = // FIXME[zach]
+        let inner = // FIXME: parallelize
             izip!(raps, qvks, traces, public_values)
             .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
             .collect();
