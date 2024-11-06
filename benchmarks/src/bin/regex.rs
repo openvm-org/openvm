@@ -26,7 +26,7 @@ fn main() -> Result<()> {
                 FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
             );
 
-            let data = include_str!("regex_email.txt");
+            let data = include_str!("../../programs/regex/regex_email.txt");
 
             let fe_bytes = data
                 .to_owned()
