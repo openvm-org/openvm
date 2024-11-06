@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{hint::black_box, mem::transmute};
+use core::mem::transmute;
 
 use regex::Regex;
 
@@ -17,7 +17,6 @@ pub fn main() {
     let re = Regex::new(pattern).expect("Invalid regex");
 
     let caps = re.captures(data).expect("No match found.");
-    // black_box(caps);
     let email = caps.name("email").expect("No email found.");
     let email_hash = axvm::intrinsics::keccak256(email.as_str().as_bytes());
 

@@ -1,0 +1,14 @@
+[workspace]
+[package]
+version = "0.1.0"
+name = "axvm-json-program"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../../toolchain/riscv/axvm" }
+serde = { version = "1.0.214", default-features = false, features = ["derive"] }
+serde-json-core = "0.6.0"
+
+[features]
+default = []
+std = ["axvm/std"]

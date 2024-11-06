@@ -1,0 +1,13 @@
+[workspace]
+[package]
+version = "0.1.0"
+name = "axvm-base64-program"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../../toolchain/riscv/axvm" }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+
+[features]
+default = []
+std = ["axvm/std"]
