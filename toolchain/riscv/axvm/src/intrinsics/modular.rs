@@ -38,6 +38,13 @@ pub trait IntMod:
 {
     /// Underlying representation of IntMod.
     type Repr;
+    /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
+    type SelfRef<'a>: Add<&'a Self, Output = Self>
+        + Sub<&'a Self, Output = Self>
+        + Mul<&'a Self, Output = Self>
+        + Div<&'a Self, Output = Self>
+    where
+        Self: 'a;
 
     /// Index of IntMod::MODULUS.
     const MOD_IDX: usize;

@@ -358,6 +358,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                     impl IntMod for #struct_name {
                                         type Repr = [u8; #limbs];
+                                        type SelfRef<'a> = &'a Self;
 
                                         const MOD_IDX: usize = #mod_idx;
 
