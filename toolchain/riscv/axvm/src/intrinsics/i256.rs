@@ -28,6 +28,16 @@ pub struct I256 {
 }
 
 impl I256 {
+    /// The minimum value of an I256.
+    pub const MIN: Self = Self {
+        limbs: [i8::MIN as u8; 32],
+    };
+
+    /// The maximum value of an I256.
+    pub const MAX: Self = Self {
+        limbs: [i8::MAX as u8; 32],
+    };
+
     /// Value of this I256 as a BigInt.
     #[cfg(not(target_os = "zkvm"))]
     pub fn as_bigint(&self) -> BigInt {

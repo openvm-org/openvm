@@ -7,7 +7,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use {super::biguint_to_limbs, num_bigint_dig::BigUint};
+use {super::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom0Funct3, Int256Funct7, CUSTOM_0},
@@ -25,6 +25,14 @@ pub struct U256 {
 }
 
 impl U256 {
+    /// The maximum value of a U256.
+    pub const MAX: Self = Self {
+        limbs: [u8::MAX; 32],
+    };
+
+    /// The minimum value of a U256.
+    pub const MIN: Self = Self { limbs: [0u8; 32] };
+
     /// Value of this U256 as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
     pub fn as_biguint(&self) -> BigUint {
@@ -77,7 +85,7 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Sub as u8,
     -=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() - rhs.as_biguint()))}
+    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(U256::MAX.as_biguint() + BigUint::one() + lhs.as_biguint() - rhs.as_biguint()))}
 );
 
 impl_bin_op!(
