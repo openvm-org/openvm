@@ -41,3 +41,22 @@ pub trait ScalarMul<Fr: Field> {
     /// Scalar multiplication of an elliptic curve point by a scalar.
     fn scalar_mul(&self, s: Fr) -> Self;
 }
+
+pub trait EccBinOps<F: Field>: AffineCoords<F> {
+    /// Adds two elliptic curve points.
+    fn is_eq(&self, other: &Self) -> bool;
+
+    /// Adds two elliptic curve points.
+    fn add(&self, other: &Self) -> Self;
+
+    /// Subtracts two elliptic curve points.
+    fn sub(&self, other: &Self) -> Self {
+        self.add(&other.neg())
+    }
+
+    /// Doubles an elliptic curve point.
+    fn double(&self, other: &Self) -> Self;
+
+    /// Adds two elliptic curve points.
+    fn add_uneq(&self, other: &Self) -> Self;
+}

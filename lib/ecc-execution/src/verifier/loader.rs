@@ -4,19 +4,23 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use ax_ecc_lib::ec_msm::msm_axvm_C;
 use halo2curves_axiom::{
-    ff::{Field, PrimeField},
-    group::ScalarMul,
+    ff::PrimeField,
+    group::{Group, ScalarMul},
+    pairing::{MillerLoopResult, MultiMillerLoop},
     CurveAffine,
 };
 use lazy_static::lazy_static;
 use snark_verifier_sdk::snark_verifier::{
     loader::{EcPointLoader, Loader, ScalarLoader},
-    pcs::AccumulationDecider,
+    pcs::{
+        kzg::{KzgAccumulator, KzgAs, KzgDecidingKey},
+        AccumulationDecider,
+    },
     Error,
 };
 
 use super::traits::{AxVmEcPoint, AxVmScalar};
-use crate::common::{AffineCoords, FieldExtension, MultiMillerLoop};
+use crate::common::EccBinOps;
 
 lazy_static! {
     /// NativeLoader instance for [`LoadedEcPoint::loader`] and
@@ -24,7 +28,7 @@ lazy_static! {
     pub static ref LOADER: AxVmLoader = AxVmLoader;
 }
 
-pub trait AxVmCurve: CurveAffine + AffineCoords<Self::Base> + ScalarMul<Self> {}
+pub trait AxVmCurve: CurveAffine + ScalarMul<Self> + EccBinOps<Self::Base> {}
 
 /// `Loader` implementation in native rust.
 #[derive(Clone, Debug)]
@@ -48,7 +52,7 @@ impl<C: AxVmCurve> EcPointLoader<C> for AxVmLoader {
     type LoadedEcPoint = AxVmEcPoint<C>;
 
     fn ec_point_load_const(&self, value: &C) -> Self::LoadedEcPoint {
-        AxVmEcPoint(value.clone())
+        AxVmEcPoint(*value)
     }
 
     fn ec_point_assert_eq(
@@ -99,23 +103,18 @@ impl<C: AxVmCurve> Loader<C> for AxVmLoader {}
 #[derive(Clone, Debug)]
 pub struct AxVmKzgAs<M, MOS>(PhantomData<(M, MOS)>);
 
-impl<M, MOS, C: AxVmCurve, Fp, Fp2, Fp12, const BITS: usize> AccumulationDecider<C, AxVmLoader>
-    for AxVmKzgAs<M, MOS>
+impl<M: MultiMillerLoop, MOS> AccumulationDecider<M::G1Affine, AxVmLoader> for KzgAs<M, MOS>
 where
-    M: MultiMillerLoop<Fp, Fp2, Fp12, BITS>,
-    C: CurveAffine<ScalarExt = Fp>,
+    M::G1Affine: AxVmCurve + CurveAffine<ScalarExt = M::Fr, CurveExt = M::G1>,
     MOS: Clone + Debug,
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2>,
 {
     type DecidingKey = KzgDecidingKey<M>;
 
     fn decide(
         dk: &Self::DecidingKey,
-        KzgAccumulator { lhs, rhs }: KzgAccumulator<M::G1Affine, NativeLoader>,
+        KzgAccumulator { lhs, rhs }: KzgAccumulator<M::G1Affine, AxVmLoader>,
     ) -> Result<(), Error> {
-        let terms = [(&lhs, &dk.g2.into()), (&rhs, &(-dk.s_g2).into())];
+        let terms = [(&lhs.0, &dk.g2().into()), (&rhs.0, &(-dk.s_g2()).into())];
         bool::from(
             M::multi_miller_loop(&terms)
                 .final_exponentiation()
@@ -127,13 +126,13 @@ where
 
     fn decide_all(
         dk: &Self::DecidingKey,
-        accumulators: Vec<KzgAccumulator<M::G1Affine, NativeLoader>>,
+        accumulators: Vec<KzgAccumulator<M::G1Affine, AxVmLoader>>,
     ) -> Result<(), Error> {
         assert!(!accumulators.is_empty());
         accumulators
             .into_iter()
             .map(|accumulator| Self::decide(dk, accumulator))
-            .try_collect::<_, Vec<_>, _>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(())
     }
 }
