@@ -1,3 +1,5 @@
+#![feature(proc_macro_diagnostic)]
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
@@ -18,6 +20,39 @@ impl Parse for Stmts {
         }
         Ok(Stmts { stmts })
     }
+}
+
+fn string_to_bytes(s: &str) -> Vec<u8> {
+    if s.starts_with("0x") {
+        return s
+            .chars()
+            .skip(2)
+            .filter(|c| !c.is_whitespace())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .chunks(2)
+            .map(|ch| u8::from_str_radix(&ch.iter().rev().collect::<String>(), 16).unwrap())
+            .collect();
+    }
+    let mut digits = s
+        .chars()
+        .map(|c| c.to_digit(10).expect("Invalid numeric literal"))
+        .collect::<Vec<_>>();
+    let mut bytes = Vec::new();
+    while !digits.is_empty() {
+        let mut rem = 0u32;
+        let mut new_digits = Vec::new();
+        for &d in digits.iter() {
+            rem = rem * 10 + d;
+            new_digits.push(rem / 256);
+            rem %= 256;
+        }
+        digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
+        bytes.push(rem as u8);
+    }
+    bytes
 }
 
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
@@ -57,39 +92,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
         use axvm::intrinsics::biguint_to_limbs;
     }));
 
-    let string_to_bytes = |s: &str| {
-        if s.starts_with("0x") {
-            return s
-                .chars()
-                .skip(2)
-                .filter(|c| !c.is_whitespace())
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>()
-                .chunks(2)
-                .map(|ch| u8::from_str_radix(&ch.iter().rev().collect::<String>(), 16).unwrap())
-                .collect();
-        }
-        let mut digits = s
-            .chars()
-            .map(|c| c.to_digit(10).expect("Invalid numeric literal"))
-            .collect::<Vec<_>>();
-        let mut bytes = Vec::new();
-        while !digits.is_empty() {
-            let mut rem = 0u32;
-            let mut new_digits = Vec::new();
-            for &d in digits.iter() {
-                rem = rem * 10 + d;
-                new_digits.push(rem / 256);
-                rem %= 256;
-            }
-            digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
-            bytes.push(rem as u8);
-        }
-        bytes
-    };
-
     for stmt in stmts {
         let result: Result<TokenStream, &str> = match stmt.clone() {
             Stmt::Expr(expr, _) => {
@@ -105,13 +107,16 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 );
 
                                 let modulus_bytes = string_to_bytes(&str_lit.value());
-                                let limbs = modulus_bytes.len();
+                                let mut limbs = modulus_bytes.len();
 
-                                // TODO: remove this once we support better reads
-                                let limbs = limbs.max(32);
+                                if limbs < 32 {
+                                    limbs = 32;
+                                    proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+                                }
 
                                 // The largest power of two so that at most 10% of all space is wasted
-                                let block_size = (limbs / 9 + 1).next_power_of_two() / 2;
+                                let block_size =
+                                    1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
                                 let limbs = limbs.next_multiple_of(block_size);
                                 let modulus_bytes = modulus_bytes
                                     .into_iter()
@@ -189,7 +194,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -211,7 +216,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -232,7 +237,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -260,7 +265,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -317,7 +322,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize + Self::Output::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::AddMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -375,7 +380,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize + Self::Output::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::SubMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -433,7 +438,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize + Self::Output::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::MulMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -496,7 +501,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize + Self::Output::MOD_IDX * 8,
+                                                    ModArithBaseFunct7::DivMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -521,7 +526,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                         ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
                                                         opcode = const CUSTOM_1,
                                                         funct3 = const Custom1Funct3::ModularArithmetic as usize,
-                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * 8,
+                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                         rd = out(reg) x,
                                                         rs1 = in(reg) self as *const #struct_name,
                                                         rs2 = in(reg) other as *const #struct_name

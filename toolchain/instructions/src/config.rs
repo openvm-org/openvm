@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Struct to store the configuration parameters for custom enabled opcodes.
 /// These parameters are supplied by the front-end user **before** the program is compiled.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CustomOpConfig {
     /// Configuration parameters for custom opcodes used in intrinsics.
     pub intrinsics: IntrinsicsOpConfig,
@@ -10,7 +10,7 @@ pub struct CustomOpConfig {
 }
 
 /// Configuration parameters for the intrinsics opcodes.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct IntrinsicsOpConfig {
     pub field_arithmetic: FieldArithmeticOpConfig,
 }

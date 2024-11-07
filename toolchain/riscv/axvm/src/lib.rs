@@ -22,6 +22,7 @@ use core::arch::asm;
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;
+pub use axvm_setup_macro::*;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
@@ -156,5 +157,3 @@ fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     axvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }
-
-pub use axvm_setup_macro::*;

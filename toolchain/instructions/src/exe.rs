@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use p3_field::Field;
 
-use crate::{config::FieldArithmeticOpConfig, program::Program};
+use crate::{config::CustomOpConfig, program::Program};
 
 /// Memory image is a map from (address space, address) to word.
 pub type MemoryImage<F> = BTreeMap<(F, F), F>;
@@ -16,44 +16,35 @@ pub struct AxVmExe<F> {
     pub pc_start: u32,
     /// Initial memory image.
     pub init_memory: MemoryImage<F>,
-    /// Field arithmetic configuration.
-    pub field_arithmetic_config: FieldArithmeticOpConfig,
+    /// Custom operations configuration.
+    pub custom_op_config: CustomOpConfig,
 }
 
 impl<F> AxVmExe<F> {
-    pub fn new(
-        program: Program<F>,
-        pc_start: u32,
-        init_memory: MemoryImage<F>,
-        field_arithmetic_config: FieldArithmeticOpConfig,
-    ) -> Self {
-        Self {
-            program,
-            pc_start,
-            init_memory,
-            field_arithmetic_config,
-        }
-    }
-    pub fn new_simple(program: Program<F>) -> Self {
+    pub fn new(program: Program<F>) -> Self {
         Self {
             program,
             pc_start: 0,
             init_memory: BTreeMap::new(),
-            field_arithmetic_config: Default::default(),
+            custom_op_config: Default::default(),
         }
     }
-    pub fn new_without_mem(program: Program<F>, pc_start: u32) -> Self {
-        Self {
-            program,
-            pc_start,
-            init_memory: BTreeMap::new(),
-            field_arithmetic_config: Default::default(),
-        }
+    pub fn with_pc_start(mut self, pc_start: u32) -> Self {
+        self.pc_start = pc_start;
+        self
+    }
+    pub fn with_init_memory(mut self, init_memory: MemoryImage<F>) -> Self {
+        self.init_memory = init_memory;
+        self
+    }
+    pub fn with_custom_op_config(mut self, custom_op_config: CustomOpConfig) -> Self {
+        self.custom_op_config = custom_op_config;
+        self
     }
 }
 
 impl<F: Field> From<Program<F>> for AxVmExe<F> {
     fn from(program: Program<F>) -> Self {
-        Self::new_simple(program)
+        Self::new(program)
     }
 }

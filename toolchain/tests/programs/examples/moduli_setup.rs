@@ -12,13 +12,10 @@ pub fn main() {
     let x = bls12381::from_bytes(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
-    // TODO: enable this if we have MUL support
-    /*
     let y = Mod1e18::from_u32(100);
     let y = y.clone() * y.clone() * y.clone();
     let y = y.clone() * y.clone() * y.clone();
     assert_eq!(y + Mod1e18::from_u32(3), Mod1e18::ZERO);
-    */
 
     let mut res = Mersenne61::from_u32(1);
     for _ in 0..61 {
