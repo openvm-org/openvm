@@ -12,10 +12,11 @@ use axvm_instructions::{
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
+use serde::{Deserialize, Serialize};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompilerOptions {
     // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,

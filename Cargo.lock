@@ -472,6 +472,7 @@ version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
  "ax-stark-backend",
+ "axvm-instructions",
  "derive_more 0.99.18",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -499,6 +500,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "static_assertions",
  "toml",
  "tracing",
  "tracing-forest",
@@ -519,6 +521,7 @@ dependencies = [
  "p3-baby-bear",
  "serde",
  "serde_json",
+ "static_assertions",
 ]
 
 [[package]]
@@ -587,6 +590,7 @@ dependencies = [
  "axvm-instructions",
  "backtrace",
  "cfg-if",
+ "derivative",
  "derive-new",
  "derive_more 1.0.0",
  "enum-utils",
@@ -621,6 +625,7 @@ dependencies = [
  "rand_xoshiro",
  "rustc-hash 2.0.0",
  "serde",
+ "static_assertions",
  "strum",
  "strum_macros",
  "test-case",

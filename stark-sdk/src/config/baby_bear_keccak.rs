@@ -6,10 +6,15 @@ use super::{
     },
     FriParameters,
 };
-use crate::config::baby_bear_bytehash::BabyBearByteHashEngineWithDefaultHash;
+use crate::{
+    assert_sc_compatible_with_serde,
+    config::baby_bear_bytehash::BabyBearByteHashEngineWithDefaultHash,
+};
 
 pub type BabyBearKeccakConfig = BabyBearByteHashConfig<Keccak256Hash>;
 pub type BabyBearKeccakEngine = BabyBearByteHashEngine<Keccak256Hash>;
+
+assert_sc_compatible_with_serde!(BabyBearKeccakConfig);
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
 pub fn default_engine() -> BabyBearKeccakEngine {

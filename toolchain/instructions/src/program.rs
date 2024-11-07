@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt, fmt::Display};
 
 use itertools::Itertools;
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
 use crate::instruction::{DebugInfo, Instruction};
 
@@ -12,7 +13,7 @@ pub const DEFAULT_PC_STEP: u32 = 4;
 pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.

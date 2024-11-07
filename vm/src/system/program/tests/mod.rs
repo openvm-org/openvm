@@ -2,8 +2,12 @@ use std::{iter, sync::Arc};
 
 use ax_stark_backend::prover::types::AirProofInput;
 use ax_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+    },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    engine::StarkFriEngine,
 };
 use axvm_instructions::{
     instruction::Instruction,
@@ -12,6 +16,8 @@ use axvm_instructions::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use serde::{de::DeserializeOwned, Serialize};
+use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{
@@ -21,8 +27,11 @@ use crate::{
         },
         READ_INSTRUCTION_BUS,
     },
-    system::program::ProgramChip,
+    system::program::{trace::AxVmCommittedExe, ProgramChip},
 };
+
+assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2OuterConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();

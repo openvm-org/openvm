@@ -156,6 +156,7 @@ tempfile = "3.13.0"
 thiserror = "1.0.65"
 rustc-hash = "2.0.0"
 ff = { version = "0.13.0", default-features = false }
+static_assertions = "1.1.0"
 
 # cryptography
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
