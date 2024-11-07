@@ -8,6 +8,8 @@ on:
     paths:
       - "vm/**"
       - "toolchain/riscv/**"
+      - "toolchain/instructions/**"
+      - "toolchain/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
