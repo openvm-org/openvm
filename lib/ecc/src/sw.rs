@@ -81,7 +81,7 @@ impl EcPoint {
                 SwBaseFunct7::SwDouble as usize,
                 uninit.as_mut_ptr(),
                 p as *const EcPoint,
-                0
+                "x0"
             );
             unsafe { uninit.assume_init() }
         }
