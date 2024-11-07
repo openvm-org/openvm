@@ -11,6 +11,7 @@ use axvm_platform::{
 };
 
 #[derive(Eq, PartialEq, Clone)]
+#[repr(C, align(32))]
 pub struct EcPoint {
     pub x: IntModN,
     pub y: IntModN,
@@ -54,14 +55,14 @@ impl EcPoint {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            let mut uninit: MaybeUninit<EcPoint> = MaybeUninit::uninit();
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::ShortWeierstrass as usize,
                 SwBaseFunct7::SwAddNe as usize,
                 uninit.as_mut_ptr(),
-                self as *const IntModN,
-                other as *const IntModN
+                p1 as *const EcPoint,
+                p2 as *const EcPoint
             );
             unsafe { uninit.assume_init() }
         }

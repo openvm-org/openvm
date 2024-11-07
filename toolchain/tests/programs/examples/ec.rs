@@ -8,20 +8,30 @@ use hex_literal::hex;
 axvm::entry!(main);
 
 pub fn main() {
+    // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
+    // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
     let x1 = IntModN::from_u32(1);
     let y1 = IntModN::from_bytes(hex!(
-        "4218F20AE6C646B363DB68605822FB14264CA8D2587FDD6FBC750D587E76A7EE"
+        "EE7A67E785D057CBF6DDF7852D8AC46241BF22850686BD363B646C6EA02F8124"
     ));
-    let x2 = BigUint::from_u32(2).unwrap();
+    let x2 = IntModN::from_u32(2);
     let y2 = IntModN::from_bytes(hex!(
-        "990418D84D45F61F60A56728F5A10317BDB3A05BDA4425E3AEE079F8A847A8D1"
+        "1D8A748A8F970EEA3E5244ADB50A3BDB71301A5F82765A06F16F54D48D814099"
     ));
+    // This is the sum of (x1, y1) and (x2, y2).
     let x3 = IntModN::from_bytes(hex!(
-        "F23A2D865C24C99CC9E7B99BD907FB93EBD6CCCE106BCCCB0082ACF8315E67BE"
+        "EB76E5138FCA2800BCCCB601ECCC6DBE39BF709DB99B7E9CC99C42C568D2A32F"
     ));
     let y3 = IntModN::from_bytes(hex!(
-        "791DFC78B49C9B5882867776F18BA7883ED0BAE1C0A856D26D41D38FB47345B4"
+        "4B54374BF83D14D62D658A0C1EAB0DE3887AB81F6777682885B9C94B87CFD197"
     ));
 
-    // let p1 = ??
+    let p1 = EcPoint { x: x1, y: y1 };
+    let p2 = EcPoint { x: x2, y: y2 };
+
+    let p3 = EcPoint::add(&p1, &p2);
+
+    if p3.x != x3 {
+        axvm::process::panic();
+    }
 }
