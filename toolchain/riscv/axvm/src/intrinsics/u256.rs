@@ -16,7 +16,7 @@ use {
 };
 
 /// A 256-bit unsigned integer type.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 #[repr(align(32), C)]
 pub struct U256 {
     limbs: [u8; 32],
@@ -47,10 +47,7 @@ impl U256 {
     /// Creates a new U256 that equals to the given u32 value.
     pub fn from_u32(value: u32) -> Self {
         let mut limbs = [0u8; 32];
-        limbs[3] = (value >> 24) as u8;
-        limbs[2] = (value >> 16) as u8;
-        limbs[1] = (value >> 8) as u8;
-        limbs[0] = value as u8;
+        limbs[..4].copy_from_slice(&value.to_le_bytes());
         Self { limbs }
     }
 
@@ -604,7 +601,7 @@ impl PartialEq for U256 {
     fn eq(&self, other: &Self) -> bool {
         #[cfg(target_os = "zkvm")]
         {
-            let mut is_equal: u32 = 1;
+            let mut is_equal: u32;
             unsafe {
                 asm!("li {res}, 1",
                     ".insn b {opcode}, {func3}, {rs1}, {rs2}, 8",
@@ -635,28 +632,27 @@ impl Ord for U256 {
     fn cmp(&self, other: &Self) -> Ordering {
         #[cfg(target_os = "zkvm")]
         {
-            let mut is_less: u32 = 0;
+            let mut cmp_result = U256::alloc();
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
                 Int256Funct7::Sltu as u8,
-                &mut is_less as *mut u32,
+                &mut cmp_result as *mut U256,
                 self as *const Self,
                 other as *const Self
             );
-            if is_less == 1 {
+            if cmp_result.limbs[0] != 0 {
                 return Ordering::Less;
             }
-            let mut is_greater: u32 = 0;
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
                 Int256Funct7::Sltu as u8,
-                &mut is_greater as *mut u32,
+                &mut cmp_result as *mut U256,
                 other as *const Self,
                 self as *const Self
             );
-            if is_greater == 1 {
+            if cmp_result.limbs[0] != 0 {
                 return Ordering::Greater;
             }
             return Ordering::Equal;

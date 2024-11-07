@@ -2,13 +2,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm::{intrinsics::I256, io::print};
+use core::array;
 axvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
 
+pub fn get_matrix(val: i8) -> Matrix {
+    array::from_fn(|_| array::from_fn(|_| I256::from_i8(val)))
+}
+
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
-    let mut c = [[I256::from_i8(0); N]; N];
+    let mut c = get_matrix(0);
     for i in 0..N {
         for j in 0..N {
             for k in 0..N {
@@ -20,7 +25,7 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 }
 
 pub fn get_identity_matrix() -> Matrix {
-    let mut res = [[I256::from_i8(0); N]; N];
+    let mut res = get_matrix(0);
     for i in 0..N {
         res[i][i] = I256::from_i8(1);
     }
@@ -53,7 +58,7 @@ pub fn main() {
     let neg_one = I256::from_i8(-1);
     let zero = I256::from_i8(0);
 
-    let a: Matrix = [[neg_one; N]; N];
+    let a: Matrix = get_matrix(-1);
     let c = matrix_exp(a, I256::from_i8(51));
     let two_to_200 = &neg_one << &I256::from_i32(200);
 
