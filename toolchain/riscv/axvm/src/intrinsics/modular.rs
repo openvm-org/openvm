@@ -42,7 +42,7 @@ pub trait IntMod:
     /// Index of IntMod::MODULUS.
     const MOD_IDX: usize;
 
-    /// Modulus as an array of bytes.
+    /// Modulus as a Repr.
     const MODULUS: Self::Repr;
 
     /// The zero element (i.e. the additive identity).
@@ -51,19 +51,19 @@ pub trait IntMod:
     /// The one element (i.e. the multiplicative identity).
     const ONE: Self;
 
-    /// Creates a new IntMod an instance of Repr.
+    /// Creates a new IntMod from an instance of Repr.
     fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes.
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
-    /// Creates a new IntMod from a u32.
+    /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
 
     /// Creates a new IntMod from a u32.
     fn from_u32(val: u32) -> Self;
 
-    /// Creates a new IntMod from a u32.
+    /// Creates a new IntMod from a u64.
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes.
