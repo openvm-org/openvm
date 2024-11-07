@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::hint::black_box;
+
 use axvm_ecc::sw::{EcPoint, IntModN};
 use hex_literal::hex;
 
@@ -32,8 +34,8 @@ pub fn main() {
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let p1 = EcPoint { x: x1, y: y1 };
-    let p2 = EcPoint { x: x2, y: y2 };
+    let mut p1 = black_box(EcPoint { x: x1, y: y1 });
+    let mut p2 = black_box(EcPoint { x: x2, y: y2 });
 
     let p3 = EcPoint::add(&p1, &p2);
 
@@ -44,6 +46,16 @@ pub fn main() {
     let p4 = EcPoint::add(&p2, &p2);
 
     if p4.x != x4 || p4.y != y4 {
+        axvm::process::panic();
+    }
+
+    p1.add_ne_assign(&p2);
+    if p1.x != x3 || p1.y != y3 {
+        axvm::process::panic();
+    }
+
+    p2.double_assign();
+    if p2.x != x4 || p2.y != y4 {
         axvm::process::panic();
     }
 }
