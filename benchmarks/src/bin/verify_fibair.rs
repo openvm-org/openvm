@@ -18,7 +18,7 @@ use tracing::info_span;
 
 fn main() -> Result<()> {
     let app_log_blowup = 1;
-    let agg_log_blowup = 3;
+    let agg_log_blowup = 1;
 
     let n = 16; // STARK to calculate 16th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);

@@ -17,7 +17,7 @@ use tracing::info_span;
 fn main() -> Result<()> {
     // TODO[jpw]: benchmark different combinations
     let app_log_blowup = 1;
-    let agg_log_blowup = 3;
+    let agg_log_blowup = 1;
 
     let elf = build_bench_program("regex")?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
