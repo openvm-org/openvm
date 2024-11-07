@@ -1,13 +1,11 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(target_os = "zkvm", no_main)]
 
 extern crate alloc;
-extern crate revm;
 
 use revm::{
     db::InMemoryDB,
-    interpreter::opcode,
-    primitives::{hex, Bytes, ExecutionResult, Output, TxKind, U256},
+    primitives::{hex, Bytes, ExecutionResult, Output, TxKind},
     Evm,
 };
 
@@ -48,7 +46,7 @@ fn main() {
         })
         .build();
 
-    let result = evm.transact().unwrap();
+    let _result = evm.transact().unwrap();
     // let Some(storage0) = result
     //     .state
     //     .get(&address)
