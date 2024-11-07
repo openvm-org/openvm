@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn verify_single_rap_constraints<SC>(
     constraints: &[SymbolicExpression<Val<SC>>],
     preprocessed_values: Option<&AdjacentOpenedValues<SC::Challenge>>,

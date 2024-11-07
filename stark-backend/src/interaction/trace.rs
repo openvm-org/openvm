@@ -158,7 +158,7 @@ where
 
     // At this point, the trace matrix is complete except that the last column
     // has the row sum but not the partial sum
-    tracing::info_span!("compute logup partial sums").in_scope(|| {
+    tracing::trace_span!("compute logup partial sums").in_scope(|| {
         let mut phi = EF::ZERO;
         for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
             phi += *perm_chunk.last().unwrap();
