@@ -1,6 +1,14 @@
 axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
+#[cfg(target_os = "zkvm")]
+use core::mem::MaybeUninit;
+
+#[cfg(target_os = "zkvm")]
+use axvm_platform::{
+    constants::{Custom1Funct3, SwBaseFunct7, CUSTOM_1},
+    custom_insn_r,
+};
 
 #[derive(Eq, PartialEq, Clone)]
 pub struct EcPoint {
@@ -46,7 +54,16 @@ impl EcPoint {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwAddNe as usize,
+                uninit.as_mut_ptr(),
+                self as *const IntModN,
+                other as *const IntModN
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 
