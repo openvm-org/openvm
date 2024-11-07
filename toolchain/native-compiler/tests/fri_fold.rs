@@ -40,7 +40,7 @@ fn test_fri_fold() {
     let x: Ext<_, _> = builder.constant(x_value);
     let z: Ext<_, _> = builder.constant(z_value);
 
-    let cur_ro: Ext<_, _> = builder.constant(EF::zero());
+    let cur_ro: Ext<_, _> = builder.constant(EF::ZERO);
     let cur_alpha_pow: Ext<_, _> = builder.uninit();
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
     builder.range(0, ps_at_z.len()).for_each(|t, builder| {
@@ -58,9 +58,9 @@ fn test_fri_fold() {
     /*builder.print_e(expected_result);
     builder.print_e(expected_final_alpha_pow);
 
-    let two = builder.constant(F::two());
+    let two = builder.constant(F::TWO);
     builder.print_f(two);
-    let ext_1210 = builder.constant(EF::from_base_slice(&[F::one(), F::two(), F::one(), F::zero()]));
+    let ext_1210 = builder.constant(EF::from_base_slice(&[F::ONE, F::TWO, F::ONE, F::ZERO]));
     builder.print_e(ext_1210);*/
 
     let cur_alpha_pow: Ext<_, _> = builder.uninit();

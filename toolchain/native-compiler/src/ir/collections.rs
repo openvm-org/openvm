@@ -125,11 +125,11 @@ impl<C: Config, V: MemVariable<C>> Array<C, V> {
             Self::Dyn(ptr, len) => {
                 if builder.flags.debug {
                     let valid = builder.lt(start, end);
-                    builder.assert_var_eq(valid, C::N::one());
+                    builder.assert_var_eq(valid, C::N::ONE);
 
-                    let len_plus_1_v = SymbolicVar::from(len.clone()) + C::N::one();
+                    let len_plus_1_v = SymbolicVar::from(len.clone()) + C::N::ONE;
                     let valid = builder.lt(end, len_plus_1_v);
-                    builder.assert_var_eq(valid, C::N::one());
+                    builder.assert_var_eq(valid, C::N::ONE);
                 }
 
                 let slice_len = builder.eval(end - start);
@@ -194,7 +194,7 @@ impl<C: Config> Builder<C> {
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
                     let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::one());
+                    self.assert_var_eq(valid, C::N::ONE);
                 }
                 let index = MemIndex {
                     index,
@@ -223,7 +223,7 @@ impl<C: Config> Builder<C> {
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
                     let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::one());
+                    self.assert_var_eq(valid, C::N::ONE);
                 }
                 let index = MemIndex {
                     index,
@@ -251,7 +251,7 @@ impl<C: Config> Builder<C> {
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
                     let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::one());
+                    self.assert_var_eq(valid, C::N::ONE);
                 }
                 Ptr {
                     address: self.eval(
@@ -294,7 +294,7 @@ impl<C: Config> Builder<C> {
             Array::Dyn(ptr, len) => {
                 if self.flags.debug {
                     let valid = self.lt(index, len.clone());
-                    self.assert_var_eq(valid, C::N::one());
+                    self.assert_var_eq(valid, C::N::ONE);
                 }
                 let index = MemIndex {
                     index,

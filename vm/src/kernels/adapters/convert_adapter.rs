@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                 [
                     cols.a_pointer.into(),
                     cols.b_pointer.into(),
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     cols.a_as.into(),
                     cols.b_as.into(),
                 ],

@@ -11,7 +11,10 @@ use axvm_recursion::{
     types::InnerConfig,
 };
 
-use crate::verifier::leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof};
+use crate::verifier::{
+    leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+    utils,
+};
 
 #[derive(DslVariable, Clone)]
 pub struct UserPublicValuesRootProofVariable<const CHUNK: usize, C: Config> {
@@ -58,12 +61,12 @@ impl Hintable<C> for UserPublicValuesRootProof<F> {
     fn write(&self) -> Vec<Vec<<C as Config>::N>> {
         let len = <<C as Config>::N>::from_canonical_usize(self.sibling_hashes.len());
         let mut stream = len.write();
-        stream.extend(self.sibling_hashes.iter().flat_map(write_field_slice));
-        stream.extend(write_field_slice(&self.public_values_commit));
+        stream.extend(
+            self.sibling_hashes
+                .iter()
+                .flat_map(utils::write_field_slice),
+        );
+        stream.extend(utils::write_field_slice(&self.public_values_commit));
         stream
     }
-}
-
-fn write_field_slice(arr: &[F; DIGEST_SIZE]) -> Vec<Vec<<C as Config>::N>> {
-    arr.iter().flat_map(|x| x.write()).collect()
 }

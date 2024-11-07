@@ -94,7 +94,7 @@ where
             .iter()
             .skip(1)
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
             });
 

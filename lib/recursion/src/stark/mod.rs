@@ -554,11 +554,11 @@ where
         builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
-        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::zero());
-        let preprocessed_idx: Usize<_> = builder.eval(C::N::zero());
-        let cached_main_commit_idx: Usize<_> = builder.eval(C::N::zero());
-        let common_main_matrix_idx: Usize<_> = builder.eval(C::N::zero());
-        let air_idx: Usize<_> = builder.eval(C::N::zero());
+        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::ZERO);
+        let preprocessed_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let cached_main_commit_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let common_main_matrix_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let air_idx: Usize<_> = builder.eval(C::N::ZERO);
         let common_main_openings = builder.get(&opening.values.main, num_cached_mains);
 
         // Convert challenges into a fixed-shape array.
@@ -569,7 +569,7 @@ where
             .map(|(phase, &num_challenges_to_sample)| {
                 (0..num_challenges_to_sample)
                     .map(|i| {
-                        let challenge: Ext<_, _> = builder.constant(C::EF::zero());
+                        let challenge: Ext<_, _> = builder.constant(C::EF::ZERO);
                         builder
                             .if_eq(
                                 m_advice_var.num_challenges_to_sample_mask[phase][i].clone(),
@@ -850,7 +850,7 @@ where
             is_last_row: selectors.is_last_row,
             is_transition: selectors.is_transition,
             alpha,
-            accumulator: SymbolicExt::zero(),
+            accumulator: SymbolicExt::ZERO,
             public_values,
             exposed_values_after_challenge, // FIXME
             _marker: PhantomData,
@@ -907,7 +907,7 @@ fn assert_cumulative_sums<C: Config>(
     air_proofs: &Array<C, AirProofDataVariable<C>>,
     num_challenges_to_sample: &Array<C, Usize<C::N>>,
 ) {
-    let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::zero());
+    let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
     // Currently only support 0 or 1 phase is supported.
     let num_phase = num_challenges_to_sample.len();
     builder.if_eq(num_phase, RVar::one()).then(|builder| {
@@ -930,5 +930,5 @@ fn assert_cumulative_sums<C: Config>(
         });
     });
 
-    builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
+    builder.assert_ext_eq(cumulative_sum, C::EF::ZERO.cons());
 }

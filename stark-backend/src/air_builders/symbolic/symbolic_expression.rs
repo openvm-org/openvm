@@ -114,7 +114,7 @@ impl<F: Field> SymbolicExpression<F> {
 
 impl<F: Field> Default for SymbolicExpression<F> {
     fn default() -> Self {
-        Self::Constant(F::zero())
+        Self::Constant(F::ZERO)
     }
 }
 
@@ -127,18 +127,10 @@ impl<F: Field> From<F> for SymbolicExpression<F> {
 impl<F: Field> AbstractField for SymbolicExpression<F> {
     type F = F;
 
-    fn zero() -> Self {
-        Self::Constant(F::zero())
-    }
-    fn one() -> Self {
-        Self::Constant(F::one())
-    }
-    fn two() -> Self {
-        Self::Constant(F::two())
-    }
-    fn neg_one() -> Self {
-        Self::Constant(F::neg_one())
-    }
+    const ZERO: Self = Self::Constant(F::ZERO);
+    const ONE: Self = Self::Constant(F::ONE);
+    const TWO: Self = Self::Constant(F::TWO);
+    const NEG_ONE: Self = Self::Constant(F::NEG_ONE);
 
     #[inline]
     fn from_f(f: Self::F) -> Self {
@@ -175,10 +167,6 @@ impl<F: Field> AbstractField for SymbolicExpression<F> {
 
     fn from_wrapped_u64(n: u64) -> Self {
         Self::Constant(F::from_wrapped_u64(n))
-    }
-
-    fn generator() -> Self {
-        Self::Constant(F::generator())
     }
 }
 
@@ -217,7 +205,7 @@ impl<F: Field> AddAssign<F> for SymbolicExpression<F> {
 
 impl<F: Field> Sum for SymbolicExpression<F> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.reduce(|x, y| x + y).unwrap_or(Self::zero())
+        iter.reduce(|x, y| x + y).unwrap_or(Self::ZERO)
     }
 }
 
@@ -308,7 +296,7 @@ impl<F: Field> MulAssign<F> for SymbolicExpression<F> {
 
 impl<F: Field> Product for SymbolicExpression<F> {
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.reduce(|x, y| x * y).unwrap_or(Self::one())
+        iter.reduce(|x, y| x * y).unwrap_or(Self::ONE)
     }
 }
 

@@ -34,7 +34,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
         final_state: ExecutionState<u32>,
     ) {
         self.records.push(DummyExecutionInteractionCols {
-            count: F::neg_one(), // send
+            count: F::NEG_ONE, // send
             initial_state: initial_state.map(F::from_canonical_u32),
             final_state: final_state.map(F::from_canonical_u32),
         })
@@ -61,7 +61,7 @@ where
         let air = self.air();
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
-        let mut values = vec![Val::<SC>::zero(); height * width];
+        let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
         for (row, record) in values.chunks_mut(width).zip(self.records) {

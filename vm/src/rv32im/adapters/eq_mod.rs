@@ -135,7 +135,7 @@ impl<
         // a range check on the highest limb.
         let rs_val_f = cols.rs_val.map(|decomp| {
             // TODO: range check
-            decomp.iter().rev().fold(AB::Expr::zero(), |acc, &limb| {
+            decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
                 acc * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS) + limb
             })
         });
@@ -144,7 +144,7 @@ impl<
             if i < NUM_READS {
                 cols.rs_val[i][RV32_REGISTER_NUM_LIMBS - 1].into()
             } else {
-                AB::Expr::zero()
+                AB::Expr::ZERO
             }
         });
 
@@ -200,11 +200,11 @@ impl<
                     cols.rs_ptr
                         .first()
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.rs_ptr
                         .get(1)
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     d.into(),
                     e.into(),
                 ],

@@ -107,7 +107,6 @@ pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
 ) -> ExecuteAndProveResult<SC>
 where
     Val<SC>: PrimeField32,
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,

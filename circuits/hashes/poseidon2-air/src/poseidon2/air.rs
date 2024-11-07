@@ -106,7 +106,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
 
     // TODO: add back custom implementations for faster trace generation
     pub(crate) fn ext_lin_layer<T: AbstractField + From<F>>(&self, input: &mut [T; WIDTH]) {
-        let mut new_state: [T; WIDTH] = core::array::from_fn(|_| T::zero());
+        let mut new_state: [T; WIDTH] = core::array::from_fn(|_| T::ZERO);
         for i in (0..WIDTH).step_by(4) {
             for index1 in 0..4 {
                 for index2 in 0..4 {
@@ -161,7 +161,7 @@ impl<const WIDTH: usize, F: AbstractField> Poseidon2Air<WIDTH, F> {
             .map(|round| round[0])
             .collect();
         let horizen_int_diag: [BabyBear; 16] = {
-            let mut array = [BabyBear::zero(); 16];
+            let mut array = [BabyBear::ZERO; 16];
             for (i, elem) in MAT_DIAG16_M_1.iter().enumerate() {
                 array[i] = BabyBear::from_canonical_u32(elem.into_bigint().0[0] as u32);
             }
@@ -316,14 +316,14 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
 
         if intermediate_power.is_some() {
             // Ensuring that intermediate_power is value^self.max_constraint_degree
-            let mut val_p = AB::Expr::one();
+            let mut val_p = AB::Expr::ONE;
             for _ in 0..self.max_constraint_degree {
                 val_p *= value.clone();
             }
             builder.assert_eq(val_p, intermediate_power.clone().unwrap());
         }
 
-        let mut ret = AB::Expr::one();
+        let mut ret = AB::Expr::ONE;
         for _ in 0..(SBOX_DEGREE - 1) / self.max_constraint_degree {
             ret *= intermediate_power.clone().unwrap();
         }

@@ -205,7 +205,7 @@ impl KeccakVmAir {
             .sponge
             .is_padding_byte
             .iter()
-            .fold(AB::Expr::zero(), |a, &b| a + b);
+            .fold(AB::Expr::ZERO, |a, &b| a + b);
 
         // If final rate block of input, then last byte must be padding
         let is_final_block = is_padding_byte[KECCAK_RATE_BYTES - 1];
@@ -423,7 +423,7 @@ impl KeccakVmAir {
             instruction.src_ptr,
             instruction.len_ptr,
         ];
-        let reg_addr_sp = AB::F::one();
+        let reg_addr_sp = AB::F::ONE;
         let timestamp_change: AB::Expr = Self::timestamp_change(instruction.remaining_len);
         self.execution_bridge
             .execute_and_increment_pc(
@@ -477,7 +477,7 @@ impl KeccakVmAir {
                 )
                 .eval(builder, should_receive.clone());
 
-            timestamp += AB::Expr::one();
+            timestamp += AB::Expr::ONE;
         }
         // See Rv32VecHeapAdapterAir
         // TODO[jpw]: reduce code duplication
@@ -566,7 +566,7 @@ impl KeccakVmAir {
                 )
                 .eval(builder, count);
 
-            timestamp += AB::Expr::one();
+            timestamp += AB::Expr::ONE;
         }
         timestamp
     }

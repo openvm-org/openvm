@@ -102,7 +102,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
                 [
                     cols.a_pointer.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     cols.a_as.into(),
                 ],
                 cols.from_state,

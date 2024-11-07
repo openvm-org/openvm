@@ -79,7 +79,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
                 AB::Expr::from_canonical_usize(self.phantom_opcode),
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
-                AB::Expr::one(),
+                AB::Expr::ONE,
                 PcIncOrSet::Inc(AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)),
             )
             .eval(builder, is_valid);
@@ -156,7 +156,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     );
                     // Extend by 0 for 4 byte alignment
                     let capacity = hint.len().div_ceil(4) * 4;
-                    hint.resize(capacity, F::zero());
+                    hint.resize(capacity, F::ZERO);
                     streams.hint_stream.extend(hint);
                 } else {
                     streams
@@ -190,7 +190,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     let bytes = (0..rs1)
                         .map(|i| -> eyre::Result<u8> {
                             let val =
-                                memory.unsafe_read_cell(F::two(), F::from_canonical_u32(rd + i));
+                                memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd + i));
                             let byte: u8 = val.as_canonical_u32().try_into()?;
                             Ok(byte)
                         })
@@ -214,7 +214,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             pc: F::from_canonical_u32(from_state.pc),
             operands: [a, b, c],
             timestamp: F::from_canonical_u32(from_state.timestamp),
-            is_valid: F::one(),
+            is_valid: F::ONE,
         });
         RefCell::borrow_mut(&self.memory).increment_timestamp();
         Ok(ExecutionState::new(
@@ -254,7 +254,7 @@ where
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let correct_height = self.rows.len().next_power_of_two();
         let width = PhantomCols::<Val<SC>>::width();
-        let mut rows = vec![Val::<SC>::zero(); width * correct_height];
+        let mut rows = Val::<SC>::zero_vec(width * correct_height);
         rows.par_chunks_mut(width)
             .zip(&self.rows)
             .for_each(|(row, row_record)| {

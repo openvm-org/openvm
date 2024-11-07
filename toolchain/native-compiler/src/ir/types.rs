@@ -140,7 +140,7 @@ impl<F> Felt<F> {
     where
         F: Field,
     {
-        SymbolicFelt::<F>::one() / *self
+        SymbolicFelt::<F>::ONE / *self
     }
 }
 
@@ -162,7 +162,7 @@ impl<F, EF> Ext<F, EF> {
         F: Field,
         EF: ExtensionField<F>,
     {
-        SymbolicExt::<F, EF>::one() / *self
+        SymbolicExt::<F, EF>::ONE / *self
     }
 }
 
@@ -232,9 +232,7 @@ impl<N: Field> Var<N> {
         cache: &mut HashMap<SymbolicVar<N>, Self>,
     ) {
         if let Some(v) = cache.get(&src) {
-            builder
-                .operations
-                .push(DslIr::AddVI(*self, *v, C::N::zero()));
+            builder.operations.push(DslIr::AddVI(*self, *v, C::N::ZERO));
             return;
         }
         match src {
@@ -242,9 +240,7 @@ impl<N: Field> Var<N> {
                 builder.operations.push(DslIr::ImmV(*self, c));
             }
             SymbolicVar::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddVI(*self, v, C::N::zero()));
+                builder.operations.push(DslIr::AddVI(*self, v, C::N::ZERO));
             }
             SymbolicVar::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicVar::Const(lhs, _), SymbolicVar::Const(rhs, _)) => {
@@ -392,13 +388,13 @@ impl<N: Field> Var<N> {
                     builder.push(DslIr::ImmV(*self, negated));
                 }
                 SymbolicVar::Val(operand, _) => {
-                    builder.push(DslIr::SubVIN(*self, C::N::zero(), *operand));
+                    builder.push(DslIr::SubVIN(*self, C::N::ZERO, *operand));
                 }
                 operand => {
                     let operand_value = Self::uninit(builder);
                     operand_value.assign_with_cache(operand.clone(), builder, cache);
                     cache.insert(operand.clone(), operand_value);
-                    builder.push(DslIr::SubVIN(*self, C::N::zero(), operand_value));
+                    builder.push(DslIr::SubVIN(*self, C::N::ZERO, operand_value));
                 }
             },
         }
@@ -550,9 +546,7 @@ impl<F: Field> Felt<F> {
         cache: &mut HashMap<SymbolicFelt<F>, Self>,
     ) {
         if let Some(v) = cache.get(&src) {
-            builder
-                .operations
-                .push(DslIr::AddFI(*self, *v, C::F::zero()));
+            builder.operations.push(DslIr::AddFI(*self, *v, C::F::ZERO));
             return;
         }
         match src {
@@ -560,9 +554,7 @@ impl<F: Field> Felt<F> {
                 builder.operations.push(DslIr::ImmF(*self, c));
             }
             SymbolicFelt::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddFI(*self, v, C::F::zero()));
+                builder.operations.push(DslIr::AddFI(*self, v, C::F::ZERO));
             }
             SymbolicFelt::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicFelt::Const(lhs, _), SymbolicFelt::Const(rhs, _)) => {
@@ -762,13 +754,13 @@ impl<F: Field> Felt<F> {
                     builder.push(DslIr::ImmF(*self, negated));
                 }
                 SymbolicFelt::Val(operand, _) => {
-                    builder.push(DslIr::SubFIN(*self, C::F::zero(), *operand));
+                    builder.push(DslIr::SubFIN(*self, C::F::ZERO, *operand));
                 }
                 operand => {
                     let operand_value = Self::uninit(builder);
                     operand_value.assign_with_cache(operand.clone(), builder, cache);
                     cache.insert(operand.clone(), operand_value);
-                    builder.push(DslIr::SubFIN(*self, C::F::zero(), operand_value));
+                    builder.push(DslIr::SubFIN(*self, C::F::ZERO, operand_value));
                 }
             },
         }
@@ -895,7 +887,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
         if let Some(v) = ext_cache.get(&src) {
             builder
                 .operations
-                .push(DslIr::AddEI(*self, *v, C::EF::zero()));
+                .push(DslIr::AddEI(*self, *v, C::EF::ZERO));
             return;
         }
         match src {
@@ -908,21 +900,19 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 SymbolicFelt::Val(v, _) => {
                     builder
                         .operations
-                        .push(DslIr::AddEFFI(*self, *v, C::EF::zero()));
+                        .push(DslIr::AddEFFI(*self, *v, C::EF::ZERO));
                 }
                 v => {
                     let v_value = Felt::uninit(builder);
                     v_value.assign(v.clone(), builder);
-                    builder.push(DslIr::AddEFFI(*self, v_value, C::EF::zero()));
+                    builder.push(DslIr::AddEFFI(*self, v_value, C::EF::ZERO));
                 }
             },
             SymbolicExt::Const(c, _) => {
                 builder.operations.push(DslIr::ImmE(*self, c));
             }
             SymbolicExt::Val(v, _) => {
-                builder
-                    .operations
-                    .push(DslIr::AddEI(*self, v, C::EF::zero()));
+                builder.operations.push(DslIr::AddEI(*self, v, C::EF::ZERO));
             }
             SymbolicExt::Add(lhs, rhs, _) => match (&*lhs, &*rhs) {
                 (SymbolicExt::Const(lhs, _), SymbolicExt::Const(rhs, _)) => {

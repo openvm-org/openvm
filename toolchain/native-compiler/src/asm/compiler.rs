@@ -79,7 +79,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             contains_break: BTreeSet::new(),
             function_labels: BTreeMap::new(),
             break_counter: 0,
-            trap_label: F::one(),
+            trap_label: F::ONE,
             word_size,
         }
     }
@@ -100,7 +100,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             let heap_start = F::from_canonical_u32(HEAP_START_ADDRESS as u32);
             self.push(AsmInstruction::ImmF(HEAP_PTR, heap_start), None);
             // Jump over the TRAP instruction we are about to add.
-            self.push(AsmInstruction::j(self.trap_label + F::one()), None);
+            self.push(AsmInstruction::j(self.trap_label + F::ONE), None);
             self.basic_block();
             // Add a TRAP instruction used as jump destination for all failed assertions.
             assert_eq!(self.block_label(), self.trap_label);
@@ -188,13 +188,13 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 }
                 DslIr::NegV(dst, src) => {
                     self.push(
-                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()),
+                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::NEG_ONE),
                         debug_info,
                     );
                 }
                 DslIr::NegF(dst, src) => {
                     self.push(
-                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::neg_one()),
+                        AsmInstruction::MulFI(dst.fp(), src.fp(), F::NEG_ONE),
                         debug_info,
                     );
                 }
@@ -249,7 +249,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_ext_exti(dst, lhs, rhs.neg(), debug_info);
                 }
                 DslIr::NegE(dst, src) => {
-                    self.mul_ext_felti(dst, src, F::neg_one(), debug_info);
+                    self.mul_ext_felti(dst, src, F::NEG_ONE, debug_info);
                 }
                 DslIr::MulV(dst, lhs, rhs) => {
                     self.push(
@@ -657,7 +657,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     // mem[dst] <- mem[src] + c * mem[val]
     // assumes dst != src
     fn add_scaled(&mut self, dst: i32, src: i32, val: i32, c: F, debug_info: Option<DebugInfo>) {
-        if c == F::one() {
+        if c == F::ONE {
             self.push(AsmInstruction::AddF(dst, src, val), debug_info);
         } else {
             self.push(AsmInstruction::MulFI(dst, val, c), debug_info.clone());

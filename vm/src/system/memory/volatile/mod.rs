@@ -100,7 +100,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         let lt_io = IsLtArrayIo {
             x: [local.addr_space, local.pointer].map(Into::into),
             y: [next.addr_space, next.pointer].map(Into::into),
-            out: AB::Expr::one(),
+            out: AB::Expr::ONE,
             count: next.is_valid.into(),
         };
         // N.B.: this will do range checks (but not other constraints) on the last row if the first row has is_valid = 1 due to wraparound
@@ -112,7 +112,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
             .send(
                 MemoryAddress::new(local.addr_space, local.pointer),
                 vec![local.initial_data],
-                AB::Expr::zero(),
+                AB::Expr::ZERO,
             )
             .eval(builder, local.is_valid);
 
@@ -190,7 +190,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         let sorted_final_memory: Vec<_> = final_memory.iter().collect();
         assert!(sorted_final_memory.len() <= trace_height);
 
-        let mut rows = vec![F::zero(); trace_height * width];
+        let mut rows = F::zero_vec(trace_height * width);
         rows.par_chunks_mut(width)
             .zip(&sorted_final_memory)
             .enumerate()
@@ -200,15 +200,15 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
                 let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
                 row.addr_space = *addr_space;
                 row.pointer = F::from_canonical_usize(*ptr);
-                row.initial_data = F::zero();
+                row.initial_data = F::ZERO;
                 row.final_data = data;
                 row.final_timestamp = F::from_canonical_u32(timestamped_values.timestamp);
-                row.is_valid = F::one();
+                row.is_valid = F::ONE;
 
                 // If next.is_valid == 1:
                 if i != sorted_final_memory.len() - 1 {
                     let (next_addr_space, next_ptr) = *sorted_final_memory[i + 1].0;
-                    let mut out = F::zero();
+                    let mut out = F::ZERO;
                     self.air.addr_lt_air.0.generate_subrow(
                         (
                             &self.range_checker,
@@ -217,18 +217,18 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
                         ),
                         ((&mut row.addr_lt_aux).into(), &mut out),
                     );
-                    debug_assert_eq!(out, F::one(), "Addresses are not sorted");
+                    debug_assert_eq!(out, F::ONE, "Addresses are not sorted");
                 }
             });
         // Always do a dummy range check on the last row due to wraparound
         if !sorted_final_memory.is_empty() {
-            let mut out = F::zero();
+            let mut out = F::ZERO;
             let row: &mut VolatileBoundaryCols<_> = rows[width * (trace_height - 1)..].borrow_mut();
             self.air.addr_lt_air.0.generate_subrow(
                 (
                     &self.range_checker,
-                    &[F::zero(), F::zero()],
-                    &[F::zero(), F::zero()],
+                    &[F::ZERO, F::ZERO],
+                    &[F::ZERO, F::ZERO],
                 ),
                 ((&mut row.addr_lt_aux).into(), &mut out),
             );

@@ -270,7 +270,7 @@ fn overflow_negative_tests() {
         None,
         None,
         Some([
-            (F::neg_one() * F::from_canonical_u32((1 << 14) + 1)).as_canonical_u32(),
+            (F::NEG_ONE * F::from_canonical_u32((1 << 14) + 1)).as_canonical_u32(),
             1,
         ]),
         None,

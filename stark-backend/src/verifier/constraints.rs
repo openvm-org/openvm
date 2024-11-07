@@ -121,7 +121,7 @@ where
         is_last_row: sels.is_last_row,
         is_transition: sels.is_transition,
         alpha,
-        accumulator: SC::Challenge::zero(),
+        accumulator: SC::Challenge::ZERO,
         challenges,
         public_values,
         exposed_values_after_challenge,

@@ -184,7 +184,7 @@ impl BabyBearChip {
     }
 
     pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: AssignedBabyBear) {
-        debug_assert_eq!(a.to_baby_bear(), BabyBear::zero());
+        debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
         assert!(a.max_bits < Fr::CAPACITY as usize);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, BabyBear::ORDER_U32, a.max_bits);
         self.gate().assert_is_const(ctx, &r, &Fr::ZERO);
@@ -403,7 +403,7 @@ impl BabyBearExt4Chip {
         }
         let w = self
             .base
-            .load_constant(ctx, <BabyBear as BinomiallyExtendable<4>>::w());
+            .load_constant(ctx, <BabyBear as BinomiallyExtendable<4>>::W);
         for i in 4..7 {
             let tmp = self.base.mul(ctx, coeffs[i], w);
             coeffs[i - 4] = self.base.add(ctx, coeffs[i - 4], tmp);

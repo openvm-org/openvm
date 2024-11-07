@@ -1,6 +1,6 @@
 use axvm_native_compiler::prelude::*;
 use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
-use p3_field::{AbstractField, TwoAdicField};
+use p3_field::{AbstractField, Field, TwoAdicField};
 
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
@@ -66,12 +66,12 @@ where
         point: Ext<<C as Config>::F, <C as Config>::EF>,
     ) -> LagrangeSelectors<Ext<<C as Config>::F, <C as Config>::EF>> {
         let unshifted_point: Ext<_, _> = builder.eval(point * self.shift.inverse());
-        let z_h_expr = builder.exp_power_of_2_v::<Ext<_, _>>(unshifted_point, self.log_n.clone())
-            - C::EF::one();
+        let z_h_expr =
+            builder.exp_power_of_2_v::<Ext<_, _>>(unshifted_point, self.log_n.clone()) - C::EF::ONE;
         let z_h: Ext<_, _> = builder.eval(z_h_expr);
 
         LagrangeSelectors {
-            is_first_row: builder.eval(z_h / (unshifted_point - C::EF::one())),
+            is_first_row: builder.eval(z_h / (unshifted_point - C::EF::ONE)),
             is_last_row: builder.eval(z_h / (unshifted_point - self.gen().inverse())),
             is_transition: builder.eval(unshifted_point - self.gen().inverse()),
             inv_zeroifier: builder.eval(z_h.inverse()),
@@ -85,7 +85,7 @@ where
     ) -> Ext<<C as Config>::F, <C as Config>::EF> {
         let unshifted_power =
             builder.exp_power_of_2_v::<Ext<_, _>>(point * self.shift.inverse(), self.log_n.clone());
-        builder.eval(unshifted_power - C::EF::one())
+        builder.eval(unshifted_power - C::EF::ONE)
     }
 
     fn split_domains(
@@ -102,7 +102,7 @@ where
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
 
-        let domain_power: Felt<_> = builder.eval(C::F::one());
+        let domain_power: Felt<_> = builder.eval(C::F::ONE);
 
         let domains = builder.array(num_chunks);
 
@@ -132,7 +132,7 @@ where
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
 
-        let domain_power: Felt<_> = builder.eval(C::F::one());
+        let domain_power: Felt<_> = builder.eval(C::F::ONE);
         let mut domains = vec![];
 
         for _ in 0..num_chunks {
@@ -157,7 +157,7 @@ where
         TwoAdicMultiplicativeCosetVariable {
             log_n: domain.log_n,
             size: domain.size,
-            shift: builder.eval(self.shift * C::F::generator()),
+            shift: builder.eval(self.shift * C::F::GENERATOR),
             g: domain.g,
         }
     }
@@ -220,7 +220,7 @@ pub(crate) mod tests {
 
         let mut rng = thread_rng();
         let fri_params = FriParameters::standard_fast();
-        let config = config_from_perm(&default_perm(), 27, fri_params);
+        let config = config_from_perm(&default_perm(), fri_params);
         let pcs = config.pcs();
         let natural_domain_for_degree = |degree: usize| -> Domain<SC> {
             <ScPcs as Pcs<EF, Challenger>>::natural_domain_for_degree(pcs, degree)

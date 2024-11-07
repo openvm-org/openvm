@@ -1,7 +1,12 @@
-use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 #[cfg(target_os = "zkvm")]
-use core::{borrow::BorrowMut, mem::MaybeUninit};
+use core::mem::MaybeUninit;
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
+#[cfg(target_os = "zkvm")]
+use axvm_platform::{
+    constants::{Custom1Funct3, ModArithBaseFunct7, CUSTOM_1},
+    custom_insn_r,
+};
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::{traits::ModInverse, BigUint, Sign, ToBigInt};
@@ -19,7 +24,7 @@ pub struct IntModN([u8; LIMBS]);
 
 impl IntModN {
     const MODULUS: [u8; LIMBS] =
-        hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+        hex!("2FFCFFFF FEFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF");
     const _MOD_IDX: usize = 0;
 
     /// The zero element of the field.
@@ -30,9 +35,21 @@ impl IntModN {
         Self(bytes)
     }
 
+    /// Creates a new IntModN from a u32.
+    pub fn from_u32(val: u32) -> Self {
+        let mut bytes = [0; LIMBS];
+        bytes[..4].copy_from_slice(&val.to_le_bytes());
+        Self(bytes)
+    }
+
     /// Value of this IntModN as an array of bytes.
     pub fn as_bytes(&self) -> &[u8; LIMBS] {
         &(self.0)
+    }
+
+    /// Returns MODULUS as an array of bytes.
+    pub fn modulus() -> [u8; LIMBS] {
+        Self::MODULUS
     }
 
     /// Creates a new IntModN from a BigUint.
@@ -50,7 +67,7 @@ impl IntModN {
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
     pub fn modulus_biguint() -> BigUint {
-        BigUint::from_bytes_be(&Self::MODULUS)
+        BigUint::from_bytes_le(&Self::MODULUS)
     }
 
     #[inline(always)]
@@ -63,7 +80,14 @@ impl IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::AddMod as usize,
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
@@ -78,7 +102,14 @@ impl IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::SubMod as usize,
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
@@ -92,7 +123,14 @@ impl IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::MulMod as usize,
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
@@ -113,7 +151,14 @@ impl IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::DivMod as usize,
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 }
@@ -163,11 +208,15 @@ impl<'a> Add<&'a IntModN> for &IntModN {
         #[cfg(target_os = "zkvm")]
         {
             let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
-            let ptr: *mut IntModN = uninit.as_mut_ptr();
-            unsafe {
-                *ptr = todo!();
-                uninit.assume_init()
-            }
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::AddMod as usize,
+                uninit.as_mut_ptr(),
+                self as *const IntModN,
+                other as *const IntModN
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
@@ -216,7 +265,16 @@ impl<'a> Sub<&'a IntModN> for &IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::SubMod as usize,
+                uninit.as_mut_ptr(),
+                self as *const IntModN,
+                other as *const IntModN
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
@@ -265,7 +323,16 @@ impl<'a> Mul<&'a IntModN> for &IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::MulMod as usize,
+                uninit.as_mut_ptr(),
+                self as *const IntModN,
+                other as *const IntModN
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
@@ -319,7 +386,16 @@ impl<'a> Div<&'a IntModN> for &IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<IntModN> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ModularArithmetic as usize,
+                ModArithBaseFunct7::DivMod as usize,
+                uninit.as_mut_ptr(),
+                self as *const IntModN,
+                other as *const IntModN
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
@@ -333,7 +409,19 @@ impl PartialEq for IntModN {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut x: u32;
+            unsafe {
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                    opcode = const CUSTOM_1,
+                    funct3 = const Custom1Funct3::ModularArithmetic as usize,
+                    funct7 = const ModArithBaseFunct7::IsEqMod as usize,
+                    rd = out(reg) x,
+                    rs1 = in(reg) self as *const IntModN,
+                    rs2 = in(reg) other as *const IntModN
+                );
+            }
+            x != 0
         }
     }
 }
@@ -346,9 +434,7 @@ mod helper {
         #[inline(always)]
         fn mul(self, other: u32) -> Self::Output {
             let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
+            res *= IntModN::from_u32(other);
             res
         }
     }
@@ -358,9 +444,7 @@ mod helper {
         #[inline(always)]
         fn mul(self, other: u32) -> Self::Output {
             let mut res = self.clone();
-            let mut other_bytes = [0u8; LIMBS];
-            other_bytes[..4].copy_from_slice(&other.to_le_bytes());
-            res *= IntModN::from_bytes(other_bytes);
+            res *= IntModN::from_u32(other);
             res
         }
     }

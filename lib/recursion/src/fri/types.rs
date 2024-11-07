@@ -40,6 +40,7 @@ pub struct FriProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct FriQueryProofVariable<C: Config> {
+    pub input_proof: Array<C, BatchOpeningVariable<C>>,
     pub commit_phase_openings: Array<C, FriCommitPhaseProofStepVariable<C>>,
 }
 

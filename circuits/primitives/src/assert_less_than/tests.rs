@@ -54,7 +54,7 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLtTestAir<A
         let local = main.row_slice(0);
         let local: &AssertLessThanCols<_, AUX_LEN> = (*local).borrow();
 
-        let io = AssertLessThanIo::new(local.x, local.y, AB::F::one());
+        let io = AssertLessThanIo::new(local.x, local.y, AB::F::ONE);
         self.0.eval(builder, (io, &local.aux.lower_decomp));
     }
 }
@@ -79,7 +79,7 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = AssertLessThanCols::<F, AUX_LEN>::width();
 
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

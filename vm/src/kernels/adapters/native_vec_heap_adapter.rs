@@ -245,11 +245,11 @@ impl<
                     cols.rs_ptr
                         .first()
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.rs_ptr
                         .get(1)
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.ptr_as.into(),
                     cols.heap_as.into(),
                 ],

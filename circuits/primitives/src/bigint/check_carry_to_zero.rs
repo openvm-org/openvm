@@ -79,7 +79,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         }
 
         // 2. Constrain the carries and expr.
-        let mut previous_carry = AB::Expr::zero();
+        let mut previous_carry = AB::Expr::ZERO;
         for (i, limb) in expr.limbs.iter().enumerate() {
             builder.assert_eq(
                 limb.clone() + previous_carry.clone(),
@@ -88,6 +88,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
             previous_carry = cols.carries[i].into();
         }
         // The last (highest) carry should be zero.
-        builder.assert_eq(previous_carry, AB::Expr::zero());
+        builder.assert_eq(previous_carry, AB::Expr::ZERO);
     }
 }
