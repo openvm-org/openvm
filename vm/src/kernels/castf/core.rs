@@ -64,7 +64,7 @@ where
             .out_val
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &limb)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &limb)| {
                 acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_BITS))
             });
 
@@ -78,7 +78,7 @@ where
                         _ => unreachable!(),
                     },
                 )
-                .eval(builder, AB::Expr::one());
+                .eval(builder, AB::Expr::ONE);
         }
 
         AdapterAirContext {
@@ -169,7 +169,7 @@ where
         let cols: &mut CastFCoreCols<F> = row_slice.borrow_mut();
         cols.in_val = record.in_val;
         cols.out_val = record.out_val;
-        cols.is_valid = F::one();
+        cols.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

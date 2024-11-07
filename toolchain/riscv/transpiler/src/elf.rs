@@ -10,6 +10,7 @@ use elf::{
     ElfBytes,
 };
 use eyre::{self, bail, ContextCompat};
+use num_bigint_dig::BigUint;
 
 pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 
@@ -35,6 +36,8 @@ pub struct Elf {
     /// The upper bound of the number of public values the program would publish.
     /// TODO: read from project config.
     pub(crate) max_num_public_values: usize,
+    /// Field arithmetic configuration.
+    pub(crate) supported_moduli: Vec<String>,
 }
 
 impl Elf {
@@ -44,6 +47,7 @@ impl Elf {
         pc_start: u32,
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
+        supported_moduli: Vec<String>,
     ) -> Self {
         Self {
             instructions,
@@ -51,6 +55,7 @@ impl Elf {
             pc_base,
             memory_image,
             max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            supported_moduli,
         }
     }
 
@@ -162,6 +167,40 @@ impl Elf {
             }
         }
 
-        Ok(Elf::new(instructions, entry, base_address, image))
+        // Get the prime moduli from the .axiom section.
+        let axiom_section_header = elf
+            .section_header_by_name(".axiom")
+            .expect("section table should be parsable");
+        let supported_moduli = if let Some(shdr) = axiom_section_header {
+            let data = elf.section_data(&shdr).unwrap();
+            let ptr = std::cell::Cell::new(0);
+            let next = || {
+                let result = *data
+                    .0
+                    .get(ptr.get())
+                    .expect("unexpected end of .axiom section");
+                ptr.set(ptr.get() + 1);
+                result
+            };
+            let next_u32 = || u32::from_le_bytes(std::array::from_fn(|_| next()));
+            let len = next_u32();
+            (0..len)
+                .map(|_| {
+                    let cnt_bytes = next_u32() as usize;
+                    BigUint::from_bytes_le(&(0..cnt_bytes).map(|_| next()).collect::<Vec<_>>())
+                        .to_str_radix(10)
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok(Elf::new(
+            instructions,
+            entry,
+            base_address,
+            image,
+            supported_moduli,
+        ))
     }
 }

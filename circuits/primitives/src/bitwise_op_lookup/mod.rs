@@ -92,10 +92,10 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
         let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
-            .receive(prep_local.x, prep_local.y, AB::F::zero(), AB::F::zero())
+            .receive(prep_local.x, prep_local.y, AB::F::ZERO, AB::F::ZERO)
             .eval(builder, local.mult_range);
         self.bus
-            .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::one())
+            .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::ONE)
             .eval(builder, local.mult_xor);
     }
 }
@@ -154,7 +154,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![F::zero(); self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS];
+        let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
             cols.mult_range = F::from_canonical_u32(

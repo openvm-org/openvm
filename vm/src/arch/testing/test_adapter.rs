@@ -158,9 +158,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                 cols.operands.to_vec(),
                 ExecutionState {
                     pc: cols.from_pc.into(),
-                    timestamp: AB::Expr::one(),
+                    timestamp: AB::Expr::ONE,
                 },
-                AB::Expr::zero(),
+                AB::Expr::ZERO,
                 (4, ctx.to_pc),
             )
             .eval(builder, processed_instruction.is_valid);

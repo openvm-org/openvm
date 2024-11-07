@@ -7,7 +7,24 @@ description = "axVM elliptic curve cryptography library."
 
 [dependencies]
 axvm = { workspace = true }
+ff = { workspace = true }
+itertools.workspace = true
+rand.workspace = true
+
+# Used for `halo2curves` feature
+# TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves
+halo2curves-axiom = { workspace = true, optional = true }
+# halo2curves = { version = "0.7.0", optional = true }
+
+# TODO[yj]: Remove this after handling ExpBigInt in raw bytes_be
+num = { version = "0.4.3", optional = true }
+group = "0.13.0"
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
 
 [features]
 default = []
-std = ["axvm/std"]
+std = ["axvm/std", "ff/std"]
+# TODO[yj]: Switch to `halo2curves` and remove `num` dependency
+halo2curves = ["dep:halo2curves-axiom", "dep:num"]

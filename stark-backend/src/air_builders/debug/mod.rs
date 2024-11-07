@@ -66,7 +66,7 @@ where
     fn assert_zero<I: Into<Self::Expr>>(&mut self, x: I) {
         assert_eq!(
             x.into(),
-            Val::<SC>::zero(),
+            Val::<SC>::ZERO,
             "constraints had nonzero value on row {}",
             self.row_index
         );
@@ -106,7 +106,7 @@ where
     {
         assert_eq!(
             x.into(),
-            SC::Challenge::zero(),
+            SC::Challenge::ZERO,
             "constraints had nonzero value on row {}",
             self.row_index
         );

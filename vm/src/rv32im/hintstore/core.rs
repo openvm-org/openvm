@@ -162,7 +162,7 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let core_cols: &mut Rv32HintStoreCoreCols<F> = row_slice.borrow_mut();
-        core_cols.is_valid = F::one();
+        core_cols.is_valid = F::ONE;
         core_cols.data = record.data;
     }
 

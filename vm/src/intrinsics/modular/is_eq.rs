@@ -136,15 +136,15 @@ where
         let lt_marker_sum = cols
             .lt_marker
             .iter()
-            .fold(AB::Expr::zero(), |acc, x| acc + *x);
+            .fold(AB::Expr::ZERO, |acc, x| acc + *x);
         let lt_marker_one_check_sum = cols
             .lt_marker
             .iter()
-            .fold(AB::Expr::zero(), |acc, x| acc + (*x) * (*x - AB::F::one()));
+            .fold(AB::Expr::ZERO, |acc, x| acc + (*x) * (*x - AB::F::ONE));
 
         builder
             .when(cols.is_valid)
-            .assert_bool(cols.c_lt_mark - AB::F::one());
+            .assert_bool(cols.c_lt_mark - AB::F::ONE);
 
         builder
             .when(cols.is_valid)
@@ -153,33 +153,33 @@ where
 
         builder
             .when(cols.is_valid)
-            .when_ne(cols.c_lt_mark, AB::F::one())
+            .when_ne(cols.c_lt_mark, AB::F::ONE)
             .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(3));
-        builder.when_ne(cols.c_lt_mark, AB::F::one()).assert_eq(
+        builder.when_ne(cols.c_lt_mark, AB::F::ONE).assert_eq(
             lt_marker_one_check_sum,
             cols.is_valid * AB::F::from_canonical_u8(2),
         );
 
         // Constrain that b, c < N (i.e. modulus).
         let modulus = self.modulus_limbs.map(AB::F::from_canonical_u32);
-        let mut prefix_sum = AB::Expr::zero();
+        let mut prefix_sum = AB::Expr::ZERO;
 
         for i in (0..READ_LIMBS).rev() {
             prefix_sum += cols.lt_marker[i].into();
             builder.assert_zero(
                 cols.lt_marker[i]
-                    * (cols.lt_marker[i] - AB::F::one())
+                    * (cols.lt_marker[i] - AB::F::ONE)
                     * (cols.lt_marker[i] - cols.c_lt_mark),
             );
 
             // Constrain b < N. Note lt_marker_sum is either 1 or 3, and that lt_marker[i]
             // being 1 indicates b[i] < N[i].
             builder
-                .when_ne(prefix_sum.clone(), AB::F::one())
+                .when_ne(prefix_sum.clone(), AB::F::ONE)
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
                 .assert_eq(cols.b[i], modulus[i]);
             builder
-                .when_ne(cols.lt_marker[i], AB::F::zero())
+                .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(cols.lt_marker[i], AB::F::from_canonical_u8(2))
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.b[i], cols.b_lt_diff);
 
@@ -190,7 +190,7 @@ where
                 .when_ne(prefix_sum.clone(), lt_marker_sum.clone())
                 .assert_eq(cols.c[i], modulus[i]);
             builder
-                .when_ne(cols.lt_marker[i], AB::F::zero())
+                .when_ne(cols.lt_marker[i], AB::F::ZERO)
                 .when_ne(
                     cols.lt_marker[i],
                     AB::Expr::from_canonical_u8(3) - cols.c_lt_mark,
@@ -200,15 +200,15 @@ where
 
         self.bus
             .send_range(
-                cols.b_lt_diff - AB::Expr::one(),
-                cols.c_lt_diff - AB::Expr::one(),
+                cols.b_lt_diff - AB::Expr::ONE,
+                cols.c_lt_diff - AB::Expr::ONE,
             )
             .eval(builder, cols.is_valid);
 
         let expected_opcode = AB::Expr::from_canonical_usize(
             Rv32ModularArithmeticOpcode::IS_EQ as usize + self.offset,
         );
-        let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
         AdapterAirContext {
@@ -293,13 +293,13 @@ where
             self.air.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1,
         );
 
-        let mut eq_marker = [F::zero(); READ_LIMBS];
-        let mut cmp_result = F::zero();
+        let mut eq_marker = [F::ZERO; READ_LIMBS];
+        let mut cmp_result = F::ZERO;
         self.air
             .subair
             .generate_subrow((&data[0], &data[1]), (&mut eq_marker, &mut cmp_result));
 
-        let mut writes = [F::zero(); WRITE_LIMBS];
+        let mut writes = [F::ZERO; WRITE_LIMBS];
         writes[0] = cmp_result;
 
         let output = AdapterRuntimeContext::without_pc([writes]);
@@ -324,7 +324,7 @@ where
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let row_slice: &mut ModularIsEqualCoreCols<_, READ_LIMBS> = row_slice.borrow_mut();
-        row_slice.is_valid = F::one();
+        row_slice.is_valid = F::ONE;
         row_slice.b = record.b;
         row_slice.c = record.c;
         row_slice.cmp_result = record.cmp_result;
@@ -336,17 +336,17 @@ where
         row_slice.c_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.c_diff_idx])
             - record.c[record.c_diff_idx];
         row_slice.c_lt_mark = if record.b_diff_idx == record.c_diff_idx {
-            F::one()
+            F::ONE
         } else {
             F::from_canonical_u8(2)
         };
         row_slice.lt_marker = from_fn(|i| {
             if i == record.b_diff_idx {
-                F::one()
+                F::ONE
             } else if i == record.c_diff_idx {
                 row_slice.c_lt_mark
             } else {
-                F::zero()
+                F::ZERO
             }
         });
     }

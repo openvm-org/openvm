@@ -1,0 +1,11 @@
+[package]
+name = "axvm-setup-macro"
+version = { workspace = true }
+edition = "2021"
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+
+[lib]
+proc-macro = true

@@ -80,7 +80,7 @@ impl<F: Field, const NUM: usize> TraceSubRowGenerator<F> for IsEqArraySubAir<NUM
                 is_eq = false;
                 *diff_inv_marker_i = (*x_i - *y_i).inverse();
             } else {
-                *diff_inv_marker_i = F::zero();
+                *diff_inv_marker_i = F::ZERO;
             }
         }
         *out = F::from_bool(is_eq);

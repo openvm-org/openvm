@@ -1,6 +1,5 @@
+use axvm_ecc::{field::FieldExtension, pairing::EvaluatedLine, point::EcPoint};
 use halo2curves_axiom::ff::Field;
-
-use crate::common::{EcPoint, EvaluatedLine, FieldExtension};
 
 /// Multiplies two line functions in 023 form and outputs the product in 02345 form
 pub fn mul_023_by_023<Fp, Fp2>(
@@ -34,7 +33,7 @@ pub fn mul_by_023<Fp, Fp2, Fp12>(f: Fp12, line: EvaluatedLine<Fp, Fp2>) -> Fp12
 where
     Fp: Field,
     Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2>,
+    Fp12: FieldExtension<BaseField = Fp2, Coeffs = [Fp2; 6]>,
 {
     mul_by_02345(
         f,
@@ -46,9 +45,9 @@ pub fn mul_by_02345<Fp, Fp2, Fp12>(f: Fp12, x: [Fp2; 6]) -> Fp12
 where
     Fp: Field,
     Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2>,
+    Fp12: FieldExtension<BaseField = Fp2, Coeffs = [Fp2; 6]>,
 {
-    let x_fp12 = Fp12::from_coeffs(&x);
+    let x_fp12 = Fp12::from_coeffs(x);
     f * x_fp12
 }
 
@@ -62,8 +61,8 @@ where
     let one = Fp2::ONE;
     let two = one + one;
     let three = one + two;
-    let x = Fp2::embed(&P.x);
-    let y = Fp2::embed(&P.y);
+    let x = Fp2::embed(P.x);
+    let y = Fp2::embed(P.y);
 
     // λ = (3x^2) / (2y)
     // 1 - λ(x/y)w^-1 + (λx - y)(1/y)w^-3

@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use ax_stark_sdk::{
-    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
+    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -9,13 +9,19 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axiom_vm::{
+    commit::AppExecutionCommit,
     config::{AxiomVmConfig, AxiomVmProvingKey},
-    verifier::leaf::types::{LeafVmVerifierInput, LeafVmVerifierPvs, UserPublicValuesRootProof},
+    verifier::{
+        common::types::VmVerifierPvs,
+        internal::types::InternalVmVerifierInput,
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::{RootVmVerifierInput, RootVmVerifierPvs},
+    },
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor, VmConfig,
-        VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor,
+        VirtualMachine, VmConfig, VmExecutor, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::tree::public_values::compute_user_public_values_proof,
@@ -23,7 +29,7 @@ use axvm_circuit::{
     },
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_recursion::types::InnerConfig;
+use axvm_recursion::{hints::Hintable, types::InnerConfig};
 use p3_baby_bear::BabyBear;
 
 type SC = BabyBearPoseidon2Config;
@@ -55,11 +61,11 @@ fn test_1() {
     let axiom_vm_pk = AxiomVmProvingKey::keygen(axiom_vm_config);
     let engine = BabyBearPoseidon2Engine::new(axiom_vm_pk.fri_params);
 
-    let program = {
+    let mut program = {
         let n = 200;
         let mut builder = Builder::<C>::default();
-        let a: Felt<F> = builder.eval(F::zero());
-        let b: Felt<F> = builder.eval(F::one());
+        let a: Felt<F> = builder.eval(F::ZERO);
+        let b: Felt<F> = builder.eval(F::ONE);
         let c: Felt<F> = builder.uninit();
         builder.range(0, n).for_each(|_, builder| {
             builder.assign(&c, a + b);
@@ -69,6 +75,7 @@ fn test_1() {
         builder.halt();
         builder.compile_isa()
     };
+    program.max_num_public_values = 16;
     let committed_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
         program.into(),
         engine.config.pcs(),
@@ -79,7 +86,7 @@ fn test_1() {
 
     let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(committed_exe, vec![])
+        .execute_and_generate_with_cached_program(committed_exe.clone(), vec![])
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -97,8 +104,8 @@ fn test_1() {
         .map(|proof_input| engine.prove(&axiom_vm_pk.app_vm_pk, proof_input))
         .collect();
 
-    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_config);
     let last_proof = app_vm_seg_proofs.pop().unwrap();
+    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.non_root_agg_vm_config.clone());
 
     let run_leaf_verifier =
         |verifier_input: LeafVmVerifierInput<SC>| -> Result<Vec<F>, ExecutionError> {
@@ -106,22 +113,25 @@ fn test_1() {
                 axiom_vm_pk.committed_leaf_program.exe.clone(),
                 verifier_input.write_to_stream(),
             )?;
-            let runtime_pvs: Vec<_> = runtime_pvs.into_iter().map(|v| v.unwrap()).collect();
+            let runtime_pvs: Vec<_> = runtime_pvs[..VmVerifierPvs::<u8>::width()]
+                .iter()
+                .map(|v| v.unwrap())
+                .collect();
             Ok(runtime_pvs)
         };
 
     // Verify all segments except the last one.
     let (first_seg_final_pc, first_seg_final_mem_root) = {
         let runtime_pvs = run_leaf_verifier(LeafVmVerifierInput {
-            proofs: app_vm_seg_proofs,
+            proofs: app_vm_seg_proofs.clone(),
             public_values_root_proof: None,
         })
         .expect("failed to verify the first segment");
-        let leaf_vm_pvs: &LeafVmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
+        let leaf_vm_pvs: &VmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
 
         assert_eq!(leaf_vm_pvs.app_commit, expected_program_commit);
-        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::zero());
-        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::zero());
+        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ZERO);
+        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::ZERO);
         (
             leaf_vm_pvs.connector.final_pc,
             leaf_vm_pvs.memory.final_root,
@@ -134,18 +144,18 @@ fn test_1() {
             public_values_root_proof: Some(pv_root_proof.clone()),
         })
         .expect("failed to verify the second segment");
-        let leaf_vm_pvs: &LeafVmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
+        let leaf_vm_pvs: &VmVerifierPvs<F> = runtime_pvs.as_slice().borrow();
         assert_eq!(leaf_vm_pvs.app_commit, expected_program_commit);
         assert_eq!(leaf_vm_pvs.connector.initial_pc, first_seg_final_pc);
-        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::one());
-        assert_eq!(leaf_vm_pvs.connector.exit_code, F::zero());
+        assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ONE);
+        assert_eq!(leaf_vm_pvs.connector.exit_code, F::ZERO);
         assert_eq!(leaf_vm_pvs.memory.initial_root, first_seg_final_mem_root);
         assert_eq!(leaf_vm_pvs.public_values_commit, expected_pv_commit);
     }
     // Failure: The public value root proof has a wrong public values commit.
     {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
-        wrong_pv_root_proof.public_values_commit[0] += F::one();
+        wrong_pv_root_proof.public_values_commit[0] += F::ONE;
         let execution_result = run_leaf_verifier(LeafVmVerifierInput {
             proofs: vec![last_proof.clone()],
             public_values_root_proof: Some(wrong_pv_root_proof),
@@ -158,9 +168,9 @@ fn test_1() {
     // Failure: The public value root proof has a wrong path proof.
     {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
-        wrong_pv_root_proof.sibling_hashes[0][0] += F::one();
+        wrong_pv_root_proof.sibling_hashes[0][0] += F::ONE;
         let execution_result = run_leaf_verifier(LeafVmVerifierInput {
-            proofs: vec![last_proof],
+            proofs: vec![last_proof.clone()],
             public_values_root_proof: Some(wrong_pv_root_proof),
         });
         match execution_result.err().unwrap() {
@@ -168,4 +178,79 @@ fn test_1() {
             _ => panic!("Expected execution to fail"),
         }
     }
+
+    let agg_vm = VirtualMachine::new(engine, axiom_vm_pk.non_root_agg_vm_config.clone());
+    let internal_commit: [F; DIGEST_SIZE] = axiom_vm_pk
+        .committed_internal_program
+        .committed_program
+        .prover_data
+        .commit
+        .into();
+    let prove_leaf_verifier = |verifier_input: LeafVmVerifierInput<SC>| -> Proof<SC> {
+        let mut leaf_result = agg_vm
+            .execute_and_generate_with_cached_program(
+                axiom_vm_pk.committed_leaf_program.clone(),
+                verifier_input.write_to_stream(),
+            )
+            .unwrap();
+        let proof = leaf_result.per_segment.pop().unwrap();
+        agg_vm.prove_single(&axiom_vm_pk.non_root_agg_vm_pk, proof)
+    };
+    let leaf_proofs = vec![
+        prove_leaf_verifier(LeafVmVerifierInput {
+            proofs: app_vm_seg_proofs.clone(),
+            public_values_root_proof: None,
+        }),
+        prove_leaf_verifier(LeafVmVerifierInput {
+            proofs: vec![last_proof.clone()],
+            public_values_root_proof: Some(pv_root_proof.clone()),
+        }),
+    ];
+
+    let prove_internal_verifier = |verifier_input: InternalVmVerifierInput<SC>| -> Proof<SC> {
+        let mut leaf_result = agg_vm
+            .execute_and_generate_with_cached_program(
+                axiom_vm_pk.committed_internal_program.clone(),
+                verifier_input.write(),
+            )
+            .unwrap();
+        let proof = leaf_result.per_segment.pop().unwrap();
+        agg_vm.prove_single(&axiom_vm_pk.non_root_agg_vm_pk, proof)
+    };
+    let internal_proofs = vec![prove_internal_verifier(InternalVmVerifierInput {
+        self_program_commit: internal_commit,
+        proofs: leaf_proofs.clone(),
+    })];
+
+    let root_agg_vm = VirtualMachine::new(agg_vm.engine, axiom_vm_pk.root_agg_vm_config.clone());
+    let prove_root_verifier = |verifier_input: RootVmVerifierInput<SC>| -> Proof<SC> {
+        let mut leaf_result = root_agg_vm
+            .execute_and_generate_with_cached_program(
+                axiom_vm_pk.committed_root_program.clone(),
+                verifier_input.write(),
+            )
+            .unwrap();
+        let proof = leaf_result.per_segment.pop().unwrap();
+        root_agg_vm.prove_single(&axiom_vm_pk.root_agg_vm_pk, proof)
+    };
+    let app_exe_commit = AppExecutionCommit::compute(
+        &axiom_vm_pk.app_vm_config,
+        &committed_exe,
+        &axiom_vm_pk.committed_leaf_program,
+    );
+
+    let root_proof = prove_root_verifier(RootVmVerifierInput {
+        proofs: internal_proofs.clone(),
+        public_values: pv_proof.public_values,
+    });
+    let root_pvs = RootVmVerifierPvs::from_flatten(
+        root_proof.per_air[PUBLIC_VALUES_AIR_ID]
+            .public_values
+            .clone(),
+    );
+    assert_eq!(root_pvs.exe_commit, app_exe_commit.exe_commit);
+    assert_eq!(
+        root_pvs.leaf_verifier_commit,
+        app_exe_commit.leaf_vm_verifier_commit
+    );
 }

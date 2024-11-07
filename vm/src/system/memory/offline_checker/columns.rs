@@ -100,7 +100,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryWriteAuxCols::<F, N>::width();
-        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryWriteAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 
@@ -148,7 +148,7 @@ impl<const N: usize, T> MemoryReadAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, N>::width();
-        MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryReadAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 
@@ -178,9 +178,9 @@ impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
-        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         let width = MemoryReadAuxCols::<F, N>::width();
-        let data = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let data = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         MemoryHeapReadAuxCols { address, data }
     }
 }
@@ -215,9 +215,9 @@ impl<const N: usize, T: Clone> MemoryHeapWriteAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
-        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         let width = MemoryWriteAuxCols::<F, N>::width();
-        let data = MemoryWriteAuxCols::from_slice(&vec![F::zero(); width]);
+        let data = MemoryWriteAuxCols::from_slice(&F::zero_vec(width));
         MemoryHeapWriteAuxCols { address, data }
     }
 }
@@ -280,7 +280,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
 impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
     pub fn disabled() -> Self {
         let width = MemoryReadOrImmediateAuxCols::<F>::width();
-        MemoryReadOrImmediateAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryReadOrImmediateAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 

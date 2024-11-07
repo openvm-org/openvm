@@ -1,5 +1,4 @@
 mod curve;
-mod field;
 mod final_exp;
 mod line;
 mod miller_loop;

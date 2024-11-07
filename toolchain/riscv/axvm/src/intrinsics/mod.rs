@@ -16,8 +16,5 @@ pub use u256::*;
 mod i256;
 pub use i256::*;
 
-mod modular;
-pub use modular::*;
-
 mod utils;
-use utils::*;
+pub use utils::*;

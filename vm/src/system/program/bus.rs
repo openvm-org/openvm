@@ -21,7 +21,7 @@ impl ProgramBus {
                 operands
                     .into_iter()
                     .map(Into::into)
-                    .chain(iter::repeat(AB::Expr::zero()))
+                    .chain(iter::repeat(AB::Expr::ZERO))
                     .take(7),
             ),
             multiplicity,

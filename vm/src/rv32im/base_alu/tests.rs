@@ -220,7 +220,7 @@ fn rv32_alu_sub_wrong_negative_test() {
 fn rv32_alu_sub_out_of_range_negative_test() {
     run_rv32_alu_negative_test(
         BaseAluOpcode::SUB,
-        [F::neg_one().as_canonical_u32(), 0, 0, 0],
+        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
         [1, 0, 0, 0],
         [2, 0, 0, 0],
         true,

@@ -478,7 +478,7 @@ impl SymbolicExpr {
                 for i in 0..left.limbs.len() {
                     res.push(
                         left.limbs[i].clone() * flag.into()
-                            + right.limbs[i].clone() * (AB::Expr::one() - flag.into()),
+                            + right.limbs[i].clone() * (AB::Expr::ONE - flag.into()),
                     );
                 }
                 OverflowInt {

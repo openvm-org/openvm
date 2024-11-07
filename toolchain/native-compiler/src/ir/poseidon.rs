@@ -63,7 +63,7 @@ impl<C: Config> Builder<C> {
     /// Reference: [p3_symmetric::TruncatedPermutation]
     pub fn poseidon2_compress_x(
         &mut self,
-        result: &mut Array<C, Felt<C::F>>,
+        result: &Array<C, Felt<C::F>>,
         left: &Array<C, Felt<C::F>>,
         right: &Array<C, Felt<C::F>>,
     ) {
@@ -81,11 +81,11 @@ impl<C: Config> Builder<C> {
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::zero());
+            builder.set(&state, i, C::F::ZERO);
         });
 
-        let break_flag: Var<_> = self.eval(C::N::zero());
-        let last_index: Usize<_> = self.eval(array.len() - C::N::one());
+        let break_flag: Var<_> = self.eval(C::N::ZERO);
+        let last_index: Usize<_> = self.eval(array.len() - C::N::ONE);
         let hash_rate: Var<_> = self.eval(C::N::from_canonical_usize(HASH_RATE));
 
         self.range(0, array.len())
@@ -93,7 +93,7 @@ impl<C: Config> Builder<C> {
             .step_by(HASH_RATE)
             .for_each(|i, builder| {
                 builder
-                    .if_eq(break_flag, C::N::one())
+                    .if_eq(break_flag, C::N::ONE)
                     .then_may_break(|builder| builder.break_loop())?;
                 // Insert elements of the chunk.
                 builder
@@ -106,7 +106,7 @@ impl<C: Config> Builder<C> {
                         builder
                             .if_eq(index, last_index.clone())
                             .then_may_break(|builder| {
-                                builder.assign(&break_flag, C::N::one());
+                                builder.assign(&break_flag, C::N::ONE);
                                 builder.break_loop()
                             })
                     });
@@ -127,28 +127,28 @@ impl<C: Config> Builder<C> {
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(0, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::zero());
+            builder.set(&state, i, C::F::ZERO);
         });
 
-        let idx: Var<_> = self.eval(C::N::zero());
+        let idx: Var<_> = self.eval(C::N::ZERO);
         self.range(0, array.len()).for_each(|i, builder| {
             let subarray = builder.get(array, i);
             builder.range(0, subarray.len()).for_each(|j, builder| {
                 builder.cycle_tracker_start("poseidon2-hash-setup");
                 let element = builder.get(&subarray, j);
                 builder.set_value(&state, idx, element);
-                builder.assign(&idx, idx + C::N::one());
+                builder.assign(&idx, idx + C::N::ONE);
                 builder.cycle_tracker_end("poseidon2-hash-setup");
                 builder
                     .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
                     .then(|builder| {
                         builder.poseidon2_permute_mut(&state);
-                        builder.assign(&idx, C::N::zero());
+                        builder.assign(&idx, C::N::ZERO);
                     });
             });
         });
 
-        self.if_ne(idx, C::N::zero()).then(|builder| {
+        self.if_ne(idx, C::N::ZERO).then(|builder| {
             builder.poseidon2_permute_mut(&state);
         });
 
@@ -166,10 +166,10 @@ impl<C: Config> Builder<C> {
         let perm_width = PERMUTATION_WIDTH;
         let state: Array<C, Felt<C::F>> = self.dyn_array(perm_width);
         self.range(hash_rate, perm_width).for_each(|i, builder| {
-            builder.set(&state, i, C::F::zero());
+            builder.set(&state, i, C::F::ZERO);
         });
 
-        let idx: Var<_> = self.eval(C::N::zero());
+        let idx: Var<_> = self.eval(C::N::ZERO);
         self.range(0, array.len()).for_each(|i, builder| {
             let subarray = builder.get(array, i);
             builder.range(0, subarray.len()).for_each(|j, builder| {
@@ -178,18 +178,18 @@ impl<C: Config> Builder<C> {
                 for i in 0..4 {
                     let felt = builder.get(&felts, i);
                     builder.set_value(&state, idx, felt);
-                    builder.assign(&idx, idx + C::N::one());
+                    builder.assign(&idx, idx + C::N::ONE);
                     builder
                         .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
                         .then(|builder| {
                             builder.poseidon2_permute_mut(&state);
-                            builder.assign(&idx, C::N::zero());
+                            builder.assign(&idx, C::N::ZERO);
                         });
                 }
             });
         });
 
-        self.if_ne(idx, C::N::zero()).then(|builder| {
+        self.if_ne(idx, C::N::ZERO).then(|builder| {
             builder.poseidon2_permute_mut(&state);
         });
 

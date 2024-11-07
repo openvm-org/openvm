@@ -79,7 +79,11 @@ impl<SC: StarkGenericConfig> ProofInput<SC> {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Serialize, Deserialize, Derivative)]
+#[serde(bound(
+    serialize = "ProverTraceData<SC>: Serialize",
+    deserialize = "ProverTraceData<SC>: Deserialize<'de>"
+))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
     pub raw_data: Arc<RowMajorMatrix<Val<SC>>>,

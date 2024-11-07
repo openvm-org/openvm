@@ -318,7 +318,7 @@ fn rv32_blt_fake_diff_val_negative_test() {
     let a = [145, 34, 25, 205];
     let b = [73, 35, 25, 205];
     let prank_vals = BranchLessThanPrankValues {
-        diff_val: Some(F::neg_one().as_canonical_u32()),
+        diff_val: Some(F::NEG_ONE.as_canonical_u32()),
         ..Default::default()
     };
     run_rv32_blt_negative_test(BranchLessThanOpcode::BLT, a, b, false, prank_vals, true);

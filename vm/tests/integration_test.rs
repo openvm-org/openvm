@@ -241,7 +241,7 @@ fn test_vm_initial_memory() {
     ]);
 
     let init_memory: BTreeMap<_, _> = [(
-        (BabyBear::one(), BabyBear::from_canonical_u32(7)),
+        (BabyBear::ONE, BabyBear::from_canonical_u32(7)),
         BabyBear::from_canonical_u32(101),
     )]
     .into_iter()
@@ -258,6 +258,7 @@ fn test_vm_initial_memory() {
         program,
         pc_start: 0,
         init_memory,
+        custom_op_config: Default::default(),
     };
     air_test(config, exe);
 }
@@ -662,7 +663,7 @@ fn test_vm_hint() {
 
     type F = BabyBear;
 
-    let input_stream: Vec<Vec<F>> = vec![vec![F::two()]];
+    let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = vm_config_with_field_arithmetic();
     air_test_with_min_segments(config, program, input_stream, 1);
 }

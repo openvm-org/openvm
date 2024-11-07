@@ -1,13 +1,11 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(target_os = "zkvm", no_main)]
 
 extern crate alloc;
-extern crate revm;
 
 use revm::{
     db::InMemoryDB,
-    interpreter::opcode,
-    primitives::{hex, Bytes, ExecutionResult, Output, TxKind, U256},
+    primitives::{hex, Bytes, ExecutionResult, Output, TxKind},
     Evm,
 };
 
@@ -48,17 +46,5 @@ fn main() {
         })
         .build();
 
-    let result = evm.transact().unwrap();
-    // let Some(storage0) = result
-    //     .state
-    //     .get(&address)
-    //     .expect("Contract not found")
-    //     .storage
-    //     .get::<U256>(&Default::default())
-    // else {
-    //     panic!("Failed to write storage in the init code: {result:#?}");
-    // };
-
-    // tracing::info!("storage U256(0) at {address}:  {storage0:#?}");
-    // assert_eq!(storage0.present_value(), U256::from(0x42), "{result:#?}");
+    let _result = evm.transact().unwrap();
 }

@@ -32,7 +32,7 @@ fn test_vm_connector_happy_path() {
     let exit_code = 1789;
     test_impl(true, exit_code, |air_proof_input| {
         let pvs: &VmConnectorPvs<F> = air_proof_input.raw.public_values.as_slice().borrow();
-        assert_eq!(pvs.is_terminate, F::one());
+        assert_eq!(pvs.is_terminate, F::ONE);
         assert_eq!(pvs.exit_code, F::from_canonical_u32(exit_code));
     });
 }
@@ -59,7 +59,7 @@ fn test_vm_connector_wrong_is_terminate() {
             .public_values
             .as_mut_slice()
             .borrow_mut();
-        pvs.is_terminate = F::zero();
+        pvs.is_terminate = F::ZERO;
     });
 }
 

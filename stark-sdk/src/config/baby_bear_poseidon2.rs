@@ -6,7 +6,7 @@ use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
@@ -20,7 +20,10 @@ use super::{
     instrument::{HashStatistics, InstrumentCounter, Instrumented, StarkHashStatistics},
     FriParameters,
 };
-use crate::engine::{StarkEngine, StarkEngineWithHashInstrumentation, StarkFriEngine};
+use crate::{
+    assert_sc_compatible_with_serde,
+    engine::{StarkEngine, StarkEngineWithHashInstrumentation, StarkFriEngine},
+};
 
 const RATE: usize = 8;
 // permutation width
@@ -37,15 +40,17 @@ type InstrPerm = Instrumented<Perm>;
 type Hash<P> = PaddingFreeSponge<P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, DIGEST_WIDTH, WIDTH>;
 type ValMmcs<P> =
-    FieldMerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
+    MerkleTreeMmcs<PackedVal, <Val as Field>::Packing, Hash<P>, Compress<P>, DIGEST_WIDTH>;
 type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
-pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH>;
-type Dft = Radix2DitParallel;
+pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
+type Dft = Radix2DitParallel<Val>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 
 pub type BabyBearPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
 pub type BabyBearPoseidon2Config = BabyBearPermutationConfig<Perm>;
 pub type BabyBearPoseidon2Engine = BabyBearPermutationEngine<Perm>;
+
+assert_sc_compatible_with_serde!(BabyBearPoseidon2Config);
 
 pub struct BabyBearPermutationEngine<P>
 where
@@ -105,36 +110,29 @@ where
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_engine(pcs_log_degree: usize) -> BabyBearPoseidon2Engine {
-    default_engine_impl(pcs_log_degree, FriParameters::standard_fast())
+pub fn default_engine() -> BabyBearPoseidon2Engine {
+    default_engine_impl(FriParameters::standard_fast())
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-fn default_engine_impl(
-    pcs_log_degree: usize,
-    fri_params: FriParameters,
-) -> BabyBearPoseidon2Engine {
+fn default_engine_impl(fri_params: FriParameters) -> BabyBearPoseidon2Engine {
     let perm = default_perm();
-    engine_from_perm(perm, pcs_log_degree, fri_params)
+    engine_from_perm(perm, fri_params)
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm, pcs_log_degree: usize) -> BabyBearPoseidon2Config {
+pub fn default_config(perm: &Perm) -> BabyBearPoseidon2Config {
     let fri_params = FriParameters::standard_fast();
-    config_from_perm(perm, pcs_log_degree, fri_params)
+    config_from_perm(perm, fri_params)
 }
 
-pub fn engine_from_perm<P>(
-    perm: P,
-    pcs_log_degree: usize,
-    fri_params: FriParameters,
-) -> BabyBearPermutationEngine<P>
+pub fn engine_from_perm<P>(perm: P, fri_params: FriParameters) -> BabyBearPermutationEngine<P>
 where
     P: CryptographicPermutation<[Val; WIDTH]>
         + CryptographicPermutation<[PackedVal; WIDTH]>
         + Clone,
 {
-    let config = config_from_perm(&perm, pcs_log_degree, fri_params);
+    let config = config_from_perm(&perm, fri_params);
     BabyBearPermutationEngine {
         config,
         perm,
@@ -142,11 +140,7 @@ where
     }
 }
 
-pub fn config_from_perm<P>(
-    perm: &P,
-    pcs_log_degree: usize,
-    fri_params: FriParameters,
-) -> BabyBearPermutationConfig<P>
+pub fn config_from_perm<P>(perm: &P, fri_params: FriParameters) -> BabyBearPermutationConfig<P>
 where
     P: CryptographicPermutation<[Val; WIDTH]>
         + CryptographicPermutation<[PackedVal; WIDTH]>
@@ -156,14 +150,14 @@ where
     let compress = Compress::new(perm.clone());
     let val_mmcs = ValMmcs::new(hash, compress);
     let challenge_mmcs = ChallengeMmcs::new(val_mmcs.clone());
-    let dft = Dft {};
+    let dft = Dft::default();
     let fri_config = FriConfig {
         log_blowup: fri_params.log_blowup,
         num_queries: fri_params.num_queries,
         proof_of_work_bits: fri_params.proof_of_work_bits,
         mmcs: challenge_mmcs,
     };
-    let pcs = Pcs::new(pcs_log_degree, dft, val_mmcs, fri_config);
+    let pcs = Pcs::new(dft, val_mmcs, fri_config);
     BabyBearPermutationConfig::new(pcs)
 }
 
@@ -179,7 +173,7 @@ pub fn default_perm() -> Perm {
         Poseidon2ExternalMatrixGeneral,
         rounds_p,
         internal_constants,
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
     )
 }
 
@@ -188,7 +182,7 @@ pub fn random_perm() -> Perm {
     let mut rng = StdRng::from_seed(seed);
     Perm::new_from_rng_128(
         Poseidon2ExternalMatrixGeneral,
-        DiffusionMatrixBabyBear,
+        DiffusionMatrixBabyBear::default(),
         &mut rng,
     )
 }
@@ -266,7 +260,7 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
 
 impl StarkFriEngine<BabyBearPoseidon2Config> for BabyBearPoseidon2Engine {
     fn new(fri_params: FriParameters) -> Self {
-        default_engine_impl(27, fri_params)
+        default_engine_impl(fri_params)
     }
     fn fri_params(&self) -> FriParameters {
         self.fri_params

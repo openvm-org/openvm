@@ -78,7 +78,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction =  1 => is_final = 0
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             local.address_space - AB::F::from_canonical_usize(self.memory_dims.as_offset),
             local.leaf_label.into(),
         ];
@@ -93,7 +93,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             POSEIDON2_DIRECT_BUS,
             iter::empty()
                 .chain(local.values.map(Into::into))
-                .chain(iter::repeat(AB::Expr::zero()).take(CHUNK))
+                .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
                 .chain(local.hash.map(Into::into)),
             local.expand_direction * local.expand_direction,
         );
@@ -150,7 +150,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
         let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
-        let mut rows = vec![F::zero(); height * width];
+        let mut rows = F::zero_vec(height * width);
 
         for (row, &(address_space, label)) in
             rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
@@ -160,7 +160,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 Some(values) => {
                     let initial_hash = hasher.hash_and_record(values);
                     PersistentBoundaryCols {
-                        expand_direction: F::one(),
+                        expand_direction: F::ONE,
                         address_space,
                         leaf_label: F::from_canonical_usize(label),
                         values: *values,
@@ -169,21 +169,21 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                     }
                 }
                 None => {
-                    let initial_hash = hasher.hash_and_record(&[F::zero(); CHUNK]);
+                    let initial_hash = hasher.hash_and_record(&[F::ZERO; CHUNK]);
                     PersistentBoundaryCols {
-                        expand_direction: F::one(),
+                        expand_direction: F::ONE,
                         address_space,
                         leaf_label: F::from_canonical_usize(label),
-                        values: [F::zero(); CHUNK],
+                        values: [F::ZERO; CHUNK],
                         hash: initial_hash,
-                        timestamp: F::zero(),
+                        timestamp: F::ZERO,
                     }
                 }
             };
             let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
             let final_hash = hasher.hash_and_record(&timestamped_values.values);
             *final_row.borrow_mut() = PersistentBoundaryCols {
-                expand_direction: F::neg_one(),
+                expand_direction: F::NEG_ONE,
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: timestamped_values.values,

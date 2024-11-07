@@ -41,7 +41,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for PublicValu
 #[test]
 fn public_values_happy_path_1() {
     let cols = PublicValuesCoreColsView::<F, F> {
-        is_valid: F::one(),
+        is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(2),
         custom_pv_flags: to_field_vec(vec![0, 0, 1]),
@@ -58,7 +58,7 @@ fn public_values_happy_path_1() {
 #[test]
 fn public_values_neg_pv_not_match() {
     let cols = PublicValuesCoreColsView::<F, F> {
-        is_valid: F::one(),
+        is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(2),
         custom_pv_flags: to_field_vec(vec![0, 0, 1]),
@@ -78,7 +78,7 @@ fn public_values_neg_pv_not_match() {
 #[test]
 fn public_values_neg_index_out_of_bound() {
     let cols = PublicValuesCoreColsView::<F, F> {
-        is_valid: F::one(),
+        is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(8),
         custom_pv_flags: to_field_vec(vec![0, 0, 0]),
@@ -105,14 +105,14 @@ fn public_values_neg_double_publish() {
 fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let rows = [
         PublicValuesCoreColsView::<F, F> {
-            is_valid: F::one(),
+            is_valid: F::ONE,
             value: F::from_canonical_u32(12),
             index: F::from_canonical_u32(0),
             custom_pv_flags: to_field_vec(vec![0, 0, 1]),
             _marker: Default::default(),
         },
         PublicValuesCoreColsView::<F, F> {
-            is_valid: F::one(),
+            is_valid: F::ONE,
             value: F::from_canonical_u32(13),
             index: F::from_canonical_u32(0),
             custom_pv_flags: to_field_vec(vec![0, 0, 1]),

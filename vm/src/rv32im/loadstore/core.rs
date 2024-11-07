@@ -103,11 +103,10 @@ where
             is_load,
         } = *cols;
 
-        let get_expr_12 =
-            |x: &AB::Expr| (x.clone() - AB::Expr::one()) * (x.clone() - AB::Expr::two());
+        let get_expr_12 = |x: &AB::Expr| (x.clone() - AB::Expr::ONE) * (x.clone() - AB::Expr::TWO);
 
         builder.assert_bool(is_valid);
-        let sum = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let sum = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_zero(flag * get_expr_12(&flag.into()));
             acc + flag
         });
@@ -121,17 +120,17 @@ where
         let inv_2 = AB::F::from_canonical_u32(2).inverse();
         let mut opcode_flags = vec![];
         for flag in flags {
-            opcode_flags.push(flag * (flag - AB::F::one()) * inv_2);
+            opcode_flags.push(flag * (flag - AB::F::ONE) * inv_2);
         }
         for flag in flags {
-            opcode_flags.push(flag * (sum.clone() - AB::F::two()) * AB::F::neg_one());
+            opcode_flags.push(flag * (sum.clone() - AB::F::TWO) * AB::F::NEG_ONE);
         }
         (0..4).for_each(|i| {
             ((i + 1)..4).for_each(|j| opcode_flags.push(flags[i] * flags[j]));
         });
 
         let opcode_when = |idxs: &[InstructionOpcode]| -> AB::Expr {
-            idxs.iter().fold(AB::Expr::zero(), |acc, &idx| {
+            idxs.iter().fold(AB::Expr::ZERO, |acc, &idx| {
                 acc + opcode_flags[idx as usize].clone()
             })
         };
@@ -213,12 +212,12 @@ where
                 * AB::Expr::from_canonical_u8(STOREB as u8)
             + AB::Expr::from_canonical_usize(self.offset);
 
-        let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::one()
-            + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::two()
+        let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::ONE
+            + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::TWO
             + opcode_when(&[LoadBu3]) * AB::Expr::from_canonical_u32(3);
 
-        let store_shift_amount = opcode_when(&[StoreB1]) * AB::Expr::one()
-            + opcode_when(&[StoreH2, StoreB2]) * AB::Expr::two()
+        let store_shift_amount = opcode_when(&[StoreB1]) * AB::Expr::ONE
+            + opcode_when(&[StoreH2, StoreB2]) * AB::Expr::TWO
             + opcode_when(&[StoreB3]) * AB::Expr::from_canonical_u32(3);
 
         AdapterAirContext {
@@ -298,29 +297,29 @@ where
         let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
         let opcode = record.opcode;
         let flags = &mut core_cols.flags;
-        *flags = [F::zero(); 4];
+        *flags = [F::ZERO; 4];
         match (opcode, record.shift) {
-            (LOADW, 0) => flags[0] = F::two(),
-            (LOADHU, 0) => flags[1] = F::two(),
-            (LOADHU, 2) => flags[2] = F::two(),
-            (LOADBU, 0) => flags[3] = F::two(),
+            (LOADW, 0) => flags[0] = F::TWO,
+            (LOADHU, 0) => flags[1] = F::TWO,
+            (LOADHU, 2) => flags[2] = F::TWO,
+            (LOADBU, 0) => flags[3] = F::TWO,
 
-            (LOADBU, 1) => flags[0] = F::one(),
-            (LOADBU, 2) => flags[1] = F::one(),
-            (LOADBU, 3) => flags[2] = F::one(),
-            (STOREW, 0) => flags[3] = F::one(),
+            (LOADBU, 1) => flags[0] = F::ONE,
+            (LOADBU, 2) => flags[1] = F::ONE,
+            (LOADBU, 3) => flags[2] = F::ONE,
+            (STOREW, 0) => flags[3] = F::ONE,
 
-            (STOREH, 0) => (flags[0], flags[1]) = (F::one(), F::one()),
-            (STOREH, 2) => (flags[0], flags[2]) = (F::one(), F::one()),
-            (STOREB, 0) => (flags[0], flags[3]) = (F::one(), F::one()),
-            (STOREB, 1) => (flags[1], flags[2]) = (F::one(), F::one()),
-            (STOREB, 2) => (flags[1], flags[3]) = (F::one(), F::one()),
-            (STOREB, 3) => (flags[2], flags[3]) = (F::one(), F::one()),
+            (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
+            (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
             _ => unreachable!(),
         };
         core_cols.prev_data = record.prev_data;
         core_cols.read_data = record.read_data;
-        core_cols.is_valid = F::one();
+        core_cols.is_valid = F::ONE;
         core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
         core_cols.write_data = record.write_data;
     }
@@ -342,13 +341,13 @@ pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
         (LOADW, 0) => (),
         (LOADBU, 0) | (LOADBU, 1) | (LOADBU, 2) | (LOADBU, 3) => {
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::zero();
+                *cell = F::ZERO;
             }
             write_data[0] = read_data[shift];
         }
         (LOADHU, 0) | (LOADHU, 2) => {
             for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::zero();
+                *cell = F::ZERO;
             }
             for (i, cell) in write_data.iter_mut().take(NUM_CELLS / 2).enumerate() {
                 *cell = read_data[i + shift];

@@ -20,7 +20,7 @@ fn test_cycle_tracker() {
     let n: Var<_> = builder.eval(n_val);
     let m: Var<_> = builder.eval(m_val);
 
-    let total: Var<_> = builder.eval(F::zero());
+    let total: Var<_> = builder.eval(F::ZERO);
 
     builder.cycle_tracker_start("loop");
 

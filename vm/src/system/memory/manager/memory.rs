@@ -165,7 +165,7 @@ impl<F: PrimeField32> Memory<F> {
         let prev_data = array::from_fn(|i| {
             self.data
                 .insert((address_space, pointer + i), values[i])
-                .unwrap_or(F::zero())
+                .unwrap_or(F::ZERO)
         });
 
         let record = MemoryWriteRecord {
@@ -408,10 +408,7 @@ impl<F: PrimeField32> Memory<F> {
     }
 
     pub fn get(&self, address_space: usize, pointer: usize) -> F {
-        *self
-            .data
-            .get(&(address_space, pointer))
-            .unwrap_or(&F::zero())
+        *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
     }
 
     fn range_array<const N: usize>(&self, address_space: usize, pointer: usize) -> [F; N] {
@@ -781,9 +778,9 @@ mod tests {
         assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
         assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
         assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(1, 5), BabyBear::zero());
+        assert_eq!(memory.get(1, 5), BabyBear::ZERO);
 
-        assert_eq!(memory.get(0, 0), BabyBear::zero());
+        assert_eq!(memory.get(0, 0), BabyBear::ZERO);
     }
 
     #[test]
@@ -797,9 +794,9 @@ mod tests {
         assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
         assert_eq!(memory.get(1, 2), BabyBear::from_canonical_u32(2));
         assert_eq!(memory.get(1, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(1, 5), BabyBear::zero());
-        assert_eq!(memory.get(1, 9), BabyBear::zero());
-        assert_eq!(memory.get(0, 0), BabyBear::zero());
+        assert_eq!(memory.get(1, 5), BabyBear::ZERO);
+        assert_eq!(memory.get(1, 9), BabyBear::ZERO);
+        assert_eq!(memory.get(0, 0), BabyBear::ZERO);
     }
 
     #[test]
@@ -870,8 +867,8 @@ mod tests {
 
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = Equipartition::<F, 8>::new();
-        initial_memory.insert((F::one(), 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
-        initial_memory.insert((F::one(), 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
+        initial_memory.insert((F::ONE, 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
+        initial_memory.insert((F::ONE, 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
 
         let mut memory = Memory::new(&initial_memory);
 

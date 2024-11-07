@@ -76,13 +76,13 @@ where
         let intermed_val = pc_limbs
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
             });
         let imm = imm_limbs
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
             });
 
@@ -90,7 +90,7 @@ where
             .when(cols.is_valid)
             .assert_eq(rd_data[0], from_pc - intermed_val);
 
-        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
 
         for i in 1..RV32_REGISTER_NUM_LIMBS {
@@ -212,7 +212,7 @@ where
         core_cols.imm_limbs = record.imm_limbs;
         core_cols.pc_limbs = record.pc_limbs;
         core_cols.rd_data = record.rd_data;
-        core_cols.is_valid = F::one();
+        core_cols.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

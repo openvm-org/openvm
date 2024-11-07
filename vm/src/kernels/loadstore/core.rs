@@ -81,14 +81,14 @@ where
             cols.is_storew2,
             cols.is_shintw,
         ];
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
         builder.assert_bool(is_valid.clone());
 
         let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
             },

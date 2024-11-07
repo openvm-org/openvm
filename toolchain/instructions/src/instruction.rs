@@ -1,5 +1,6 @@
 use backtrace::Backtrace;
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::isize_to_field, PhantomInstruction, SystemOpcode, UsizeOpcode};
 
@@ -7,7 +8,7 @@ use crate::{utils::isize_to_field, PhantomInstruction, SystemOpcode, UsizeOpcode
 pub const NUM_OPERANDS: usize = 7;
 
 #[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
+#[derive(Clone, Debug, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
 pub struct Instruction<F> {
     pub opcode: usize,
     pub a: F,
@@ -36,7 +37,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
         let mut operands = operands.map(F::from_canonical_usize).to_vec();
-        operands.resize(NUM_OPERANDS, F::zero());
+        operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
             opcode,
             a: operands[0],
@@ -106,7 +107,7 @@ impl<T: Default> Default for Instruction<T> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DebugInfo {
     pub dsl_instruction: String,
     pub trace: Option<Backtrace>,

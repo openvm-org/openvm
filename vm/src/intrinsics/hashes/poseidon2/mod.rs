@@ -163,8 +163,8 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
 
                 Poseidon2VmCols {
                     io: Poseidon2VmIoCols {
-                        is_opcode: F::one(),
-                        is_compress_direct: F::zero(),
+                        is_opcode: F::ONE,
+                        is_compress_direct: F::ZERO,
                         pc: F::from_canonical_u32(from_state.pc),
                         timestamp: F::from_canonical_u32(from_state.timestamp),
                         a: instruction.a,
@@ -187,21 +187,21 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             }
             Poseidon2Record::DirectCompress { inner_cols } => Poseidon2VmCols {
                 io: Poseidon2VmIoCols {
-                    is_opcode: F::zero(),
-                    is_compress_direct: F::one(),
-                    pc: F::zero(),
-                    timestamp: F::zero(),
-                    a: F::zero(),
-                    b: F::zero(),
-                    c: F::zero(),
-                    d: F::zero(),
-                    e: F::zero(),
-                    is_compress_opcode: F::zero(),
+                    is_opcode: F::ZERO,
+                    is_compress_direct: F::ONE,
+                    pc: F::ZERO,
+                    timestamp: F::ZERO,
+                    a: F::ZERO,
+                    b: F::ZERO,
+                    c: F::ZERO,
+                    d: F::ZERO,
+                    e: F::ZERO,
+                    is_compress_opcode: F::ZERO,
                 },
                 aux: Poseidon2VmAuxCols {
-                    dst_ptr: F::zero(),
-                    lhs_ptr: F::zero(),
-                    rhs_ptr: F::zero(),
+                    dst_ptr: F::ZERO,
+                    lhs_ptr: F::ZERO,
+                    rhs_ptr: F::ZERO,
                     internal: inner_cols,
                     ptr_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled()),
                     input_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled()),
@@ -337,7 +337,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 }
 impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {
     fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::zero(); WIDTH];
+        let mut input_state = [F::ZERO; WIDTH];
         input_state[..CHUNK].copy_from_slice(lhs);
         input_state[CHUNK..].copy_from_slice(rhs);
 
@@ -352,7 +352,7 @@ impl<F: PrimeField32> HasherChip<CHUNK, F> for Poseidon2Chip<F> {
     ///
     /// No interactions with other chips.
     fn compress_and_record(&mut self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::zero(); WIDTH];
+        let mut input_state = [F::ZERO; WIDTH];
         input_state[..CHUNK].copy_from_slice(lhs);
         input_state[CHUNK..].copy_from_slice(rhs);
 

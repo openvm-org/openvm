@@ -41,10 +41,10 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 a,
                 b,
                 c,
-                d: BabyBear::one(),
-                e: BabyBear::two(),
-                f: BabyBear::zero(),
-                g: BabyBear::zero(),
+                d: BabyBear::ONE,
+                e: BabyBear::TWO,
+                f: BabyBear::ZERO,
+                g: BabyBear::ZERO,
             }
         })
         .collect()
@@ -120,7 +120,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     tester.build().load(chip).finalize()
 }
 
-fn get_engine(_: usize) -> BabyBearBlake3Engine {
+fn get_engine() -> BabyBearBlake3Engine {
     BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
 }
 
@@ -199,7 +199,7 @@ fn poseidon2_negative_test() {
 //         outs.iter()
 //             .enumerate()
 //             .flat_map(|(i, out)| {
-//                 vec![BabyBear::one()]
+//                 vec![BabyBear::ONE]
 //                     .into_iter()
 //                     .chain(hashes[i].0)
 //                     .chain(hashes[i].1)
@@ -209,7 +209,7 @@ fn poseidon2_negative_test() {
 //         width + 1,
 //     );
 //     dummy_direct_cpu_trace.values.extend(vec![
-//         BabyBear::zero();
+//         BabyBear::ZERO;
 //         (width + 1) * (correct_height - NUM_OPS)
 //     ]);
 //

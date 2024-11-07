@@ -9,6 +9,7 @@ repository = { workspace = true }
 
 [dependencies]
 axvm-platform = { workspace = true, features = ["rust-runtime"] }
+axvm-setup-macro = { workspace = true }
 serde = { workspace = true, features = ["alloc", "derive"] }
 hex-literal.workspace = true
 

@@ -5,13 +5,15 @@ use p3_symmetric::Hash;
 
 use super::{
     types::{
-        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsProofVariable,
-        TwoAdicPcsRoundVariable,
+        DimensionsVariable, FriConfigVariable, TwoAdicPcsMatsVariable, TwoAdicPcsRoundVariable,
     },
     verify_batch, verify_challenges, verify_shape_and_sample_challenges, NestedOpenedValues,
     TwoAdicMultiplicativeCosetVariable,
 };
-use crate::{challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable};
+use crate::{
+    challenger::ChallengerVariable, commit::PcsVariable, digest::DigestVariable,
+    fri::types::FriProofVariable,
+};
 
 /// Notes:
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
@@ -29,7 +31,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     rounds: Array<C, TwoAdicPcsRoundVariable<C>>,
-    proof: TwoAdicPcsProofVariable<C>,
+    proof: FriProofVariable<C>,
     challenger: &mut impl ChallengerVariable<C>,
 ) where
     C::F: TwoAdicField,
@@ -40,23 +42,21 @@ pub fn verify_two_adic_pcs<C: Config>(
     let log_blowup = config.log_blowup;
     let blowup = config.blowup;
     let alpha = challenger.sample_ext(builder);
-    let fri_proof = proof.fri_proof;
 
     builder.cycle_tracker_start("stage-d-1-verify-shape-and-sample-challenges");
-    let fri_challenges =
-        verify_shape_and_sample_challenges(builder, config, &fri_proof, challenger);
+    let fri_challenges = verify_shape_and_sample_challenges(builder, config, &proof, challenger);
     builder.cycle_tracker_end("stage-d-1-verify-shape-and-sample-challenges");
 
     let log_global_max_height =
-        builder.eval_expr(fri_proof.commit_phase_commits.len() + RVar::from(log_blowup));
+        builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(log_blowup));
 
-    let reduced_openings: Array<_, Array<_, Ext<_, _>>> = builder.array(proof.query_openings.len());
+    let reduced_openings: Array<_, Array<_, Ext<_, _>>> = builder.array(proof.query_proofs.len());
 
     builder.cycle_tracker_start("stage-d-2-fri-fold");
     builder
-        .range(0, proof.query_openings.len())
+        .range(0, proof.query_proofs.len())
         .for_each(|i, builder| {
-            let query_opening = builder.get(&proof.query_openings, i);
+            let query_proof = builder.get(&proof.query_proofs, i);
             let index_bits = builder.get(&fri_challenges.query_indices, i);
 
             let ro: Array<C, Ext<C::F, C::EF>> = builder.array(32);
@@ -64,12 +64,12 @@ pub fn verify_two_adic_pcs<C: Config>(
             if builder.flags.static_only {
                 for j in 0..32 {
                     // ATTENTION: don't use set_value here, Fixed will share the same variable.
-                    builder.set(&ro, j, C::EF::zero().cons());
-                    builder.set(&alpha_pow, j, C::EF::one().cons());
+                    builder.set(&ro, j, C::EF::ZERO.cons());
+                    builder.set(&alpha_pow, j, C::EF::ONE.cons());
                 }
             } else {
-                let zero_ef = builder.eval(C::EF::zero().cons());
-                let one_ef = builder.eval(C::EF::one().cons());
+                let zero_ef = builder.eval(C::EF::ZERO.cons());
+                let one_ef = builder.eval(C::EF::ONE.cons());
                 for j in 0..32 {
                     // Use set_value here to save a copy.
                     builder.set_value(&ro, j, zero_ef);
@@ -78,7 +78,7 @@ pub fn verify_two_adic_pcs<C: Config>(
             }
 
             builder.range(0, rounds.len()).for_each(|j, builder| {
-                let batch_opening = builder.get(&query_opening, j);
+                let batch_opening = builder.get(&query_proof.input_proof, j);
                 let round = builder.get(&rounds, j);
                 let batch_commit = round.batch_commit;
                 let mats = round.mats;
@@ -212,13 +212,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.cycle_tracker_end("stage-d-2-fri-fold");
 
     builder.cycle_tracker_start("stage-d-3-verify-challenges");
-    verify_challenges(
-        builder,
-        config,
-        &fri_proof,
-        &fri_challenges,
-        &reduced_openings,
-    );
+    verify_challenges(builder, config, &proof, &fri_challenges, &reduced_openings);
     builder.cycle_tracker_end("stage-d-3-verify-challenges");
 }
 
@@ -293,7 +287,7 @@ where
 
     type Commitment = DigestVariable<C>;
 
-    type Proof = TwoAdicPcsProofVariable<C>;
+    type Proof = FriProofVariable<C>;
 
     fn natural_domain_for_log_degree(
         &self,
@@ -340,7 +334,7 @@ pub mod tests {
             types::TwoAdicPcsRoundVariable, TwoAdicFriPcsVariable,
             TwoAdicMultiplicativeCosetVariable,
         },
-        hints::{Hintable, InnerPcsProof, InnerVal},
+        hints::{Hintable, InnerFriProof, InnerVal},
         utils::const_fri_config,
     };
 
@@ -357,7 +351,7 @@ pub mod tests {
 
         let mut rng = &mut OsRng;
         let log_degrees = &[nb_log2_rows];
-        let engine = default_engine(27);
+        let engine = default_engine();
         let pcs = engine.config.pcs();
         let perm = engine.perm;
 
@@ -416,7 +410,7 @@ pub mod tests {
         }
 
         // Test proof verification.
-        let proofvar = InnerPcsProof::read(&mut builder);
+        let proofvar = InnerFriProof::read(&mut builder);
         let mut challenger = DuplexChallengerVariable::new(&mut builder);
         let commit = <[InnerVal; DIGEST_SIZE]>::from(commit).to_vec();
         let commit = DigestVariable::Felt(builder.constant::<Array<_, _>>(commit));

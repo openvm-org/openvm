@@ -42,6 +42,6 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
                 local[3],
                 InteractionType::Send,
             )
-            .eval(builder, AB::F::one());
+            .eval(builder, AB::F::ONE);
     }
 }

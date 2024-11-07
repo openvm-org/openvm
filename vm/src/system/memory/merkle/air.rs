@@ -50,10 +50,10 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
 
         // if `expand_direction` != -1, then `*_direction_different` should be 0
         builder
-            .when_ne(local.expand_direction, AB::F::neg_one())
+            .when_ne(local.expand_direction, AB::F::NEG_ONE)
             .assert_zero(local.left_direction_different);
         builder
-            .when_ne(local.expand_direction, AB::F::neg_one())
+            .when_ne(local.expand_direction, AB::F::NEG_ONE)
             .assert_zero(local.right_direction_different);
 
         // rows should be sorted in descending order
@@ -96,7 +96,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         builder
             .when(local.is_root)
             .when(next.is_root)
-            .assert_eq(local.expand_direction - next.expand_direction, AB::F::two());
+            .assert_eq(local.expand_direction - next.expand_direction, AB::F::TWO);
 
         // roots should have correct height
         builder.when(local.is_root).assert_eq(

@@ -12,6 +12,6 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         io: Poseidon2IoCols<WIDTH, AB::Var>,
     ) {
         let fields = io.input.into_iter().chain(io.output);
-        builder.push_receive(self.bus_index, fields, F::one());
+        builder.push_receive(self.bus_index, fields, F::ONE);
     }
 }

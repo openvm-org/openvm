@@ -11,7 +11,7 @@ impl<C: Config> Builder<C> {
 
         let output = self.dyn_array::<Var<_>>(num_bits as usize);
 
-        let sum: Var<_> = self.eval(C::N::zero());
+        let sum: Var<_> = self.eval(C::N::ZERO);
         for i in 0..num_bits as usize {
             let index = MemIndex {
                 index: i.into(),
@@ -21,7 +21,7 @@ impl<C: Config> Builder<C> {
             self.push(DslIr::StoreHintWord(output.ptr(), index));
 
             let bit = self.get(&output, i);
-            self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
+            self.assert_var_eq(bit * (bit - C::N::ONE), C::N::ZERO);
             self.assign(&sum, sum + bit * C::N::from_canonical_u32(1 << i));
         }
 
@@ -50,7 +50,7 @@ impl<C: Config> Builder<C> {
 
         let output = self.dyn_array::<Var<_>>(num_bits as usize);
 
-        let sum: Felt<_> = self.eval(C::F::zero());
+        let sum: Felt<_> = self.eval(C::F::ZERO);
         for i in 0..num_bits as usize {
             let index = MemIndex {
                 index: i.into(),
@@ -60,8 +60,8 @@ impl<C: Config> Builder<C> {
             self.push(DslIr::StoreHintWord(output.ptr(), index));
 
             let bit = self.get(&output, i);
-            self.assert_var_eq(bit * (bit - C::N::one()), C::N::zero());
-            self.if_eq(bit, C::N::one()).then(|builder| {
+            self.assert_var_eq(bit * (bit - C::N::ONE), C::N::ZERO);
+            self.if_eq(bit, C::N::ONE).then(|builder| {
                 builder.assign(&sum, sum + C::F::from_canonical_u32(1 << i));
             });
         }
@@ -87,8 +87,8 @@ impl<C: Config> Builder<C> {
 
     /// Convert bits to a variable.
     pub fn bits2num_v(&mut self, bits: &Array<C, Var<C::N>>) -> Var<C::N> {
-        let num: Var<_> = self.eval(C::N::zero());
-        let power: Var<_> = self.eval(C::N::one());
+        let num: Var<_> = self.eval(C::N::ZERO);
+        let power: Var<_> = self.eval(C::N::ONE);
         self.range(0, bits.len()).for_each(|i, builder| {
             let bit = builder.get(bits, i);
             builder.assign(&num, num + bit * power);
@@ -99,7 +99,7 @@ impl<C: Config> Builder<C> {
 
     /// Convert bits to a variable inside a circuit.
     pub fn bits2num_v_circuit(&mut self, bits: &[Var<C::N>]) -> Var<C::N> {
-        let result: Var<_> = self.eval(C::N::zero());
+        let result: Var<_> = self.eval(C::N::ZERO);
         for i in 0..bits.len() {
             self.assign(&result, result + bits[i] * C::N::from_canonical_u32(1 << i));
         }
@@ -108,11 +108,11 @@ impl<C: Config> Builder<C> {
 
     /// Convert bits to a felt.
     pub fn bits2num_f(&mut self, bits: &Array<C, Var<C::N>>, num_bits: u32) -> Felt<C::F> {
-        let num: Felt<_> = self.eval(C::F::zero());
+        let num: Felt<_> = self.eval(C::F::ZERO);
         for i in 0..num_bits as usize {
             let bit = self.get(bits, i);
             // Add `bit * 2^i` to the sum.
-            self.if_eq(bit, C::N::one()).then(|builder| {
+            self.if_eq(bit, C::N::ONE).then(|builder| {
                 builder.assign(&num, num + C::F::from_canonical_u32(1 << i));
             });
         }
@@ -140,7 +140,7 @@ impl<C: Config> Builder<C> {
             builder.set_value(&result_bits, i, entry);
         });
 
-        let zero = self.eval(C::N::zero());
+        let zero = self.eval(C::N::ZERO);
         self.range(bit_len, num_bits).for_each(|i, builder| {
             builder.set_value(&result_bits, i, zero);
         });

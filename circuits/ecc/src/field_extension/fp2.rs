@@ -216,7 +216,7 @@ mod tests {
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
-        let mut row = vec![BabyBear::zero(); width];
+        let mut row = BabyBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
@@ -284,7 +284,7 @@ mod tests {
             bn254_fq_to_biguint(z_fp2.c0),
             bn254_fq_to_biguint(z_fp2.c1),
         ];
-        let mut row = vec![BabyBear::zero(); width];
+        let mut row = BabyBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);

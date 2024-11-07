@@ -118,8 +118,7 @@ impl<T: Copy> KeccakVmCols<T> {
     }
 
     pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
-        // WARNING: once plonky3 commit is updated this needs to be changed to y, x
-        self.inner.a_prime_prime_prime(x, y, limb)
+        self.inner.a_prime_prime_prime(y, x, limb)
     }
 
     pub fn is_first_round(&self) -> T {
