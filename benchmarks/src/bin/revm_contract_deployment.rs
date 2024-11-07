@@ -15,8 +15,8 @@ use tracing::info_span;
 
 fn main() -> Result<()> {
     // TODO[jpw]: benchmark different combinations
-    let app_log_blowup = 1;
-    // let agg_log_blowup = 1;
+    let app_log_blowup = 2;
+    // let agg_log_blowup = 2;
 
     // https://etherscan.io/tx/0xa40b41d5a00b8b1a1d591dc60882521942f5b98b277bb3e8ba6e0edda0a2e550
     let bytecode_hex = include_str!("../../programs/revm_contract_deployment/usdc/FiatTokenV1.bin");
