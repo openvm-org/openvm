@@ -7,5 +7,5 @@ pub mod pairing;
 pub mod point;
 pub mod sw;
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "halo2curves")]
 pub mod curve;

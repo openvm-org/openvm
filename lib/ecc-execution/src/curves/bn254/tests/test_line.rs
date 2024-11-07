@@ -28,7 +28,14 @@ fn test_mul_013_by_013() {
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_013_by_013 = mul_013_by_013::<Fq, Fq2>(line_0, line_1, Bn254::xi());
-    let mul_013_by_013 = Fq12::from_coeffs(&mul_013_by_013);
+    let mul_013_by_013 = Fq12::from_coeffs([
+        mul_013_by_013[0],
+        mul_013_by_013[1],
+        mul_013_by_013[2],
+        mul_013_by_013[3],
+        mul_013_by_013[4],
+        Fq2::ZERO,
+    ]);
 
     // Compare with the result of multiplying two Fp12 elements
     let fp12_0 = Fq12::from_evaluated_line_d_type(line_0);
@@ -66,6 +73,6 @@ fn test_mul_by_01234() {
     ];
     let mul_by_01234 = mul_by_01234::<Fq, Fq2, Fq12>(f, x);
 
-    let x_f12 = Fq12::from_coeffs(&x);
+    let x_f12 = Fq12::from_coeffs([x[0], x[1], x[2], x[3], x[4], Fq2::ZERO]);
     assert_eq!(mul_by_01234, f * x_f12);
 }

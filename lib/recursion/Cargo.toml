@@ -32,7 +32,7 @@ snark-verifier-sdk = { workspace = true, features = [
     "loader_evm",
     "revm",
 ], optional = true }
-ff = { version = "0.13", features = ["derive", "derive_bits"] }
+ff = { workspace = true, features = ["derive", "derive_bits"] }
 itertools.workspace = true
 rand.workspace = true
 serde.workspace = true

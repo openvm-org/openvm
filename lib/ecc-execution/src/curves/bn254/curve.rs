@@ -1,4 +1,5 @@
 use axvm_ecc::field::FieldExtension;
+use ff::Field;
 use halo2curves_axiom::bn256::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
@@ -53,7 +54,7 @@ pub struct Bn254;
 
 impl Bn254 {
     pub fn xi() -> Fq2 {
-        Fq2::from_coeffs(&[Fq::from_raw([9, 0, 0, 0]), Fq::one()])
+        Fq2::from_coeffs([Fq::from_raw([9, 0, 0, 0]), Fq::ONE])
     }
 
     pub fn seed() -> u64 {

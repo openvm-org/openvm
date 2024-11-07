@@ -10,7 +10,7 @@ use ax_ecc_primitives::{
         bls12381_fq12_to_biguint_vec, bls12381_fq2_to_biguint_vec, bls12381_fq_to_biguint,
     },
 };
-use axvm_ecc::{field::Fp2Constructor, point::EcPoint};
+use axvm_ecc::{field::FieldExtension, point::EcPoint};
 use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
@@ -98,7 +98,7 @@ fn test_mul_023_by_023() {
     let r_cmp = ax_ecc_execution::curves::bls12_381::mul_023_by_023::<Fq, Fq2>(
         line0,
         line1,
-        Fq2::new(Fq::one(), Fq::one()),
+        Fq2::from_coeffs([Fq::ONE, Fq::ONE]),
     );
     let r_cmp_bigint = r_cmp
         .map(|x| [bls12381_fq_to_biguint(x.c0), bls12381_fq_to_biguint(x.c1)])

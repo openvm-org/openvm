@@ -2,6 +2,7 @@ use axvm_ecc::{
     curve::bls12381::{Fq, Fq2},
     field::FieldExtension,
 };
+use ff::Field;
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
 
@@ -34,7 +35,7 @@ pub struct Bls12_381;
 
 impl Bls12_381 {
     pub fn xi() -> Fq2 {
-        Fq2::from_coeffs(&[Fq::one(), Fq::one()])
+        Fq2::from_coeffs([Fq::ONE, Fq::ONE])
     }
 
     pub fn seed() -> u64 {

@@ -67,8 +67,8 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
+axvm-ecc = { workspace = true, features = ["halo2curves"] }
 axvm-ecc-constants = { workspace = true }
-axvm-ecc = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
 ax-ecc-execution = { workspace = true }
@@ -78,7 +78,7 @@ hex.workspace = true
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:ax-stark-sdk", "axvm-ecc/test-utils"]
+test-utils = ["dep:ax-stark-sdk", "axvm-ecc/halo2curves"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
