@@ -58,7 +58,7 @@ pub trait IntMod:
     fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes.
-    fn from_bytes(bytes: &[u8]) -> Self;
+    fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u32.
     fn from_u8(val: u8) -> Self;
@@ -70,7 +70,7 @@ pub trait IntMod:
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes.
-    fn as_bytes(&self) -> &[u8];
+    fn as_le_bytes(&self) -> &[u8];
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]

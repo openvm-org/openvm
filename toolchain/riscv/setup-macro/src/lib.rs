@@ -74,22 +74,26 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
     let mut moduli = Vec::new();
 
     output.push(TokenStream::from(quote::quote! {
-        #[cfg(target_os = "zkvm")]
-        use core::mem::MaybeUninit;
-        use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
-        use core::fmt::{self, Debug};
-
-        #[cfg(target_os = "zkvm")]
-        use axvm_platform::{
-            constants::{Custom1Funct3, ModArithBaseFunct7, CUSTOM_1},
-            custom_insn_r,
+        use core::{
+            fmt::{self, Debug},
+            iter::{Product, Sum},
+            ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
         };
 
+        use axvm::intrinsics::IntMod;
         #[cfg(not(target_os = "zkvm"))]
-        use num_bigint_dig::{traits::ModInverse, BigUint, Sign, ToBigInt};
-
-        #[cfg(not(target_os = "zkvm"))]
-        use axvm::intrinsics::biguint_to_limbs;
+        use {
+            axvm::intrinsics::{biguint_to_limbs, uint_mod_inverse},
+            num_bigint_dig::{traits::ModInverse, BigUint, Sign, ToBigInt},
+        };
+        #[cfg(target_os = "zkvm")]
+        use {
+            axvm_platform::{
+                constants::{Custom1Funct3, ModArithBaseFunct7, CUSTOM_1},
+                custom_insn_r,
+            },
+            core::mem::MaybeUninit,
+        };
     }));
 
     for stmt in stmts {
@@ -135,50 +139,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     pub struct #struct_name([u8; #limbs]);
 
                                     impl #struct_name {
-                                        const MODULUS: [u8; #limbs] = [#(#modulus_bytes),*];
-                                        const MOD_IDX: usize = #mod_idx;
-
-                                        /// The zero element of the field.
-                                        pub const ZERO: Self = Self([0; #limbs]);
-
-                                        /// Creates a new #struct_name from an array of bytes.
-                                        pub const fn from_bytes(bytes: [u8; #limbs]) -> Self {
-                                            Self(bytes)
-                                        }
-
-                                        /// Creates a new #struct_name from a u32.
-                                        pub fn from_u32(val: u32) -> Self {
+                                        #[inline(always)]
+                                        const fn from_const_u8(val: u8) -> Self {
                                             let mut bytes = [0; #limbs];
-                                            bytes[..4].copy_from_slice(&val.to_le_bytes());
+                                            bytes[0] = val;
                                             Self(bytes)
-                                        }
-
-                                        /// Value of this #struct_name as an array of bytes.
-                                        pub fn as_bytes(&self) -> &[u8; #limbs] {
-                                            &(self.0)
-                                        }
-
-                                        /// Returns MODULUS as an array of bytes.
-                                        const fn modulus() -> [u8; #limbs] {
-                                            Self::MODULUS
-                                        }
-
-                                        /// Creates a new #struct_name from a BigUint.
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        pub fn from_biguint(biguint: BigUint) -> Self {
-                                            Self(biguint_to_limbs(&biguint))
-                                        }
-
-                                        /// Value of this #struct_name as a BigUint.
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        pub fn as_biguint(&self) -> BigUint {
-                                            BigUint::from_bytes_le(self.as_bytes())
-                                        }
-
-                                        /// Modulus N as a BigUint.
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        pub fn modulus_biguint() -> BigUint {
-                                            BigUint::from_bytes_le(&Self::MODULUS)
                                         }
 
                                         #[inline(always)]
@@ -194,7 +159,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    ModArithBaseFunct7::AddMod as usize
+                                                        + Self::MOD_IDX
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -216,7 +183,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    ModArithBaseFunct7::SubMod as usize
+                                                        + Self::MOD_IDX
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -237,7 +206,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    ModArithBaseFunct7::MulMod as usize
+                                                        + Self::MOD_IDX
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -250,14 +221,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             #[cfg(not(target_os = "zkvm"))]
                                             {
                                                 let modulus = Self::modulus_biguint();
-                                                let signed_inv = other.as_biguint().mod_inverse(modulus.clone()).unwrap();
-                                                let inv = if signed_inv.sign() == Sign::Minus {
-                                                    modulus.to_bigint().unwrap() + signed_inv
-                                                } else {
-                                                    signed_inv
-                                                }
-                                                .to_biguint()
-                                                .unwrap();
+                                                let inv = uint_mod_inverse(&other.as_biguint(), &modulus);
                                                 *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                                             }
                                             #[cfg(target_os = "zkvm")]
@@ -265,12 +229,201 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    ModArithBaseFunct7::DivMod as usize
+                                                        + Self::MOD_IDX
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
                                                 )
                                             }
+                                        }
+
+                                        #[inline(always)]
+                                        fn add_refs_impl(&self, other: &Self) -> Self {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res += other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn sub_refs_impl(&self, other: &Self) -> Self {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res -= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn mul_refs_impl(&self, other: &Self) -> Self {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res *= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn div_refs_impl(&self, other: &Self) -> Self {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                let mut res = self.clone();
+                                                res /= other;
+                                                res
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                                                custom_insn_r!(
+                                                    CUSTOM_1,
+                                                    Custom1Funct3::ModularArithmetic as usize,
+                                                    ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    self as *const #struct_name,
+                                                    other as *const #struct_name
+                                                );
+                                                unsafe { uninit.assume_init() }
+                                            }
+                                        }
+
+                                        #[inline(always)]
+                                        fn eq_impl(&self, other: &Self) -> bool {
+                                            #[cfg(not(target_os = "zkvm"))]
+                                            {
+                                                self.as_le_bytes() == other.as_le_bytes()
+                                            }
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut x: u32;
+                                                unsafe {
+                                                    core::arch::asm!(
+                                                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                                                        opcode = const CUSTOM_1,
+                                                        funct3 = const Custom1Funct3::ModularArithmetic as usize,
+                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                        rd = out(reg) x,
+                                                        rs1 = in(reg) self as *const #struct_name,
+                                                        rs2 = in(reg) other as *const #struct_name
+                                                    );
+                                                }
+                                                x != 0
+                                            }
+                                        }
+                                    }
+
+                                    impl IntMod for #struct_name {
+                                        type Repr = [u8; #limbs];
+
+                                        const MOD_IDX: usize = #mod_idx;
+
+                                        const MODULUS: Self::Repr = [#(#modulus_bytes),*];
+
+                                        const ZERO: Self = Self([0; #limbs]);
+
+                                        const ONE: Self = Self::from_const_u8(1);
+
+                                        const NEG_ONE: Self = Self([255; #limbs]);
+
+                                        fn from_repr(repr: Self::Repr) -> Self {
+                                            Self(repr)
+                                        }
+
+                                        fn from_le_bytes(bytes: &[u8]) -> Self {
+                                            let mut arr = [0u8; 32];
+                                            arr.copy_from_slice(bytes);
+                                            Self(arr)
+                                        }
+
+                                        fn from_u8(val: u8) -> Self {
+                                            Self::from_const_u8(val)
+                                        }
+
+                                        fn from_u32(val: u32) -> Self {
+                                            let mut bytes = [0; 32];
+                                            bytes[..4].copy_from_slice(&val.to_le_bytes());
+                                            Self(bytes)
+                                        }
+
+                                        fn from_u64(val: u64) -> Self {
+                                            let mut bytes = [0; 32];
+                                            bytes[..8].copy_from_slice(&val.to_le_bytes());
+                                            Self(bytes)
+                                        }
+
+                                        fn as_le_bytes(&self) -> &[u8] {
+                                            &(self.0)
+                                        }
+
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        fn modulus_biguint() -> BigUint {
+                                            BigUint::from_bytes_le(&Self::MODULUS)
+                                        }
+
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        fn from_biguint(biguint: BigUint) -> Self {
+                                            Self(biguint_to_limbs(&biguint))
+                                        }
+
+                                        #[cfg(not(target_os = "zkvm"))]
+                                        fn as_biguint(&self) -> BigUint {
+                                            BigUint::from_bytes_le(self.as_le_bytes())
+                                        }
+
+                                        fn double(&self) -> Self {
+                                            self + self
+                                        }
+
+                                        fn square(&self) -> Self {
+                                            self * self
+                                        }
+
+                                        fn cube(&self) -> Self {
+                                            &self.square() * self
                                         }
                                     }
 
@@ -310,25 +463,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         type Output = #struct_name;
                                         #[inline(always)]
                                         fn add(self, other: &'a #struct_name) -> Self::Output {
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            {
-                                                let mut res = self.clone();
-                                                res += other;
-                                                res
-                                            }
-                                            #[cfg(target_os = "zkvm")]
-                                            {
-                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                                                custom_insn_r!(
-                                                    CUSTOM_1,
-                                                    Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                    uninit.as_mut_ptr(),
-                                                    self as *const #struct_name,
-                                                    other as *const #struct_name
-                                                );
-                                                unsafe { uninit.assume_init() }
-                                            }
+                                            self.add_refs_impl(other)
                                         }
                                     }
 
@@ -368,25 +503,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         type Output = #struct_name;
                                         #[inline(always)]
                                         fn sub(self, other: &'a #struct_name) -> Self::Output {
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            {
-                                                let mut res = self.clone();
-                                                res -= other;
-                                                res
-                                            }
-                                            #[cfg(target_os = "zkvm")]
-                                            {
-                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                                                custom_insn_r!(
-                                                    CUSTOM_1,
-                                                    Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                    uninit.as_mut_ptr(),
-                                                    self as *const #struct_name,
-                                                    other as *const #struct_name
-                                                );
-                                                unsafe { uninit.assume_init() }
-                                            }
+                                            self.sub_refs_impl(other)
                                         }
                                     }
 
@@ -426,25 +543,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         type Output = #struct_name;
                                         #[inline(always)]
                                         fn mul(self, other: &'a #struct_name) -> Self::Output {
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            {
-                                                let mut res = self.clone();
-                                                res *= other;
-                                                res
-                                            }
-                                            #[cfg(target_os = "zkvm")]
-                                            {
-                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                                                custom_insn_r!(
-                                                    CUSTOM_1,
-                                                    Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                    uninit.as_mut_ptr(),
-                                                    self as *const #struct_name,
-                                                    other as *const #struct_name
-                                                );
-                                                unsafe { uninit.assume_init() }
-                                            }
+                                            self.mul_refs_impl(other)
                                         }
                                     }
 
@@ -489,57 +588,51 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         /// Undefined behaviour when denominator is not coprime to N
                                         #[inline(always)]
                                         fn div(self, other: &'a #struct_name) -> Self::Output {
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            {
-                                                let mut res = self.clone();
-                                                res /= other;
-                                                res
-                                            }
-                                            #[cfg(target_os = "zkvm")]
-                                            {
-                                                let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                                                custom_insn_r!(
-                                                    CUSTOM_1,
-                                                    Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize + Self::Output::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                    uninit.as_mut_ptr(),
-                                                    self as *const #struct_name,
-                                                    other as *const #struct_name
-                                                );
-                                                unsafe { uninit.assume_init() }
-                                            }
+                                            self.div_refs_impl(other)
                                         }
                                     }
 
                                     impl PartialEq for #struct_name {
                                         #[inline(always)]
                                         fn eq(&self, other: &Self) -> bool {
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            {
-                                                self.as_bytes() == other.as_bytes()
-                                            }
-                                            #[cfg(target_os = "zkvm")]
-                                            {
-                                                let mut x: u32;
-                                                unsafe {
-                                                    core::arch::asm!(
-                                                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                                                        opcode = const CUSTOM_1,
-                                                        funct3 = const Custom1Funct3::ModularArithmetic as usize,
-                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        rd = out(reg) x,
-                                                        rs1 = in(reg) self as *const #struct_name,
-                                                        rs2 = in(reg) other as *const #struct_name
-                                                    );
-                                                }
-                                                x != 0
-                                            }
+                                            self.eq_impl(other)
+                                        }
+                                    }
+
+                                    impl<'a> Sum<&'a #struct_name> for #struct_name {
+                                        fn sum<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
+                                            iter.fold(Self::ZERO, |acc, x| &acc + x)
+                                        }
+                                    }
+
+                                    impl Sum for #struct_name {
+                                        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+                                            iter.fold(Self::ZERO, |acc, x| &acc + &x)
+                                        }
+                                    }
+
+                                    impl<'a> Product<&'a #struct_name> for #struct_name {
+                                        fn product<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
+                                            iter.fold(Self::ONE, |acc, x| &acc * x)
+                                        }
+                                    }
+
+                                    impl Product for #struct_name {
+                                        fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+                                            iter.fold(Self::ONE, |acc, x| &acc * &x)
+                                        }
+                                    }
+
+                                    impl Neg for #struct_name {
+                                        type Output = #struct_name;
+                                        fn neg(self) -> Self::Output {
+                                            Self::ZERO - &self
                                         }
                                     }
 
                                     impl Debug for #struct_name {
                                         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                            write!(f, "{:?}", self.as_bytes())
+                                            write!(f, "{:?}", self.as_le_bytes())
                                         }
                                     }
 
