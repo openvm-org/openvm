@@ -142,7 +142,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         pub const ZERO: Self = Self([0; #limbs]);
 
                                         /// Creates a new #struct_name from an array of bytes.
-                                        const fn from_bytes(bytes: [u8; #limbs]) -> Self {
+                                        pub const fn from_bytes(bytes: [u8; #limbs]) -> Self {
                                             Self(bytes)
                                         }
 

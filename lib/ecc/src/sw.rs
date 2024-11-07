@@ -2,7 +2,11 @@ axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
 
+#[cfg(target_os = "zkvm")]
+use axvm_platform::constants::SwBaseFunct7;
+
 #[derive(Eq, PartialEq, Clone)]
+#[repr(C)]
 pub struct EcPoint {
     pub x: IntModN,
     pub y: IntModN,
@@ -46,7 +50,39 @@ impl EcPoint {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<EcPoint> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwAddNe as usize,
+                uninit.as_mut_ptr(),
+                p1 as *const EcPoint,
+                p2 as *const EcPoint
+            );
+            unsafe { uninit.assume_init() }
+        }
+    }
+
+    #[inline(always)]
+    pub fn add_ne_assign(&mut self, p2: &EcPoint) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let lambda = (&p2.y - &self.y) / (&p2.x - &self.x);
+            let x3 = &lambda * &lambda - &self.x - &p2.x;
+            let y3 = &lambda * &(&self.x - &x3) - &self.y;
+            self.x = x3;
+            self.y = y3;
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwAddNe as usize,
+                self as *mut EcPoint,
+                self as *const EcPoint,
+                p2 as *const EcPoint
+            );
         }
     }
 
@@ -61,7 +97,39 @@ impl EcPoint {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<EcPoint> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwDouble as usize,
+                uninit.as_mut_ptr(),
+                p as *const EcPoint,
+                "x0"
+            );
+            unsafe { uninit.assume_init() }
+        }
+    }
+
+    #[inline(always)]
+    pub fn double_assign(&mut self) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let lambda = &self.x * &self.x * 3 / (&self.y * 2);
+            let x3 = &lambda * &lambda - &self.x * 2;
+            let y3 = &lambda * &(&self.x - &x3) - &self.y;
+            self.x = x3;
+            self.y = y3;
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwDouble as usize,
+                self as *mut EcPoint,
+                self as *const EcPoint,
+                "x0"
+            );
         }
     }
 }

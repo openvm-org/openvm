@@ -55,6 +55,15 @@ macro_rules! custom_insn_r {
             ), opcode = const $opcode, funct3 = const $funct3, funct7 = const $funct7, rd = out(reg) $rd)
         }
     };
+    ($opcode:expr, $funct3:expr, $funct7:expr, $rd:expr, $rs1:expr, $rs2:literal) => {
+        // Note: rd = in(reg) because we expect rd to be a pointer
+        unsafe {
+            core::arch::asm!(concat!(
+                ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, ",
+                $rs2,
+            ), opcode = const $opcode, funct3 = const $funct3, funct7 = const $funct7, rd = in(reg) $rd, rs1 = in(reg) $rs1)
+        }
+    };
     ($opcode:expr, $funct3:expr, $funct7:expr, $rd:expr, $rs1:expr, $rs2:expr) => {
         // Note: rd = in(reg) because we expect rd to be a pointer
         unsafe {

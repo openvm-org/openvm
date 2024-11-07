@@ -135,3 +135,15 @@ fn test_matrix_power_signed_prove() -> Result<()> {
     air_test_with_min_segments(config, elf, vec![], 1);
     Ok(())
 }
+
+#[test]
+fn test_ec_runtime() -> Result<()> {
+    let elf = build_example_program("ec")?;
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_canonical_modulus()
+            .add_canonical_ec_curves(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}

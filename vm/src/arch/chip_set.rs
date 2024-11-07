@@ -796,8 +796,12 @@ impl VmConfig {
             gen_ec_executor_tuple(&self.supported_ec_curves)
         {
             let global_opcode_idx = local_opcode_idx + class_offset;
-            if executors.contains_key(&local_opcode_idx) {
-                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            if executors.contains_key(&global_opcode_idx) {
+                let name = ExecutorName::from(executors.get(&global_opcode_idx).unwrap());
+                panic!(
+                    "Attempting to override an executor for opcode {global_opcode_idx} with executor {:?}",
+                    name
+                );
             }
             let config32 = ExprBuilderConfig {
                 modulus: modulus.clone(),
@@ -942,7 +946,7 @@ impl VmConfig {
             gen_pairing_executor_tuple(&self.supported_pairing_curves)
         {
             let global_opcode_idx = local_opcode_idx + class_offset;
-            if executors.contains_key(&local_opcode_idx) {
+            if executors.contains_key(&global_opcode_idx) {
                 panic!("Attempting to override an executor for opcode {global_opcode_idx}");
             }
             let config32 = ExprBuilderConfig {

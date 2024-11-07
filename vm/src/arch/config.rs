@@ -135,8 +135,14 @@ impl VmConfig {
         self.add_modular_support(primes)
     }
 
-    pub fn add_ecc_support(self) -> Self {
-        todo!()
+    pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
+        let mut res = self;
+        res.supported_ec_curves.extend(ec_curves);
+        res
+    }
+
+    pub fn add_canonical_ec_curves(self) -> Self {
+        self.add_ecc_support(vec![EcCurve::Secp256k1])
     }
 
     /// Generate a proving key for the VM.
