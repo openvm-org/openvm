@@ -7,9 +7,9 @@ use core::{
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 
-/// Trait definition for AXVM modular integers, where each operation
+/// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
-pub trait IntMod<const LIMBS: usize>:
+pub trait IntMod:
     Sized
     + Eq
     + Clone
@@ -36,11 +36,14 @@ pub trait IntMod<const LIMBS: usize>:
     + for<'a> MulAssign<&'a Self>
     + for<'a> DivAssign<&'a Self>
 {
+    /// Underlying representation of IntMod.
+    type Repr;
+
     /// Index of IntMod::MODULUS.
     const MOD_IDX: usize;
 
     /// Modulus as an array of bytes.
-    const MODULUS: [u8; LIMBS];
+    const MODULUS: Self::Repr;
 
     /// The zero element (i.e. the additive identity).
     const ZERO: Self;
@@ -48,13 +51,14 @@ pub trait IntMod<const LIMBS: usize>:
     /// The one element (i.e. the multiplicative identity).
     const ONE: Self;
 
-    /// Returns MODULUS as an array of bytes.
-    fn modulus() -> [u8; LIMBS] {
-        Self::MODULUS
-    }
+    /// The negative one element (i.e. additive inverse of one).
+    const NEG_ONE: Self;
+
+    /// Creates a new IntMod an instance of Repr.
+    fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes.
-    fn from_bytes(bytes: [u8; LIMBS]) -> Self;
+    fn from_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u32.
     fn from_u8(val: u8) -> Self;
@@ -66,7 +70,7 @@ pub trait IntMod<const LIMBS: usize>:
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes.
-    fn as_bytes(&self) -> &[u8; LIMBS];
+    fn as_bytes(&self) -> &[u8];
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -98,15 +102,6 @@ pub trait IntMod<const LIMBS: usize>:
     fn cube(&self) -> Self {
         let mut ret = self.square();
         ret *= self;
-        ret
-    }
-
-    /// Exponentiates this IntMod by 'exp'.
-    fn pow(&self, exp: u32) -> Self {
-        let mut ret = Self::ONE;
-        for _ in 0..exp {
-            ret *= self;
-        }
         ret
     }
 }
