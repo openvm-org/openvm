@@ -51,9 +51,6 @@ pub trait IntMod:
     /// The one element (i.e. the multiplicative identity).
     const ONE: Self;
 
-    /// The negative one element (i.e. additive inverse of one).
-    const NEG_ONE: Self;
-
     /// Creates a new IntMod an instance of Repr.
     fn from_repr(repr: Self::Repr) -> Self;
 

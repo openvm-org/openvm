@@ -367,8 +367,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                         const ONE: Self = Self::from_const_u8(1);
 
-                                        const NEG_ONE: Self = Self([255; #limbs]);
-
                                         fn from_repr(repr: Self::Repr) -> Self {
                                             Self(repr)
                                         }
