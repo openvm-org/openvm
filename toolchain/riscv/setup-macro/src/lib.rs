@@ -20,6 +20,15 @@ impl Parse for Stmts {
     }
 }
 
+/// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
+/// Usage:
+/// ```
+/// moduli_setup! {
+///     Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
+///     Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
+/// }
+/// ```
+/// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on).
 #[proc_macro]
 pub fn moduli_setup(input: TokenStream) -> TokenStream {
     let Stmts { stmts } = parse_macro_input!(input as Stmts);
@@ -91,24 +100,26 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                         if let syn::Expr::Lit(lit) = &*assign.right {
                             if let syn::Lit::Str(str_lit) = &lit.lit {
+                                let struct_name = syn::Ident::new(
+                                    &struct_name,
+                                    proc_macro::Span::call_site().into(),
+                                );
+
                                 let modulus_bytes = string_to_bytes(&str_lit.value());
                                 let limbs = modulus_bytes.len();
 
                                 // TODO: remove this once we support better reads
                                 let limbs = limbs.max(32);
+
+                                // The largest power of two so that at most 10% of all space is wasted
+                                let block_size = (limbs / 9 + 1).next_power_of_two() / 2;
+                                let limbs = limbs.next_multiple_of(block_size);
                                 let modulus_bytes = modulus_bytes
                                     .into_iter()
                                     .chain(vec![0u8; limbs])
                                     .take(limbs)
                                     .collect::<Vec<_>>();
 
-                                let struct_name = syn::Ident::new(
-                                    &struct_name,
-                                    proc_macro::Span::call_site().into(),
-                                );
-
-                                // The largest power of two so that at most 10% of all space is wasted
-                                let block_size = (limbs + limbs / 9 + 1).next_power_of_two() / 2;
                                 let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
                                 let block_size =
                                     syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
