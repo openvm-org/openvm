@@ -91,7 +91,6 @@ ax-circuit-primitives = { path = "circuits/primitives", default-features = false
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
-axvm-toolchain-tests = { path = "toolchain/tests", default-features = false }
 # Plonky3
 # d094850 is jpw's PR: https://github.com/Plonky3/Plonky3/commit/d094850d1740d722fea9130ec5bbff7ff6bc808c
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d094850" }

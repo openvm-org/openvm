@@ -11,7 +11,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
-hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex = { version = "0.4.3", default-features = false }
 hex-literal = { version = "0.4.1", default-features = false }
 axvm-ecc = { path = "../../../lib/ecc", default-features = false }
 
