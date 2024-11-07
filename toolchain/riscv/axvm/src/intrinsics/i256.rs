@@ -202,7 +202,7 @@ impl Ord for I256 {
     fn cmp(&self, other: &Self) -> Ordering {
         #[cfg(target_os = "zkvm")]
         {
-            let mut cmp_result = unsafe { MaybeUninit::<U256>::uninit().assume_init() };
+            let mut cmp_result = unsafe { MaybeUninit::<I256>::uninit().assume_init() };
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
