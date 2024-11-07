@@ -4,7 +4,7 @@
 use core::hint::black_box;
 
 use axvm::intrinsics::IntMod;
-use axvm_ecc::sw::{EcPoint, IntModN};
+use axvm_ecc::sw::{EcPointN, IntModN};
 use hex_literal::hex;
 
 axvm::entry!(main);
@@ -35,16 +35,16 @@ pub fn main() {
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = black_box(EcPoint { x: x1, y: y1 });
-    let mut p2 = black_box(EcPoint { x: x2, y: y2 });
+    let mut p1 = black_box(EcPointN { x: x1, y: y1 });
+    let mut p2 = black_box(EcPointN { x: x2, y: y2 });
 
-    let p3 = EcPoint::add(&p1, &p2);
+    let p3 = EcPointN::add(&p1, &p2);
 
     if p3.x != x3 || p3.y != y3 {
         panic!();
     }
 
-    let p4 = EcPoint::add(&p2, &p2);
+    let p4 = EcPointN::add(&p2, &p2);
 
     if p4.x != x4 || p4.y != y4 {
         panic!();
