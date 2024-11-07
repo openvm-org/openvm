@@ -11,7 +11,7 @@ use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig, VmExecutor};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use eyre::Result;
-use metrics::{gauge, Gauge};
+use metrics::{counter, gauge, Gauge};
 use p3_field::PrimeField32;
 use tempfile::tempdir;
 
@@ -66,6 +66,7 @@ where
         .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
     // 2. Generate proving key from config.
     config.collect_metrics = false;
+    counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
     let vm = VirtualMachine::new(engine, config);
     let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
     // 3. Commit to the exe by generating cached trace for program.

@@ -8,6 +8,8 @@ on:
     paths:
       - "vm/**"
       - "toolchain/riscv/**"
+      - "toolchain/instructions/**"
+      - "toolchain/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -38,6 +40,12 @@ jobs:
 
       - name: Run transpiler tests
         working-directory: toolchain/riscv/transpiler
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          cargo nextest run --cargo-profile=fast
+
+      - name: Run toolchain tests
+        working-directory: toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo nextest run --cargo-profile=fast

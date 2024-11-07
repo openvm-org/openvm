@@ -17,8 +17,8 @@ use eyre::Result;
 use tracing::info_span;
 
 fn main() -> Result<()> {
-    let app_log_blowup = 1;
-    let agg_log_blowup = 3;
+    let app_log_blowup = 2;
+    let agg_log_blowup = 2;
 
     let n = 16; // STARK to calculate 16th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);
@@ -31,8 +31,8 @@ fn main() -> Result<()> {
         let vdata = engine
             .run_test(vec![fib_chip.generate_air_proof_input()])
             .unwrap();
-
-        let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
+        let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
+        let config = VmConfig::aggregation(0, max_constraint_degree);
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()

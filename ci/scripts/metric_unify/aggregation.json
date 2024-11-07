@@ -20,6 +20,12 @@
       "name": "total_cycles",
       "metrics": ["total_cycles"],
       "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "fri.log_blowup",
+      "metrics": ["fri.log_blowup"],
+      "operation": "unique"
     }
   ]
 }

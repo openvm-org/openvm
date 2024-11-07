@@ -16,8 +16,8 @@ use tracing::info_span;
 
 fn main() -> Result<()> {
     // TODO[jpw]: benchmark different combinations
-    let app_log_blowup = 1;
-    let agg_log_blowup = 3;
+    let app_log_blowup = 2;
+    let agg_log_blowup = 2;
 
     let elf = build_bench_program("regex")?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
@@ -46,7 +46,8 @@ fn main() -> Result<()> {
         {
             // Leaf aggregation: 1->1 proof "aggregation"
             // TODO[jpw]: put real user public values number, placeholder=0
-            let config = VmConfig::aggregation(0, (1 << agg_log_blowup) - 1);
+            let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
+            let config = VmConfig::aggregation(0, max_constraint_degree);
             let compiler_options = CompilerOptions {
                 enable_cycle_tracker: true,
                 ..Default::default()
