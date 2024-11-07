@@ -165,7 +165,7 @@ def apply_aggregations(db: MetricDb, aggregations):
     for aggregation in aggregations:
         # group_by_values => aggregation metric
         group_by_dict = {}
-        if aggregation.operation == "sum":
+        if aggregation.operation == "sum" or aggregation.operation == "unique":
             for tuple_keys, metrics_dict in db.dict_by_label_types.items():
                 if not set(aggregation.group_by).issubset(set(tuple_keys)):
                     continue
@@ -174,24 +174,30 @@ def apply_aggregations(db: MetricDb, aggregations):
                     group_by_values = tuple([label_dict[key] for key in aggregation.group_by])
                     for metric in metrics:
                         if metric.name in aggregation.metrics:
-                            if group_by_values not in group_by_dict:
-                                group_by_dict[group_by_values] = 0
-                            group_by_dict[group_by_values] += metric.value
+                            if aggregation.operation == "sum":
+                                if group_by_values not in group_by_dict:
+                                    group_by_dict[group_by_values] = 0
+                                group_by_dict[group_by_values] += metric.value
+                            elif aggregation.operation == "unique":
+                                if group_by_values not in group_by_dict:
+                                    group_by_dict[group_by_values] = metric.value
+                                else:
+                                    assert group_by_dict[group_by_values] == metric.value
 
-            for group_by_values, sum in group_by_dict.items():
+            for group_by_values, agg_value in group_by_dict.items():
                 aggregation_label = labels_to_tuple([(k,v) for k,v in zip(aggregation.group_by, group_by_values)])
                 if aggregation_label not in db.flat_dict:
                     db.flat_dict[aggregation_label] = []
                 overwrite = False
                 for metric in db.flat_dict[aggregation_label]:
                     if metric.name == aggregation.name:
-                        if metric.value != sum:
+                        if metric.value != agg_value:
                             print(f"[WARN] Overwriting {metric.name}: previous value = {metric.value}, new value = {sum}")
-                        metric.value = sum
+                        metric.value = agg_value
                         overwrite = True
                         break
                 if not overwrite:
-                    db.flat_dict[aggregation_label].append(Metric(aggregation.name, sum))
+                    db.flat_dict[aggregation_label].append(Metric(aggregation.name, agg_value))
         else:
             raise ValueError(f"Unknown operation: {aggregation.operation}")
     db.separate_by_label_types()
@@ -227,8 +233,6 @@ def generate_displayable_metrics(
         agg_metrics = []
         for metric in metrics:
             if metric.name in [a.name for a in aggregations]:
-                agg_metrics.append(metric)
-            if metric.name == "fri.log_blowup":
                 agg_metrics.append(metric)
         if len(agg_metrics) == 0:
             continue
