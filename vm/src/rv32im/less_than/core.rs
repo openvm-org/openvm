@@ -78,7 +78,7 @@ where
         let cols: &LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [cols.opcode_slt_flag, cols.opcode_sltu_flag];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -88,7 +88,7 @@ where
         let b = &cols.b;
         let c = &cols.c;
         let marker = &cols.diff_marker;
-        let mut prefix_sum = AB::Expr::zero();
+        let mut prefix_sum = AB::Expr::ZERO;
 
         let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
         let c_diff = c[NUM_LIMBS - 1] - cols.c_msb_f;
@@ -102,7 +102,7 @@ where
                 cols.c_msb_f - cols.b_msb_f
             } else {
                 c[i] - b[i]
-            }) * (AB::Expr::from_canonical_u8(2) * cols.cmp_result - AB::Expr::one());
+            }) * (AB::Expr::from_canonical_u8(2) * cols.cmp_result - AB::Expr::ONE);
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
@@ -123,17 +123,17 @@ where
             )
             .eval(builder, is_valid.clone());
         self.bus
-            .send_range(cols.diff_val - AB::Expr::one(), AB::F::zero())
+            .send_range(cols.diff_val - AB::Expr::ONE, AB::F::ZERO)
             .eval(builder, prefix_sum);
 
         let expected_opcode = flags
             .iter()
             .zip(LessThanOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             })
             + AB::Expr::from_canonical_usize(self.offset);
-        let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
         AdapterAirContext {

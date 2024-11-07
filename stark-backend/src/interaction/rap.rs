@@ -67,13 +67,13 @@ where
     let betas = generate_betas(rand_elems[1].into(), &all_interactions);
 
     let phi_lhs = phi_next.into() - phi_local.into();
-    let mut phi_rhs = AB::ExprEF::zero();
-    let mut phi_0 = AB::ExprEF::zero();
+    let mut phi_rhs = AB::ExprEF::ZERO;
+    let mut phi_0 = AB::ExprEF::ZERO;
 
     for (chunk_idx, interaction_chunk) in
         all_interactions.chunks(interaction_chunk_size).enumerate()
     {
-        let mut denoms = vec![AB::ExprEF::zero(); interaction_chunk.len()];
+        let mut denoms = AB::ExprEF::zero_vec(interaction_chunk.len());
         let interaction_chunk = interaction_chunk.to_vec();
         for (i, interaction) in interaction_chunk.iter().enumerate() {
             assert!(!interaction.fields.is_empty(), "fields should not be empty");
@@ -89,7 +89,7 @@ where
             row_lhs *= denom.clone();
         }
 
-        let mut row_rhs = AB::ExprEF::zero();
+        let mut row_rhs = AB::ExprEF::ZERO;
         for (i, interaction) in interaction_chunk.into_iter().enumerate() {
             let mut term: AB::ExprEF = interaction.count.into();
             if interaction.interaction_type == InteractionType::Receive {

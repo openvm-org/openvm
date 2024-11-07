@@ -192,11 +192,11 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
-            address_space == F::zero() || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
+            address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        if address_space == F::zero() {
+        if address_space == F::ZERO {
             assert_eq!(N, 1, "cannot batch read from address space 0");
 
             let timestamp = self.timestamp();
@@ -255,7 +255,7 @@ impl<F: PrimeField32> MemoryController<F> {
         pointer: F,
         data: [F; N],
     ) -> MemoryWriteRecord<F, N> {
-        assert_ne!(address_space, F::zero());
+        assert_ne!(address_space, F::ZERO);
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
             ptr_u32 < (1 << self.mem_config.pointer_max_bits),
@@ -564,8 +564,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         &self,
         read: MemoryReadRecord<F, 1>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
-        let mut inv = F::zero();
-        let mut is_zero = F::zero();
+        let mut inv = F::ZERO;
+        let mut is_zero = F::ZERO;
         IsZeroSubAir.generate_subrow(read.address_space, (&mut inv, &mut is_zero));
         let timestamp_lt_cols =
             self.generate_timestamp_lt_cols(read.prev_timestamp, read.timestamp);
@@ -595,7 +595,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         timestamp: u32,
     ) -> LessThanAuxCols<F, AUX_LEN> {
         debug_assert!(prev_timestamp < timestamp);
-        let mut decomp = [F::zero(); AUX_LEN];
+        let mut decomp = [F::ZERO; AUX_LEN];
         self.timestamp_lt_air.generate_subrow(
             (&self.range_checker, prev_timestamp, timestamp),
             &mut decomp,
@@ -612,7 +612,7 @@ pub fn memory_image_to_equipartition<F: PrimeField32, const N: usize>(
         let addr_u32 = addr.as_canonical_u32();
         let shift = addr_u32 as usize % N;
         let key = (addr_space, (addr_u32 / N as u32) as usize);
-        result.entry(key).or_insert([F::zero(); N])[shift] = word;
+        result.entry(key).or_insert([F::ZERO; N])[shift] = word;
     }
     result
 }

@@ -79,7 +79,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
 
         let (cmp, _, _, _) =
             run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-        let mut a = [F::zero(); RV32_REGISTER_NUM_LIMBS];
+        let mut a = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
         a[0] = F::from_bool(cmp);
         assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd));
     }
@@ -259,7 +259,7 @@ fn rv32_lt_fake_diff_val_negative_test() {
     let b = [145, 34, 25, 205];
     let c = [73, 35, 25, 205];
     let prank_vals = LessThanPrankValues {
-        diff_val: Some(F::neg_one().as_canonical_u32()),
+        diff_val: Some(F::NEG_ONE.as_canonical_u32()),
         ..Default::default()
     };
     run_rv32_lt_negative_test(LessThanOpcode::SLT, b, c, false, prank_vals, true);

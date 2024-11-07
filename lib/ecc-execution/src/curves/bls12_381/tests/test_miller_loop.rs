@@ -1,13 +1,13 @@
-use halo2curves_axiom::bls12_381::{
-    Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
+use axvm_ecc::{
+    curve::bls12381::{Fq, Fq12, Fq2, G1Affine, G2Affine},
+    pairing::{miller_add_step, miller_double_and_add_step, miller_double_step, MultiMillerLoop},
+    point::EcPoint,
 };
+use halo2curves_axiom::bls12_381::{G2Prepared, MillerLoopResult};
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
 use crate::{
-    common::{
-        miller_add_step, miller_double_and_add_step, miller_double_step, EcPoint, MultiMillerLoop,
-    },
     curves::bls12_381::{
         line::{mul_023_by_023, mul_by_023, mul_by_02345},
         Bls12_381,

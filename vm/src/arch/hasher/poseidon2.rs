@@ -28,7 +28,7 @@ pub struct Poseidon2Hasher<const WIDTH: usize, F: Clone> {
 
 impl<F: PrimeField> Hasher<{ CHUNK }, F> for Poseidon2Hasher<{ POSEIDON2_WIDTH }, F> {
     fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::zero(); POSEIDON2_WIDTH];
+        let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
         input_state[..CHUNK].copy_from_slice(lhs);
         input_state[CHUNK..].copy_from_slice(rhs);
         let inner_cols = self.poseidon2_air.generate_trace_row(input_state);

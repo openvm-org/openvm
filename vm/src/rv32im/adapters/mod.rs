@@ -60,7 +60,7 @@ pub fn read_rv32_register<F: PrimeField32>(
     address_space: F,
     pointer: F,
 ) -> (MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>, u32) {
-    debug_assert_eq!(address_space, F::one());
+    debug_assert_eq!(address_space, F::ONE);
     let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = compose(record.data);
     (record, val)
@@ -68,7 +68,7 @@ pub fn read_rv32_register<F: PrimeField32>(
 
 /// Peeks at the value of a register without updating the memory state or incrementing the timestamp.
 pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
-    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::one(), pointer);
+    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
     compose(data)
 }
 
@@ -77,7 +77,7 @@ pub fn abstract_compose<T: AbstractField, V: Mul<T, Output = T>>(
 ) -> T {
     data.into_iter()
         .enumerate()
-        .fold(T::zero(), |acc, (i, limb)| {
+        .fold(T::ZERO, |acc, (i, limb)| {
             acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
         })
 }

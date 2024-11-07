@@ -77,7 +77,7 @@ where
             cols.opcode_and_flag,
         ];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -91,8 +91,8 @@ where
         // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
         // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUB when
         // carry[i] is (a[i] + b[i] - c[i] + carry[i - 1]) / 2^LIMB_BITS.
-        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
-        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
@@ -104,7 +104,7 @@ where
                     + if i > 0 {
                         carry_add[i - 1].clone()
                     } else {
-                        AB::Expr::zero()
+                        AB::Expr::ZERO
                     });
             builder
                 .when(cols.opcode_add_flag)
@@ -114,7 +114,7 @@ where
                     + if i > 0 {
                         carry_sub[i - 1].clone()
                     } else {
-                        AB::Expr::zero()
+                        AB::Expr::ZERO
                     });
             builder
                 .when(cols.opcode_sub_flag)
@@ -136,7 +136,7 @@ where
         }
 
         let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             |acc, (flag, local_opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
             },

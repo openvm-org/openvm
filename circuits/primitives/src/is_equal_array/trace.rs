@@ -14,7 +14,7 @@ impl IsEqualVecAir {
         assert!(height.is_power_of_two());
         assert_eq!(x.len(), y.len());
 
-        let mut rows_concat = vec![F::zero(); width * x.len()];
+        let mut rows_concat = F::zero_vec(width * x.len());
         for (i, (x, y)) in x.iter().zip(y.iter()).enumerate() {
             let mut is_equal_cols =
                 IsEqualVecColsMut::from_slice(&mut rows_concat[i * width..(i + 1) * width], self);
@@ -33,7 +33,7 @@ impl IsEqualVecAir {
     ) {
         is_equal_cols.io.x.clone_from_slice(x);
         is_equal_cols.io.y.clone_from_slice(y);
-        *is_equal_cols.io.is_equal = if x == y { F::one() } else { F::zero() };
+        *is_equal_cols.io.is_equal = if x == y { F::ONE } else { F::ZERO };
 
         self.generate_trace_row_aux(x, y, &mut is_equal_cols.aux);
     }
@@ -56,14 +56,14 @@ impl IsEqualVecAir {
         let prods: Vec<F> = (0..vec_len - 1)
             .map(|i| {
                 if i < transition_index {
-                    F::one()
+                    F::ONE
                 } else {
-                    F::zero()
+                    F::ZERO
                 }
             })
             .collect();
 
-        let mut invs = vec![F::zero(); vec_len];
+        let mut invs = F::zero_vec(vec_len);
         if transition_index != vec_len {
             invs[transition_index] = (x_row[transition_index] - y_row[transition_index]).inverse();
         }
@@ -80,7 +80,7 @@ impl<F: PrimeField> LocalTraceInstructions<F> for IsEqualVecAir {
     fn generate_trace_row(&self, local_input: Self::LocalInput) -> Self::Cols<F> {
         let width = self.get_width();
 
-        let mut row = vec![F::zero(); width];
+        let mut row = F::zero_vec(width);
         let mut is_equal_cols = IsEqualVecColsMut::from_slice(&mut row, self);
 
         self.generate_trace_row(

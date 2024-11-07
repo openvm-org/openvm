@@ -1,9 +1,10 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine, G2Affine};
+use axvm_ecc::{
+    curve::bls12381::{Fq, Fq2},
+    field::FieldExtension,
+};
+use ff::Field;
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
-use rand::Rng;
-
-use crate::common::{AffineCoords, FieldExtension};
 
 lazy_static! {
     // polyFactor = (1-x)/3
@@ -34,7 +35,7 @@ pub struct Bls12_381;
 
 impl Bls12_381 {
     pub fn xi() -> Fq2 {
-        Fq2::from_coeffs(&[Fq::one(), Fq::one()])
+        Fq2::from_coeffs([Fq::ONE, Fq::ONE])
     }
 
     pub fn seed() -> u64 {
@@ -43,53 +44,5 @@ impl Bls12_381 {
 
     pub fn pseudo_binary_encoding() -> [i8; BLS12_381_PBE_BITS] {
         BLS12_381_PBE
-    }
-}
-
-impl AffineCoords<Fq> for G1Affine {
-    fn x(&self) -> Fq {
-        self.x
-    }
-
-    fn y(&self) -> Fq {
-        self.y
-    }
-
-    fn neg(&self) -> Self {
-        let mut pt = *self;
-        pt.y = -pt.y;
-        pt
-    }
-
-    fn random(rng: &mut impl Rng) -> Self {
-        G1Affine::random(rng)
-    }
-
-    fn generator() -> Self {
-        G1Affine::generator()
-    }
-}
-
-impl AffineCoords<Fq2> for G2Affine {
-    fn x(&self) -> Fq2 {
-        self.x
-    }
-
-    fn y(&self) -> Fq2 {
-        self.y
-    }
-
-    fn neg(&self) -> Self {
-        let mut pt = *self;
-        pt.y = -pt.y;
-        pt
-    }
-
-    fn random(rng: &mut impl Rng) -> Self {
-        G2Affine::random(rng)
-    }
-
-    fn generator() -> Self {
-        G2Affine::generator()
     }
 }

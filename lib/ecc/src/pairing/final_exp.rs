@@ -1,6 +1,9 @@
-use halo2curves_axiom::ff::Field;
+use ff::Field;
 
-use super::{EcPoint, ExpBigInt, FieldExtension};
+use crate::{
+    field::{ExpBigInt, FieldExtension},
+    point::EcPoint,
+};
 
 #[allow(non_snake_case)]
 pub trait FinalExp<Fp, Fp2, Fp12>

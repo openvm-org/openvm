@@ -1,7 +1,7 @@
-use halo2curves_axiom::ff::Field;
+use ff::Field;
 
 use super::UnevaluatedLine;
-use crate::common::{EcPoint, FieldExtension};
+use crate::{field::FieldExtension, point::EcPoint};
 
 #[allow(non_snake_case)]
 pub fn miller_double_step<Fp, Fp2>(S: EcPoint<Fp2>) -> (EcPoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
@@ -116,19 +116,4 @@ where
         UnevaluatedLine { b: b0, c: c0 },
         UnevaluatedLine { b: b1, c: c1 },
     )
-}
-
-#[allow(non_snake_case)]
-pub fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i8) -> Vec<EcPoint<Fp2>>
-where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-{
-    Q.iter()
-        .map(|q| match sigma_i {
-            1 => q.clone(),
-            -1 => q.neg(),
-            _ => panic!("Invalid sigma_i"),
-        })
-        .collect()
 }

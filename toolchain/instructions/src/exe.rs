@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
 use crate::{config::CustomOpConfig, program::Program};
 
@@ -8,7 +9,11 @@ use crate::{config::CustomOpConfig, program::Program};
 pub type MemoryImage<F> = BTreeMap<(F, F), F>;
 
 /// Executable program for AxVM.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: Serialize",
+    deserialize = "F: std::cmp::Ord + Deserialize<'de>"
+))]
 pub struct AxVmExe<F> {
     /// Program to execute.
     pub program: Program<F>,

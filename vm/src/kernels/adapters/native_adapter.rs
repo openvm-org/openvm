@@ -155,7 +155,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
         }
 
         let zero_address =
-            || MemoryAddress::new(AB::Expr::from(AB::F::zero()), AB::Expr::from(AB::F::zero()));
+            || MemoryAddress::new(AB::Expr::from(AB::F::ZERO), AB::Expr::from(AB::F::ZERO));
         let f = |var_addr: MemoryAddress<AB::Var, AB::Var>| -> MemoryAddress<AB::Expr, AB::Expr> {
             MemoryAddress::new(var_addr.address_space.into(), var_addr.pointer.into())
         };

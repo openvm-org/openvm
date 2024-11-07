@@ -1,23 +1,13 @@
+use axvm_ecc::{field::FieldExtension, pairing::LineMType, point::EcPoint};
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    common::{fp12_square, EcPoint, FieldExtension, LineMType},
-    curves::bls12_381::{mul_023_by_023, mul_by_023, mul_by_02345, tangent_line_023, Bls12_381},
+use crate::curves::bls12_381::{
+    mul_023_by_023, mul_by_023, mul_by_02345, tangent_line_023, Bls12_381,
 };
-
-// TODO[yj]: Probably should refactor these tests so that they don't repeat the ones in BN254
-#[test]
-fn test_fp12_square() {
-    let mut rng = StdRng::seed_from_u64(8);
-    let rnd = Fq12::random(&mut rng);
-    let sq = fp12_square::<Fq12>(rnd);
-    let sq_native = rnd.square();
-    assert_eq!(sq, sq_native);
-}
 
 #[test]
 fn test_mul_023_by_023() {
@@ -40,7 +30,7 @@ fn test_mul_023_by_023() {
 
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_023_by_023 = mul_023_by_023::<Fq, Fq2>(line_0, line_1, Bls12_381::xi());
-    let mul_023_by_023 = Fq12::from_coeffs(&mul_023_by_023);
+    let mul_023_by_023 = Fq12::from_coeffs(mul_023_by_023);
 
     // Compare with the result of multiplying two Fp12 elements
     let fp12_0 = Fq12::from_evaluated_line_m_type(line_0);
@@ -79,6 +69,6 @@ fn test_mul_by_02345() {
     ];
     let mul_by_02345 = mul_by_02345::<Fq, Fq2, Fq12>(f, x);
 
-    let x_f12 = Fq12::from_coeffs(&x);
+    let x_f12 = Fq12::from_coeffs(x);
     assert_eq!(mul_by_02345, f * x_f12);
 }

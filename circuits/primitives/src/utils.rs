@@ -13,7 +13,7 @@ pub const fn next_power_of_two_or_zero(n: usize) -> usize {
 }
 
 pub fn not<F: AbstractField>(a: impl Into<F>) -> F {
-    F::one() - a.into()
+    F::ONE - a.into()
 }
 
 pub fn and<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
@@ -29,13 +29,13 @@ pub fn or<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
 
 /// Assumes that a and b are boolean
 pub fn implies<F: AbstractField>(a: impl Into<F>, b: impl Into<F>) -> F {
-    or(F::one() - a.into(), b.into())
+    or(F::ONE - a.into(), b.into())
 }
 
 /// Assumes that `cond` is boolean. Returns `a` if `cond` is true, otherwise returns `b`.
 pub fn select<F: AbstractField>(cond: impl Into<F>, a: impl Into<F>, b: impl Into<F>) -> F {
     let cond = cond.into();
-    cond.clone() * a.into() + (F::one() - cond) * b.into()
+    cond.clone() * a.into() + (F::ONE - cond) * b.into()
 }
 
 pub fn to_vcols<F: Field>(cols: &[usize]) -> Vec<VirtualPairCol<F>> {

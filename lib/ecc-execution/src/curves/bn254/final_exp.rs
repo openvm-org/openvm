@@ -1,10 +1,14 @@
+use axvm_ecc::{
+    field::{ExpBigInt, FieldExtension},
+    pairing::{FinalExp, MultiMillerLoop},
+    point::EcPoint,
+};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::common::{EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
@@ -41,11 +45,11 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         // get the 27th root of unity
         let u0 = U27_COEFF_0.to_u64_digits().1;
         let u1 = U27_COEFF_1.to_u64_digits().1;
-        let u_coeffs = Fq2::from_coeffs(&[
+        let u_coeffs = Fq2::from_coeffs([
             Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
             Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
         ]);
-        let unity_root_27 = Fq12::from_coeffs(&[
+        let unity_root_27 = Fq12::from_coeffs([
             Fq2::ZERO,
             Fq2::ZERO,
             u_coeffs,

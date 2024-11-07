@@ -477,7 +477,7 @@ mod tests {
         let mut inputs = bn254_fq12_to_biguint_vec(x_fq12);
         inputs.extend(bn254_fq12_to_biguint_vec(y_fq12));
 
-        let mut row = vec![BabyBear::zero(); width];
+        let mut row = BabyBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);

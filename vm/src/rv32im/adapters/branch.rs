@@ -107,7 +107,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -116,7 +116,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs2_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rs2_ptr),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -130,8 +130,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::one(),
-                    AB::Expr::one(),
+                    AB::Expr::ONE,
+                    AB::Expr::ONE,
                 ],
                 local.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),

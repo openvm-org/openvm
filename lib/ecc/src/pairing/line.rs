@@ -1,6 +1,6 @@
-use halo2curves_axiom::ff::Field;
+use ff::Field;
 
-use super::FieldExtension;
+use crate::field::FieldExtension;
 
 #[derive(Clone, Copy, Debug)]
 pub struct UnevaluatedLine<Fp, Fp2>
@@ -19,8 +19,8 @@ where
 {
     pub fn evaluate(self, x_over_y: Fp, y_inv: Fp) -> EvaluatedLine<Fp, Fp2> {
         EvaluatedLine {
-            b: self.b.mul_base(&x_over_y),
-            c: self.c.mul_base(&y_inv),
+            b: self.b.mul_base(x_over_y),
+            c: self.c.mul_base(y_inv),
         }
     }
 }

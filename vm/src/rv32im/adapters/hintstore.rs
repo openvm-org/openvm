@@ -143,7 +143,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
         // read rs1
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local_cols.rs1_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
                 local_cols.rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -183,7 +183,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::two(), mem_ptr),
+                MemoryAddress::new(AB::F::TWO, mem_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -197,11 +197,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
             .execute(
                 ctx.instruction.opcode,
                 [
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
-                    AB::Expr::one(),
-                    AB::Expr::two(),
+                    AB::Expr::ONE,
+                    AB::Expr::TWO,
                 ],
                 local_cols.from_state,
                 ExecutionState {

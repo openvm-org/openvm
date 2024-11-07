@@ -76,8 +76,8 @@ where
                 from_fn(|i| record.len_read.data[i + 1]);
             let mut instruction = KeccakInstructionCols {
                 pc: record.pc,
-                is_enabled: Val::<SC>::one(),
-                is_enabled_first_round: Val::<SC>::zero(),
+                is_enabled: Val::<SC>::ONE,
+                is_enabled_first_round: Val::<SC>::ZERO,
                 start_timestamp: Val::<SC>::from_canonical_u32(record.start_timestamp()),
                 dst_ptr: record.dst_read.pointer,
                 src_ptr: record.src_read.pointer,
@@ -148,7 +148,7 @@ where
 
         // Use unsafe alignment so we can parallely write to the matrix
         let mut trace =
-            RowMajorMatrix::new(vec![Val::<SC>::zero(); num_rows * trace_width], trace_width);
+            RowMajorMatrix::new(Val::<SC>::zero_vec(num_rows * trace_width), trace_width);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.ptr_max_bits;
 
         trace
@@ -165,7 +165,7 @@ where
                 let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
                     block.reads[partial_read_idx].data
                 } else {
-                    [Val::<SC>::zero(); KECCAK_WORD_SIZE]
+                    [Val::<SC>::ZERO; KECCAK_WORD_SIZE]
                 };
                 for (row, p3_keccak_row) in rows
                     .chunks_exact_mut(trace_width)

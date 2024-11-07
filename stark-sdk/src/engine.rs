@@ -35,7 +35,6 @@ impl<SC: StarkGenericConfig> ProofInputForTest<SC> {
         engine: &impl StarkFriEngine<SC>,
     ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -49,7 +48,6 @@ impl<SC: StarkGenericConfig> ProofInputForTest<SC> {
 /// Stark engine using Fri.
 pub trait StarkFriEngine<SC: StarkGenericConfig>: StarkEngine<SC> + Sized
 where
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,

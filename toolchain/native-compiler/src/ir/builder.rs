@@ -571,14 +571,14 @@ impl<C: Config> Builder<C> {
             "Cannot commit to public values with a sub builder"
         );
         if self.nb_public_values.is_none() {
-            self.nb_public_values = Some(self.eval(C::N::zero()));
+            self.nb_public_values = Some(self.eval(C::N::ZERO));
         }
         *self.nb_public_values.as_ref().unwrap()
     }
 
     fn commit_public_value_and_increment(&mut self, val: Felt<C::F>, nb_public_values: Var<C::N>) {
         self.operations.push(DslIr::Publish(val, nb_public_values));
-        self.assign(&nb_public_values, nb_public_values + C::N::one());
+        self.assign(&nb_public_values, nb_public_values + C::N::ONE);
     }
 
     /// Register and commits a felt as public value.  This value will be constrained when verified.

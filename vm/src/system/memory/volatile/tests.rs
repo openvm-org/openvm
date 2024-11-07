@@ -70,15 +70,15 @@ fn boundary_air_test() {
             .iter()
             .flat_map(|(addr_space, pointer)| {
                 vec![
-                    Val::one(),
+                    Val::ONE,
                     *addr_space,
                     *pointer,
-                    Val::zero(),
-                    Val::zero(),
-                    Val::one(),
+                    Val::ZERO,
+                    Val::ZERO,
+                    Val::ONE,
                 ]
             })
-            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
+            .chain(iter::repeat(Val::ZERO).take(6 * diff_height))
             .collect(),
         6,
     );
@@ -92,15 +92,15 @@ fn boundary_air_test() {
                     .unwrap();
 
                 vec![
-                    Val::one(),
+                    Val::ONE,
                     *addr_space,
                     *pointer,
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
-                    Val::one(),
+                    Val::ONE,
                 ]
             })
-            .chain(iter::repeat(Val::zero()).take(6 * diff_height))
+            .chain(iter::repeat(Val::ZERO).take(6 * diff_height))
             .collect(),
         6,
     );

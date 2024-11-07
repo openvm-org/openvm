@@ -120,7 +120,7 @@ where
         let JalRecord { imm } = record;
         let row_slice: &mut JalCoreCols<_> = row_slice.borrow_mut();
         row_slice.imm = imm;
-        row_slice.is_valid = F::one();
+        row_slice.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

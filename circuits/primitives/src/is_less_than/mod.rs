@@ -63,7 +63,7 @@ impl<T> IsLessThanIo<T> {
 ///     deg(count) + max(1, deg(x), deg(y))
 ///
 /// N.B.: AssertLtSubAir could be implemented by directly passing through
-/// to IsLtSubAir with `out = AB::Expr::one()`. The only additional
+/// to IsLtSubAir with `out = AB::Expr::ONE`. The only additional
 /// constraint in this air is `assert_bool(io.out)`. However since both Airs
 /// are fundamental and the constraints are simple, we opt to keep the two
 /// versions separate.
@@ -125,7 +125,7 @@ impl IsLtSubAir {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 

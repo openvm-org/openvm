@@ -73,10 +73,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));
         if height == 0 {
-            let values = *memory.get(&from).unwrap_or(&[F::zero(); CHUNK]);
+            let values = *memory.get(&from).unwrap_or(&[F::ZERO; CHUNK]);
             MemoryNode::new_leaf(hasher.hash(&values))
         } else if range.next().is_none() {
-            let leaf_value = hasher.hash(&[F::zero(); CHUNK]);
+            let leaf_value = hasher.hash(&[F::ZERO; CHUNK]);
             MemoryNode::construct_uniform(height, leaf_value, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));

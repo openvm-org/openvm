@@ -57,6 +57,6 @@ impl<F: Field> TraceSubRowGenerator<F> for IsZeroSubAir {
 
     fn generate_subrow<'a>(&'a self, x: F, (inv, out): (&'a mut F, &'a mut F)) {
         *out = F::from_bool(x.is_zero());
-        *inv = x.try_inverse().unwrap_or(F::zero());
+        *inv = x.try_inverse().unwrap_or(F::ZERO);
     }
 }

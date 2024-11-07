@@ -32,7 +32,6 @@ pub(super) fn generate_permutation_traces_and_cumulative_sums<SC: StarkGenericCo
     Vec<Option<RowMajorMatrix<SC::Challenge>>>,
 )
 where
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,
@@ -67,7 +66,6 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
 ) -> ProverQuotientData<SC>
 where
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,

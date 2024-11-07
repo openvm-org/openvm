@@ -3,14 +3,12 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::{
-    common::{EcPoint, UnevaluatedLine},
-    curves::bn254::tangent_line_013,
-};
+use ax_ecc_execution::curves::bn254::tangent_line_013;
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
+use axvm_ecc::{pairing::UnevaluatedLine, point::EcPoint};
 use axvm_ecc_constants::BN254;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{

@@ -1,11 +1,12 @@
-use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
+use axvm_ecc::{
+    curve::bn254::{Fq, Fq2, G1Affine, G2Affine},
+    field::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
+};
+use halo2curves_axiom::bn256::Fr;
 use num::{BigInt, Num};
 
-use crate::{
-    common::{ExpBigInt, FinalExp, MultiMillerLoop},
-    curves::bn254::Bn254,
-    tests::utils::generate_test_points_generator_scalar,
-};
+use crate::{curves::bn254::Bn254, tests::utils::generate_test_points_generator_scalar};
 
 #[test]
 #[allow(non_snake_case)]

@@ -364,9 +364,51 @@ r32_ec_point(a) -> EcPoint {
 | SW_ADD_NE\<C\> | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field. |
 | SW_DOUBLE\<C\> | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                           |
 
+### Complex Extension Field
+
+The VM can be configured to support intrinsic instructions for complex extension fields of prime fields. A complex extension field `Fp2` is the quadratic extension of a prime field `Fp` with irreducible polynomial `X^2 + 1`. An element in `Fp2` is a pair `c0: Fp, c1: Fp` such that `c0 + c1 u`
+represents a point in `Fp2` where `u^2 = -1`.
+
+The VM will only be configured for `Fp2` if the modular arithmetic instructions for `Fp::MODULUS` are also configured. The memory layout of `Fp2` is then that of two concatenated `Fp` elements,
+and the block size for memory accesses is set to equal the block size of `Fp`.
+
+We use the following notation below:
+
+```
+r32_fp2(a) -> Fp2 {
+    let c0 = [r32{0}(a): Fp::NUM_LIMBS]_2;
+    let c1 = [r32{0}(a) + Fp::NUM_LIMBS: Fp::NUM_LIMBS]_2;
+    return Fp2 { c0, c1 };
+}
+```
+
+| Name       | Operands    | Description                                |
+| ---------- | ----------- | ------------------------------------------ |
+| ADD\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)` |
+| SUB\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)` |
+| MUL\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)` |
+| DIV\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)` |
+
 ### Optimal Ate Pairing
 
-TODO
+The VM can be configured to enable intrinsic instructions for accelerating the optimal Ate pairing.
+Currently the supported pairing friendly elliptic curves are BN254 and BLS12-381, which both have embedding degree 12. For more detailed descriptions of the instructions, refer to [this](https://hackmd.io/NjMhWt1HTDOB7TIKmTOMFw?view). For curve `C` to be supported, the VM must have
+enabled instructions for `C::Fp` and `C::Fp2`. The memory block size is `C::Fp::BLOCK_SIZE` for both reads and writes.
+
+We lay out `Fp12` in memory as `c0, ..., c5` where `c_i: Fp2` and the `Fp12` element is `c0 + c1 w + ... + c5 w^5` where `w^6 = C::XI` in `Fp2`, where `C::Xi: Fp2` is an associated constant. Both `UnevaluatedLine<Fp2>` and `EvaluatedLine<Fp2>` are laid out in memory the same as `[Fp2; 2]`.
+
+| Name                            | Operands    | Description                                                                                                                                                                                                                                                                                                                |
+| ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MILLER_DOUBLE_STEP\<C\>         | `a,b,_,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2`. The output `miller_double_step(S): (EcPoint<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                                                                                                                       |
+| MILLER_DOUBLE_AND_ADD_STEP\<C\> | `a,b,c,1,2` | Let `S: EcPoint<Fp2>` be read starting from `[r32{0}(b)]_2` and `Q: EcPoint<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `miller_double_and_add_step(S, Q): (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>)` is written contiguously to memory starting at `[r32{0}(a)]_2`.                          |
+| FP12_MUL\<C\>                   | `a,b,c,1,2` | Set `r32_fp12(a) = r32_fp12(b) * r32_fp12(c)` where `r32_fp12(a)` is 6 `Fp2` elements laid out contiguously in memory starting at `[r32{0}(a)]_2`.                                                                                                                                                                         |
+| EVALUATE_LINE\<C\>              | `a,b,c,1,2` | Let `line: UnevaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `(x_over_y, x_inv): (Fp, Fp)` be read starting from `[r32{0}(c)]_2`. The output `evaluate_line(line, x_over_y, x_inv): EvaluatedLine<Fp2>` is written contiguously to memory starting at `[r32{0}(a)]_2`.                                       |
+| MUL_013_BY_013\<C\>             | `a,b,c,1,2` | Let `line_0: EvaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `line_1: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_013_by_013(line_0, line_1): [Fp2; 5]` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **D-type**. |
+| MUL_BY_013\<C\>                 | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `line: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_by_013(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **D-type**.                                     |
+| MUL_BY_01234\<C\>               | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `x: [Fp2; 5]` be read starting from `[r32{0}(c)]_2`. The output `mul_by_01234(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **D-type**.                                                |
+| MUL_023_BY_023\<C\>             | `a,b,c,1,2` | Let `line_0: EvaluatedLine<Fp2>` be read starting from `[r32{0}(b)]_2` and `line_1: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_023_by_023(line_0, line_1): [Fp2; 5]` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**. |
+| MUL_BY_023\<C\>                 | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `line: EvaluatedLine<Fp2>` be read starting from `[r32{0}(c)]_2`. The output `mul_by_023(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                     |
+| MUL_BY_02345\<C\>               | `a,b,c,1,2` | Let `f: Fp12` be read starting from `[r32{0}(b)]_2` and `x: [Fp2; 5]` be read starting from `[r32{0}(c)]_2`. The output `mul_by_02345(f, line): Fp12` is written contiguously to memory starting at `[r32{0}(a)]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                |
 
 ## Native Kernel
 

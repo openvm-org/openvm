@@ -24,7 +24,7 @@ fn compute_fri_mat_opening<F: Field>(
     a: &[F],
     b: &[[F; EXT_DEG]],
 ) -> ([F; EXT_DEG], [F; EXT_DEG]) {
-    let mut result = [F::zero(); EXT_DEG];
+    let mut result = [F::ZERO; EXT_DEG];
     for (&a, &b) in a.iter().zip_eq(b) {
         result = FieldExtension::add(
             result,

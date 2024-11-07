@@ -10,7 +10,7 @@ repository.workspace = true
 p3-field.workspace = true
 axvm-instructions-derive.workspace = true
 
-backtrace.workspace = true
+backtrace = { workspace = true, features = ["serde"] }
 derive-new.workspace = true
 itertools.workspace = true
 strum.workspace = true

@@ -70,7 +70,7 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
             MulOpcode::MUL as usize,
             &mut rng,
         );
-        instruction.e = F::zero();
+        instruction.e = F::ZERO;
         tester.execute(&mut chip, instruction);
 
         let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);

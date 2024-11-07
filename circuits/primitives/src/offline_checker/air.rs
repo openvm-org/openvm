@@ -104,7 +104,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for OfflineChecker {
         // Ensuring lt_bit is on
         builder
             .when_transition()
-            .assert_one(or(AB::Expr::one() - next_cols.is_valid, next_cols.lt_bit));
+            .assert_one(or(AB::Expr::ONE - next_cols.is_valid, next_cols.lt_bit));
 
         // Making sure is_extra rows are at the bottom
         builder

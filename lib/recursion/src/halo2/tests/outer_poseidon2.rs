@@ -71,8 +71,8 @@ fn test_p2_compress() {
     let perm = outer_perm();
     let compressor = OuterCompress::new(perm.clone());
 
-    let a: [Bn254Fr; 1] = [Bn254Fr::two()];
-    let b: [Bn254Fr; 1] = [Bn254Fr::two()];
+    let a: [Bn254Fr; 1] = [Bn254Fr::TWO];
+    let b: [Bn254Fr; 1] = [Bn254Fr::TWO];
     let gt = compressor.compress([a, b]);
 
     let mut builder = Builder::<OuterConfig>::default();

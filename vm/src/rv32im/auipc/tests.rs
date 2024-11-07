@@ -234,7 +234,7 @@ fn overflow_negative_tests() {
         Some(255),
         None,
         None,
-        Some([F::neg_one().as_canonical_u32(), 1, 0]),
+        Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
         None,
         VerificationError::NonZeroCumulativeSum,
     );
@@ -242,7 +242,7 @@ fn overflow_negative_tests() {
         AUIPC,
         Some(0),
         Some(255),
-        Some([F::neg_one().as_canonical_u32(), 1, 0, 0]),
+        Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
         Some([0, 0, 0]),
         Some([1, 0, 0]),
         VerificationError::NonZeroCumulativeSum,

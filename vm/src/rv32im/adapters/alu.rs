@@ -142,7 +142,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::one(), local.rs1_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -160,7 +160,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::one(), local.rd_ptr),
+                MemoryAddress::new(AB::Expr::ONE, local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local.writes_aux,
@@ -174,7 +174,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2.into(),
-                    AB::Expr::one(),
+                    AB::Expr::ONE,
                     local.rs2_as.into(),
                 ],
                 local.from_state,
@@ -234,7 +234,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
             )
         } else {
             let rs2_read = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, c);
-            (Some(rs2_read), rs2_read.data, F::zero())
+            (Some(rs2_read), rs2_read.data, F::ZERO)
         };
 
         Ok(([rs1.data, rs2_data], Self::ReadRecord { rs1, rs2, rs2_imm }))
@@ -285,7 +285,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         row_slice.rs2_as = read_record
             .rs2
             .map(|rs2| rs2.address_space)
-            .unwrap_or(F::zero());
+            .unwrap_or(F::ZERO);
         row_slice.reads_aux = [
             aux_cols_factory.make_read_aux_cols(read_record.rs1),
             match read_record.rs2 {

@@ -16,19 +16,19 @@ fn test_compiler_for_loops() {
     let n_val = BabyBear::from_canonical_u32(10);
     let m_val = BabyBear::from_canonical_u32(5);
 
-    let zero: Var<_> = builder.eval(F::zero());
+    let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);
     let m: Var<_> = builder.eval(m_val);
 
-    let i_counter: Var<_> = builder.eval(F::zero());
-    let total_counter: Var<_> = builder.eval(F::zero());
+    let i_counter: Var<_> = builder.eval(F::ZERO);
+    let total_counter: Var<_> = builder.eval(F::ZERO);
     builder.range(zero, n).for_each(|_, builder| {
-        builder.assign(&i_counter, i_counter + F::one());
+        builder.assign(&i_counter, i_counter + F::ONE);
 
-        let j_counter: Var<_> = builder.eval(F::zero());
+        let j_counter: Var<_> = builder.eval(F::ZERO);
         builder.range(zero, m).for_each(|_, builder| {
-            builder.assign(&total_counter, total_counter + F::one());
-            builder.assign(&j_counter, j_counter + F::one());
+            builder.assign(&total_counter, total_counter + F::ONE);
+            builder.assign(&j_counter, j_counter + F::ONE);
         });
         // Assert that the inner loop ran m times, in two different ways.
         builder.assert_var_eq(j_counter, m_val);
@@ -117,7 +117,7 @@ fn test_compiler_break() {
                         Ok(())
                     },
                     |builder| {
-                        builder.assert_var_eq(value, F::zero());
+                        builder.assert_var_eq(value, F::ZERO);
                         builder.break_loop()
                     },
                 )
@@ -130,10 +130,10 @@ fn test_compiler_break() {
         .range(0, array.len())
         .may_break()
         .for_each(|i, builder| {
-            let counter: Var<_> = builder.eval(F::zero());
+            let counter: Var<_> = builder.eval(F::ZERO);
 
             builder.range(0, i).may_break().for_each(|_, builder| {
-                builder.assign(&counter, counter + F::one());
+                builder.assign(&counter, counter + F::ONE);
                 builder
                     .if_eq(counter, RVar::from(break_len))
                     .then_may_break(|builder| builder.break_loop())
@@ -145,18 +145,18 @@ fn test_compiler_break() {
 
     // Test that the array is correctly initialized.
 
-    let is_break: Var<_> = builder.eval(F::one());
+    let is_break: Var<_> = builder.eval(F::ONE);
     builder.range(0, array.len()).for_each(|i, builder| {
         let exp_value: Var<_> = builder.eval(
             i * is_break
-                + (SymbolicVar::<F>::one() - is_break)
+                + (SymbolicVar::<F>::ONE - is_break)
                     * SymbolicVar::from(F::from_canonical_usize(break_len)),
         );
         let value = builder.get(&array, i);
         builder.assert_var_eq(value, exp_value);
         builder
             .if_eq(i, RVar::from(break_len))
-            .then(|builder| builder.assign(&is_break, F::zero()));
+            .then(|builder| builder.assign(&is_break, F::ZERO));
     });
 
     builder.halt();
@@ -223,15 +223,15 @@ fn test_compiler_step_by() {
 
     let n_val = BabyBear::from_canonical_u32(20);
 
-    let zero: Var<_> = builder.eval(F::zero());
+    let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);
 
-    let i_counter: Var<_> = builder.eval(F::zero());
+    let i_counter: Var<_> = builder.eval(F::ZERO);
     builder.range(zero, n).step_by(2).for_each(|_, builder| {
-        builder.assign(&i_counter, i_counter + F::one());
+        builder.assign(&i_counter, i_counter + F::ONE);
     });
     // Assert that the outer loop ran n times, in two different ways.
-    let n_exp = n_val / F::two();
+    let n_exp = n_val / F::TWO;
     builder.assert_var_eq(i_counter, n_exp);
 
     builder.halt();
@@ -246,12 +246,12 @@ fn test_compiler_bneinc() {
 
     let n_val = BabyBear::from_canonical_u32(20);
 
-    let zero: Var<_> = builder.eval(F::zero());
+    let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);
 
-    let i_counter: Var<_> = builder.eval(F::zero());
+    let i_counter: Var<_> = builder.eval(F::ZERO);
     builder.range(zero, n).step_by(1).for_each(|_, builder| {
-        builder.assign(&i_counter, i_counter + F::one());
+        builder.assign(&i_counter, i_counter + F::ONE);
     });
 
     builder.halt();

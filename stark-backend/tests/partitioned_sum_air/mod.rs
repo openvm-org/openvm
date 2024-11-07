@@ -12,7 +12,6 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::utils::generate_random_matrix;
@@ -26,10 +25,8 @@ type Val = BabyBear;
 // See air.rs for description of SumAir
 fn prove_and_verify_sum_air(x: Vec<Val>, ys: Vec<Vec<Val>>) -> Result<(), VerificationError> {
     assert_eq!(x.len(), ys.len());
-    let degree = x.len();
-    let log_degree = log2_ceil_usize(degree);
 
-    let engine = default_engine(log_degree);
+    let engine = default_engine();
 
     let x_trace = RowMajorMatrix::new(x, 1);
     let y_width = ys[0].len();
@@ -74,7 +71,7 @@ fn test_partitioned_sum_air_happy_path() {
     let ys = generate_random_matrix::<Val>(rng, n, 5);
     let x: Vec<Val> = ys
         .iter()
-        .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
+        .map(|row| row.iter().fold(Val::ZERO, |sum, x| sum + *x))
         .collect();
     prove_and_verify_sum_air(x, ys).expect("Verification failed");
 }
@@ -86,9 +83,9 @@ fn test_partitioned_sum_air_happy_neg() {
     let ys = generate_random_matrix(rng, n, 5);
     let mut x: Vec<Val> = ys
         .iter()
-        .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
+        .map(|row| row.iter().fold(Val::ZERO, |sum, x| sum + *x))
         .collect();
-    x[0] = Val::zero();
+    x[0] = Val::ZERO;
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
     });

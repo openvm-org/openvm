@@ -12,10 +12,11 @@ use axvm_instructions::{
 use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
+use serde::{Deserialize, Serialize};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompilerOptions {
     // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,
@@ -54,8 +55,8 @@ fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instr
         c,
         d: d.to_field(),
         e: e.to_field(),
-        f: F::zero(),
-        g: F::zero(),
+        f: F::ZERO,
+        g: F::ZERO,
     }
 }
 
@@ -77,7 +78,7 @@ fn inst_med<F: PrimeField64>(
         d: d.to_field(),
         e: e.to_field(),
         f: f.to_field(),
-        g: F::zero(),
+        g: F::ZERO,
     }
 }
 
@@ -116,9 +117,9 @@ impl AS {
     // TODO[INT-1698]
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
-            AS::Immediate => F::zero(),
-            AS::Register => F::one(),
-            AS::Memory => F::two(),
+            AS::Immediate => F::ZERO,
+            AS::Register => F::ONE,
+            AS::Memory => F::TWO,
         }
     }
 }
@@ -319,13 +320,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::PrintV(src) => vec![Instruction::phantom(
             PhantomInstruction::PrintF,
             i32_f(src),
-            F::zero(),
+            F::ZERO,
             2,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
             PhantomInstruction::PrintF,
             i32_f(src),
-            F::zero(),
+            F::ZERO,
             2,
         )],
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
@@ -333,7 +334,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 Instruction::phantom(
                     PhantomInstruction::PrintF,
                     i32_f(src + i * word_size_i32),
-                    F::zero(),
+                    F::ZERO,
                     2,
                 )
             })
@@ -410,7 +411,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                     options.opcode_with_offset(NativeJalOpcode::JAL),
                     i32_f(dst),
                     labels(label) - pc,
-                    F::zero(),
+                    F::ZERO,
                     AS::Memory,
                     AS::Immediate,
                 ),
@@ -519,28 +520,28 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ))
             .collect(),
         AsmInstruction::Trap => vec![
-            Instruction::phantom(PhantomInstruction::DebugPanic, F::zero(), F::zero(), 0),
+            Instruction::phantom(PhantomInstruction::DebugPanic, F::ZERO, F::ZERO, 0),
         ],
         AsmInstruction::Halt => vec![
             // terminate
             inst(
                 options.opcode_with_offset(SystemOpcode::TERMINATE),
-                F::zero(),
-                F::zero(),
-                F::zero(),
+                F::ZERO,
+                F::ZERO,
+                F::ZERO,
                 AS::Immediate,
                 AS::Immediate,
             ),
         ],
         AsmInstruction::HintInputVec() => vec![
-            Instruction::phantom(PhantomInstruction::HintInput, F::zero(), F::zero(), 0)
+            Instruction::phantom(PhantomInstruction::HintInput, F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::HintBits(src, len) => vec![
             Instruction::phantom(PhantomInstruction::HintBits, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
-            F::zero(),
+            F::ZERO,
             offset,
             i32_f(val),
             AS::Memory,
@@ -556,7 +557,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::ImmF(dst, val) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
             val,
-            F::zero(),
+            F::ZERO,
             i32_f(dst),
             AS::Immediate,
             AS::Memory,
@@ -564,7 +565,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::CopyF(dst, src) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::LOADW),
             i32_f(dst),
-            F::zero(),
+            F::ZERO,
             i32_f(src),
             AS::Memory,
             AS::Immediate,
@@ -613,7 +614,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             options.opcode_with_offset(Poseidon2Opcode::PERM_POS2),
             i32_f(dst),
             i32_f(src),
-            F::zero(),
+            F::ZERO,
             AS::Memory,
             AS::Memory,
         )],
@@ -633,7 +634,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         }
         AsmInstruction::Publish(val, index) => vec![inst_med(
             options.opcode_with_offset(PublishOpcode::PUBLISH),
-            F::zero(),
+            F::ZERO,
             i32_f(val),
             i32_f(index),
             AS::Immediate,
@@ -664,8 +665,8 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
     // mem[0] <- 0
     let init_register_0 = inst(
         options.opcode_with_offset(NativeLoadStoreOpcode::STOREW),
-        F::zero(),
-        F::zero(),
+        F::ZERO,
+        F::ZERO,
         i32_f(0),
         AS::Immediate,
         AS::Memory,

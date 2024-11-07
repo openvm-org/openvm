@@ -45,7 +45,7 @@
 //         let x = builder.common_main().row_slice(0)[0];
 //         let ys = builder.cached_mains()[0].row_slice(0);
 //
-//         let mut y_sum = AB::Expr::zero();
+//         let mut y_sum = AB::Expr::ZERO;
 //         for &y in &*ys {
 //             y_sum = y_sum + y;
 //         }
@@ -110,7 +110,7 @@
 //     let ys = generate_random_matrix::<Val>(rng, n, 5);
 //     let x: Vec<Val> = ys
 //         .iter()
-//         .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
+//         .map(|row| row.iter().fold(Val::ZERO, |sum, x| sum + *x))
 //         .collect();
 //     prove_and_verify_sum_air(x, ys).expect("Verification failed");
 // }

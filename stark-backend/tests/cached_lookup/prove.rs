@@ -39,7 +39,6 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     ProverBenchmarks,
 )
 where
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,
@@ -148,7 +147,7 @@ fn compare_provers(
 ) -> ProverStatistics {
     let rng = StdRng::seed_from_u64(0);
     let trace = generate_random_trace(rng, field_width, 1 << log_degree);
-    let engine = engine_from_perm(random_perm(), log_degree, fri_params);
+    let engine = engine_from_perm(random_perm(), fri_params);
     let (_, _, _, without_ct) = prove(&engine, trace.clone(), false);
 
     let (_, _, _, with_ct) = prove(&engine, trace, true);

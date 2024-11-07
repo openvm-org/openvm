@@ -52,6 +52,12 @@ where
 
     let ext_degree = SC::Challenge::D;
 
+    let mut alpha_powers = alpha
+        .powers()
+        .take(symbolic_constraints.constraints.len())
+        .collect_vec();
+    alpha_powers.reverse();
+
     // assert!(quotient_size >= PackedVal::<SC>::WIDTH);
     // We take PackedVal::<SC>::WIDTH worth of values at a time from a quotient_size slice, so we need to
     // pad with default values in the case where quotient_size is smaller than PackedVal::<SC>::WIDTH.
@@ -124,7 +130,7 @@ where
                 })
                 .collect_vec();
 
-            let accumulator = PackedChallenge::<SC>::zero();
+            let accumulator = PackedChallenge::<SC>::ZERO;
             let mut folder = ProverConstraintFolder {
                 preprocessed: VerticalPair::new(
                     RowMajorMatrixView::new_row(&preprocessed_local),
@@ -152,7 +158,7 @@ where
                 is_first_row,
                 is_last_row,
                 is_transition,
-                alpha,
+                alpha_powers: &alpha_powers,
                 accumulator,
                 public_values,
                 exposed_values_after_challenge,
@@ -161,6 +167,7 @@ where
                 interactions: vec![],
                 interaction_chunk_size,
                 has_common_main: rap.common_main_width() > 0,
+                constraint_index: 0,
             };
             rap.eval(&mut folder);
 

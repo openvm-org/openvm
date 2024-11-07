@@ -73,7 +73,7 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
     let b = rng.gen_range(0..1 << 20);
     let c = rng.gen_range(0..1 << 20);
     let d = if is_immediate {
-        F::zero()
+        F::ZERO
     } else {
         F::from_canonical_u32(rng.gen_range(1..4))
     };
@@ -108,13 +108,13 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
 }
 
 fn get_data_pointer(data: &TestData) -> F {
-    if data.d != F::zero() {
+    if data.d != F::ZERO {
         data.cd_val
             + data.b
             + if data.is_extended {
                 data.g * data.fd_val
             } else {
-                F::zero()
+                F::ZERO
             }
     } else {
         data.c
@@ -122,7 +122,7 @@ fn get_data_pointer(data: &TestData) -> F {
             + if data.is_extended {
                 data.g * data.f
             } else {
-                F::zero()
+                F::ZERO
             }
     }
 }
@@ -132,7 +132,7 @@ fn set_values(
     chip: &mut KernelLoadStoreChip<F, 1>,
     data: &TestData,
 ) {
-    if data.d != F::zero() {
+    if data.d != F::ZERO {
         tester.write(
             data.d.as_canonical_u32() as usize,
             data.a.as_canonical_u32() as usize,
@@ -187,7 +187,7 @@ fn check_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
 
     let correct_data_val = if data.is_load || data.is_hint {
         data.data_val
-    } else if data.d != F::zero() {
+    } else if data.d != F::ZERO {
         data.ad_val
     } else {
         data.a

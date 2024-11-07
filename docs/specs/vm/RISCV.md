@@ -91,9 +91,33 @@ Short Weierstrass elliptic curve arithmetic depends on elliptic curve `C`. The i
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
+## Complex Extension Field Arithmetic
+
+Complex extension field arithmetic over `Fp2` depends on `Fp` where `-1` is not a quadratic residue. The instruction set and VM can be simultaneously configured _ahead of time_ to support `Fp2` arithmetic for a subset of the `Fp` with modular arithmetic enabled. We use **the same** `config.mod_idx(Fp::MODULUS)` to denote the index of `Fp2` in this list. In the list below, `idx` denotes `config.mod_idx(Fp::MODULUS)`.
+
+| RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                              |
+| ----------- | --- | ----------- | ------ | --------- | ----------------------------------------------------------------------------------------- |
+| add         | R   | 0101011     | 010    | `idx*8`   | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x + y` to `[rd..]_2` |
+| sub         | R   | 0101011     | 010    | `idx*8+1` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x - y` to `[rd..]_2` |
+| mul         | R   | 0101011     | 010    | `idx*8+2` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x * y` to `[rd..]_2` |
+| div         | R   | 0101011     | 010    | `idx*8+3` | Read `x: Fp2` from `[rs1..]_2` and `y: Fp2` from `[rs2..]_2`. Write `x / y` to `[rd..]_2` |
+
 ## Optimal Ate Pairing
 
-TODO
+Instruction for accelerating optimal Ate pairing depend on a pairing friend elliptic curve `C` and associated `Fp, Fp2, Fp12` and constant `XI: Fp2`. Presently only the curves BN254 and BLS12-381 are supported, with `pairing_idx(Bn254) = 0` and `pairing_idx(Bls12_381) = 1`. In the list below, `idx` denotes `pairing_idx(C)`.
+
+| RISC-V Inst                | FMT | opcode[6:0] | funct3 | funct7       | RISC-V description and notes                                                                                                                                                                                                 |
+| -------------------------- | --- | ----------- | ------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| miller_double_step         | R   | 0101011     | 011    | `idx*16`     | Read `S: EcPoint<Fp2>` from `[rs1..]_2`. Write `miller_double_step(S): (EcPoint<Fp2>, UnevaluatedLine<Fp2>)` to `[rd..]_2`. `rs2` must be zero.                                                                              |
+| miller_double_and_add_step | R   | 0101011     | 011    | `idx*16 + 1` | Read `S: EcPoint<Fp2>` from `[rs1..]_2` and `Q: EcPoint<Fp2>` from `[rs2..]_2`. Write `miller_double_and_add_step(S, Q): (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>)` to `[rd..]_2`.                          |
+| fp12_mul                   | R   | 0101011     | 011    | `idx*16 + 2` | Read `x: Fp12` from `[rs1..]_2` and `y: Fp12` from `[rs2..]_2`. Write `x * y: Fp12` to `[rd..]_2`.                                                                                                                           |
+| evaluate_line              | R   | 0101011     | 011    | `idx*16 + 3` | Read `line: UnevaluatedLine<Fp2>` from `[rs1..]_2` and `(x_over_y, x_inv): (Fp, Fp)` from `[rs2..]_2`. Write `evaluate_line(line, x_over_y, x_inv): EvaluatedLine<Fp2>` to `[rd..]_2`.                                       |
+| mul_013_by_013             | R   | 0101011     | 011    | `idx*16 + 4` | Read `line_0: EvaluatedLine<Fp2>` from `[rs1..]_2` and `line_1: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_013_by_013(line_0, line_1): [Fp2; 5]` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **D-type**. |
+| mul_by_013                 | R   | 0101011     | 011    | `idx*16 + 5` | Read `f: Fp12` from `[rs1..]_2` and `line: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_by_013(f, line): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **D-type**.                                     |
+| mul_by_01234               | R   | 0101011     | 011    | `idx*16 + 6` | Read `f: Fp12` from `[rs1..]_2` and `x: [Fp2; 5]` from `[rs2..]_2`. Write `mul_by_01234(f, x): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **D-type**.                                                   |
+| mul_023_by_023             | R   | 0101011     | 011    | `idx*16 + 7` | Read `line_0: EvaluatedLine<Fp2>` from `[rs1..]_2` and `line_1: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_023_by_023(line_0, line_1): [Fp2; 5]` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**. |
+| mul_by_023                 | R   | 0101011     | 011    | `idx*16 + 8` | Read `f: Fp12` from `[rs1..]_2` and `line: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_by_023(f, line): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                     |
+| mul_by_02345               | R   | 0101011     | 011    | `idx*16 + 9` | Read `f: Fp12` from `[rs1..]_2` and `x: [Fp2; 5]` from `[rs2..]_2`. Write `mul_by_02345(f, x): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                   |
 
 # RISC-V to axVM Transpilation
 

@@ -89,7 +89,7 @@ where
             cols.opcode_sra_flag,
         ];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -103,8 +103,8 @@ where
         // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
         // 1 << bit_shift. Because the sum of all bit_shift_marker[i] is constrained to be
         // 1, bit_shift is guaranteed to be in range.
-        let mut bit_marker_sum = AB::Expr::zero();
-        let mut bit_shift = AB::Expr::zero();
+        let mut bit_marker_sum = AB::Expr::ZERO;
+        let mut bit_shift = AB::Expr::ZERO;
 
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
@@ -125,8 +125,8 @@ where
 
         // Check that a[i] = b[i] <</>> c[i] both on the bit and limb shift level if c <
         // NUM_LIMBS * LIMB_BITS.
-        let mut limb_marker_sum = AB::Expr::zero();
-        let mut limb_shift = AB::Expr::zero();
+        let mut limb_marker_sum = AB::Expr::ZERO;
+        let mut limb_shift = AB::Expr::ZERO;
         for i in 0..NUM_LIMBS {
             builder.assert_bool(cols.limb_shift_marker[i]);
             limb_marker_sum += cols.limb_shift_marker[i].into();
@@ -140,7 +140,7 @@ where
                     when_limb_shift.assert_zero(a[j] * cols.opcode_sll_flag);
                 } else {
                     let expected_a_left = if j - i == 0 {
-                        AB::Expr::zero()
+                        AB::Expr::ZERO
                     } else {
                         cols.bit_shift_carry[j - i - 1].into() * cols.opcode_sll_flag
                     } + b[j - i] * cols.bit_multiplier_left
@@ -158,7 +158,7 @@ where
                     );
                 } else {
                     let expected_a_right = if j + i == NUM_LIMBS - 1 {
-                        cols.b_sign * (cols.bit_multiplier_right - AB::F::one())
+                        cols.b_sign * (cols.bit_multiplier_right - AB::F::ONE)
                     } else {
                         cols.bit_shift_carry[j + i + 1].into() * right_shift.clone()
                     } * AB::F::from_canonical_usize(1 << LIMB_BITS)
@@ -210,7 +210,7 @@ where
         let expected_opcode = flags
             .iter()
             .zip(ShiftOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             })
             + AB::Expr::from_canonical_usize(self.offset);
@@ -342,10 +342,10 @@ where
         row_slice.c = record.c;
         row_slice.bit_multiplier_left = match record.opcode {
             ShiftOpcode::SLL => F::from_canonical_usize(1 << record.bit_shift),
-            _ => F::zero(),
+            _ => F::ZERO,
         };
         row_slice.bit_multiplier_right = match record.opcode {
-            ShiftOpcode::SLL => F::zero(),
+            ShiftOpcode::SLL => F::ZERO,
             _ => F::from_canonical_usize(1 << record.bit_shift),
         };
         row_slice.b_sign = record.b_sign;

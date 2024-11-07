@@ -119,7 +119,7 @@ impl AssertLtSubAir {
         assert_eq!(lower_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
-        let intermed_val = io.y - io.x - AB::Expr::one();
+        let intermed_val = io.y - io.x - AB::Expr::ONE;
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
@@ -127,7 +127,7 @@ impl AssertLtSubAir {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 

@@ -171,10 +171,10 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
-            F::one(),
-            F::zero(),
+            F::ONE,
+            F::ZERO,
             F::from_bool(dec_insn.rd != 0),
-            F::zero(),
+            F::ZERO,
         )
     }
 
@@ -184,7 +184,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         }
         // we need to set f to 1 because this is handled by the same chip as jal
         let mut result = from_u_type(Rv32JalLuiOpcode::LUI.with_default_offset(), &dec_insn);
-        result.f = F::one();
+        result.f = F::ONE;
         result
     }
 
@@ -195,12 +195,12 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         Instruction::new(
             Rv32AuipcOpcode::AUIPC.with_default_offset(),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
-            F::zero(),
+            F::ZERO,
             F::from_canonical_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
-            F::one(), // rd is a register
-            F::zero(),
-            F::zero(),
-            F::zero(),
+            F::ONE, // rd is a register
+            F::ZERO,
+            F::ZERO,
+            F::ZERO,
         )
     }
 
@@ -333,10 +333,10 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     isize_to_field(dec_insn.imm as isize),
-                    F::one(),
-                    F::two(),
-                    F::zero(),
-                    F::zero(),
+                    F::ONE,
+                    F::TWO,
+                    F::ZERO,
+                    F::ZERO,
                 ))
             }
             _ => unimplemented!(),
@@ -426,7 +426,7 @@ fn process_phantom<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
     let dec_insn = IType::new(instruction_u32);
     PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
         PhantomImm::HintInput => {
-            Instruction::phantom(PhantomInstruction::HintInputRv32, F::zero(), F::zero(), 0)
+            Instruction::phantom(PhantomInstruction::HintInputRv32, F::ZERO, F::ZERO, 0)
         }
         PhantomImm::PrintStr => Instruction::phantom(
             PhantomInstruction::PrintStrRv32,

@@ -66,9 +66,7 @@ fn instrumented_prove_and_verify(
     partition: bool,
 ) -> StarkHashStatistics<BenchParams> {
     let instr_perm = baby_bear_poseidon2::random_instrumented_perm();
-    let degree = trace.len();
-    let pcs_log_degree = log2_ceil_usize(degree);
-    let mut engine = engine_from_perm(instr_perm, pcs_log_degree, fri_params);
+    let mut engine = engine_from_perm(instr_perm, fri_params);
     engine.perm.is_on = false;
 
     let (vk, air, proof, _) = prove(&engine, trace, partition);

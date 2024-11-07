@@ -20,6 +20,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-ecc-primitives = { workspace = true }
+axvm-ecc = { workspace = true }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
@@ -49,6 +50,8 @@ inferno = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
 eyre.workspace = true
+derivative.workspace = true
+static_assertions.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
@@ -66,6 +69,7 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
+axvm-ecc = { workspace = true, features = ["halo2curves"] }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 ax-ecc-primitives = { workspace = true, features = ["test-utils"] }
@@ -76,7 +80,7 @@ hex.workspace = true
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:ax-stark-sdk"]
+test-utils = ["dep:ax-stark-sdk", "axvm-ecc/halo2curves"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]

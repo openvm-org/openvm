@@ -347,7 +347,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // TODO: avoid all these copies and directly allocate
         sub_row.copy_from_slice(
             &[
-                vec![F::one()],
+                vec![F::ONE],
                 input_limbs.concat(),
                 vars_limbs.concat(),
                 all_q.concat(),

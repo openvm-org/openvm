@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program};
-use axvm_circuit::arch::VmConfig;
+use axvm_circuit::arch::{ExecutorName, VmConfig};
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use eyre::Result;
@@ -36,7 +36,12 @@ fn main() -> Result<()> {
                 .into_iter()
                 .map(AbstractField::from_canonical_u8)
                 .collect();
-            bench_from_exe(engine, VmConfig::rv32im(), elf, vec![bytecode])
+            bench_from_exe(
+                engine,
+                VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32),
+                elf,
+                vec![bytecode],
+            )
         })?;
         Ok(())
     })

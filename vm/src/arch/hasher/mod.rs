@@ -6,7 +6,7 @@ pub trait Hasher<const CHUNK: usize, F: Field> {
     /// Statelessly compresses two chunks of data into a single chunk.
     fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
     fn hash(&self, values: &[F; CHUNK]) -> [F; CHUNK] {
-        self.compress(values, &[F::zero(); CHUNK])
+        self.compress(values, &[F::ZERO; CHUNK])
     }
     /// Chunk a list of fields. Use chunks as leaves to computes the root of the Merkle tree.
     /// Assumption: the number of public values is a power of two * CHUNK.
@@ -28,7 +28,7 @@ pub trait HasherChip<const CHUNK: usize, F: Field>: Hasher<CHUNK, F> {
     /// Stateful version of `hash` for recording the event in the chip.
     fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
     fn hash_and_record(&mut self, values: &[F; CHUNK]) -> [F; CHUNK] {
-        self.compress_and_record(values, &[F::zero(); CHUNK])
+        self.compress_and_record(values, &[F::ZERO; CHUNK])
     }
 }
 

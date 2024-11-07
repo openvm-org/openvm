@@ -606,6 +606,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
     let serialized_len = serialized_moduli.len();
     // Note: this also prevents the macro from being called twice
     output.push(TokenStream::from(quote::quote! {
+        #[cfg(target_os = "zkvm")]
         #[link_section = ".axiom"]
         #[no_mangle]
         #[used]

@@ -225,7 +225,7 @@ impl<
         ))) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::one(), ptr),
+                    MemoryAddress::new(AB::Expr::ONE, ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -302,12 +302,12 @@ impl<
                     cols.rs_ptr
                         .first()
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.rs_ptr
                         .get(1)
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
-                    AB::Expr::one(),
+                        .unwrap_or(AB::Expr::ZERO),
+                    AB::Expr::ONE,
                     e.into(),
                 ],
                 cols.from_state,

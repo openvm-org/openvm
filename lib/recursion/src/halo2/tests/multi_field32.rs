@@ -59,7 +59,7 @@ fn test_challenger_sample_ext() {
     let a = BabyBear::from_canonical_usize(1);
     let b = BabyBear::from_canonical_usize(2);
     let c = BabyBear::from_canonical_usize(3);
-    let hash = Hash::from([Bn254Fr::two(); OUTER_DIGEST_SIZE]);
+    let hash = Hash::from([Bn254Fr::TWO; OUTER_DIGEST_SIZE]);
     challenger.observe(hash);
     challenger.observe(a);
     challenger.observe(b);
@@ -76,7 +76,7 @@ fn test_challenger_sample_ext() {
     let a = builder.eval(a);
     let b = builder.eval(b);
     let c = builder.eval(c);
-    let hash = builder.eval(Bn254Fr::two());
+    let hash = builder.eval(Bn254Fr::TWO);
     challenger.observe_commitment(&mut builder, [hash]);
     challenger.observe(&mut builder, a);
     challenger.observe(&mut builder, b);
