@@ -51,7 +51,7 @@ pub fn main() {
     let c = bin_exp(a, U256::from_u32(1234567));
     if c != get_identity_matrix() {
         print("FAIL: the resulting matrix should have been the identity matrix");
-        axvm::process::panic();
+        panic!();
     }
 
     let one = U256::from_u8(1);
@@ -65,7 +65,7 @@ pub fn main() {
         for j in 0..N {
             if c[i][j] != two_to_200 {
                 print("FAIL: the resulting matrix is incorect");
-                axvm::process::panic();
+                panic!();
             }
         }
     }
@@ -73,54 +73,54 @@ pub fn main() {
     // Shift right tests
     if &two_to_200 >> &U256::from_u8(200) != one {
         print("FAIL: 2^200 >> 200 == 1 test failed");
-        axvm::process::panic();
+        panic!();
     }
     if &two_to_200 >> &U256::from_u8(201) != zero {
         print("FAIL: 2^200 >> 201 == 0 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     // Xor tests
     if &two_to_200 ^ &two_to_200 != zero {
         print("FAIL: 2^200 ^ 2^200 == 0 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     if &two_to_200 ^ &one != &two_to_200 + &one {
         print("FAIL: 2^200 ^ 1 == 2^200 + 1 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     // Or tests
     if &one | &one != one {
         print("FAIL: 1 | 1 == 1 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     if &two_to_200 | &one != &two_to_200 + &one {
         print("FAIL: 2^200 | 1 = 2^200 + 1 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     // Other tests
     if &zero - &one <= zero {
         print("FAIL: 0 - 1 > 0 test failed (should have wrapped)");
-        axvm::process::panic();
+        panic!();
     }
 
     if &zero - &one + &one != zero {
         print("FAIL: 0 - 1 + 1 == 0 test failed (should have wrapped)");
-        axvm::process::panic();
+        panic!();
     }
 
     if &one << &U256::from_u32(256) != one {
         print("FAIL: 1 << 256 == 1 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     if &one << &U256::from_u32(261) != U256::from_u8(32) {
         print("FAIL: 1 << 261 == 32 test failed");
-        axvm::process::panic();
+        panic!();
     }
 
     print("PASS");
