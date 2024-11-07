@@ -385,6 +385,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                             EccOpcode::EC_ADD_NE as usize + EccOpcode::default_offset()
                         }
                         Some(SwBaseFunct7::SwDouble) => {
+                            assert!(dec_insn.rs2 == 0);
                             EccOpcode::EC_DOUBLE as usize + EccOpcode::default_offset()
                         }
                         _ => unimplemented!(),
@@ -400,6 +401,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     let base_funct7 = (dec_insn.funct7 as u8) % PAIRING_MAX_KINDS;
                     let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {
                         Some(PairingBaseFunct7::MillerDoubleStep) => {
+                            assert!(dec_insn.rs2 == 0);
                             PairingOpcode::MILLER_DOUBLE_STEP as usize + PairingOpcode::default_offset()
                         }
                         Some(PairingBaseFunct7::MillerDoubleAndAddStep) => {
