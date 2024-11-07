@@ -12,18 +12,25 @@ pub fn main() {
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
     let x1 = IntModN::from_u32(1);
     let y1 = IntModN::from_bytes(hex!(
-        "EE7A67E785D057CBF6DDF7852D8AC46241BF22850686BD363B646C6EA02F8124"
+        "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
     ));
     let x2 = IntModN::from_u32(2);
     let y2 = IntModN::from_bytes(hex!(
-        "1D8A748A8F970EEA3E5244ADB50A3BDB71301A5F82765A06F16F54D48D814099"
+        "D1A847A8F879E0AEE32544DA5BA0B3BD1703A1F52867A5601FF6454DD8180499"
     ));
     // This is the sum of (x1, y1) and (x2, y2).
     let x3 = IntModN::from_bytes(hex!(
-        "EB76E5138FCA2800BCCCB601ECCC6DBE39BF709DB99B7E9CC99C42C568D2A32F"
+        "BE675E31F8AC8200CBCC6B10CECCD6EB93FB07D99BB9E7C99CC9245C862D3AF2"
     ));
     let y3 = IntModN::from_bytes(hex!(
-        "4B54374BF83D14D62D658A0C1EAB0DE3887AB81F6777682885B9C94B87CFD197"
+        "B44573B48FD3416DD256A8C0E1BAD03E88A78BF176778682589B9CB478FC1D79"
+    ));
+    // This is the double of (x2, y2).
+    let x4 = IntModN::from_bytes(hex!(
+        "3BFFFFFF32333333333333333333333333333333333333333333333333333333"
+    ));
+    let y4 = IntModN::from_bytes(hex!(
+        "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
     let p1 = EcPoint { x: x1, y: y1 };
@@ -31,7 +38,13 @@ pub fn main() {
 
     let p3 = EcPoint::add(&p1, &p2);
 
-    if p3.x != x3 {
+    if p3.x != x3 || p3.y != y3 {
+        axvm::process::panic();
+    }
+
+    let p4 = EcPoint::add(&p2, &p2);
+
+    if p4.x != x4 || p4.y != y4 {
         axvm::process::panic();
     }
 }

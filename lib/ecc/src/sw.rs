@@ -79,7 +79,16 @@ impl EcPoint {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<EcPoint> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ShortWeierstrass as usize,
+                SwBaseFunct7::SwDouble as usize,
+                uninit.as_mut_ptr(),
+                p as *const EcPoint,
+                0
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
