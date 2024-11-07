@@ -1,7 +1,9 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::intrinsics::IntModN;
+axvm::moduli_setup! {
+    IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
+}
 use axvm_ecc::sw::EcPoint;
 use hex_literal::hex;
 

@@ -1,14 +1,9 @@
 axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
 
 #[cfg(target_os = "zkvm")]
-use axvm_platform::{
-    constants::{Custom1Funct3, SwBaseFunct7, CUSTOM_1},
-    custom_insn_r,
-};
+use axvm_platform::constants::SwBaseFunct7;
 
 #[derive(Eq, PartialEq, Clone)]
 #[repr(C, align(32))]

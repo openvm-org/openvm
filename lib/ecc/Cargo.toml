@@ -9,8 +9,8 @@ description = "axVM elliptic curve cryptography library."
 axvm = { workspace = true }
 axvm-platform = { workspace = true }
 ff = { workspace = true }
-itertools.workspace = true
-rand.workspace = true
+itertools = { workspace = true, default-features = false, features = ["use_alloc"] }
+rand = { workspace = true, default-features = false }
 
 # Used for `halo2curves` feature
 # TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves

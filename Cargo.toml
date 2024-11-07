@@ -128,7 +128,7 @@ zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9"
 # for testing only:
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
 
-itertools = "0.13.0"
+itertools = { version = "0.13.0", default-features = false }
 rayon = "1.10"
 parking_lot = "0.12.2"
 tracing = "0.1.40"
@@ -144,7 +144,7 @@ strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
 enum-utils = "0.1.1"
 backtrace = "0.3.71"
-rand = "0.8.5"
+rand = { version = "0.8.5", default-features = false }
 hex-literal = { version = "0.4.1", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 metrics = "0.23.0"
