@@ -374,7 +374,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         }
 
                                         fn from_le_bytes(bytes: &[u8]) -> Self {
-                                            let mut arr = [0u8; 32];
+                                            let mut arr = [0u8; #limbs];
                                             arr.copy_from_slice(bytes);
                                             Self(arr)
                                         }
@@ -384,13 +384,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         }
 
                                         fn from_u32(val: u32) -> Self {
-                                            let mut bytes = [0; 32];
+                                            let mut bytes = [0; #limbs];
                                             bytes[..4].copy_from_slice(&val.to_le_bytes());
                                             Self(bytes)
                                         }
 
                                         fn from_u64(val: u64) -> Self {
-                                            let mut bytes = [0; 32];
+                                            let mut bytes = [0; #limbs];
                                             bytes[..8].copy_from_slice(&val.to_le_bytes());
                                             Self(bytes)
                                         }

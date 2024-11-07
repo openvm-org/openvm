@@ -9,7 +9,7 @@ axvm::moduli_setup! {
 }
 
 pub fn main() {
-    let x = bls12381::from_bytes(core::array::from_fn(|i| i as u8));
+    let x = bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
     let y = Mod1e18::from_u32(100);
