@@ -16,6 +16,8 @@ pub mod air_builders;
 mod chip;
 /// Types for tracking matrix in system with multiple commitments, each to multiple matrices.
 pub mod commit;
+/// Trait for concrete prover and verifier.
+pub mod concrete;
 /// Helper types associated to generic STARK config.
 pub mod config;
 /// Trait for STARK backend engine proving keygen, proviing, verifying API functions.
