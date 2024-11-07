@@ -55,7 +55,18 @@ We support a single branch instruction, `beq256`, which is B-type.
 
 We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **0101011**..
 
-Modular arithmetic instructions depend on the modulus `N`. The instruction set and VM can be simultaneously configured _ahead of time_ to support a fixed ordered list of moduli. We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
+Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.axiom` section of the ELF file in the serialized format. This is achieved by the `setup_moduli!` macro: for example, the following code
+```rust
+setup_moduli! {
+    Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
+    Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
+}
+```
+generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields, and saves the list of moduli in the static `AXIOM_SERIALIZED_MODULI` variable in the `.axiom` section. Hexadecimal and decimal formats are supported.
+
+**NB:** we need to use the `AXIOM_SERIALIZED_MODULI` variable for the linker not to optimize it away at the moment. This can be done, for example, by putting `core::hint::black_box(AXIOM_SERIALIZED_MODULI)` anywhere in the main function.
+
+We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
 **Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See [above](#modular-arithmetic) for more details.
 
