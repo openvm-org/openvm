@@ -87,7 +87,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
             bytes.push(rem as u8);
         }
-        bytes.reverse();
         bytes
     };
 
