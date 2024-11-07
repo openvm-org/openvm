@@ -1,7 +1,7 @@
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 #[cfg(not(target_os = "zkvm"))]
@@ -18,19 +18,23 @@ pub trait IntMod<const LIMBS: usize>:
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
+    + Div<Output = Self>
     + Sum
     + Product
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
     + for<'a> Mul<&'a Self, Output = Self>
+    + for<'a> Div<&'a Self, Output = Self>
     + for<'a> Sum<&'a Self>
     + for<'a> Product<&'a Self>
     + AddAssign
     + SubAssign
     + MulAssign
+    + DivAssign
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
+    + for<'a> DivAssign<&'a Self>
 {
     /// Index of IntMod::MODULUS.
     const MOD_IDX: usize;
