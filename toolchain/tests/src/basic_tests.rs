@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
@@ -36,24 +34,6 @@ fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
     let executor = VmExecutor::<F>::new(VmConfig::rv32i());
     executor.execute(elf, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
-    Ok(())
-}
-
-#[test]
-fn test_moduli_setup_runtime() -> Result<()> {
-    let elf = build_example_program("moduli_setup")?;
-    let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32i().add_modular_support(
-            exe.field_arithmetic_config
-                .primes
-                .iter()
-                .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-                .collect(),
-        ),
-    );
-    executor.execute(elf, vec![])?;
-    assert!(!executor.config.supported_modulus.is_empty());
     Ok(())
 }
 

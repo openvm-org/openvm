@@ -19,6 +19,7 @@ use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     process_instruction, InstructionProcessor,
 };
+use strum::EnumCount;
 
 use crate::util::*;
 
@@ -369,9 +370,10 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         }
                         _ => unimplemented!(),
                     };
-                    let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
-                        * MODULAR_ARITHMETIC_MAX_KINDS;
-                    let global_opcode = global_opcode + mod_idx_shift as usize;
+                    assert!(Rv32ModularArithmeticOpcode::COUNT <= MODULAR_ARITHMETIC_MAX_KINDS as usize);
+                    let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS) as usize
+                        * Rv32ModularArithmeticOpcode::COUNT;
+                    let global_opcode = global_opcode + mod_idx_shift;
                     Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 Some(ShortWeierstrass) => {

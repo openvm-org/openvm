@@ -33,6 +33,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
         #[cfg(target_os = "zkvm")]
         use core::mem::MaybeUninit;
         use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+        use core::fmt::{self, Debug};
 
         #[cfg(target_os = "zkvm")]
         use axvm_platform::{
@@ -93,6 +94,14 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 let modulus_bytes = string_to_bytes(&str_lit.value());
                                 let limbs = modulus_bytes.len();
 
+                                // TODO: remove this once we support better reads
+                                let limbs = limbs.max(32);
+                                let modulus_bytes = modulus_bytes
+                                    .into_iter()
+                                    .chain(vec![0u8; limbs])
+                                    .take(limbs)
+                                    .collect::<Vec<_>>();
+
                                 let struct_name = syn::Ident::new(
                                     &struct_name,
                                     proc_macro::Span::call_site().into(),
@@ -112,7 +121,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                     impl #struct_name {
                                         const MODULUS: [u8; #limbs] = [#(#modulus_bytes),*];
-                                        const _MOD_IDX: usize = #mod_idx;
+                                        const MOD_IDX: usize = #mod_idx;
 
                                         /// The zero element of the field.
                                         pub const ZERO: Self = Self([0; #limbs]);
@@ -170,7 +179,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize,
+                                                    ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * 8,
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -192,7 +201,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize,
+                                                    ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * 8,
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -213,7 +222,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize,
+                                                    ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * 8,
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -241,7 +250,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize,
+                                                    ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * 8,
                                                     self as *mut Self,
                                                     self as *const Self,
                                                     other as *const Self
@@ -298,7 +307,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::AddMod as usize,
+                                                    ModArithBaseFunct7::AddMod as usize + Self::Output::MOD_IDX * 8,
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -356,7 +365,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::SubMod as usize,
+                                                    ModArithBaseFunct7::SubMod as usize + Self::Output::MOD_IDX * 8,
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -414,7 +423,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::MulMod as usize,
+                                                    ModArithBaseFunct7::MulMod as usize + Self::Output::MOD_IDX * 8,
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -477,7 +486,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 custom_insn_r!(
                                                     CUSTOM_1,
                                                     Custom1Funct3::ModularArithmetic as usize,
-                                                    ModArithBaseFunct7::DivMod as usize,
+                                                    ModArithBaseFunct7::DivMod as usize + Self::Output::MOD_IDX * 8,
                                                     uninit.as_mut_ptr(),
                                                     self as *const #struct_name,
                                                     other as *const #struct_name
@@ -502,7 +511,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                         ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
                                                         opcode = const CUSTOM_1,
                                                         funct3 = const Custom1Funct3::ModularArithmetic as usize,
-                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize,
+                                                        funct7 = const ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * 8,
                                                         rd = out(reg) x,
                                                         rs1 = in(reg) self as *const #struct_name,
                                                         rs2 = in(reg) other as *const #struct_name
@@ -510,6 +519,12 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 }
                                                 x != 0
                                             }
+                                        }
+                                    }
+
+                                    impl Debug for #struct_name {
+                                        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                            write!(f, "{:?}", self.as_bytes())
                                         }
                                     }
 
