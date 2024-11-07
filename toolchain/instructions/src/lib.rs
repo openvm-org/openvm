@@ -404,13 +404,13 @@ pub enum Fp2Opcode {
 pub enum PairingOpcode {
     MILLER_DOUBLE_STEP,
     MILLER_DOUBLE_AND_ADD_STEP,
+    EVALUATE_LINE,
     MUL_013_BY_013,
     MUL_BY_013,
     MUL_BY_01234,
     MUL_023_BY_023,
     MUL_BY_023,
     MUL_BY_02345,
-    EVALUATE_LINE,
 }
 
 // =================================================================================================
