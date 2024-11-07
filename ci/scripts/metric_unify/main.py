@@ -228,6 +228,8 @@ def generate_displayable_metrics(
         for metric in metrics:
             if metric.name in [a.name for a in aggregations]:
                 agg_metrics.append(metric)
+            if metric.name == "fri.log_blowup":
+                agg_metrics.append(metric)
         if len(agg_metrics) == 0:
             continue
         if group_name not in group_to_metrics:

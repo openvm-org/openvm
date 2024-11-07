@@ -66,5 +66,6 @@ pub fn standard_fri_params_with_100_bits_conjectured_security(log_blowup: usize)
         _ => todo!("No standard FRI params defined for log blowup {log_blowup}",),
     };
     assert!(fri_params.get_conjectured_security_bits(100) >= 100);
+    tracing::info!("FRI parameters | log_blowup: {log_blowup:<2} | num_queries: {:<2} | proof_of_work_bits: {:<2}", fri_params.num_queries, fri_params.proof_of_work_bits);
     fri_params
 }
