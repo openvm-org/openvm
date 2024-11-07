@@ -18,7 +18,9 @@ use {
     core::{arch::asm, mem::MaybeUninit},
 };
 
-/// A 256-bit unsigned integer type.
+use crate::impl_bin_op;
+
+/// A 256-bit signed integer type.
 #[derive(Clone, Debug)]
 #[repr(align(32), C)]
 pub struct I256 {
@@ -59,552 +61,111 @@ impl I256 {
         limbs[..4].copy_from_slice(&value.to_le_bytes());
         Self { limbs }
     }
-
-    /// Allocating memory for I256 without initializing it.
-    #[cfg(target_os = "zkvm")]
-    #[inline(always)]
-    fn alloc() -> Self {
-        let uninit = MaybeUninit::<Self>::uninit();
-        let init = unsafe { uninit.assume_init() };
-        init
-    }
 }
 
-/// Addition
-impl<'a> AddAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn add_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Add as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() + rhs.as_bigint()));
-        }
-    }
-}
+impl_bin_op!(
+    I256,
+    Add,
+    AddAssign,
+    add,
+    add_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Add as u8,
+    +=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() + rhs.as_bigint()))}
+);
 
-impl AddAssign<I256> for I256 {
-    #[inline(always)]
-    fn add_assign(&mut self, rhs: I256) {
-        *self += &rhs;
-    }
-}
+impl_bin_op!(
+    I256,
+    Sub,
+    SubAssign,
+    sub,
+    sub_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Sub as u8,
+    -=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() - rhs.as_bigint()))}
+);
 
-impl<'a> Add<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn add(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Add as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() + rhs.as_bigint()));
-    }
-}
+impl_bin_op!(
+    I256,
+    Mul,
+    MulAssign,
+    mul,
+    mul_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Mul as u8,
+    *=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() * rhs.as_bigint()))}
+);
 
-impl<'a> Add<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn add(mut self, rhs: &'a Self) -> Self::Output {
-        self += rhs;
-        self
-    }
-}
+impl_bin_op!(
+    I256,
+    BitXor,
+    BitXorAssign,
+    bitxor,
+    bitxor_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Xor as u8,
+    ^=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() ^ rhs.as_bigint()))}
+);
 
-impl Add<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn add(mut self, rhs: Self) -> Self::Output {
-        self += &rhs;
-        self
-    }
-}
+impl_bin_op!(
+    I256,
+    BitAnd,
+    BitAndAssign,
+    bitand,
+    bitand_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::And as u8,
+    &=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() & rhs.as_bigint()))}
+);
 
-/// Subtraction
-impl<'a> SubAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn sub_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Sub as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() - rhs.as_bigint()));
-        }
-    }
-}
+impl_bin_op!(
+    I256,
+    BitOr,
+    BitOrAssign,
+    bitor,
+    bitor_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Or as u8,
+    |=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() | rhs.as_bigint()))}
+);
 
-impl SubAssign<I256> for I256 {
-    #[inline(always)]
-    fn sub_assign(&mut self, rhs: I256) {
-        *self -= &rhs;
-    }
-}
+impl_bin_op!(
+    I256,
+    Shl,
+    ShlAssign,
+    shl,
+    shl_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Sll as u8,
+    <<=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() << rhs.limbs[0] as usize))}
+);
 
-impl<'a> Sub<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn sub(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Sub as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() - rhs.as_bigint()));
-    }
-}
-
-impl<'a> Sub<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn sub(mut self, rhs: &'a Self) -> Self::Output {
-        self -= rhs;
-        self
-    }
-}
-
-impl Sub<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn sub(mut self, rhs: Self) -> Self::Output {
-        self -= &rhs;
-        self
-    }
-}
-
-/// Multiplication
-impl<'a> MulAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn mul_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Mul as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() * rhs.as_bigint()));
-        }
-    }
-}
-
-impl MulAssign<I256> for I256 {
-    #[inline(always)]
-    fn mul_assign(&mut self, rhs: I256) {
-        *self *= &rhs;
-    }
-}
-
-impl<'a> Mul<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn mul(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Mul as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() * rhs.as_bigint()));
-    }
-}
-
-impl<'a> Mul<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn mul(mut self, rhs: &'a Self) -> Self::Output {
-        self *= rhs;
-        self
-    }
-}
-
-impl Mul<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn mul(mut self, rhs: Self) -> Self::Output {
-        self *= &rhs;
-        self
-    }
-}
-
-/// Bitwise XOR
-impl<'a> BitXorAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn bitxor_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Xor as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() ^ rhs.as_bigint()));
-        }
-    }
-}
-
-impl BitXorAssign<I256> for I256 {
-    #[inline(always)]
-    fn bitxor_assign(&mut self, rhs: I256) {
-        *self ^= &rhs;
-    }
-}
-
-impl<'a> BitXor<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn bitxor(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Xor as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() ^ rhs.as_bigint()));
-    }
-}
-
-impl<'a> BitXor<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitxor(mut self, rhs: &'a Self) -> Self::Output {
-        self ^= rhs;
-        self
-    }
-}
-
-impl BitXor<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitxor(mut self, rhs: Self) -> Self::Output {
-        self ^= &rhs;
-        self
-    }
-}
-
-/// Bitwise AND
-impl<'a> BitAndAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn bitand_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::And as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() & rhs.as_bigint()));
-        }
-    }
-}
-
-impl BitAndAssign<I256> for I256 {
-    #[inline(always)]
-    fn bitand_assign(&mut self, rhs: I256) {
-        *self &= &rhs;
-    }
-}
-
-impl<'a> BitAnd<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn bitand(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::And as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() & rhs.as_bigint()));
-    }
-}
-
-impl<'a> BitAnd<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitand(mut self, rhs: &'a Self) -> Self::Output {
-        self &= rhs;
-        self
-    }
-}
-
-impl BitAnd<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitand(mut self, rhs: Self) -> Self::Output {
-        self &= &rhs;
-        self
-    }
-}
-
-/// Bitwise OR
-impl<'a> BitOrAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn bitor_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Or as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() | rhs.as_bigint()));
-        }
-    }
-}
-
-impl BitOrAssign<I256> for I256 {
-    #[inline(always)]
-    fn bitor_assign(&mut self, rhs: I256) {
-        *self |= &rhs;
-    }
-}
-
-impl<'a> BitOr<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn bitor(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Or as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() | rhs.as_bigint()));
-    }
-}
-
-impl<'a> BitOr<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitor(mut self, rhs: &'a Self) -> Self::Output {
-        self |= rhs;
-        self
-    }
-}
-
-impl BitOr<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn bitor(mut self, rhs: Self) -> Self::Output {
-        self |= &rhs;
-        self
-    }
-}
-
-/// Left shift
-impl<'a> ShlAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn shl_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Sll as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() << rhs.limbs[0] as usize));
-        }
-    }
-}
-
-impl ShlAssign<I256> for I256 {
-    #[inline(always)]
-    fn shl_assign(&mut self, rhs: I256) {
-        *self <<= &rhs;
-    }
-}
-
-impl<'a> Shl<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn shl(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Sll as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() << rhs.limbs[0] as usize));
-    }
-}
-
-impl<'a> Shl<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn shl(mut self, rhs: &'a Self) -> Self::Output {
-        self <<= rhs;
-        self
-    }
-}
-
-impl Shl<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn shl(mut self, rhs: Self) -> Self::Output {
-        self <<= &rhs;
-        self
-    }
-}
-
-/// Right shift
-impl<'a> ShrAssign<&'a I256> for I256 {
-    #[inline(always)]
-    fn shr_assign(&mut self, rhs: &'a I256) {
-        #[cfg(target_os = "zkvm")]
-        custom_insn_r!(
-            CUSTOM_0,
-            Custom0Funct3::Int256 as u8,
-            Int256Funct7::Sra as u8,
-            self as *mut Self,
-            self as *const Self,
-            rhs as *const Self
-        );
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            *self = Self::from_bigint(&(self.as_bigint() >> rhs.limbs[0] as usize));
-        }
-    }
-}
-
-impl ShrAssign<I256> for I256 {
-    #[inline(always)]
-    fn shr_assign(&mut self, rhs: I256) {
-        *self >>= &rhs;
-    }
-}
-
-impl<'a> Shr<&'a I256> for &I256 {
-    type Output = I256;
-    #[inline(always)]
-    fn shr(self, rhs: &'a I256) -> I256 {
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut ret = I256::alloc();
-            custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
-                Int256Funct7::Sra as u8,
-                &mut ret as *mut I256,
-                self as *const I256,
-                rhs as *const I256
-            );
-            return ret;
-        }
-        #[cfg(not(target_os = "zkvm"))]
-        return I256::from_bigint(&(self.as_bigint() >> rhs.limbs[0] as usize));
-    }
-}
-
-impl<'a> Shr<&'a I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn shr(mut self, rhs: &'a Self) -> Self::Output {
-        self >>= rhs;
-        self
-    }
-}
-
-impl Shr<I256> for I256 {
-    type Output = Self;
-    #[inline(always)]
-    fn shr(mut self, rhs: Self) -> Self::Output {
-        self >>= &rhs;
-        self
-    }
-}
+impl_bin_op!(
+    I256,
+    Shr,
+    ShrAssign,
+    shr,
+    shr_assign,
+    CUSTOM_0,
+    Custom0Funct3::Int256 as u8,
+    Int256Funct7::Sra as u8,
+    >>=,
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() >> rhs.limbs[0] as usize))}
+);
 
 impl PartialEq for I256 {
     fn eq(&self, other: &Self) -> bool {
