@@ -52,7 +52,7 @@ impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
             // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
-            f = &f * &f * &c.unwrap();
+            f = f * f * c.unwrap();
         }
 
         let mut Q_acc = Q_acc;
