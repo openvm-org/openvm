@@ -18,7 +18,7 @@ use {
 use crate::impl_bin_op;
 
 /// A 256-bit unsigned integer type.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[repr(align(32), C)]
 pub struct U256 {
     limbs: [u8; 32],
@@ -32,6 +32,9 @@ impl U256 {
 
     /// The minimum value of a U256.
     pub const MIN: Self = Self { limbs: [0u8; 32] };
+
+    /// The zero constant.
+    pub const ZERO: Self = Self { limbs: [0u8; 32] };
 
     /// Value of this U256 as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -58,6 +61,13 @@ impl U256 {
     pub fn from_u32(value: u32) -> Self {
         let mut limbs = [0u8; 32];
         limbs[..4].copy_from_slice(&value.to_le_bytes());
+        Self { limbs }
+    }
+
+    /// Creates a new U256 that equals to the given u64 value.
+    pub fn from_u64(value: u64) -> Self {
+        let mut limbs = [0u8; 32];
+        limbs[..8].copy_from_slice(&value.to_le_bytes());
         Self { limbs }
     }
 }
@@ -228,5 +238,25 @@ impl Ord for U256 {
         }
         #[cfg(not(target_os = "zkvm"))]
         return self.as_biguint().cmp(&other.as_biguint());
+    }
+}
+
+impl Clone for U256 {
+    fn clone(&self) -> Self {
+        #[cfg(target_os = "zkvm")]
+        {
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_0,
+                Custom0Funct3::Int256 as u8,
+                Int256Funct7::Add as u8,
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                &Self::ZERO as *const Self
+            );
+            unsafe { uninit.assume_init() }
+        }
+        #[cfg(not(target_os = "zkvm"))]
+        return Self { limbs: self.limbs };
     }
 }

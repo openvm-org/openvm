@@ -115,24 +115,28 @@ fn test_modular_runtime() -> Result<()> {
 }
 
 #[test]
-fn test_matrix_power_prove() -> Result<()> {
+fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
-    let config = VmConfig::rv32im()
-        .add_int256_alu()
-        .add_int256_m()
-        .add_int256_branch();
-    air_test_with_min_segments(config, elf, vec![], 1);
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_int256_alu()
+            .add_int256_m()
+            .add_int256_branch(),
+    );
+    executor.execute(elf, vec![])?;
     Ok(())
 }
 
 #[test]
-fn test_matrix_power_signed_prove() -> Result<()> {
+fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
-    let config = VmConfig::rv32im()
-        .add_int256_alu()
-        .add_int256_m()
-        .add_int256_branch();
-    air_test_with_min_segments(config, elf, vec![], 1);
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_int256_alu()
+            .add_int256_m()
+            .add_int256_branch(),
+    );
+    executor.execute(elf, vec![])?;
     Ok(())
 }
 

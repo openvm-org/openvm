@@ -7,10 +7,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use {
-    super::bigint_to_limbs,
-    num_bigint_dig::{BigInt, Sign},
-};
+use {super::bigint_to_limbs, num_bigint_dig::BigInt};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom0Funct3, Int256Funct7, CUSTOM_0},
@@ -21,7 +18,7 @@ use {
 use crate::impl_bin_op;
 
 /// A 256-bit signed integer type.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[repr(align(32), C)]
 pub struct I256 {
     limbs: [u8; 32],
@@ -29,24 +26,18 @@ pub struct I256 {
 
 impl I256 {
     /// The minimum value of an I256.
-    pub const MIN: Self = Self {
-        limbs: [i8::MIN as u8; 32],
-    };
+    pub const MIN: Self = Self::generate_min();
 
     /// The maximum value of an I256.
-    pub const MAX: Self = Self {
-        limbs: [i8::MAX as u8; 32],
-    };
+    pub const MAX: Self = Self::generate_max();
+
+    /// The zero constant.
+    pub const ZERO: Self = Self { limbs: [0u8; 32] };
 
     /// Value of this I256 as a BigInt.
     #[cfg(not(target_os = "zkvm"))]
     pub fn as_bigint(&self) -> BigInt {
-        let sign = if self.limbs[31] & 0x80 != 0 {
-            Sign::Minus
-        } else {
-            Sign::Plus
-        };
-        BigInt::from_bytes_le(sign, &self.limbs)
+        BigInt::from_signed_bytes_le(&self.limbs)
     }
 
     /// Creates a new I256 from a BigInt.
@@ -69,6 +60,28 @@ impl I256 {
         let mut limbs = if value < 0 { [u8::MAX; 32] } else { [0u8; 32] };
         let value = value as u32;
         limbs[..4].copy_from_slice(&value.to_le_bytes());
+        Self { limbs }
+    }
+
+    /// Creates a new I256 that equals to the given i64 value.
+    pub fn from_i64(value: i64) -> Self {
+        let mut limbs = if value < 0 { [u8::MAX; 32] } else { [0u8; 32] };
+        let value = value as u64;
+        limbs[..8].copy_from_slice(&value.to_le_bytes());
+        Self { limbs }
+    }
+
+    /// A constant private helper function to generate the minimum value of an I256.
+    const fn generate_min() -> Self {
+        let mut limbs = [0u8; 32];
+        limbs[31] = i8::MIN as u8;
+        Self { limbs }
+    }
+
+    /// A constant private helper function to generate the maximum value of an I256.
+    const fn generate_max() -> Self {
+        let mut limbs = [u8::MAX; 32];
+        limbs[31] = i8::MAX as u8;
         Self { limbs }
     }
 }
@@ -239,5 +252,25 @@ impl Ord for I256 {
         }
         #[cfg(not(target_os = "zkvm"))]
         return self.as_bigint().cmp(&other.as_bigint());
+    }
+}
+
+impl Clone for I256 {
+    fn clone(&self) -> Self {
+        #[cfg(target_os = "zkvm")]
+        {
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_0,
+                Custom0Funct3::Int256 as u8,
+                Int256Funct7::Add as u8,
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                &Self::ZERO as *const Self
+            );
+            unsafe { uninit.assume_init() }
+        }
+        #[cfg(not(target_os = "zkvm"))]
+        return Self { limbs: self.limbs };
     }
 }

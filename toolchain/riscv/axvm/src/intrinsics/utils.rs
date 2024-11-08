@@ -1,13 +1,32 @@
 #[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::{traits::ModInverse, {BigInt, BigUint, Sign, ToBigInt}};
+use num_bigint_dig::{
+    traits::ModInverse,
+    {BigInt, BigUint, Sign, ToBigInt},
+};
 
 #[inline]
 #[cfg(not(target_os = "zkvm"))]
 #[allow(dead_code)]
-/// Convert a `BigUint` to a `[u8; NUM_LIMBS]`.
+/// Convert a `BigUint` to a `[u8; NUM_LIMBS]` in little-endian format.
 pub fn biguint_to_limbs<const NUM_LIMBS: usize>(x: &BigUint) -> [u8; NUM_LIMBS] {
     let mut sm = x.to_bytes_le();
     sm.resize(NUM_LIMBS, 0);
+    sm.try_into().unwrap()
+}
+
+#[inline]
+#[cfg(not(target_os = "zkvm"))]
+#[allow(dead_code)]
+/// Convert a `BigInt` to a `[u8; NUM_LIMBS]` in two's complement little-endian format.
+pub(super) fn bigint_to_limbs<const NUM_LIMBS: usize>(x: &BigInt) -> [u8; NUM_LIMBS] {
+    let mut sm = x.to_signed_bytes_le();
+    let mut ext = 0;
+    if let Some(last) = sm.last() {
+        if (*last as i8) < 0 {
+            ext = u8::MAX;
+        }
+    }
+    sm.resize(NUM_LIMBS, ext);
     sm.try_into().unwrap()
 }
 
@@ -26,16 +45,19 @@ pub fn uint_mod_inverse(x: &BigUint, modulus: &BigUint) -> BigUint {
     .unwrap()
 }
 
-#[inline]
-#[cfg(not(target_os = "zkvm"))]
-pub(super) fn bigint_to_limbs<const NUM_LIMBS: usize>(x: &BigInt) -> [u8; NUM_LIMBS] {
-    let mut sm = x.to_bytes_le().1;
-    sm.resize(NUM_LIMBS, 0);
-    sm.try_into().unwrap()
-}
-
 /// A macro that implements all the following for the given struct and operation:
 /// a op= b, a op= &b, a op b, a op &b, &a op b, &a op &b
+/// Description of the parameters (see [u256.rs] for an example):
+/// - $struct_name: The struct to implement the operation for.
+/// - $trait_name: The trait name of the operation to implement.
+/// - $trait_assign_name: The trait name of the assignment operation to implement.
+/// - $trait_fn: The trait function name to implement.
+/// - $trait_assign_fn: The assignment trait function name to implement.
+/// - $opcode: The custom opcode of the operation in axvm.
+/// - $func3: The func3 of the operation in axvm.
+/// - $func7: The func7 of the operation in axvm.
+/// - $op_sym: The symbol to use for the operation.
+/// - $rust_expr: A closure to get the result of the operation if target is non-zkvm.
 #[macro_export]
 macro_rules! impl_bin_op {
     ($struct_name:ty, $trait_name:ident,
