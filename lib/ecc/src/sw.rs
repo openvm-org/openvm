@@ -202,67 +202,28 @@ impl EcPointN {
     }
 }
 
-fn get_booth_index(window_index: usize, window_size: usize, el: &[u8]) -> i32 {
-    // Booth encoding:
-    // * step by `window` size
-    // * slice by size of `window + 1``
-    // * each window overlap by 1 bit * append a zero bit to the least significant end
-    // Indexing rule for example window size 3 where we slice by 4 bits:
-    // `[0, +1, +1, +2, +2, +3, +3, +4, -4, -3, -3 -2, -2, -1, -1, 0]``
-    // So we can reduce the bucket size without preprocessing scalars
-    // and remembering them as in classic signed digit encoding
-
-    let skip_bits = (window_index * window_size).saturating_sub(1);
-    let skip_bytes = skip_bits / 8;
-
-    // fill into a u32
-    let mut v: [u8; 4] = [0; 4];
-    for (dst, src) in v.iter_mut().zip(el.iter().skip(skip_bytes)) {
-        *dst = *src
-    }
-    let mut tmp = u32::from_le_bytes(v);
-
-    // pad with one 0 if slicing the least significant window
-    if window_index == 0 {
-        tmp <<= 1;
-    }
-
-    // remove further bits
-    tmp >>= skip_bits - (skip_bytes * 8);
-    // apply the booth window
-    tmp &= (1 << (window_size + 1)) - 1;
-
-    let sign = tmp & (1 << window_size) == 0;
-
-    // div ceil by 2
-    tmp = (tmp + 1) >> 1;
-
-    // find the booth action index
-    if sign {
-        tmp as i32
-    } else {
-        ((!(tmp - 1) & ((1 << window_size) - 1)) as i32).neg()
-    }
-}
-
-use axvm::io::print;
+// Multi-scalar multiplication
+// Reference: https://github.com/privacy-scaling-explorations/halo2curves/blob/8771fe5a5d54fc03e74dbc8915db5dad3ab46a83/src/msm.rs#L335
 impl EcPointN {
     pub fn msm(coeffs: &[IntModN], bases: &[EcPointN]) -> Self {
-        print("msm!");
         let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes()).collect();
         let mut acc = Self::IDENTITY;
+
+        // c: window size. Will group scalars into c-bit windows
         let c = if bases.len() < 4 {
             1
         } else if bases.len() < 32 {
             3
         } else {
             //(f64::from(bases.len() as u32)).ln().ceil() as usize
-            // TODO: cannot do ln
+            // TODO: cannot do ln without std? what do we do here
             6
         };
 
-        // TODO
+        // TODO: should IntModN have a method to get the byte size?
         let field_byte_size = 32;
+
+        // Find the "highest" byte used in the all coefficients
         // OR all coefficients in order to make a mask to figure out the maximum number of bytes used
         // among all coefficients.
         let mut acc_or = vec![0; field_byte_size];
@@ -280,6 +241,9 @@ impl EcPointN {
         if max_byte_size == 0 {
             return Self::IDENTITY;
         }
+        // End of finding highest byte used in all coefficients
+        // Can't we just OR all the bits??
+        // As we just need the number_of_windows below
         let number_of_windows = max_byte_size * 8_usize / c + 1;
 
         for current_window in (0..number_of_windows).rev() {
@@ -291,7 +255,7 @@ impl EcPointN {
             let mut buckets = vec![Self::IDENTITY; 1 << (c - 1)];
 
             for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-                let coeff = get_booth_index(current_window, c, coeff);
+                let coeff = Self::get_booth_index(current_window, c, coeff);
                 if coeff.is_positive() {
                     buckets[coeff as usize - 1].add_assign(base);
                 }
@@ -310,7 +274,49 @@ impl EcPointN {
                 acc = Self::add(&acc, &running_sum);
             }
         }
-        print("msm done!");
         acc
+    }
+
+    fn get_booth_index(window_index: usize, window_size: usize, el: &[u8]) -> i32 {
+        // Booth encoding:
+        // * step by `window` size
+        // * slice by size of `window + 1``
+        // * each window overlap by 1 bit * append a zero bit to the least significant end
+        // Indexing rule for example window size 3 where we slice by 4 bits:
+        // `[0, +1, +1, +2, +2, +3, +3, +4, -4, -3, -3 -2, -2, -1, -1, 0]``
+        // So we can reduce the bucket size without preprocessing scalars
+        // and remembering them as in classic signed digit encoding
+
+        let skip_bits = (window_index * window_size).saturating_sub(1);
+        let skip_bytes = skip_bits / 8;
+
+        // fill into a u32
+        let mut v: [u8; 4] = [0; 4];
+        for (dst, src) in v.iter_mut().zip(el.iter().skip(skip_bytes)) {
+            *dst = *src
+        }
+        let mut tmp = u32::from_le_bytes(v);
+
+        // pad with one 0 if slicing the least significant window
+        if window_index == 0 {
+            tmp <<= 1;
+        }
+
+        // remove further bits
+        tmp >>= skip_bits - (skip_bytes * 8);
+        // apply the booth window
+        tmp &= (1 << (window_size + 1)) - 1;
+
+        let sign = tmp & (1 << window_size) == 0;
+
+        // div ceil by 2
+        tmp = (tmp + 1) >> 1;
+
+        // find the booth action index
+        if sign {
+            tmp as i32
+        } else {
+            ((!(tmp - 1) & ((1 << window_size) - 1)) as i32).neg()
+        }
     }
 }

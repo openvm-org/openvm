@@ -64,7 +64,12 @@ pub fn main() {
     }
 
     // Ec Mul
-    let scalar = IntModN::from_u32(1);
+    let mut p1 = black_box(EcPointN {
+        x: x1.clone(),
+        y: y1.clone(),
+    });
+    let scalar = IntModN::from_u32(12345678);
+    // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
     let x5 = IntModN::from_le_bytes(&hex!(
         "194A93387F790803D972AF9C4A40CB89D106A36F58EE2F31DC48A41768216D6D"
     ));
@@ -72,7 +77,7 @@ pub fn main() {
         "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
     ));
     let result = EcPointN::msm(&[scalar], &[p1]);
-    if result.x != x1 || result.y != y1 {
-        axvm::process::panic();
+    if result.x != x5 || result.y != y5 {
+        panic!();
     }
 }
