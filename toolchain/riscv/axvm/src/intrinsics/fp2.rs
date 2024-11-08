@@ -4,133 +4,38 @@ use core::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-#[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::BigUint;
-
 use super::IntMod;
 
-/// Trait definition for AXVM Fp2s, which take the form c0 + c1 * u where field
-/// Fp2 = Fp[u]/(u^2 + 1).
-pub trait Fp2<F: IntMod>:
-    Sized
-    + Eq
-    + Clone
-    + Debug
-    + Neg<Output = Self>
-    + Add<Output = Self>
-    + Sub<Output = Self>
-    + Mul<Output = Self>
-    + Div<Output = Self>
-    + Sum
-    + Product
-    + for<'a> Add<&'a Self, Output = Self>
-    + for<'a> Sub<&'a Self, Output = Self>
-    + for<'a> Mul<&'a Self, Output = Self>
-    + for<'a> Div<&'a Self, Output = Self>
-    + for<'a> Sum<&'a Self>
-    + for<'a> Product<&'a Self>
-    + AddAssign
-    + SubAssign
-    + MulAssign
-    + DivAssign
-    + for<'a> AddAssign<&'a Self>
-    + for<'a> SubAssign<&'a Self>
-    + for<'a> MulAssign<&'a Self>
-    + for<'a> DivAssign<&'a Self>
-{
-    /// Index of IntMod::MODULUS.
-    const MOD_IDX: usize = F::MOD_IDX;
-
-    /// Modulus as an F::Repr.
-    const MODULUS: F::Repr = F::MODULUS;
-
-    /// The zero element (i.e. the additive identity).
-    const ZERO: Self;
-
-    /// The one element (i.e. the multiplicative identity).
-    const ONE: Self;
-
-    /// TODO
-    fn new(c0: F, c1: F) -> Self;
-
-    /// TODO
-    fn from_fp((c0, c1): (F, F)) -> Self {
-        Self::new(c0, c1)
-    }
-
-    /// Creates a new Fp2 from 2 instances of Repr.
-    fn from_repr((c0_repr, c1_repr): (F::Repr, F::Repr)) -> Self {
-        Self::new(F::from_repr(c0_repr), F::from_repr(c1_repr))
-    }
-
-    /// Creates a new Fp2 from two arrays of bytes.
-    fn from_le_bytes((c0_bytes, c1_bytes): (&[u8], &[u8])) -> Self {
-        Self::new(F::from_le_bytes(c0_bytes), F::from_le_bytes(c1_bytes))
-    }
-
-    /// Creates a new Fp2 from two u8s.
-    fn from_u8((c0_val, c1_val): (u8, u8)) -> Self {
-        Self::new(F::from_u8(c0_val), F::from_u8(c1_val))
-    }
-
-    /// Creates a new Fp2 from two u32s.
-    fn from_u32((c0_val, c1_val): (u32, u32)) -> Self {
-        Self::new(F::from_u32(c0_val), F::from_u32(c1_val))
-    }
-
-    /// Creates a new Fp2 from two u64s.
-    fn from_u64((c0_val, c1_val): (u64, u64)) -> Self {
-        Self::new(F::from_u64(c0_val), F::from_u64(c1_val))
-    }
-
-    /// Value of c0 and c1 as Fps.
-    fn as_fp(&self) -> (&F, &F);
-
-    /// Value of c0 and c1 as arrays of bytes.
-    fn as_le_bytes(&self) -> (&[u8], &[u8]);
-
-    /// Returns MODULUS (i.e. p) as a BigUint.
-    #[cfg(not(target_os = "zkvm"))]
-    fn modulus_biguint() -> BigUint {
-        F::modulus_biguint()
-    }
-
-    /// Creates a new Fp2 from two BigUints.
-    #[cfg(not(target_os = "zkvm"))]
-    fn from_biguint((c0, c1): (BigUint, BigUint)) -> Self {
-        Self::new(F::from_biguint(c0), F::from_biguint(c1))
-    }
-
-    /// Value of c0 and c1 as BigUints.
-    #[cfg(not(target_os = "zkvm"))]
-    fn as_biguint(&self) -> (BigUint, BigUint) {
-        let (c0, c1) = self.as_fp();
-        (c0.as_biguint(), c1.as_biguint())
-    }
-}
-
-/// TODO
+/// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
+/// Elements are represented as `c0 + c1 * u` where `u^2 = -1`.
+///
+/// Memory alignment follows alignment of `F`.
+/// Memory layout is concatenation of `c0` and `c1`.
 #[derive(Clone, PartialEq, Eq)]
 #[repr(C)]
 pub struct Complex<F> {
-    c0: F,
-    c1: F,
+    /// Real coordinate
+    pub c0: F,
+    /// Imaginary coordinate
+    pub c1: F,
 }
 
-impl<F: IntMod> Complex<F> {
+impl<F> Complex<F> {
     const fn new(c0: F, c1: F) -> Self {
         Self { c0, c1 }
     }
 }
 
 impl<F: IntMod> Complex<F> {
+    const ZERO: Self = Self::new(F::ZERO, F::ZERO);
+    const ONE: Self = Self::new(F::ONE, F::ZERO);
+
     #[inline(always)]
     fn add_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let (d0, d1) = other.as_fp();
-            self.c0 += d0;
-            self.c1 += d1;
+            self.c0 += &other.c0;
+            self.c1 += &other.c1;
         }
         #[cfg(target_os = "zkvm")]
         {
@@ -143,9 +48,8 @@ impl<F: IntMod> Complex<F> {
     fn sub_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let (d0, d1) = other.as_fp();
-            self.c0 -= d0;
-            self.c1 -= d1;
+            self.c0 -= &other.c0;
+            self.c1 -= &other.c1;
         }
         #[cfg(target_os = "zkvm")]
         {
@@ -158,8 +62,8 @@ impl<F: IntMod> Complex<F> {
     fn mul_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let (c0, c1) = self.as_fp();
-            let (d0, d1) = other.as_fp();
+            let (c0, c1) = (&self.c0, &self.c1);
+            let (d0, d1) = (&other.c0, &other.c1);
             *self = Self::new(
                 c0.clone() * d0 - c1.clone() * d1,
                 c0.clone() * d1 + c1.clone() * d0,
@@ -176,8 +80,8 @@ impl<F: IntMod> Complex<F> {
     fn div_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let (c0, c1) = self.as_fp();
-            let (d0, d1) = other.as_fp();
+            let (c0, c1) = (&self.c0, &self.c1);
+            let (d0, d1) = (&other.c0, &other.c1);
             let denom = F::ONE / (d0.square() + d1.square());
             *self = Self::new(
                 denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
@@ -248,26 +152,6 @@ impl<F: IntMod> Complex<F> {
         {
             todo!()
         }
-    }
-}
-
-impl<F: IntMod> Fp2<F> for Complex<F> {
-    const ZERO: Self = Self::new(F::ZERO, F::ZERO);
-
-    const ONE: Self = Self::new(F::ONE, F::ZERO);
-
-    fn new(c0: F, c1: F) -> Self {
-        Self::new(c0, c1)
-    }
-
-    /// Value of c0 and c1 as Fps.
-    fn as_fp(&self) -> (&F, &F) {
-        (&self.c0, &self.c1)
-    }
-
-    /// Value of c0 and c1 as arrays of bytes.
-    fn as_le_bytes(&self) -> (&[u8], &[u8]) {
-        (self.c0.as_le_bytes(), self.c1.as_le_bytes())
     }
 }
 
@@ -469,6 +353,6 @@ impl<F: IntMod> Neg for Complex<F> {
 
 impl<F: IntMod> Debug for Complex<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{:?}", self.as_le_bytes())
+        write!(f, "{:?} + {:?} * u", self.c0, self.c1)
     }
 }
