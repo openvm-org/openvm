@@ -47,6 +47,8 @@ pub struct VmConfig {
     pub executors: Vec<ExecutorName>,
     /// List of all supported modulus
     pub supported_modulus: Vec<BigUint>,
+    /// List of all supported Fp2 modulus (stored as indices of supported_modulus)
+    pub supported_fp2_modulus: Vec<usize>,
     /// List of all supported EC curves
     pub supported_ec_curves: Vec<EcCurve>,
     /// List of all supported pairing curves
@@ -85,6 +87,7 @@ impl VmConfig {
         collect_metrics: bool,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
+        supported_fp2_modulus: Vec<usize>,
         supported_ec_curves: Vec<EcCurve>,
         supported_pairing_curves: Vec<PairingCurve>,
     ) -> Self {
@@ -97,6 +100,7 @@ impl VmConfig {
             max_segment_len,
             collect_metrics,
             supported_modulus,
+            supported_fp2_modulus,
             supported_ec_curves,
             supported_pairing_curves,
         }
@@ -133,6 +137,21 @@ impl VmConfig {
     pub fn add_canonical_modulus(self) -> Self {
         let primes = Modulus::all().iter().map(|m| m.prime()).collect();
         self.add_modular_support(primes)
+    }
+
+    pub fn add_fp2_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
+        let mut res = self;
+        res.supported_modulus.reserve(enabled_modulus.len());
+        for modulus in enabled_modulus {
+            res.supported_fp2_modulus.push(res.supported_modulus.len());
+            res.supported_modulus.push(modulus);
+        }
+        res
+    }
+
+    pub fn add_canonical_fp2_modulus(self) -> Self {
+        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
+        self.add_fp2_modular_support(primes)
     }
 
     pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
@@ -180,6 +199,7 @@ impl Default for VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
+            vec![],
             vec![],
             vec![],
             vec![],

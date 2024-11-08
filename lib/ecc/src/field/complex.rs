@@ -9,7 +9,7 @@ use axvm::intrinsics::IntMod;
 use {
     axvm_platform::{
         constants::{
-            ComplexExtFieldBaseFunct7, Custom1Funct3, CUSTOM_1, MODULAR_ARITHMETIC_MAX_KINDS,
+            ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1,
         },
         custom_insn_r,
     },
@@ -43,6 +43,11 @@ impl<F: IntMod> Complex<F> {
     // One element (i.e. multiplicative identity)
     pub const ONE: Self = Self::new(F::ONE, F::ZERO);
 
+    /// Set this complex number to be its conjugate
+    pub fn conjugate_assign(&mut self) {
+        self.c1 *= -F::ONE
+    }
+
     /// Conjugate of this complex number
     pub fn conjugate(&self) -> Self {
         Self::new(self.c0.clone(), -self.c1.clone())
@@ -62,7 +67,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Add as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -84,7 +89,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Sub as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -110,7 +115,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Mul as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -138,7 +143,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Div as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -162,7 +167,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Add as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
@@ -187,7 +192,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Sub as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
@@ -212,7 +217,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Mul as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
@@ -237,7 +242,7 @@ impl<F: IntMod> Complex<F> {
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Div as usize
-                    + F::MOD_IDX * (MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
