@@ -14,10 +14,10 @@ pub use p3_util;
 pub mod air_builders;
 /// Trait for stateful chip that owns trace generation
 mod chip;
+/// API trait for circuit prover/verifier.
+pub mod circuit_api;
 /// Types for tracking matrix in system with multiple commitments, each to multiple matrices.
 pub mod commit;
-/// Trait for concrete prover and verifier.
-pub mod concrete;
 /// Helper types associated to generic STARK config.
 pub mod config;
 /// Trait for STARK backend engine proving keygen, proviing, verifying API functions.
