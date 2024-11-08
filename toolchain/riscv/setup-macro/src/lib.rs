@@ -103,6 +103,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     .chain(vec![0u8; limbs])
                                     .take(limbs)
                                     .collect::<Vec<_>>();
+                                let num_bytes = modulus_bytes.len();
 
                                 let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
                                 let block_size =
@@ -111,532 +112,534 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 let result = TokenStream::from(
                                     quote::quote_spanned! { span.into() =>
 
-                                        #[derive(Clone, Eq)]
-                                        #[repr(C, align(#block_size))]
-                                        pub struct #struct_name([u8; #limbs]);
+                                                                            #[derive(Clone, Eq)]
+                                                                            #[repr(C, align(#block_size))]
+                                                                            pub struct #struct_name([u8; #limbs]);
 
-                                        impl #struct_name {
-                                            #[inline(always)]
-                                            const fn from_const_u8(val: u8) -> Self {
-                                                let mut bytes = [0; #limbs];
-                                                bytes[0] = val;
-                                                Self(bytes)
-                                            }
+                                                                            impl #struct_name {
+                                                                                #[inline(always)]
+                                                                                const fn from_const_u8(val: u8) -> Self {
+                                                                                    let mut bytes = [0; #limbs];
+                                                                                    bytes[0] = val;
+                                                                                    Self(bytes)
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn add_assign_impl(&mut self, other: &Self) {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    *self = Self::from_biguint(
-                                                        (self.as_biguint() + other.as_biguint()) % Self::modulus_biguint(),
-                                                    );
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::AddMod as usize
-                                                            + Self::MOD_IDX
-                                                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        self as *mut Self,
-                                                        self as *const Self,
-                                                        other as *const Self
-                                                    )
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn add_assign_impl(&mut self, other: &Self) {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        *self = Self::from_biguint(
+                                                                                            (self.as_biguint() + other.as_biguint()) % Self::modulus_biguint(),
+                                                                                        );
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::AddMod as usize
+                                                                                                + Self::MOD_IDX
+                                                                                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            self as *mut Self,
+                                                                                            self as *const Self,
+                                                                                            other as *const Self
+                                                                                        )
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn sub_assign_impl(&mut self, other: &Self) {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let modulus = Self::modulus_biguint();
-                                                    *self = Self::from_biguint(
-                                                        (self.as_biguint() + modulus.clone() - other.as_biguint()) % modulus,
-                                                    );
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::SubMod as usize
-                                                            + Self::MOD_IDX
-                                                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        self as *mut Self,
-                                                        self as *const Self,
-                                                        other as *const Self
-                                                    )
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn sub_assign_impl(&mut self, other: &Self) {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let modulus = Self::modulus_biguint();
+                                                                                        *self = Self::from_biguint(
+                                                                                            (self.as_biguint() + modulus.clone() - other.as_biguint()) % modulus,
+                                                                                        );
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::SubMod as usize
+                                                                                                + Self::MOD_IDX
+                                                                                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            self as *mut Self,
+                                                                                            self as *const Self,
+                                                                                            other as *const Self
+                                                                                        )
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn mul_assign_impl(&mut self, other: &Self) {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    *self = Self::from_biguint(
-                                                        (self.as_biguint() * other.as_biguint()) % Self::modulus_biguint(),
-                                                    );
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::MulMod as usize
-                                                            + Self::MOD_IDX
-                                                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        self as *mut Self,
-                                                        self as *const Self,
-                                                        other as *const Self
-                                                    )
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn mul_assign_impl(&mut self, other: &Self) {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        *self = Self::from_biguint(
+                                                                                            (self.as_biguint() * other.as_biguint()) % Self::modulus_biguint(),
+                                                                                        );
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::MulMod as usize
+                                                                                                + Self::MOD_IDX
+                                                                                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            self as *mut Self,
+                                                                                            self as *const Self,
+                                                                                            other as *const Self
+                                                                                        )
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn div_assign_impl(&mut self, other: &Self) {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let modulus = Self::modulus_biguint();
-                                                    let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
-                                                    *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::DivMod as usize
-                                                            + Self::MOD_IDX
-                                                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        self as *mut Self,
-                                                        self as *const Self,
-                                                        other as *const Self
-                                                    )
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn div_assign_impl(&mut self, other: &Self) {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let modulus = Self::modulus_biguint();
+                                                                                        let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
+                                                                                        *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::DivMod as usize
+                                                                                                + Self::MOD_IDX
+                                                                                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            self as *mut Self,
+                                                                                            self as *const Self,
+                                                                                            other as *const Self
+                                                                                        )
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn add_refs_impl(&self, other: &Self) -> Self {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let mut res = self.clone();
-                                                    res += other;
-                                                    res
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        uninit.as_mut_ptr(),
-                                                        self as *const #struct_name,
-                                                        other as *const #struct_name
-                                                    );
-                                                    unsafe { uninit.assume_init() }
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn add_refs_impl(&self, other: &Self) -> Self {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let mut res = self.clone();
+                                                                                        res += other;
+                                                                                        res
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            uninit.as_mut_ptr(),
+                                                                                            self as *const #struct_name,
+                                                                                            other as *const #struct_name
+                                                                                        );
+                                                                                        unsafe { uninit.assume_init() }
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn sub_refs_impl(&self, other: &Self) -> Self {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let mut res = self.clone();
-                                                    res -= other;
-                                                    res
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        uninit.as_mut_ptr(),
-                                                        self as *const #struct_name,
-                                                        other as *const #struct_name
-                                                    );
-                                                    unsafe { uninit.assume_init() }
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn sub_refs_impl(&self, other: &Self) -> Self {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let mut res = self.clone();
+                                                                                        res -= other;
+                                                                                        res
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            uninit.as_mut_ptr(),
+                                                                                            self as *const #struct_name,
+                                                                                            other as *const #struct_name
+                                                                                        );
+                                                                                        unsafe { uninit.assume_init() }
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn mul_refs_impl(&self, other: &Self) -> Self {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let mut res = self.clone();
-                                                    res *= other;
-                                                    res
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        uninit.as_mut_ptr(),
-                                                        self as *const #struct_name,
-                                                        other as *const #struct_name
-                                                    );
-                                                    unsafe { uninit.assume_init() }
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn mul_refs_impl(&self, other: &Self) -> Self {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let mut res = self.clone();
+                                                                                        res *= other;
+                                                                                        res
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            uninit.as_mut_ptr(),
+                                                                                            self as *const #struct_name,
+                                                                                            other as *const #struct_name
+                                                                                        );
+                                                                                        unsafe { uninit.assume_init() }
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn div_refs_impl(&self, other: &Self) -> Self {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    let mut res = self.clone();
-                                                    res /= other;
-                                                    res
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                                                    axvm_platform::custom_insn_r!(
-                                                        axvm_platform::constants::CUSTOM_1,
-                                                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                        axvm_platform::constants::ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        uninit.as_mut_ptr(),
-                                                        self as *const #struct_name,
-                                                        other as *const #struct_name
-                                                    );
-                                                    unsafe { uninit.assume_init() }
-                                                }
-                                            }
+                                                                                #[inline(always)]
+                                                                                fn div_refs_impl(&self, other: &Self) -> Self {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        let mut res = self.clone();
+                                                                                        res /= other;
+                                                                                        res
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                                                        axvm_platform::custom_insn_r!(
+                                                                                            axvm_platform::constants::CUSTOM_1,
+                                                                                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                            axvm_platform::constants::ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                            uninit.as_mut_ptr(),
+                                                                                            self as *const #struct_name,
+                                                                                            other as *const #struct_name
+                                                                                        );
+                                                                                        unsafe { uninit.assume_init() }
+                                                                                    }
+                                                                                }
 
-                                            #[inline(always)]
-                                            fn eq_impl(&self, other: &Self) -> bool {
-                                                #[cfg(not(target_os = "zkvm"))]
-                                                {
-                                                    self.as_le_bytes() == other.as_le_bytes()
-                                                }
-                                                #[cfg(target_os = "zkvm")]
-                                                {
-                                                    let mut x: u32;
-                                                    unsafe {
-                                                        core::arch::asm!(
-                                                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                                                            opcode = const axvm_platform::constants::CUSTOM_1,
-                                                            funct3 = const axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                                            funct7 = const axvm_platform::constants::ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                            rd = out(reg) x,
-                                                            rs1 = in(reg) self as *const #struct_name,
-                                                            rs2 = in(reg) other as *const #struct_name
-                                                        );
-                                                    }
-                                                    x != 0
-                                                }
-                                            }
-                                        }
+                                                                                #[inline(always)]
+                                                                                fn eq_impl(&self, other: &Self) -> bool {
+                                                                                    #[cfg(not(target_os = "zkvm"))]
+                                                                                    {
+                                                                                        self.as_le_bytes() == other.as_le_bytes()
+                                                                                    }
+                                                                                    #[cfg(target_os = "zkvm")]
+                                                                                    {
+                                                                                        let mut x: u32;
+                                                                                        unsafe {
+                                                                                            core::arch::asm!(
+                                                                                                ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                                                                                                opcode = const axvm_platform::constants::CUSTOM_1,
+                                                                                                funct3 = const axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                                                                funct7 = const axvm_platform::constants::ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                                                                rd = out(reg) x,
+                                                                                                rs1 = in(reg) self as *const #struct_name,
+                                                                                                rs2 = in(reg) other as *const #struct_name
+                                                                                            );
+                                                                                        }
+                                                                                        x != 0
+                                                                                    }
+                                                                                }
+                                                                            }
 
-                                        impl axvm::intrinsics::IntMod for #struct_name {
-                                            type Repr = [u8; #limbs];
-                                            type SelfRef<'a> = &'a Self;
+                                                                            impl axvm::intrinsics::IntMod for #struct_name {
+                                                                                type Repr = [u8; #limbs];
+                                                                                type SelfRef<'a> = &'a Self;
 
-                                            const MOD_IDX: usize = #mod_idx;
+                                                                                const MOD_IDX: usize = #mod_idx;
 
-                                            const MODULUS: Self::Repr = [#(#modulus_bytes),*];
+                                                                                const MODULUS: Self::Repr = [#(#modulus_bytes),*];
 
-                                            const ZERO: Self = Self([0; #limbs]);
+                                                                                const ZERO: Self = Self([0; #limbs]);
 
-                                            const ONE: Self = Self::from_const_u8(1);
+                                                                            const NUM_BYTES: usize = #num_bytes;
 
-                                            fn from_repr(repr: Self::Repr) -> Self {
-                                                Self(repr)
-                                            }
+                                                                                const ONE: Self = Self::from_const_u8(1);
 
-                                            fn from_le_bytes(bytes: &[u8]) -> Self {
-                                                let mut arr = [0u8; #limbs];
-                                                arr.copy_from_slice(bytes);
-                                                Self(arr)
-                                            }
+                                                                                fn from_repr(repr: Self::Repr) -> Self {
+                                                                                    Self(repr)
+                                                                                }
 
-                                            fn from_u8(val: u8) -> Self {
-                                                Self::from_const_u8(val)
-                                            }
+                                                                                fn from_le_bytes(bytes: &[u8]) -> Self {
+                                                                                    let mut arr = [0u8; #limbs];
+                                                                                    arr.copy_from_slice(bytes);
+                                                                                    Self(arr)
+                                                                                }
 
-                                            fn from_u32(val: u32) -> Self {
-                                                let mut bytes = [0; #limbs];
-                                                bytes[..4].copy_from_slice(&val.to_le_bytes());
-                                                Self(bytes)
-                                            }
+                                                                                fn from_u8(val: u8) -> Self {
+                                                                                    Self::from_const_u8(val)
+                                                                                }
 
-                                            fn from_u64(val: u64) -> Self {
-                                                let mut bytes = [0; #limbs];
-                                                bytes[..8].copy_from_slice(&val.to_le_bytes());
-                                                Self(bytes)
-                                            }
+                                                                                fn from_u32(val: u32) -> Self {
+                                                                                    let mut bytes = [0; #limbs];
+                                                                                    bytes[..4].copy_from_slice(&val.to_le_bytes());
+                                                                                    Self(bytes)
+                                                                                }
 
-                                            fn as_le_bytes(&self) -> &[u8] {
-                                                &(self.0)
-                                            }
+                                                                                fn from_u64(val: u64) -> Self {
+                                                                                    let mut bytes = [0; #limbs];
+                                                                                    bytes[..8].copy_from_slice(&val.to_le_bytes());
+                                                                                    Self(bytes)
+                                                                                }
 
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            fn modulus_biguint() -> num_bigint_dig::BigUint {
-                                                num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)
-                                            }
+                                                                                fn as_le_bytes(&self) -> &[u8] {
+                                                                                    &(self.0)
+                                                                                }
 
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
-                                                Self(axvm::intrinsics::biguint_to_limbs(&biguint))
-                                            }
+                                                                                #[cfg(not(target_os = "zkvm"))]
+                                                                                fn modulus_biguint() -> num_bigint_dig::BigUint {
+                                                                                    num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)
+                                                                                }
 
-                                            #[cfg(not(target_os = "zkvm"))]
-                                            fn as_biguint(&self) -> num_bigint_dig::BigUint {
-                                                num_bigint_dig::BigUint::from_bytes_le(self.as_le_bytes())
-                                            }
+                                                                                #[cfg(not(target_os = "zkvm"))]
+                                                                                fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
+                                                                                    Self(axvm::intrinsics::biguint_to_limbs(&biguint))
+                                                                                }
 
-                                            fn double(&self) -> Self {
-                                                self + self
-                                            }
+                                                                                #[cfg(not(target_os = "zkvm"))]
+                                                                                fn as_biguint(&self) -> num_bigint_dig::BigUint {
+                                                                                    num_bigint_dig::BigUint::from_bytes_le(self.as_le_bytes())
+                                                                                }
 
-                                            fn square(&self) -> Self {
-                                                self * self
-                                            }
+                                                                                fn double(&self) -> Self {
+                                                                                    self + self
+                                                                                }
 
-                                            fn cube(&self) -> Self {
-                                                &self.square() * self
-                                            }
-                                        }
+                                                                                fn square(&self) -> Self {
+                                                                                    self * self
+                                                                                }
 
-                                        impl<'a> core::ops::AddAssign<&'a #struct_name> for #struct_name {
-                                            #[inline(always)]
-                                            fn add_assign(&mut self, other: &'a #struct_name) {
-                                                self.add_assign_impl(other);
-                                            }
-                                        }
+                                                                                fn cube(&self) -> Self {
+                                                                                    &self.square() * self
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::AddAssign for #struct_name {
-                                            #[inline(always)]
-                                            fn add_assign(&mut self, other: Self) {
-                                                self.add_assign_impl(&other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::AddAssign<&'a #struct_name> for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn add_assign(&mut self, other: &'a #struct_name) {
+                                                                                    self.add_assign_impl(other);
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::Add for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn add(mut self, other: Self) -> Self::Output {
-                                                self += other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::AddAssign for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn add_assign(&mut self, other: Self) {
+                                                                                    self.add_assign_impl(&other);
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Add<&'a #struct_name> for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn add(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self += other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::Add for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn add(mut self, other: Self) -> Self::Output {
+                                                                                    self += other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Add<&'a #struct_name> for &#struct_name {
-                                            type Output = #struct_name;
-                                            #[inline(always)]
-                                            fn add(self, other: &'a #struct_name) -> Self::Output {
-                                                self.add_refs_impl(other)
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Add<&'a #struct_name> for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn add(mut self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self += other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::SubAssign<&'a #struct_name> for #struct_name {
-                                            #[inline(always)]
-                                            fn sub_assign(&mut self, other: &'a #struct_name) {
-                                                self.sub_assign_impl(other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Add<&'a #struct_name> for &#struct_name {
+                                                                                type Output = #struct_name;
+                                                                                #[inline(always)]
+                                                                                fn add(self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self.add_refs_impl(other)
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::SubAssign for #struct_name {
-                                            #[inline(always)]
-                                            fn sub_assign(&mut self, other: Self) {
-                                                self.sub_assign_impl(&other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::SubAssign<&'a #struct_name> for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn sub_assign(&mut self, other: &'a #struct_name) {
+                                                                                    self.sub_assign_impl(other);
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::Sub for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn sub(mut self, other: Self) -> Self::Output {
-                                                self -= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::SubAssign for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn sub_assign(&mut self, other: Self) {
+                                                                                    self.sub_assign_impl(&other);
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Sub<&'a #struct_name> for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn sub(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self -= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::Sub for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn sub(mut self, other: Self) -> Self::Output {
+                                                                                    self -= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Sub<&'a #struct_name> for &#struct_name {
-                                            type Output = #struct_name;
-                                            #[inline(always)]
-                                            fn sub(self, other: &'a #struct_name) -> Self::Output {
-                                                self.sub_refs_impl(other)
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Sub<&'a #struct_name> for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn sub(mut self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self -= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::MulAssign<&'a #struct_name> for #struct_name {
-                                            #[inline(always)]
-                                            fn mul_assign(&mut self, other: &'a #struct_name) {
-                                                self.mul_assign_impl(other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Sub<&'a #struct_name> for &#struct_name {
+                                                                                type Output = #struct_name;
+                                                                                #[inline(always)]
+                                                                                fn sub(self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self.sub_refs_impl(other)
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::MulAssign for #struct_name {
-                                            #[inline(always)]
-                                            fn mul_assign(&mut self, other: Self) {
-                                                self.mul_assign_impl(&other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::MulAssign<&'a #struct_name> for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn mul_assign(&mut self, other: &'a #struct_name) {
+                                                                                    self.mul_assign_impl(other);
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::Mul for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn mul(mut self, other: Self) -> Self::Output {
-                                                self *= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::MulAssign for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn mul_assign(&mut self, other: Self) {
+                                                                                    self.mul_assign_impl(&other);
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Mul<&'a #struct_name> for #struct_name {
-                                            type Output = Self;
-                                            #[inline(always)]
-                                            fn mul(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self *= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::Mul for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn mul(mut self, other: Self) -> Self::Output {
+                                                                                    self *= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Mul<&'a #struct_name> for &#struct_name {
-                                            type Output = #struct_name;
-                                            #[inline(always)]
-                                            fn mul(self, other: &'a #struct_name) -> Self::Output {
-                                                self.mul_refs_impl(other)
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Mul<&'a #struct_name> for #struct_name {
+                                                                                type Output = Self;
+                                                                                #[inline(always)]
+                                                                                fn mul(mut self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self *= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::DivAssign<&'a #struct_name> for #struct_name {
-                                            /// Undefined behaviour when denominator is not coprime to N
-                                            #[inline(always)]
-                                            fn div_assign(&mut self, other: &'a #struct_name) {
-                                                self.div_assign_impl(other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Mul<&'a #struct_name> for &#struct_name {
+                                                                                type Output = #struct_name;
+                                                                                #[inline(always)]
+                                                                                fn mul(self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self.mul_refs_impl(other)
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::DivAssign for #struct_name {
-                                            /// Undefined behaviour when denominator is not coprime to N
-                                            #[inline(always)]
-                                            fn div_assign(&mut self, other: Self) {
-                                                self.div_assign_impl(&other);
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::DivAssign<&'a #struct_name> for #struct_name {
+                                                                                /// Undefined behaviour when denominator is not coprime to N
+                                                                                #[inline(always)]
+                                                                                fn div_assign(&mut self, other: &'a #struct_name) {
+                                                                                    self.div_assign_impl(other);
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::Div for #struct_name {
-                                            type Output = Self;
-                                            /// Undefined behaviour when denominator is not coprime to N
-                                            #[inline(always)]
-                                            fn div(mut self, other: Self) -> Self::Output {
-                                                self /= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::DivAssign for #struct_name {
+                                                                                /// Undefined behaviour when denominator is not coprime to N
+                                                                                #[inline(always)]
+                                                                                fn div_assign(&mut self, other: Self) {
+                                                                                    self.div_assign_impl(&other);
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Div<&'a #struct_name> for #struct_name {
-                                            type Output = Self;
-                                            /// Undefined behaviour when denominator is not coprime to N
-                                            #[inline(always)]
-                                            fn div(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self /= other;
-                                                self
-                                            }
-                                        }
+                                                                            impl core::ops::Div for #struct_name {
+                                                                                type Output = Self;
+                                                                                /// Undefined behaviour when denominator is not coprime to N
+                                                                                #[inline(always)]
+                                                                                fn div(mut self, other: Self) -> Self::Output {
+                                                                                    self /= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::ops::Div<&'a #struct_name> for &#struct_name {
-                                            type Output = #struct_name;
-                                            /// Undefined behaviour when denominator is not coprime to N
-                                            #[inline(always)]
-                                            fn div(self, other: &'a #struct_name) -> Self::Output {
-                                                self.div_refs_impl(other)
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Div<&'a #struct_name> for #struct_name {
+                                                                                type Output = Self;
+                                                                                /// Undefined behaviour when denominator is not coprime to N
+                                                                                #[inline(always)]
+                                                                                fn div(mut self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self /= other;
+                                                                                    self
+                                                                                }
+                                                                            }
 
-                                        impl PartialEq for #struct_name {
-                                            #[inline(always)]
-                                            fn eq(&self, other: &Self) -> bool {
-                                                self.eq_impl(other)
-                                            }
-                                        }
+                                                                            impl<'a> core::ops::Div<&'a #struct_name> for &#struct_name {
+                                                                                type Output = #struct_name;
+                                                                                /// Undefined behaviour when denominator is not coprime to N
+                                                                                #[inline(always)]
+                                                                                fn div(self, other: &'a #struct_name) -> Self::Output {
+                                                                                    self.div_refs_impl(other)
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::iter::Sum<&'a #struct_name> for #struct_name {
-                                            fn sum<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
-                                                iter.fold(Self::ZERO, |acc, x| &acc + x)
-                                            }
-                                        }
+                                                                            impl PartialEq for #struct_name {
+                                                                                #[inline(always)]
+                                                                                fn eq(&self, other: &Self) -> bool {
+                                                                                    self.eq_impl(other)
+                                                                                }
+                                                                            }
 
-                                        impl core::iter::Sum for #struct_name {
-                                            fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-                                                iter.fold(Self::ZERO, |acc, x| &acc + &x)
-                                            }
-                                        }
+                                                                            impl<'a> core::iter::Sum<&'a #struct_name> for #struct_name {
+                                                                                fn sum<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
+                                                                                    iter.fold(Self::ZERO, |acc, x| &acc + x)
+                                                                                }
+                                                                            }
 
-                                        impl<'a> core::iter::Product<&'a #struct_name> for #struct_name {
-                                            fn product<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
-                                                iter.fold(Self::ONE, |acc, x| &acc * x)
-                                            }
-                                        }
+                                                                            impl core::iter::Sum for #struct_name {
+                                                                                fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+                                                                                    iter.fold(Self::ZERO, |acc, x| &acc + &x)
+                                                                                }
+                                                                            }
 
-                                        impl core::iter::Product for #struct_name {
-                                            fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-                                                iter.fold(Self::ONE, |acc, x| &acc * &x)
-                                            }
-                                        }
+                                                                            impl<'a> core::iter::Product<&'a #struct_name> for #struct_name {
+                                                                                fn product<I: Iterator<Item = &'a #struct_name>>(iter: I) -> Self {
+                                                                                    iter.fold(Self::ONE, |acc, x| &acc * x)
+                                                                                }
+                                                                            }
 
-                                        impl core::ops::Neg for #struct_name {
-                                            type Output = #struct_name;
-                                            fn neg(self) -> Self::Output {
-                                                Self::ZERO - &self
-                                            }
-                                        }
+                                                                            impl core::iter::Product for #struct_name {
+                                                                                fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+                                                                                    iter.fold(Self::ONE, |acc, x| &acc * &x)
+                                                                                }
+                                                                            }
 
-                                        impl core::fmt::Debug for #struct_name {
-                                            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                                                write!(f, "{:?}", self.as_le_bytes())
-                                            }
-                                        }
+                                                                            impl core::ops::Neg for #struct_name {
+                                                                                type Output = #struct_name;
+                                                                                fn neg(self) -> Self::Output {
+                                                                                    Self::ZERO - &self
+                                                                                }
+                                                                            }
 
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        mod helper {
-                                            use super::*;
-                                            impl core::ops::Mul<u32> for #struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
+                                                                            impl core::fmt::Debug for #struct_name {
+                                                                                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                                                                                    write!(f, "{:?}", self.as_le_bytes())
+                                                                                }
+                                                                            }
 
-                                            impl core::ops::Mul<u32> for &#struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
-                                        }
+                                                                            #[cfg(not(target_os = "zkvm"))]
+                                                                            mod helper {
+                                                                                use super::*;
+                                                                                impl core::ops::Mul<u32> for #struct_name {
+                                                                                    type Output = #struct_name;
+                                                                                    #[inline(always)]
+                                                                                    fn mul(self, other: u32) -> Self::Output {
+                                                                                        let mut res = self.clone();
+                                                                                        res *= #struct_name::from_u32(other);
+                                                                                        res
+                                                                                    }
+                                                                                }
 
-                                    },
+                                                                                impl core::ops::Mul<u32> for &#struct_name {
+                                                                                    type Output = #struct_name;
+                                                                                    #[inline(always)]
+                                                                                    fn mul(self, other: u32) -> Self::Output {
+                                                                                        let mut res = self.clone();
+                                                                                        res *= #struct_name::from_u32(other);
+                                                                                        res
+                                                                                    }
+                                                                                }
+                                                                            }
+
+                                                                        },
                                 );
 
                                 moduli.push(modulus_bytes);

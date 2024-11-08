@@ -41,23 +41,21 @@ pub fn main() {
     });
     let mut p2 = black_box(EcPointN { x: x2, y: y2 });
 
-    let p3 = EcPointN::add(&p1, &p2);
-
+    // Generic add can handle equal or unequal points.
+    let p3 = p1.add(&p2);
     if p3.x != x3 || p3.y != y3 {
         panic!();
     }
-
-    let p4 = EcPointN::add(&p2, &p2);
-
+    let p4 = p2.add(&p2);
     if p4.x != x4 || p4.y != y4 {
         panic!();
     }
 
-    p1.add_ne_assign(&p2);
+    // Add assign and double assign
+    p1.add_assign(&p2);
     if p1.x != x3 || p1.y != y3 {
         panic!();
     }
-
     p2.double_assign();
     if p2.x != x4 || p2.y != y4 {
         panic!();

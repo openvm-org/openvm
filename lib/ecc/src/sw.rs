@@ -67,19 +67,19 @@ impl EcPointN {
     }
 
     // Two points can be equal or not.
-    pub fn add(p1: &EcPointN, p2: &EcPointN) -> EcPointN {
-        if p1.is_identity() {
+    pub fn add(&self, p2: &EcPointN) -> EcPointN {
+        if self.is_identity() {
             p2.clone()
         } else if p2.is_identity() {
-            p1.clone()
-        } else if p1.x == p2.x {
-            if &p1.y + &p2.y == IntModN::ZERO {
+            self.clone()
+        } else if self.x == p2.x {
+            if &self.y + &p2.y == IntModN::ZERO {
                 Self::IDENTITY
             } else {
-                Self::double(p1)
+                Self::double_internal(self)
             }
         } else {
-            Self::add_ne(p1, p2)
+            Self::add_ne(self, p2)
         }
     }
 
@@ -93,10 +93,24 @@ impl EcPointN {
             if &self.y + &p2.y == IntModN::ZERO {
                 *self = Self::IDENTITY;
             } else {
-                *self = Self::double(self);
+                *self = Self::double_internal(self);
             }
         } else {
             Self::add_ne_assign(self, p2);
+        }
+    }
+
+    pub fn double(&self) -> Self {
+        if self.is_identity() {
+            self.clone()
+        } else {
+            Self::double_internal(self)
+        }
+    }
+
+    pub fn double_assign(&mut self) {
+        if !self.is_identity() {
+            Self::double_assign_internal(self);
         }
     }
 
@@ -107,8 +121,10 @@ impl EcPointN {
         }
     }
 
+    // Below are wrapper functions for the intrinsic instructions.
+    // Should not be called directly.
     #[inline(always)]
-    pub fn add_ne(p1: &EcPointN, p2: &EcPointN) -> EcPointN {
+    fn add_ne(p1: &EcPointN, p2: &EcPointN) -> EcPointN {
         #[cfg(not(target_os = "zkvm"))]
         {
             let lambda = (&p2.y - &p1.y) / (&p2.x - &p1.x);
@@ -132,7 +148,7 @@ impl EcPointN {
     }
 
     #[inline(always)]
-    pub fn add_ne_assign(&mut self, p2: &EcPointN) {
+    fn add_ne_assign(&mut self, p2: &EcPointN) {
         #[cfg(not(target_os = "zkvm"))]
         {
             let lambda = (&p2.y - &self.y) / (&p2.x - &self.x);
@@ -155,7 +171,7 @@ impl EcPointN {
     }
 
     #[inline(always)]
-    pub fn double(p: &EcPointN) -> EcPointN {
+    fn double_internal(p: &EcPointN) -> EcPointN {
         #[cfg(not(target_os = "zkvm"))]
         {
             let lambda = &p.x * &p.x * 3 / (&p.y * 2);
@@ -179,7 +195,7 @@ impl EcPointN {
     }
 
     #[inline(always)]
-    pub fn double_assign(&mut self) {
+    fn double_assign_internal(&mut self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             let lambda = &self.x * &self.x * 3 / (&self.y * 2);
@@ -215,15 +231,12 @@ impl EcPointN {
         } else if bases.len() < 32 {
             3
         } else {
-            //(f64::from(bases.len() as u32)).ln().ceil() as usize
-            // TODO: cannot do ln without std? what do we do here
-            6
+            // TODO: cannot do f64 ln without std? what do we do here
+            (f64::from(bases.len() as u32)).ln().ceil() as usize
         };
 
-        // TODO: should IntModN have a method to get the byte size?
-        let field_byte_size = 32;
+        let field_byte_size = IntModN::NUM_BYTES;
 
-        // Find the "highest" byte used in the all coefficients
         // OR all coefficients in order to make a mask to figure out the maximum number of bytes used
         // among all coefficients.
         let mut acc_or = vec![0; field_byte_size];
@@ -241,16 +254,11 @@ impl EcPointN {
         if max_byte_size == 0 {
             return Self::IDENTITY;
         }
-        // End of finding highest byte used in all coefficients
-        // Can't we just OR all the bits??
-        // As we just need the number_of_windows below
         let number_of_windows = max_byte_size * 8_usize / c + 1;
 
         for current_window in (0..number_of_windows).rev() {
             for _ in 0..c {
-                // TODO: double identity will panic
-                // acc = Self::double(&acc);
-                acc = Self::add(&acc, &acc);
+                acc.double_assign();
             }
             let mut buckets = vec![Self::IDENTITY; 1 << (c - 1)];
 
