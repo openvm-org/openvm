@@ -5,13 +5,11 @@ axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
 
-pub trait EcPoint:
+pub trait Group:
     Clone
     + Debug
     + Eq
     + Sized
-    + Send
-    + Sync
     + Add<Output = Self>
     + Sub<Output = Self>
     + for<'a> Add<&'a Self, Output = Self>
@@ -26,6 +24,11 @@ pub trait EcPoint:
     + for<'a> MulAssign<&'a Self::Scalar>
 {
     type Scalar: IntMod;
+    type SelfRef<'a>: Add<&'a Self, Output = Self>
+        + Sub<&'a Self, Output = Self>
+        + Mul<&'a Self::Scalar, Output = Self>
+    where
+        Self: 'a;
 
     fn identity() -> Self;
     fn is_identity(&self) -> bool;
