@@ -2,7 +2,7 @@ pub use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Fq6};
 
 // use super::{Fq, Fq12, Fq2, Fq6};
 use crate::{
-    field::{ExpBigInt, Field, FieldExt},
+    field::{ExpBigInt, Field, FieldExtension},
     pairing::{EvaluatedLine, LineMType},
 };
 
@@ -10,7 +10,7 @@ use crate::{
 /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the intermediate points manually.
 ///
 /// FieldExtension for Fq12 with Fq2 as base field since halo2curves does not implement `Field` for Fq6.
-impl FieldExt for Fq12 {
+impl FieldExtension for Fq12 {
     type BaseField = Fq2;
     type Coeffs = [Self::BaseField; 6];
     type SelfRef<'a> = &'a Self;

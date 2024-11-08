@@ -5,12 +5,12 @@ use itertools::{izip, Itertools};
 
 use super::{EvaluatedLine, MillerStep};
 use crate::{
-    field::{Field, FieldExt},
+    field::{Field, FieldExtension},
     point::AffinePoint,
 };
 
 #[allow(non_snake_case)]
-pub trait MultiMillerLoop: MillerStep
+pub trait MultiMillerLoop<const PBE_LEN: usize>: MillerStep
 where
     for<'a> &'a Self::Fp: Add<&'a Self::Fp, Output = Self::Fp>,
     for<'a> &'a Self::Fp: Sub<&'a Self::Fp, Output = Self::Fp>,
@@ -21,16 +21,13 @@ where
     for<'a> &'a Self::Fp2: Neg<Output = Self::Fp2>,
     for<'a> &'a Self::Fp12: Mul<&'a Self::Fp12, Output = Self::Fp12>,
 {
-    type Fp12: FieldExt<BaseField = Self::Fp2>;
+    type Fp12: FieldExtension<BaseField = Self::Fp2>;
+
+    const SEED_ABS: u64;
+    const PSEUDO_BINARY_ENCODING: [i8; PBE_LEN];
 
     /// We use the field extension tower `Fp12 = Fp2[w]/(w^6 - xi)`.
     fn xi() -> Self::Fp2;
-
-    /// Seed value for the curve
-    fn seed() -> u64;
-
-    /// Pseudo-binary used for the loop counter of the curve
-    fn pseudo_binary_encoding() -> Vec<i8>;
 
     /// Function to evaluate the line functions of the Miller loop
     fn evaluate_lines_vec(
@@ -113,7 +110,7 @@ where
         fn q_signed<Fp, Fp2>(Q: &[AffinePoint<Fp2>], sigma_i: i8) -> Vec<AffinePoint<Fp2>>
         where
             Fp: Field,
-            Fp2: FieldExt<BaseField = Fp>,
+            Fp2: FieldExtension<BaseField = Fp>,
         {
             Q.iter()
                 .map(|q| match sigma_i {
@@ -124,13 +121,12 @@ where
                 .collect()
         }
 
-        let pseudo_binary_encoding = Self::pseudo_binary_encoding();
-        for i in (0..pseudo_binary_encoding.len() - 2).rev() {
+        for i in (0..PBE_LEN - 2).rev() {
             f = &f * &f;
 
             let mut lines = Vec::<EvaluatedLine<Self::Fp, Self::Fp2>>::new();
 
-            if pseudo_binary_encoding[i] == 0 {
+            if Self::PSEUDO_BINARY_ENCODING[i] == 0 {
                 // Run miller double step if \sigma_i == 0
                 let (Q_out, lines_2S) = Q_acc
                     .into_iter()
@@ -146,7 +142,7 @@ where
             } else {
                 // use embedded exponent technique if c is provided
                 f = if let Some(c) = c.clone() {
-                    match pseudo_binary_encoding[i] {
+                    match Self::PSEUDO_BINARY_ENCODING[i] {
                         1 => &f * &c,
                         -1 => &f * &c_inv,
                         _ => panic!("Invalid sigma_i"),
@@ -156,7 +152,7 @@ where
                 };
 
                 // Run miller double and add if \sigma_i != 0
-                let Q_signed = q_signed(Q, pseudo_binary_encoding[i]);
+                let Q_signed = q_signed(Q, Self::PSEUDO_BINARY_ENCODING[i]);
                 let (Q_out, lines_S_plus_Q, lines_S_plus_Q_plus_S): (Vec<_>, Vec<_>, Vec<_>) =
                     Q_acc
                         .iter()

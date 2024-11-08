@@ -5,7 +5,7 @@ use axvm_ecc::{
 };
 use itertools::izip;
 
-use super::Bls12_381;
+use super::{Bls12_381, BLS12_381_PBE, BLS12_381_PBE_LEN, BLS12_381_SEED_ABS};
 
 impl MillerStep for Bls12_381 {
     type Fp = Fq;
@@ -13,19 +13,14 @@ impl MillerStep for Bls12_381 {
 }
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop for Bls12_381 {
+impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
     type Fp12 = Fq12;
+
+    const SEED_ABS: u64 = BLS12_381_SEED_ABS;
+    const PSEUDO_BINARY_ENCODING: [i8; BLS12_381_PBE_LEN] = BLS12_381_PBE;
 
     fn xi() -> Fq2 {
         Self::xi()
-    }
-
-    fn seed() -> u64 {
-        Self::seed()
-    }
-
-    fn pseudo_binary_encoding() -> Vec<i8> {
-        Self::pseudo_binary_encoding()
     }
 
     fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {

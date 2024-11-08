@@ -1,16 +1,15 @@
 use core::{
     fmt::Debug,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-mod field_ext;
-pub use field_ext::*;
+mod field_extension;
+pub use field_extension::*;
 
 mod complex;
 pub use complex::*;
 
 mod sextic_ext_field;
-use halo2curves_axiom::bls12_381::Fq;
 pub use sextic_ext_field::*;
 
 #[cfg(feature = "halo2curves")]
@@ -27,24 +26,19 @@ pub trait Field:
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
-    + Div<Output = Self>
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
     + for<'a> Mul<&'a Self, Output = Self>
-    + for<'a> Div<&'a Self, Output = Self>
     + AddAssign
     + SubAssign
     + MulAssign
-    + DivAssign
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + for<'a> DivAssign<&'a Self>
 {
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
         + Mul<&'a Self, Output = Self>
-        + Div<&'a Self, Output = Self>
     where
         Self: 'a;
 
@@ -59,20 +53,4 @@ pub trait Field:
 
     /// Inverts this element, returning `None` if this element is zero.
     fn invert(&self) -> Option<Self>;
-}
-
-impl<F: halo2curves_axiom::ff::Field> Field for F {
-    type SelfRef<'a> = &'a Self;
-
-    const ZERO: Self = F::ZERO;
-
-    const ONE: Self = F::ONE;
-
-    fn square(&self) -> Self {
-        self.square()
-    }
-
-    fn invert(&self) -> Option<Self> {
-        self.invert().into()
-    }
 }

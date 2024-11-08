@@ -2,7 +2,7 @@ use core::ops::{Add, Mul, Neg, Sub};
 
 use super::UnevaluatedLine;
 use crate::{
-    field::{Field, FieldExt},
+    field::{Field, FieldExtension},
     point::AffinePoint,
 };
 
@@ -15,7 +15,7 @@ where
     for<'a> &'a Self::Fp2: Neg<Output = Self::Fp2>,
 {
     type Fp: Field;
-    type Fp2: FieldExt<BaseField = Self::Fp>;
+    type Fp2: FieldExtension<BaseField = Self::Fp>;
 
     /// Miller double step
     fn miller_double_step(
@@ -143,7 +143,7 @@ where
 // pub fn miller_double_step<Fp, Fp2>(S: AffinePoint<Fp2>) -> (AffinePoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 // where
 //     Fp: Field,
-//     Fp2: FieldExt<BaseField = Fp>,
+//     Fp2: FieldExtension<BaseField = Fp>,
 //     for<'a> &'a Fp2: Add<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Sub<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Mul<&'a Fp2, Output = Fp2>,
@@ -182,7 +182,7 @@ where
 // ) -> (AffinePoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 // where
 //     Fp: Field,
-//     Fp2: FieldExt<BaseField = Fp>,
+//     Fp2: FieldExtension<BaseField = Fp>,
 //     for<'a> &'a Fp2: Add<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Sub<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Mul<&'a Fp2, Output = Fp2>,
@@ -221,7 +221,7 @@ where
 // )
 // where
 //     Fp: Field,
-//     Fp2: FieldExt<BaseField = Fp>,
+//     Fp2: FieldExtension<BaseField = Fp>,
 //     for<'a> &'a Fp2: Add<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Sub<&'a Fp2, Output = Fp2>,
 //     for<'a> &'a Fp2: Mul<&'a Fp2, Output = Fp2>,

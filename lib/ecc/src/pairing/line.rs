@@ -1,10 +1,10 @@
-use crate::field::{Field, FieldExt, SexticExtField};
+use crate::field::{Field, FieldExtension, SexticExtField};
 
 #[derive(Clone, Copy, Debug)]
 pub struct UnevaluatedLine<Fp, Fp2>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     pub b: Fp2,
     pub c: Fp2,
@@ -13,7 +13,7 @@ where
 impl<Fp, Fp2> UnevaluatedLine<Fp, Fp2>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     pub fn evaluate(&self, x_over_y: &Fp, y_inv: &Fp) -> EvaluatedLine<Fp, Fp2> {
         EvaluatedLine {
@@ -27,7 +27,7 @@ where
 pub struct EvaluatedLine<Fp, Fp2>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
 {
     pub b: Fp2,
     pub c: Fp2,
@@ -37,8 +37,8 @@ where
 pub trait LineMType<Fp, Fp2, Fp12>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
-    Fp12: FieldExt<BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     fn from_evaluated_line_m_type(line: EvaluatedLine<Fp, Fp2>) -> Fp12;
 }
@@ -47,8 +47,8 @@ where
 pub trait LineMulMType<Fp, Fp2, Fp12>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
-    Fp12: FieldExt<BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     fn mul_023_by_023(
         l0: EvaluatedLine<Fp, Fp2>,
@@ -70,8 +70,8 @@ where
 pub trait LineDType<Fp, Fp2, Fp12>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
-    Fp12: FieldExt<BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     fn from_evaluated_line_d_type(line: EvaluatedLine<Fp, Fp2>) -> Fp12;
 }
@@ -80,8 +80,8 @@ where
 pub trait LineMulDType<Fp, Fp2, Fp12>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
-    Fp12: FieldExt<BaseField = Fp2>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2>,
 {
     fn mul_013_by_013(
         l0: EvaluatedLine<Fp, Fp2>,

@@ -9,7 +9,7 @@ pub use point::{G1Affine, G2Affine};
 use crate::field::Field;
 
 impl Field for Fq {
-    type SelfRef<'a> = &'a Self;
+    type SelfRef<'a> = Self;
 
     const ZERO: Self = Fq::zero();
     const ONE: Self = Fq::one();

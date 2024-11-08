@@ -1,5 +1,5 @@
 use crate::{
-    field::{ExpBigInt, Field, FieldExt},
+    field::{ExpBigInt, Field, FieldExtension},
     point::AffinePoint,
 };
 
@@ -7,8 +7,8 @@ use crate::{
 pub trait FinalExp<Fp, Fp2, Fp12>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
-    Fp12: FieldExt<BaseField = Fp2> + ExpBigInt<Fp12>,
+    Fp2: FieldExtension<BaseField = Fp>,
+    Fp12: FieldExtension<BaseField = Fp2> + ExpBigInt<Fp12>,
 {
     /// Assert in circuit that the final exponentiation is equal to one. The actual final
     /// exponentiaton is calculated out of circuit via final_exp_hint. Scalar coefficients

@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    field::{FieldExt, SexticExtField},
+    field::{FieldExtension, SexticExtField},
     pairing::{LineMType, LineMulMType},
     point::AffinePoint,
 };

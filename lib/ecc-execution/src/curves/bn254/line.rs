@@ -2,12 +2,12 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc::{
     curve::bn254::{Fq, Fq12, Fq2},
-    field::{Field, FieldExt, SexticExtField},
+    field::{Field, FieldExtension, SexticExtField},
     pairing::{EvaluatedLine, LineMulDType, UnevaluatedLine},
     point::AffinePoint,
 };
 
-use super::Bn254;
+use super::{Bn254, BN254_XI};
 
 impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {
     fn mul_013_by_013(
@@ -22,7 +22,7 @@ impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {
         // where w⁶ = xi
         // l0 * l1 = 1 + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴ + (c0c1)w⁶
         //         = (1 + c0c1 * xi) + (b0 + b1)w + (b0b1)w² + (c0 + c1)w³ + (b0c1 + b1c0)w⁴
-        let l0 = Fq2::ONE + c0 * c1 * Bn254::xi();
+        let l0 = Fq2::ONE + c0 * c1 * *BN254_XI;
         let l1 = b0 + b1;
         let l2 = b0 * b1;
         let l3 = c0 + c1;
@@ -60,7 +60,7 @@ impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {
 pub fn tangent_line_013<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp, Fp2>
 where
     Fp: Field,
-    Fp2: FieldExt<BaseField = Fp>,
+    Fp2: FieldExtension<BaseField = Fp>,
     for<'a> &'a Fp: Add<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Sub<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Mul<&'a Fp, Output = Fp>,

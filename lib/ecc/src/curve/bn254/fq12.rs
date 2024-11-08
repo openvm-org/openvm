@@ -1,12 +1,12 @@
 pub use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6};
 
 use crate::{
-    field::{ExpBigInt, Field, FieldExt},
+    field::{ExpBigInt, Field, FieldExtension},
     pairing::{EvaluatedLine, LineDType},
 };
 
 /// FieldExtension for Fq12 with Fq6 as base field since halo2curves does not implement `Field` for Fq6.
-impl FieldExt for Fq12 {
+impl FieldExtension for Fq12 {
     type BaseField = Fq2;
     type Coeffs = [Self::BaseField; 6];
     type SelfRef<'a> = &'a Self;

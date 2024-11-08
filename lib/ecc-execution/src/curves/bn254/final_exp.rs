@@ -1,6 +1,6 @@
 use axvm_ecc::{
     curve::bn254::{Fq, Fq12, Fq2},
-    field::{ExpBigInt, FieldExt},
+    field::{ExpBigInt, FieldExtension},
     pairing::{FinalExp, MultiMillerLoop},
     point::AffinePoint,
 };
