@@ -167,6 +167,7 @@ num-bigint-dig = "0.8.4"
 num-bigint = "0.4.6"
 num-integer = "0.1.46"
 num-traits = "0.2.19"
+micromath = { version = "2.1", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

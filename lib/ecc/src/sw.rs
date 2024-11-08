@@ -17,6 +17,8 @@ axvm::moduli_setup! {
 
 use alloc::{vec, vec::Vec};
 
+use micromath::F32Ext;
+
 pub trait Group:
     Clone
     + Debug
@@ -231,8 +233,7 @@ impl EcPointN {
         } else if bases.len() < 32 {
             3
         } else {
-            // TODO: cannot do f64 ln without std? what do we do here
-            (f64::from(bases.len() as u32)).ln().ceil() as usize
+            (bases.len() as f32).ln().ceil() as usize
         };
 
         let field_byte_size = IntModN::NUM_BYTES;
