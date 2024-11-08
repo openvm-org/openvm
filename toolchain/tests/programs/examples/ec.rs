@@ -62,10 +62,7 @@ pub fn main() {
     }
 
     // Ec Mul
-    let mut p1 = black_box(EcPointN {
-        x: x1.clone(),
-        y: y1.clone(),
-    });
+    let p1 = black_box(EcPointN { x: x1, y: y1 });
     let scalar = IntModN::from_u32(12345678);
     // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
     let x5 = IntModN::from_le_bytes(&hex!(

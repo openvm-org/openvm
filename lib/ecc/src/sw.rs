@@ -16,6 +16,7 @@ axvm::moduli_setup! {
 }
 
 use alloc::{vec, vec::Vec};
+use core::ops::Neg;
 
 use micromath::F32Ext;
 
