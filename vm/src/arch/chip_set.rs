@@ -1330,9 +1330,9 @@ fn gen_ec_executor_tuple(
 
 // Returns (local_opcode_idx, global offset, executor name, modulus)
 fn gen_pairing_executor_tuple(
-    supported_ec_curves: &[PairingCurve],
+    supported_pairing_curves: &[PairingCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
-    supported_ec_curves
+    supported_pairing_curves
         .iter()
         .enumerate()
         .flat_map(|(i, curve)| {

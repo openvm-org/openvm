@@ -37,6 +37,22 @@ fn test_modular_runtime() -> Result<()> {
 }
 
 #[test]
+fn test_complex_runtime() -> Result<()> {
+    let elf = build_example_program("complex")?;
+    // TODO[stephenh]: because of some issues w.r.t. moduli indexing, for
+    // this test to pass we need to add BN254 twice. Once we separate
+    // indexing for EcCurve and PairingCurve, remove the additional add.
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_canonical_modulus()
+            .add_canonical_pairing_curves()
+            .add_canonical_pairing_curves(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
     let executor = VmExecutor::<F>::new(

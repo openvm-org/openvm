@@ -145,6 +145,16 @@ impl VmConfig {
         self.add_ecc_support(vec![EcCurve::Secp256k1])
     }
 
+    pub fn add_pairing_support(self, pairing_curves: Vec<PairingCurve>) -> Self {
+        let mut res = self;
+        res.supported_pairing_curves.extend(pairing_curves);
+        res
+    }
+
+    pub fn add_canonical_pairing_curves(self) -> Self {
+        self.add_pairing_support(vec![PairingCurve::Bn254])
+    }
+
     /// Generate a proving key for the VM.
     pub fn generate_pk<SC: StarkGenericConfig>(
         &self,

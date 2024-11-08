@@ -13,6 +13,8 @@ use {
 
 axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
+    Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
+    Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
 }
 
 pub trait Group:
@@ -132,8 +134,9 @@ impl EcPointN {
     pub fn double(p: &EcPointN) -> EcPointN {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let lambda = &p.x * &p.x * 3 / (&p.y * 2);
-            let x3 = &lambda * &lambda - &p.x * 2;
+            let two = IntModN::from_u8(2);
+            let lambda = &p.x * &p.x * IntModN::from_u8(3) / (&p.y * &two);
+            let x3 = &lambda * &lambda - &p.x * &two;
             let y3 = &lambda * &(&p.x - &x3) - &p.y;
             EcPointN { x: x3, y: y3 }
         }
@@ -156,8 +159,9 @@ impl EcPointN {
     pub fn double_assign(&mut self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let lambda = &self.x * &self.x * 3 / (&self.y * 2);
-            let x3 = &lambda * &lambda - &self.x * 2;
+            let two = IntModN::from_u8(2);
+            let lambda = &self.x * &self.x * IntModN::from_u8(3) / (&self.y * &two);
+            let x3 = &lambda * &lambda - &self.x * &two;
             let y3 = &lambda * &(&self.x - &x3) - &self.y;
             self.x = x3;
             self.y = y3;
