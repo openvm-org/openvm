@@ -9,11 +9,6 @@ use num_bigint_dig::BigUint;
 
 use super::IntMod;
 
-/// Number of limbs to represent the BN256 prime.
-pub const BN256_LIMBS: usize = 32;
-/// Number of limbs to represent the BLS12-381 prime.
-pub const BLS12_381_LIMBS: usize = 48;
-
 /// Trait definition for AXVM Fp2s, which take the form c0 + c1 * u where field
 /// Fp2 = Fp[u]/(u^2 + 1).
 pub trait Fp2<F: IntMod>:
@@ -115,20 +110,20 @@ pub trait Fp2<F: IntMod>:
 }
 
 /// TODO
-#[derive(Clone, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[repr(C)]
-pub struct Fp2Impl<F: IntMod> {
+pub struct Complex<F> {
     c0: F,
     c1: F,
 }
 
-impl<F: IntMod> Fp2Impl<F> {
+impl<F: IntMod> Complex<F> {
     const fn new(c0: F, c1: F) -> Self {
         Self { c0, c1 }
     }
 }
 
-impl<F: IntMod> Fp2Impl<F> {
+impl<F: IntMod> Complex<F> {
     #[inline(always)]
     fn add_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
@@ -254,23 +249,9 @@ impl<F: IntMod> Fp2Impl<F> {
             todo!()
         }
     }
-
-    #[inline(always)]
-    fn eq_impl(&self, other: &Self) -> bool {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            let (c0, c1) = self.as_fp();
-            let (d0, d1) = other.as_fp();
-            (c0 == d0) && (c1 == d1)
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            todo!()
-        }
-    }
 }
 
-impl<F: IntMod> Fp2<F> for Fp2Impl<F> {
+impl<F: IntMod> Fp2<F> for Complex<F> {
     const ZERO: Self = Self::new(F::ZERO, F::ZERO);
 
     const ONE: Self = Self::new(F::ONE, F::ZERO);
@@ -290,21 +271,21 @@ impl<F: IntMod> Fp2<F> for Fp2Impl<F> {
     }
 }
 
-impl<'a, F: IntMod> AddAssign<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> AddAssign<&'a Complex<F>> for Complex<F> {
     #[inline(always)]
-    fn add_assign(&mut self, other: &'a Fp2Impl<F>) {
+    fn add_assign(&mut self, other: &'a Complex<F>) {
         self.add_assign_impl(other);
     }
 }
 
-impl<F: IntMod> AddAssign for Fp2Impl<F> {
+impl<F: IntMod> AddAssign for Complex<F> {
     #[inline(always)]
     fn add_assign(&mut self, other: Self) {
         self.add_assign_impl(&other);
     }
 }
 
-impl<F: IntMod> Add for Fp2Impl<F> {
+impl<F: IntMod> Add for Complex<F> {
     type Output = Self;
     #[inline(always)]
     fn add(mut self, other: Self) -> Self::Output {
@@ -313,38 +294,38 @@ impl<F: IntMod> Add for Fp2Impl<F> {
     }
 }
 
-impl<'a, F: IntMod> Add<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> Add<&'a Complex<F>> for Complex<F> {
     type Output = Self;
     #[inline(always)]
-    fn add(mut self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn add(mut self, other: &'a Complex<F>) -> Self::Output {
         self += other;
         self
     }
 }
 
-impl<'a, F: IntMod> Add<&'a Fp2Impl<F>> for &Fp2Impl<F> {
-    type Output = Fp2Impl<F>;
+impl<'a, F: IntMod> Add<&'a Complex<F>> for &Complex<F> {
+    type Output = Complex<F>;
     #[inline(always)]
-    fn add(self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn add(self, other: &'a Complex<F>) -> Self::Output {
         self.add_refs_impl(other)
     }
 }
 
-impl<'a, F: IntMod> SubAssign<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> SubAssign<&'a Complex<F>> for Complex<F> {
     #[inline(always)]
-    fn sub_assign(&mut self, other: &'a Fp2Impl<F>) {
+    fn sub_assign(&mut self, other: &'a Complex<F>) {
         self.sub_assign_impl(other);
     }
 }
 
-impl<F: IntMod> SubAssign for Fp2Impl<F> {
+impl<F: IntMod> SubAssign for Complex<F> {
     #[inline(always)]
     fn sub_assign(&mut self, other: Self) {
         self.sub_assign_impl(&other);
     }
 }
 
-impl<F: IntMod> Sub for Fp2Impl<F> {
+impl<F: IntMod> Sub for Complex<F> {
     type Output = Self;
     #[inline(always)]
     fn sub(mut self, other: Self) -> Self::Output {
@@ -353,38 +334,38 @@ impl<F: IntMod> Sub for Fp2Impl<F> {
     }
 }
 
-impl<'a, F: IntMod> Sub<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> Sub<&'a Complex<F>> for Complex<F> {
     type Output = Self;
     #[inline(always)]
-    fn sub(mut self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn sub(mut self, other: &'a Complex<F>) -> Self::Output {
         self -= other;
         self
     }
 }
 
-impl<'a, F: IntMod> Sub<&'a Fp2Impl<F>> for &Fp2Impl<F> {
-    type Output = Fp2Impl<F>;
+impl<'a, F: IntMod> Sub<&'a Complex<F>> for &Complex<F> {
+    type Output = Complex<F>;
     #[inline(always)]
-    fn sub(self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn sub(self, other: &'a Complex<F>) -> Self::Output {
         self.sub_refs_impl(other)
     }
 }
 
-impl<'a, F: IntMod> MulAssign<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> MulAssign<&'a Complex<F>> for Complex<F> {
     #[inline(always)]
-    fn mul_assign(&mut self, other: &'a Fp2Impl<F>) {
+    fn mul_assign(&mut self, other: &'a Complex<F>) {
         self.mul_assign_impl(other);
     }
 }
 
-impl<F: IntMod> MulAssign for Fp2Impl<F> {
+impl<F: IntMod> MulAssign for Complex<F> {
     #[inline(always)]
     fn mul_assign(&mut self, other: Self) {
         self.mul_assign_impl(&other);
     }
 }
 
-impl<F: IntMod> Mul for Fp2Impl<F> {
+impl<F: IntMod> Mul for Complex<F> {
     type Output = Self;
     #[inline(always)]
     fn mul(mut self, other: Self) -> Self::Output {
@@ -393,32 +374,32 @@ impl<F: IntMod> Mul for Fp2Impl<F> {
     }
 }
 
-impl<'a, F: IntMod> Mul<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> Mul<&'a Complex<F>> for Complex<F> {
     type Output = Self;
     #[inline(always)]
-    fn mul(mut self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn mul(mut self, other: &'a Complex<F>) -> Self::Output {
         self *= other;
         self
     }
 }
 
-impl<'a, F: IntMod> Mul<&'a Fp2Impl<F>> for &Fp2Impl<F> {
-    type Output = Fp2Impl<F>;
+impl<'a, F: IntMod> Mul<&'a Complex<F>> for &Complex<F> {
+    type Output = Complex<F>;
     #[inline(always)]
-    fn mul(self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn mul(self, other: &'a Complex<F>) -> Self::Output {
         self.mul_refs_impl(other)
     }
 }
 
-impl<'a, F: IntMod> DivAssign<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> DivAssign<&'a Complex<F>> for Complex<F> {
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div_assign(&mut self, other: &'a Fp2Impl<F>) {
+    fn div_assign(&mut self, other: &'a Complex<F>) {
         self.div_assign_impl(other);
     }
 }
 
-impl<F: IntMod> DivAssign for Fp2Impl<F> {
+impl<F: IntMod> DivAssign for Complex<F> {
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
     fn div_assign(&mut self, other: Self) {
@@ -426,7 +407,7 @@ impl<F: IntMod> DivAssign for Fp2Impl<F> {
     }
 }
 
-impl<F: IntMod> Div for Fp2Impl<F> {
+impl<F: IntMod> Div for Complex<F> {
     type Output = Self;
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
@@ -436,64 +417,57 @@ impl<F: IntMod> Div for Fp2Impl<F> {
     }
 }
 
-impl<'a, F: IntMod> Div<&'a Fp2Impl<F>> for Fp2Impl<F> {
+impl<'a, F: IntMod> Div<&'a Complex<F>> for Complex<F> {
     type Output = Self;
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div(mut self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn div(mut self, other: &'a Complex<F>) -> Self::Output {
         self /= other;
         self
     }
 }
 
-impl<'a, F: IntMod> Div<&'a Fp2Impl<F>> for &Fp2Impl<F> {
-    type Output = Fp2Impl<F>;
+impl<'a, F: IntMod> Div<&'a Complex<F>> for &Complex<F> {
+    type Output = Complex<F>;
     /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div(self, other: &'a Fp2Impl<F>) -> Self::Output {
+    fn div(self, other: &'a Complex<F>) -> Self::Output {
         self.div_refs_impl(other)
     }
 }
 
-impl<F: IntMod> PartialEq for Fp2Impl<F> {
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        self.eq_impl(other)
-    }
-}
-
-impl<'a, F: IntMod> Sum<&'a Fp2Impl<F>> for Fp2Impl<F> {
-    fn sum<I: Iterator<Item = &'a Fp2Impl<F>>>(iter: I) -> Self {
+impl<'a, F: IntMod> Sum<&'a Complex<F>> for Complex<F> {
+    fn sum<I: Iterator<Item = &'a Complex<F>>>(iter: I) -> Self {
         iter.fold(Self::ZERO, |acc, x| &acc + x)
     }
 }
 
-impl<F: IntMod> Sum for Fp2Impl<F> {
+impl<F: IntMod> Sum for Complex<F> {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::ZERO, |acc, x| &acc + &x)
     }
 }
 
-impl<'a, F: IntMod> Product<&'a Fp2Impl<F>> for Fp2Impl<F> {
-    fn product<I: Iterator<Item = &'a Fp2Impl<F>>>(iter: I) -> Self {
+impl<'a, F: IntMod> Product<&'a Complex<F>> for Complex<F> {
+    fn product<I: Iterator<Item = &'a Complex<F>>>(iter: I) -> Self {
         iter.fold(Self::ONE, |acc, x| &acc * x)
     }
 }
 
-impl<F: IntMod> Product for Fp2Impl<F> {
+impl<F: IntMod> Product for Complex<F> {
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::ONE, |acc, x| &acc * &x)
     }
 }
 
-impl<F: IntMod> Neg for Fp2Impl<F> {
-    type Output = Fp2Impl<F>;
+impl<F: IntMod> Neg for Complex<F> {
+    type Output = Complex<F>;
     fn neg(self) -> Self::Output {
         Self::ZERO - &self
     }
 }
 
-impl<F: IntMod> Debug for Fp2Impl<F> {
+impl<F: IntMod> Debug for Complex<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{:?}", self.as_le_bytes())
     }
