@@ -1,4 +1,4 @@
-use super::{Field, FieldExt};
+use super::Field;
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 + \xi`.
 /// Elements are represented as `c0 + c1 * w` where `w^6 = \xi`, where \xi depends on the twist of the curve.

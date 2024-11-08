@@ -2,7 +2,7 @@ use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2, G1Affine, G2Affine},
     field::SexticExtField,
     pairing::{LineMulMType, MillerStep, MultiMillerLoop},
-    point::EcPoint,
+    point::AffinePoint,
 };
 use halo2curves_axiom::bls12_381::{G2Prepared, MillerLoopResult};
 use rand::{rngs::StdRng, SeedableRng};
@@ -62,8 +62,8 @@ fn test_f_mul() {
     let P = G1Affine::conditional_select(&P, &G1Affine::generator(), either_identity);
     let Q = G2Affine::conditional_select(&Q, &G2Affine::generator(), either_identity);
 
-    let P_ecpoint = EcPoint { x: P.x, y: P.y };
-    let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
+    let P_ecpoint = AffinePoint { x: P.x, y: P.y };
+    let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
 
     // Setup constants
     let y_inv = P_ecpoint.y.invert().unwrap();

@@ -3,12 +3,12 @@ use rand::Rng;
 use crate::field::Field;
 
 #[derive(Debug, Clone)]
-pub struct EcPoint<F> {
+pub struct AffinePoint<F> {
     pub x: F,
     pub y: F,
 }
 
-impl<F: Field> EcPoint<F> {
+impl<F: Field> AffinePoint<F> {
     pub fn new(x: F, y: F) -> Self {
         Self { x, y }
     }

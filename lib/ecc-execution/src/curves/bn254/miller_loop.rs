@@ -2,7 +2,7 @@ use axvm_ecc::{
     curve::bn254::{Fq, Fq12, Fq2},
     field::FieldExt,
     pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
-    point::EcPoint,
+    point::AffinePoint,
 };
 use halo2curves_axiom::bn256::{FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
@@ -50,12 +50,12 @@ impl MultiMillerLoop for Bn254 {
     fn pre_loop(
         &self,
         f: &Fq12,
-        Q_acc: Vec<EcPoint<Fq2>>,
-        _Q: &[EcPoint<Fq2>],
+        Q_acc: Vec<AffinePoint<Fq2>>,
+        _Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
-    ) -> (Fq12, Vec<EcPoint<Fq2>>) {
+    ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut f = *f;
 
         if c.is_some() {
@@ -85,12 +85,12 @@ impl MultiMillerLoop for Bn254 {
     fn post_loop(
         &self,
         f: &Fq12,
-        Q_acc: Vec<EcPoint<Fq2>>,
-        Q: &[EcPoint<Fq2>],
+        Q_acc: Vec<AffinePoint<Fq2>>,
+        Q: &[AffinePoint<Fq2>],
         _c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
-    ) -> (Fq12, Vec<EcPoint<Fq2>>) {
+    ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut Q_acc = Q_acc;
         let mut lines = Vec::<EvaluatedLine<Fq, Fq2>>::new();
 
@@ -103,7 +103,7 @@ impl MultiMillerLoop for Bn254 {
                 let x = x * x_to_q_minus_1_over_3;
                 let y = Q.y.frobenius_map(Some(1));
                 let y = y * XI_TO_Q_MINUS_1_OVER_2;
-                EcPoint { x, y }
+                AffinePoint { x, y }
             })
             .collect::<Vec<_>>();
 
@@ -125,7 +125,7 @@ impl MultiMillerLoop for Bn254 {
             .map(|Q| {
                 // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to the identity mapping
                 let x = Q.x * x_to_q_sq_minus_1_over_3;
-                EcPoint { x, y: Q.y }
+                AffinePoint { x, y: Q.y }
             })
             .collect::<Vec<_>>();
 

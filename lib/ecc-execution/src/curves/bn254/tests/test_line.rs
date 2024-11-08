@@ -1,7 +1,7 @@
 use axvm_ecc::{
     field::{FieldExt, SexticExtField},
     pairing::{LineDType, LineMulDType},
-    point::EcPoint,
+    point::AffinePoint,
 };
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
@@ -17,11 +17,11 @@ fn test_mul_013_by_013() {
     let mut rng = StdRng::seed_from_u64(8);
     let rnd_pt_0 = G1Affine::random(&mut rng);
     let rnd_pt_1 = G1Affine::random(&mut rng);
-    let ec_point_0 = EcPoint::<Fq> {
+    let ec_point_0 = AffinePoint::<Fq> {
         x: rnd_pt_0.x,
         y: rnd_pt_0.y,
     };
-    let ec_point_1 = EcPoint::<Fq> {
+    let ec_point_1 = AffinePoint::<Fq> {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
@@ -53,7 +53,7 @@ fn test_mul_by_013() {
     let mut rng = StdRng::seed_from_u64(8);
     let f = Fq12::random(&mut rng);
     let rnd_pt = G1Affine::random(&mut rng);
-    let ec_point = EcPoint::<Fq> {
+    let ec_point = AffinePoint::<Fq> {
         x: rnd_pt.x,
         y: rnd_pt.y,
     };

@@ -6,7 +6,7 @@ use itertools::{izip, Itertools};
 use super::{EvaluatedLine, MillerStep};
 use crate::{
     field::{Field, FieldExt},
-    point::EcPoint,
+    point::AffinePoint,
 };
 
 #[allow(non_snake_case)]
@@ -43,27 +43,31 @@ where
     fn pre_loop(
         &self,
         f: &Self::Fp12,
-        Q_acc: Vec<EcPoint<Self::Fp2>>,
-        Q: &[EcPoint<Self::Fp2>],
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
         x_over_ys: Vec<Self::Fp>,
         y_invs: Vec<Self::Fp>,
-    ) -> (Self::Fp12, Vec<EcPoint<Self::Fp2>>);
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>);
 
     /// Runs after the main loop in the Miller loop function
     fn post_loop(
         &self,
         f: &Self::Fp12,
-        Q_acc: Vec<EcPoint<Self::Fp2>>,
-        Q: &[EcPoint<Self::Fp2>],
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
         x_over_ys: Vec<Self::Fp>,
         y_invs: Vec<Self::Fp>,
-    ) -> (Self::Fp12, Vec<EcPoint<Self::Fp2>>);
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>);
 
     /// Runs the multi-Miller loop with no embedded exponent
     #[allow(non_snake_case)]
-    fn multi_miller_loop(&self, P: &[EcPoint<Self::Fp>], Q: &[EcPoint<Self::Fp2>]) -> Self::Fp12 {
+    fn multi_miller_loop(
+        &self,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Self::Fp12 {
         self.multi_miller_loop_embedded_exp(P, Q, None)
     }
 
@@ -72,8 +76,8 @@ where
     #[allow(non_snake_case)]
     fn multi_miller_loop_embedded_exp(
         &self,
-        P: &[EcPoint<Self::Fp>],
-        Q: &[EcPoint<Self::Fp2>],
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
     ) -> Self::Fp12 {
         assert!(!P.is_empty());
@@ -106,7 +110,7 @@ where
         f = f_out;
         Q_acc = Q_acc_out;
 
-        fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i8) -> Vec<EcPoint<Fp2>>
+        fn q_signed<Fp, Fp2>(Q: &[AffinePoint<Fp2>], sigma_i: i8) -> Vec<AffinePoint<Fp2>>
         where
             Fp: Field,
             Fp2: FieldExt<BaseField = Fp>,

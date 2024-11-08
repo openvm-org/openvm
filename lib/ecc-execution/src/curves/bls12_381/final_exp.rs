@@ -2,7 +2,7 @@ use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2},
     field::ExpBigInt,
     pairing::{FinalExp, MultiMillerLoop},
-    point::EcPoint,
+    point::AffinePoint,
 };
 use num::BigInt;
 
@@ -10,7 +10,7 @@ use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
-    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
         let (c, s) = self.final_exp_hint(f);
 
         // f * s = c^{q - x}

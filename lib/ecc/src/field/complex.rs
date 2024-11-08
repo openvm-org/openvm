@@ -81,14 +81,13 @@ impl<F: Field> Complex<F> {
     fn div_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            unimplemented!("Div is not implemented for `Field`")
-            // let (c0, c1) = (&self.c0, &self.c1);
-            // let (d0, d1) = (&other.c0, &other.c1);
-            // let denom = F::ONE / (d0.square() + d1.square());
-            // *self = Self::new(
-            //     denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
-            //     denom * &(c1.clone() * d0 - c0.clone() * d1),
-            // );
+            let (c0, c1) = (&self.c0, &self.c1);
+            let (d0, d1) = (&other.c0, &other.c1);
+            let denom = F::ONE / (d0.square() + d1.square());
+            *self = Self::new(
+                denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
+                denom * &(c1.clone() * d0 - c0.clone() * d1),
+            );
         }
         #[cfg(target_os = "zkvm")]
         {

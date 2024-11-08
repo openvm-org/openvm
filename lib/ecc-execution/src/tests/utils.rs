@@ -1,6 +1,6 @@
 use axvm_ecc::{
     field::{Field, FieldExt},
-    point::{AffineCoords, EcPoint},
+    point::{AffineCoords, AffinePoint},
 };
 use group::ScalarMul;
 use itertools::izip;
@@ -12,7 +12,12 @@ use rand::{rngs::StdRng, SeedableRng};
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points<A1, A2, Fp, Fp2>(
     rand_seeds: &[u64],
-) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
+) -> (
+    Vec<A1>,
+    Vec<A2>,
+    Vec<AffinePoint<Fp>>,
+    Vec<AffinePoint<Fp2>>,
+)
 where
     A1: AffineCoords<Fp>,
     A2: AffineCoords<Fp2>,
@@ -32,8 +37,8 @@ where
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x(), y: P.y() },
+                AffinePoint { x: Q.x(), y: Q.y() },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();
@@ -49,7 +54,12 @@ where
 pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize>(
     a: &[Fr; N],
     b: &[Fr; N],
-) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
+) -> (
+    Vec<A1>,
+    Vec<A2>,
+    Vec<AffinePoint<Fp>>,
+    Vec<AffinePoint<Fp2>>,
+)
 where
     A1: AffineCoords<Fp> + ScalarMul<Fr>,
     A2: AffineCoords<Fp2> + ScalarMul<Fr>,
@@ -72,8 +82,8 @@ where
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x(), y: P.y() },
+                AffinePoint { x: Q.x(), y: Q.y() },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();

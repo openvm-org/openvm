@@ -1,7 +1,7 @@
 use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2},
     pairing::{EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop},
-    point::EcPoint,
+    point::AffinePoint,
 };
 use itertools::izip;
 
@@ -49,12 +49,12 @@ impl MultiMillerLoop for Bls12_381 {
     fn pre_loop(
         &self,
         f: &Fq12,
-        Q_acc: Vec<EcPoint<Fq2>>,
-        Q: &[EcPoint<Fq2>],
+        Q_acc: Vec<AffinePoint<Fq2>>,
+        Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
-    ) -> (Fq12, Vec<EcPoint<Fq2>>) {
+    ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut f = *f;
 
         if c.is_some() {
@@ -105,12 +105,12 @@ impl MultiMillerLoop for Bls12_381 {
     fn post_loop(
         &self,
         f: &Fq12,
-        Q_acc: Vec<EcPoint<Fq2>>,
-        _Q: &[EcPoint<Fq2>],
+        Q_acc: Vec<AffinePoint<Fq2>>,
+        _Q: &[AffinePoint<Fq2>],
         _c: Option<Fq12>,
         _x_over_ys: Vec<Fq>,
         _y_invs: Vec<Fq>,
-    ) -> (Fq12, Vec<EcPoint<Fq2>>) {
+    ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         // Conjugate for negative component of the seed
         let f = f.conjugate();
         (f, Q_acc)

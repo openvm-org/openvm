@@ -3,7 +3,7 @@ use core::ops::{Add, Mul, Neg, Sub};
 use super::UnevaluatedLine;
 use crate::{
     field::{Field, FieldExt},
-    point::EcPoint,
+    point::AffinePoint,
 };
 
 /// Trait definition for Miller step opcodes
@@ -19,8 +19,8 @@ where
 
     /// Miller double step
     fn miller_double_step(
-        s: EcPoint<Self::Fp2>,
-    ) -> (EcPoint<Self::Fp2>, UnevaluatedLine<Self::Fp, Self::Fp2>) {
+        s: AffinePoint<Self::Fp2>,
+    ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp, Self::Fp2>) {
         #[cfg(not(target_os = "zkvm"))]
         {
             let one = &Self::Fp2::ONE;
@@ -36,7 +36,7 @@ where
             let x_2s = lambda * lambda - two * x;
             // y_2s = λ(x - x_2s) - y
             let y_2s = lambda * &(x - &x_2s) - y;
-            let two_s = EcPoint { x: x_2s, y: y_2s };
+            let two_s = AffinePoint { x: x_2s, y: y_2s };
 
             // Tangent line
             //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
@@ -57,9 +57,9 @@ where
 
     /// Miller add step
     fn miller_add_step(
-        s: EcPoint<Self::Fp2>,
-        q: EcPoint<Self::Fp2>,
-    ) -> (EcPoint<Self::Fp2>, UnevaluatedLine<Self::Fp, Self::Fp2>) {
+        s: AffinePoint<Self::Fp2>,
+        q: AffinePoint<Self::Fp2>,
+    ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp, Self::Fp2>) {
         let x_s = &s.x;
         let y_s = &s.y;
         let x_q = &q.x;
@@ -71,7 +71,7 @@ where
         let x_s_plus_q = lambda * lambda - x_s - x_q;
         let y_s_plus_q = lambda * &(x_q - &x_s_plus_q) - y_q;
 
-        let s_plus_q = EcPoint {
+        let s_plus_q = AffinePoint {
             x: x_s_plus_q,
             y: y_s_plus_q,
         };
@@ -86,10 +86,10 @@ where
     /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency)
     #[allow(clippy::type_complexity)]
     fn miller_double_and_add_step(
-        s: EcPoint<Self::Fp2>,
-        q: EcPoint<Self::Fp2>,
+        s: AffinePoint<Self::Fp2>,
+        q: AffinePoint<Self::Fp2>,
     ) -> (
-        EcPoint<Self::Fp2>,
+        AffinePoint<Self::Fp2>,
         UnevaluatedLine<Self::Fp, Self::Fp2>,
         UnevaluatedLine<Self::Fp, Self::Fp2>,
     ) {
@@ -113,7 +113,7 @@ where
             let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - &x_s_plus_q;
             let y_s_plus_q_plus_s = lambda2 * &(x_s - &x_s_plus_q_plus_s) - y_s;
 
-            let s_plus_q_plus_s = EcPoint {
+            let s_plus_q_plus_s = AffinePoint {
                 x: x_s_plus_q_plus_s,
                 y: y_s_plus_q_plus_s,
             };
@@ -140,7 +140,7 @@ where
 }
 
 // #[allow(non_snake_case)]
-// pub fn miller_double_step<Fp, Fp2>(S: EcPoint<Fp2>) -> (EcPoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
+// pub fn miller_double_step<Fp, Fp2>(S: AffinePoint<Fp2>) -> (AffinePoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 // where
 //     Fp: Field,
 //     Fp2: FieldExt<BaseField = Fp>,
@@ -161,7 +161,7 @@ where
 //     let x_2S = lambda * lambda - two * x;
 //     // y_2S = λ(x - x_2S) - y
 //     let y_2S = lambda * &(x - &x_2S) - y;
-//     let two_s = EcPoint { x: x_2S, y: y_2S };
+//     let two_s = AffinePoint { x: x_2S, y: y_2S };
 
 //     // Tangent line
 //     //   1 + b' (x_P / y_P) w^-1 + c' (1 / y_P) w^-3
@@ -177,9 +177,9 @@ where
 
 // #[allow(non_snake_case)]
 // pub fn miller_add_step<Fp, Fp2>(
-//     S: EcPoint<Fp2>,
-//     Q: EcPoint<Fp2>,
-// ) -> (EcPoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
+//     S: AffinePoint<Fp2>,
+//     Q: AffinePoint<Fp2>,
+// ) -> (AffinePoint<Fp2>, UnevaluatedLine<Fp, Fp2>)
 // where
 //     Fp: Field,
 //     Fp2: FieldExt<BaseField = Fp>,
@@ -198,7 +198,7 @@ where
 //     let x_s_plus_q = lambda * lambda - x_s - x_q;
 //     let y_s_plus_q = lambda * &(x_q - &x_s_plus_q) - y_q;
 
-//     let s_plus_q = EcPoint {
+//     let s_plus_q = AffinePoint {
 //         x: x_s_plus_q,
 //         y: y_s_plus_q,
 //     };
@@ -212,10 +212,10 @@ where
 
 // #[allow(non_snake_case)]
 // pub fn miller_double_and_add_step<Fp, Fp2>(
-//     S: EcPoint<Fp2>,
-//     Q: EcPoint<Fp2>,
+//     S: AffinePoint<Fp2>,
+//     Q: AffinePoint<Fp2>,
 // ) -> (
-//     EcPoint<Fp2>,
+//     AffinePoint<Fp2>,
 //     UnevaluatedLine<Fp, Fp2>,
 //     UnevaluatedLine<Fp, Fp2>,
 // )
@@ -243,7 +243,7 @@ where
 //     let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - &x_s_plus_q;
 //     let y_s_plus_q_plus_s = lambda2 * &(x_s - &x_s_plus_q_plus_s) - y_s;
 
-//     let s_plus_q_plus_s = EcPoint {
+//     let s_plus_q_plus_s = AffinePoint {
 //         x: x_s_plus_q_plus_s,
 //         y: y_s_plus_q_plus_s,
 //     };

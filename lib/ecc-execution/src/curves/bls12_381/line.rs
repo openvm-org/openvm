@@ -4,7 +4,7 @@ use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2},
     field::{Field, FieldExt, SexticExtField},
     pairing::{EvaluatedLine, LineMulMType, UnevaluatedLine},
-    point::EcPoint,
+    point::AffinePoint,
 };
 
 use super::Bls12_381;
@@ -57,7 +57,7 @@ impl LineMulMType<Fq, Fq2, Fq12> for Bls12_381 {
 
 /// Returns a line function for a tangent line at the point P
 #[allow(non_snake_case)]
-pub fn tangent_line_023<Fp, Fp2>(P: EcPoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+pub fn tangent_line_023<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp, Fp2>
 where
     Fp: Field,
     Fp2: FieldExt<BaseField = Fp>,

@@ -2,7 +2,7 @@ use axvm_ecc::{
     curve::bls12381::{Fq, Fq2, G1Affine, G2Affine},
     field::ExpBigInt,
     pairing::{FinalExp, MultiMillerLoop},
-    point::{AffineCoords, EcPoint},
+    point::{AffineCoords, AffinePoint},
 };
 use halo2curves_axiom::bls12_381::Fr;
 use itertools::izip;
@@ -58,8 +58,8 @@ fn generate_test_points_bls12_381(
 ) -> (
     Vec<G1Affine>,
     Vec<G2Affine>,
-    Vec<EcPoint<Fq>>,
-    Vec<EcPoint<Fq2>>,
+    Vec<AffinePoint<Fq>>,
+    Vec<AffinePoint<Fq2>>,
 ) {
     let mut P_vec = vec![];
     let mut Q_vec = vec![];
@@ -77,8 +77,8 @@ fn generate_test_points_bls12_381(
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x(), y: P.y() },
+                AffinePoint { x: Q.x(), y: Q.y() },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();

@@ -10,6 +10,7 @@ mod complex;
 pub use complex::*;
 
 mod sextic_ext_field;
+use halo2curves_axiom::bls12_381::Fq;
 pub use sextic_ext_field::*;
 
 #[cfg(feature = "halo2curves")]
@@ -34,13 +35,16 @@ pub trait Field:
     + AddAssign
     + SubAssign
     + MulAssign
+    + DivAssign
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
+    + for<'a> DivAssign<&'a Self>
 {
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
         + Mul<&'a Self, Output = Self>
+        + Div<&'a Self, Output = Self>
     where
         Self: 'a;
 
@@ -55,4 +59,20 @@ pub trait Field:
 
     /// Inverts this element, returning `None` if this element is zero.
     fn invert(&self) -> Option<Self>;
+}
+
+impl<F: halo2curves_axiom::ff::Field> Field for F {
+    type SelfRef<'a> = &'a Self;
+
+    const ZERO: Self = F::ZERO;
+
+    const ONE: Self = F::ONE;
+
+    fn square(&self) -> Self {
+        self.square()
+    }
+
+    fn invert(&self) -> Option<Self> {
+        self.invert().into()
+    }
 }
