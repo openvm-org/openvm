@@ -23,7 +23,7 @@ use crate::{
     },
     kernels::{
         adapters::native_vectorized_adapter::NativeVectorizedAdapterChip,
-        field_extension::{FieldExt, FieldExtensionChip, FieldExtensionCoreChip},
+        field_extension::{FieldExtension, FieldExtensionChip, FieldExtensionCoreChip},
     },
 };
 #[test]

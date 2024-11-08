@@ -1,6 +1,6 @@
 use core::{
     fmt::Debug,
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 mod field_ext;
@@ -26,9 +26,11 @@ pub trait Field:
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
+    + Div<Output = Self>
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
     + for<'a> Mul<&'a Self, Output = Self>
+    + for<'a> Div<&'a Self, Output = Self>
     + AddAssign
     + SubAssign
     + MulAssign

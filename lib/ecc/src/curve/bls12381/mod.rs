@@ -2,6 +2,8 @@ mod fq12;
 mod fq2;
 mod point;
 
+use core::ops::DivAssign;
+
 use halo2curves_axiom::bls12_381::Fq6;
 pub use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 pub use point::{G1Affine, G2Affine};
@@ -20,6 +22,12 @@ impl Field for Fq {
 
     fn square(&self) -> Self {
         self.square()
+    }
+}
+
+impl DivAssign for Fq {
+    fn div_assign(&mut self, rhs: Self) {
+        *self *= rhs.invert().unwrap()
     }
 }
 

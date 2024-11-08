@@ -267,7 +267,7 @@ fn test_evaluate_line() {
         b: uneval_b,
         c: uneval_c,
     };
-    let evaluated = uneval.evaluate(x_over_y, y_inv);
+    let evaluated = uneval.evaluate(&x_over_y, &y_inv);
 
     let result = chip.0.core.expr().execute_with_output(inputs, vec![]);
     assert_eq!(result.len(), 4);
