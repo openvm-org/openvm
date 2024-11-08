@@ -80,6 +80,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
         };
 
+        // TODO[jpw]: change to axvm-ecc
         use axvm::intrinsics::IntMod;
         #[cfg(not(target_os = "zkvm"))]
         use {

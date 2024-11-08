@@ -1,9 +1,9 @@
+#[cfg(target_os = "zkvm")]
+use axvm_platform::constants::SwBaseFunct7;
+
 axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
-
-#[cfg(target_os = "zkvm")]
-use axvm_platform::constants::SwBaseFunct7;
 
 #[derive(Eq, PartialEq, Clone)]
 #[repr(C)]

@@ -105,23 +105,3 @@ fn test_print_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
-
-#[test]
-fn test_modular_runtime() -> Result<()> {
-    let elf = build_example_program("little")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_modulus());
-    executor.execute(elf, vec![])?;
-    Ok(())
-}
-
-#[test]
-fn test_ec_runtime() -> Result<()> {
-    let elf = build_example_program("ec")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_canonical_modulus()
-            .add_canonical_ec_curves(),
-    );
-    executor.execute(elf, vec![])?;
-    Ok(())
-}

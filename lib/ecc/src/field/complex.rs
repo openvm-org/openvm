@@ -4,7 +4,7 @@ use core::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use super::IntMod;
+use axvm::intrinsics::IntMod;
 
 /// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
 /// Elements are represented as `c0 + c1 * u` where `u^2 = -1`.
@@ -75,6 +75,7 @@ impl<F: IntMod> Complex<F> {
         }
     }
 
+    // TODO[jpw]: add where clause when Self: Field
     /// Implementation of DivAssign.
     #[inline(always)]
     fn div_assign_impl(&mut self, other: &Self) {

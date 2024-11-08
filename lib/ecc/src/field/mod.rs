@@ -1,7 +1,10 @@
 use ff::Field;
 
+mod complex;
 #[cfg(feature = "halo2curves")]
 mod exp_bytes_be;
+
+pub use complex::*;
 #[cfg(feature = "halo2curves")]
 pub use exp_bytes_be::*;
 

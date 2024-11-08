@@ -41,22 +41,22 @@ pub fn main() {
     let p3 = EcPoint::add(&p1, &p2);
 
     if p3.x != x3 || p3.y != y3 {
-        axvm::process::panic();
+        panic!();
     }
 
     let p4 = EcPoint::add(&p2, &p2);
 
     if p4.x != x4 || p4.y != y4 {
-        axvm::process::panic();
+        panic!();
     }
 
     p1.add_ne_assign(&p2);
     if p1.x != x3 || p1.y != y3 {
-        axvm::process::panic();
+        panic!();
     }
 
     p2.double_assign();
     if p2.x != x4 || p2.y != y4 {
-        axvm::process::panic();
+        panic!();
     }
 }

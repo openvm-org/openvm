@@ -1,3 +1,4 @@
+//! Modular arithmetic traits for use with axVM intrinsics.
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
@@ -9,6 +10,9 @@ use num_bigint_dig::BigUint;
 
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
+///
+/// Division is only defined over the group of units in the ring of integers modulo MODULUS.
+/// It is undefined behavior outside of this group.
 pub trait IntMod:
     Sized
     + Eq
