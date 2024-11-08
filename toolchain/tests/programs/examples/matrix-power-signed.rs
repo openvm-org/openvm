@@ -129,5 +129,10 @@ pub fn main() {
         panic!();
     }
 
+    if two_to_200.clone() != two_to_200 {
+        print("FAIL: 2^200 clone test failed");
+        panic!();
+    }
+
     print("PASS");
 }
