@@ -13,7 +13,7 @@ use axvm_circuit_derive::InstructionExecutor;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{instructions::EccOpcode, VmChipWrapper},
+    arch::{instructions::Rv32WeierstrassOpcode, VmChipWrapper},
     intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
@@ -45,7 +45,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![EccOpcode::EC_ADD_NE as usize],
+            vec![Rv32WeierstrassOpcode::EC_ADD_NE as usize],
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcAddNe",
@@ -76,7 +76,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![EccOpcode::EC_DOUBLE as usize],
+            vec![Rv32WeierstrassOpcode::EC_DOUBLE as usize],
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcDouble",

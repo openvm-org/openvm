@@ -8,7 +8,7 @@ axvm::moduli_setup! {
 axvm::entry!(main);
 
 pub fn main() {
-    let mut pow = IntModN::modulus();
+    let mut pow = IntModN::MODULUS;
     pow[0] -= 2;
 
     let mut a = IntModN::from_u32(1234);
@@ -30,7 +30,7 @@ pub fn main() {
     }
 
     let two = IntModN::from_u32(2);
-    let minus_two = IntModN::from_bytes(pow);
+    let minus_two = IntModN::from_le_bytes(&pow);
 
     if (res - &minus_two) != (inv + &two) {
         axvm::process::panic();

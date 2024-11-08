@@ -69,6 +69,9 @@
 	.insn r CUSTOM_0, 5, 10, \rd, \rs1, \rs2
 .endm
 
+.macro fp12_mul rd, rs1, rs2
+	.insn r CUSTOM_1, 3, 2, \rd, \rs1, \rs2
+.endm
 
 .global _start
 
@@ -91,4 +94,5 @@ _start:
 	slt256 a5, a0, a1
 	sltu256 a6, a0, a1
 	#mul256 a2, a0, a1
+	fp12_mul a2, a0, a1
     .insn i 0x0b, 0, x0, x0, 0

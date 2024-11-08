@@ -3,7 +3,8 @@
 
 use core::hint::black_box;
 
-use axvm_ecc::sw::{EcPoint, IntModN};
+use axvm::intrinsics::IntMod;
+use axvm_ecc::sw::{EcPointN, IntModN};
 use hex_literal::hex;
 
 axvm::entry!(main);
@@ -12,50 +13,50 @@ pub fn main() {
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
     let x1 = IntModN::from_u32(1);
-    let y1 = IntModN::from_bytes(hex!(
+    let y1 = IntModN::from_le_bytes(&hex!(
         "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
     ));
     let x2 = IntModN::from_u32(2);
-    let y2 = IntModN::from_bytes(hex!(
+    let y2 = IntModN::from_le_bytes(&hex!(
         "D1A847A8F879E0AEE32544DA5BA0B3BD1703A1F52867A5601FF6454DD8180499"
     ));
     // This is the sum of (x1, y1) and (x2, y2).
-    let x3 = IntModN::from_bytes(hex!(
+    let x3 = IntModN::from_le_bytes(&hex!(
         "BE675E31F8AC8200CBCC6B10CECCD6EB93FB07D99BB9E7C99CC9245C862D3AF2"
     ));
-    let y3 = IntModN::from_bytes(hex!(
+    let y3 = IntModN::from_le_bytes(&hex!(
         "B44573B48FD3416DD256A8C0E1BAD03E88A78BF176778682589B9CB478FC1D79"
     ));
     // This is the double of (x2, y2).
-    let x4 = IntModN::from_bytes(hex!(
+    let x4 = IntModN::from_le_bytes(&hex!(
         "3BFFFFFF32333333333333333333333333333333333333333333333333333333"
     ));
-    let y4 = IntModN::from_bytes(hex!(
+    let y4 = IntModN::from_le_bytes(&hex!(
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = black_box(EcPoint { x: x1, y: y1 });
-    let mut p2 = black_box(EcPoint { x: x2, y: y2 });
+    let mut p1 = black_box(EcPointN { x: x1, y: y1 });
+    let mut p2 = black_box(EcPointN { x: x2, y: y2 });
 
-    let p3 = EcPoint::add(&p1, &p2);
+    let p3 = EcPointN::add(&p1, &p2);
 
     if p3.x != x3 || p3.y != y3 {
-        axvm::process::panic();
+        panic!();
     }
 
-    let p4 = EcPoint::add(&p2, &p2);
+    let p4 = EcPointN::add(&p2, &p2);
 
     if p4.x != x4 || p4.y != y4 {
-        axvm::process::panic();
+        panic!();
     }
 
     p1.add_ne_assign(&p2);
     if p1.x != x3 || p1.y != y3 {
-        axvm::process::panic();
+        panic!();
     }
 
     p2.double_assign();
     if p2.x != x4 || p2.y != y4 {
-        axvm::process::panic();
+        panic!();
     }
 }
