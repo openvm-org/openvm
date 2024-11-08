@@ -61,11 +61,11 @@ where
     let mut P_vec = vec![];
     let mut Q_vec = vec![];
     for i in 0..N {
-        let mut p = A1::generator() * a[i];
+        let mut p = A1::generator() * a[i].clone();
         if i % 2 == 1 {
             p = p.neg();
         }
-        let q = A2::generator() * b[i];
+        let q = A2::generator() * b[i].clone();
         P_vec.push(p);
         Q_vec.push(q);
     }

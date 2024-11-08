@@ -17,6 +17,10 @@ impl Field for Fr {
     fn invert(&self) -> Option<Self> {
         self.invert().into()
     }
+
+    fn square(&self) -> Self {
+        self.square()
+    }
 }
 
 impl Field for Fq {
@@ -27,6 +31,10 @@ impl Field for Fq {
 
     fn invert(&self) -> Option<Self> {
         self.invert().into()
+    }
+
+    fn square(&self) -> Self {
+        self.square()
     }
 }
 
@@ -46,6 +54,10 @@ impl Field for Fq2 {
     fn invert(&self) -> Option<Self> {
         self.invert().into()
     }
+
+    fn square(&self) -> Self {
+        self.square()
+    }
 }
 
 impl Field for Fq12 {
@@ -63,5 +75,9 @@ impl Field for Fq12 {
 
     fn invert(&self) -> Option<Self> {
         self.invert().into()
+    }
+
+    fn square(&self) -> Self {
+        self.square()
     }
 }

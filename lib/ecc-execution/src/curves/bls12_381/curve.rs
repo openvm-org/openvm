@@ -1,6 +1,6 @@
 use axvm_ecc::{
     curve::bls12381::{Fq, Fq2},
-    field::FieldExtension,
+    field::FieldExt,
 };
 use ff::Field;
 use lazy_static::lazy_static;
@@ -25,8 +25,7 @@ pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
 
 // BLS12-381 pseudo-binary encoding. This encoding represents the absolute value of the curve seed.
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bls12381/pairing.go#L322
-pub const BLS12_381_PBE_BITS: usize = 64;
-pub const BLS12_381_PBE: [i8; BLS12_381_PBE_BITS] = [
+pub const BLS12_381_PBE: [i8; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
@@ -42,7 +41,7 @@ impl Bls12_381 {
         BLS12_381_SEED_ABS
     }
 
-    pub fn pseudo_binary_encoding() -> [i8; BLS12_381_PBE_BITS] {
-        BLS12_381_PBE
+    pub fn pseudo_binary_encoding() -> Vec<i8> {
+        BLS12_381_PBE.to_vec()
     }
 }

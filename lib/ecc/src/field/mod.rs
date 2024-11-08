@@ -1,4 +1,7 @@
-use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::{
+    fmt::Debug,
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 mod field_ext;
 pub use field_ext::*;
@@ -18,6 +21,7 @@ pub use exp_bytes_be::*;
 pub trait Field:
     Sized
     + Clone
+    + Debug
     + Neg<Output = Self>
     + Add<Output = Self>
     + Sub<Output = Self>
@@ -43,6 +47,9 @@ pub trait Field:
 
     /// The one element of the field, the multiplicative identity.
     const ONE: Self;
+
+    /// Squares this field element.
+    fn square(&self) -> Self;
 
     /// Inverts this element, returning `None` if this element is zero.
     fn invert(&self) -> Option<Self>;

@@ -1,6 +1,8 @@
-use axvm_ecc::field::FieldExtension;
+use axvm_ecc::{
+    curve::bn254::{Fq, Fq2},
+    field::FieldExt,
+};
 use ff::Field;
-use halo2curves_axiom::bn256::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
 
@@ -43,8 +45,7 @@ pub const BN254_SEED_NEG: bool = false;
 
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bn254/pairing.go#L356
 // loopCounter = 6x₀+2 = 29793968203157093288 in 2-NAF (nonadjacent form)
-pub const BN254_PBE_BITS: usize = 66;
-pub const BN254_PBE_NAF: [i8; BN254_PBE_BITS] = [
+pub const BN254_PBE_NAF: [i8; 66] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
     0, 0, 1, 0, -1, 0, 1,
@@ -61,7 +62,7 @@ impl Bn254 {
         BN254_SEED
     }
 
-    pub fn pseudo_binary_encoding() -> [i8; BN254_PBE_BITS] {
-        BN254_PBE_NAF
+    pub fn pseudo_binary_encoding() -> Vec<i8> {
+        BN254_PBE_NAF.to_vec()
     }
 }

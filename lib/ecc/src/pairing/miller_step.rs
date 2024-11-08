@@ -84,6 +84,7 @@ where
     }
 
     /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency)
+    #[allow(clippy::type_complexity)]
     fn miller_double_and_add_step(
         s: EcPoint<Self::Fp2>,
         q: EcPoint<Self::Fp2>,

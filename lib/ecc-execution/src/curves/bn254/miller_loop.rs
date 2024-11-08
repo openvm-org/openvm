@@ -1,15 +1,23 @@
 use axvm_ecc::{
-    field::FieldExtension,
-    pairing::{miller_add_step, miller_double_step, EvaluatedLine, MultiMillerLoop},
+    curve::bn254::{Fq, Fq12, Fq2},
+    field::FieldExt,
+    pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
     point::EcPoint,
 };
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
+use halo2curves_axiom::bn256::{FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
-use super::{mul_013_by_013, mul_by_01234, mul_by_013, Bn254, BN254_PBE_BITS};
+use super::Bn254;
+
+impl MillerStep for Bn254 {
+    type Fp = Fq;
+    type Fp2 = Fq2;
+}
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
+impl MultiMillerLoop for Bn254 {
+    type Fp12 = Fq12;
+
     fn xi() -> Fq2 {
         Self::xi()
     }
@@ -18,7 +26,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         Self::seed()
     }
 
-    fn pseudo_binary_encoding() -> [i8; BN254_PBE_BITS] {
+    fn pseudo_binary_encoding() -> Vec<i8> {
         Self::pseudo_binary_encoding()
     }
 
@@ -26,12 +34,12 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         let mut f = f;
         let mut lines = lines;
         if lines.len() % 2 == 1 {
-            f = mul_by_013(f, lines.pop().unwrap());
+            f = Self::mul_by_013(f, lines.pop().unwrap());
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = mul_013_by_013(*line0, *line1, Self::xi());
-                f = mul_by_01234(f, prod);
+                let prod = Self::mul_013_by_013(*line0, *line1);
+                f = Self::mul_by_01234(f, prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");
             }
@@ -48,7 +56,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         x_over_ys: Vec<Fq>,
         y_invs: Vec<Fq>,
     ) -> (Fq12, Vec<EcPoint<Fq2>>) {
-        let mut f = f;
+        let mut f = *f;
 
         if c.is_some() {
             f = f.square();
@@ -59,7 +67,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
 
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
-            .map(|Q| miller_double_step::<Fq, Fq2>(Q.clone()))
+            .map(|Q| Self::miller_double_step(Q.clone()))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_double;
 
@@ -76,7 +84,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
 
     fn post_loop(
         &self,
-        f: Fq12,
+        f: &Fq12,
         Q_acc: Vec<EcPoint<Fq2>>,
         Q: &[EcPoint<Fq2>],
         _c: Option<Fq12>,
@@ -102,7 +110,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q1_vec.iter())
-            .map(|(Q_acc, q1)| miller_add_step::<Fq, Fq2>(Q_acc.clone(), q1.clone()))
+            .map(|(Q_acc, q1)| Self::miller_add_step(Q_acc.clone(), q1.clone()))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
@@ -124,7 +132,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q2_vec.iter())
-            .map(|(Q_acc, q2)| miller_add_step::<Fq, Fq2>(Q_acc.clone(), q2.clone()))
+            .map(|(Q_acc, q2)| Self::miller_add_step(Q_acc.clone(), q2.clone()))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
@@ -134,7 +142,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BN254_PBE_BITS> for Bn254 {
             lines.push(line);
         }
 
-        let mut f = f;
+        let mut f = *f;
         f = self.evaluate_lines_vec(f, lines);
 
         (f, Q_acc)

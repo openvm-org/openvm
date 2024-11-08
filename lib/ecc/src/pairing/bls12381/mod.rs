@@ -1,15 +1,4 @@
-use lazy_static::lazy_static;
+// mod line;
+// pub use line::*;
 
-mod line;
-pub use line::*;
-
-mod miller_step;
-pub use miller_step::*;
-
-use crate::field::Field;
-
-pub struct Bls12381;
-
-lazy_static! {
-    pub static ref BLS12381_XI: Fp2 = Fp2::from_u32((1, 1));
-}
+// pub struct Bls12381;

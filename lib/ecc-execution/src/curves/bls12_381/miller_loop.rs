@@ -1,14 +1,21 @@
 use axvm_ecc::{
     curve::bls12381::{Fq, Fq12, Fq2},
-    pairing::{miller_add_step, miller_double_step, EvaluatedLine, MultiMillerLoop},
+    pairing::{EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop},
     point::EcPoint,
 };
 use itertools::izip;
 
-use super::{mul_023_by_023, mul_by_023, mul_by_02345, Bls12_381, BLS12_381_PBE_BITS};
+use super::Bls12_381;
+
+impl MillerStep for Bls12_381 {
+    type Fp = Fq;
+    type Fp2 = Fq2;
+}
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
+impl MultiMillerLoop for Bls12_381 {
+    type Fp12 = Fq12;
+
     fn xi() -> Fq2 {
         Self::xi()
     }
@@ -17,7 +24,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         Self::seed()
     }
 
-    fn pseudo_binary_encoding() -> [i8; BLS12_381_PBE_BITS] {
+    fn pseudo_binary_encoding() -> Vec<i8> {
         Self::pseudo_binary_encoding()
     }
 
@@ -25,12 +32,12 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         let mut f = f;
         let mut lines = lines;
         if lines.len() % 2 == 1 {
-            f = mul_by_023(f, lines.pop().unwrap());
+            f = Self::mul_by_023(f, lines.pop().unwrap());
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = mul_023_by_023(*line0, *line1, Self::xi());
-                f = mul_by_02345(f, prod);
+                let prod = Self::mul_023_by_023(*line0, *line1);
+                f = Self::mul_by_02345(f, prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");
             }
@@ -64,7 +71,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
-            .map(|Q| miller_double_step::<Fq, Fq2>(Q.clone()))
+            .map(|Q| Self::miller_double_step(Q.clone()))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_double;
 
@@ -79,7 +86,7 @@ impl MultiMillerLoop<Fq, Fq2, Fq12, BLS12_381_PBE_BITS> for Bls12_381 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(Q.iter())
-            .map(|(Q_acc, Q)| miller_add_step::<Fq, Fq2>(Q_acc.clone(), Q.clone()))
+            .map(|(Q_acc, Q)| Self::miller_add_step(Q_acc.clone(), Q.clone()))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
