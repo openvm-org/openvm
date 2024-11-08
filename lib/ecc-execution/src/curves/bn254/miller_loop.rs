@@ -21,10 +21,6 @@ impl MultiMillerLoop<BN254_PBE_NAF_LEN> for Bn254 {
     const SEED_ABS: u64 = BN254_SEED;
     const PSEUDO_BINARY_ENCODING: [i8; BN254_PBE_NAF_LEN] = BN254_PBE_NAF;
 
-    fn xi() -> Fq2 {
-        Self::xi()
-    }
-
     fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
         let mut f = f;
         let mut lines = lines;

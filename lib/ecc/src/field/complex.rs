@@ -1,7 +1,7 @@
 use core::{
     fmt::{Debug, Formatter, Result},
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 use super::Field;

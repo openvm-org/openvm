@@ -19,10 +19,6 @@ impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
     const SEED_ABS: u64 = BLS12_381_SEED_ABS;
     const PSEUDO_BINARY_ENCODING: [i8; BLS12_381_PBE_LEN] = BLS12_381_PBE;
 
-    fn xi() -> Fq2 {
-        Self::xi()
-    }
-
     fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
         let mut f = f;
         let mut lines = lines;

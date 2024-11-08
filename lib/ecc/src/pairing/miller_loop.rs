@@ -26,9 +26,6 @@ where
     const SEED_ABS: u64;
     const PSEUDO_BINARY_ENCODING: [i8; PBE_LEN];
 
-    /// We use the field extension tower `Fp12 = Fp2[w]/(w^6 - xi)`.
-    fn xi() -> Self::Fp2;
-
     /// Function to evaluate the line functions of the Miller loop
     fn evaluate_lines_vec(
         &self,
