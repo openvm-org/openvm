@@ -2,7 +2,6 @@ use strum_macros::FromRepr;
 
 pub const CUSTOM_0: u8 = 0x0b;
 pub const CUSTOM_1: u8 = 0x2b;
-pub const CUSTOM_2: u8 = 0x4b;
 
 /// Different funct3 for custom RISC-V instructions using the [CUSTOM_0] 7-bit opcode prefix.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
@@ -29,14 +28,6 @@ pub enum Custom1Funct3 {
     ComplexExtField,
     /// Instructions for optimal Ate pairing
     Pairing,
-}
-
-/// Different funct3 for custom RISC-V instructions using the [CUSTOM_2] 7-bit opcode prefix.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum Custom2Funct3 {
-    Fp2Bn254 = 0,
-    Fp2Bls12381,
 }
 
 /// imm options for system phantom instructions
