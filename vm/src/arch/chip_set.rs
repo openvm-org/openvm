@@ -1288,18 +1288,19 @@ fn gen_ec_executor_tuple(
         .iter()
         .enumerate()
         .flat_map(|(i, curve)| {
-            let class_offset = EccOpcode::default_offset() + i * EccOpcode::COUNT;
+            let class_offset =
+                Rv32WeierstrassOpcode::default_offset() + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
                     (
-                        EccOpcode::EC_ADD_NE as usize,
+                        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
                         class_offset,
                         ExecutorName::EcAddNeRv32_2x32,
                         curve.prime(),
                     ),
                     (
-                        EccOpcode::EC_DOUBLE as usize,
+                        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
                         class_offset,
                         ExecutorName::EcDoubleRv32_2x32,
                         curve.prime(),
@@ -1308,13 +1309,13 @@ fn gen_ec_executor_tuple(
             } else if bytes <= 48 {
                 vec![
                     (
-                        EccOpcode::EC_ADD_NE as usize,
+                        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
                         class_offset,
                         ExecutorName::EcAddNeRv32_6x16,
                         curve.prime(),
                     ),
                     (
-                        EccOpcode::EC_DOUBLE as usize,
+                        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
                         class_offset,
                         ExecutorName::EcDoubleRv32_6x16,
                         curve.prime(),

@@ -13,7 +13,8 @@ use p3_field::AbstractField;
 use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{
-        instructions::EccOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, VmChipWrapper,
+        BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
@@ -39,8 +40,8 @@ fn test_add_ne() {
     );
     let core = FieldExpressionCoreChip::new(
         expr,
-        EccOpcode::default_offset(),
-        vec![EccOpcode::EC_ADD_NE as usize],
+        Rv32WeierstrassOpcode::default_offset(),
+        vec![Rv32WeierstrassOpcode::EC_ADD_NE as usize],
         vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcAddNe",
@@ -83,7 +84,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.core.air.offset + EccOpcode::EC_ADD_NE as usize,
+        chip.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
     tester.execute(&mut chip, instruction);
@@ -107,8 +108,8 @@ fn test_double() {
     );
     let core = FieldExpressionCoreChip::new(
         expr,
-        EccOpcode::default_offset(),
-        vec![EccOpcode::EC_DOUBLE as usize],
+        Rv32WeierstrassOpcode::default_offset(),
+        vec![Rv32WeierstrassOpcode::EC_DOUBLE as usize],
         vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         "EcDouble",
@@ -141,7 +142,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.core.air.offset + EccOpcode::EC_DOUBLE as usize,
+        chip.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, instruction);

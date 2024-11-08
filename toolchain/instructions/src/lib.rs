@@ -363,9 +363,9 @@ pub enum Rv32ModularArithmeticOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x190]
+#[opcode_offset = 0x600]
 #[repr(usize)]
-pub enum EccOpcode {
+pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
     EC_DOUBLE,
 }

@@ -2,11 +2,11 @@ use std::marker::PhantomData;
 
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
-    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, EccOpcode, Fp12Opcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, PairingOpcode, PhantomInstruction, Rv32AuipcOpcode,
-    Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode,
-    Rv32JalrOpcode, Rv32KeccakOpcode, Rv32LessThan256Opcode, Rv32LoadStoreOpcode,
-    Rv32ModularArithmeticOpcode, Rv32Mul256Opcode, Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, Fp12Opcode, LessThanOpcode, MulHOpcode,
+    MulOpcode, PairingOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode,
+    Rv32BranchEqual256Opcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
+    Rv32KeccakOpcode, Rv32LessThan256Opcode, Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode,
+    Rv32Mul256Opcode, Rv32Shift256Opcode, Rv32WeierstrassOpcode, ShiftOpcode, UsizeOpcode,
 };
 use axvm_platform::constants::{
     Custom0Funct3::{self, *},
@@ -382,17 +382,18 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
                     let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                         Some(SwBaseFunct7::SwAddNe) => {
-                            EccOpcode::EC_ADD_NE as usize + EccOpcode::default_offset()
+                            Rv32WeierstrassOpcode::EC_ADD_NE as usize + Rv32WeierstrassOpcode::default_offset()
                         }
                         Some(SwBaseFunct7::SwDouble) => {
                             assert!(dec_insn.rs2 == 0);
-                            EccOpcode::EC_DOUBLE as usize + EccOpcode::default_offset()
+                            Rv32WeierstrassOpcode::EC_DOUBLE as usize + Rv32WeierstrassOpcode::default_offset()
                         }
                         _ => unimplemented!(),
                     };
-                    let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
-                        * SHORT_WEIERSTRASS_MAX_KINDS;
-                    let global_opcode = global_opcode + curve_idx_shift as usize;
+                    assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
+                    let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS) as usize
+                        * Rv32WeierstrassOpcode::COUNT;
+                    let global_opcode = global_opcode + curve_idx_shift;
                     Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 Some(Pairing) => {
@@ -433,9 +434,15 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                         }
                         _ => unimplemented!(),
                     };
-                    let pairing_idx_shift = ((dec_insn.funct7 as u8) / PAIRING_MAX_KINDS)
-                        * PAIRING_MAX_KINDS;
-                    let global_opcode = global_opcode + pairing_idx_shift as usize;
+                    assert!(PairingOpcode::COUNT < PAIRING_MAX_KINDS as usize); // + 1 for Fp12Mul
+                    let pairing_idx = ((dec_insn.funct7 as u8) / PAIRING_MAX_KINDS) as usize;
+                    let pairing_idx_shift = if let Some(PairingBaseFunct7::Fp12Mul) = PairingBaseFunct7::from_repr(base_funct7) {
+                        // SPECIAL CASE: Fp12Mul uses different enum Fp12Opcode
+                        pairing_idx * Fp12Opcode::COUNT
+                    } else {
+                        pairing_idx * PairingOpcode::COUNT
+                    };
+                    let global_opcode = global_opcode + pairing_idx_shift;
                     Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 _ => unimplemented!(),
