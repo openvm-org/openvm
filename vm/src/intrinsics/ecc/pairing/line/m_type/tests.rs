@@ -3,14 +3,14 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::curves::bls12_381::tangent_line_023;
+use ax_ecc_execution::curves::bls12_381::{tangent_line_023, Bls12_381};
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{
         bls12381_fq12_to_biguint_vec, bls12381_fq2_to_biguint_vec, bls12381_fq_to_biguint,
     },
 };
-use axvm_ecc::{field::FieldExt, point::EcPoint};
+use axvm_ecc::{field::SexticExtField, pairing::LineMulMType, point::AffinePoint};
 use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
@@ -62,11 +62,11 @@ fn test_mul_023_by_023() {
     let mut rng1 = StdRng::seed_from_u64(95);
     let rnd_pt_0 = G1Affine::random(&mut rng0);
     let rnd_pt_1 = G1Affine::random(&mut rng1);
-    let ec_pt_0 = EcPoint::<Fq> {
+    let ec_pt_0 = AffinePoint::<Fq> {
         x: rnd_pt_0.x,
         y: rnd_pt_0.y,
     };
-    let ec_pt_1 = EcPoint::<Fq> {
+    let ec_pt_1 = AffinePoint::<Fq> {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
@@ -95,12 +95,9 @@ fn test_mul_023_by_023() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 10);
 
-    let r_cmp = ax_ecc_execution::curves::bls12_381::mul_023_by_023::<Fq, Fq2>(
-        line0,
-        line1,
-        Fq2::from_coeffs([Fq::ONE, Fq::ONE]),
-    );
+    let r_cmp = Bls12_381::mul_023_by_023(line0, line1);
     let r_cmp_bigint = r_cmp
+        .c
         .map(|x| [bls12381_fq_to_biguint(x.c0), bls12381_fq_to_biguint(x.c1)])
         .concat();
 
@@ -202,10 +199,7 @@ fn test_mul_by_02345() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp = ax_ecc_execution::curves::bls12_381::mul_by_02345::<Fq, Fq2, Fq12>(
-        f,
-        [x0, Fq2::ZERO, x2, x3, x4, x5],
-    );
+    let r_cmp = Bls12_381::mul_by_02345(f, SexticExtField::new([x0, Fq2::ZERO, x2, x3, x4, x5]));
     let r_cmp_bigint = bls12381_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {

@@ -18,6 +18,7 @@ where
     type Fp2: FieldExtension<BaseField = Self::Fp>;
 
     /// Miller double step
+    #[allow(clippy::type_complexity)]
     fn miller_double_step(
         s: AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp, Self::Fp2>) {
@@ -56,6 +57,7 @@ where
     }
 
     /// Miller add step
+    #[allow(clippy::type_complexity)]
     fn miller_add_step(
         s: AffinePoint<Self::Fp2>,
         q: AffinePoint<Self::Fp2>,

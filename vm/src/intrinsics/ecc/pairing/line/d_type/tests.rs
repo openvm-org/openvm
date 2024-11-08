@@ -3,12 +3,16 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::curves::bn254::tangent_line_013;
+use ax_ecc_execution::curves::bn254::{tangent_line_013, Bn254};
 use ax_ecc_primitives::{
     field_expression::ExprBuilderConfig,
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
-use axvm_ecc::{pairing::UnevaluatedLine, point::EcPoint};
+use axvm_ecc::{
+    field::SexticExtField,
+    pairing::{LineMulDType, UnevaluatedLine},
+    point::AffinePoint,
+};
 use axvm_ecc_constants::BN254;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
@@ -60,11 +64,11 @@ fn test_mul_013_by_013() {
     let mut rng1 = StdRng::seed_from_u64(95);
     let rnd_pt_0 = G1Affine::random(&mut rng0);
     let rnd_pt_1 = G1Affine::random(&mut rng1);
-    let ec_pt_0 = EcPoint::<Fq> {
+    let ec_pt_0 = AffinePoint::<Fq> {
         x: rnd_pt_0.x,
         y: rnd_pt_0.y,
     };
-    let ec_pt_1 = EcPoint::<Fq> {
+    let ec_pt_1 = AffinePoint::<Fq> {
         x: rnd_pt_1.x,
         y: rnd_pt_1.y,
     };
@@ -93,12 +97,9 @@ fn test_mul_013_by_013() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 10);
 
-    let r_cmp = ax_ecc_execution::curves::bn254::mul_013_by_013::<Fq, Fq2>(
-        line0,
-        line1,
-        Fq2::new(Fq::from_raw([9, 0, 0, 0]), Fq::one()),
-    );
+    let r_cmp = Bn254::mul_013_by_013(line0, line1);
     let r_cmp_bigint = r_cmp
+        .c
         .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
 
@@ -192,8 +193,7 @@ fn test_mul_by_01234() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp =
-        ax_ecc_execution::curves::bn254::mul_by_01234::<Fq, Fq2, Fq12>(f, [x0, x1, x2, x3, x4]);
+    let r_cmp = Bn254::mul_by_01234(f, SexticExtField::new([x0, x1, x2, x3, x4, Fq2::ZERO]));
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {
