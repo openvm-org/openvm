@@ -106,13 +106,7 @@ jobs:
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'base64'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'json'
+        if: inputs.benchmark_name == 'base64_json'
         working-directory: benchmarks
         run: |
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
