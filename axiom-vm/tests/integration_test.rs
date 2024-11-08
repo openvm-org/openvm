@@ -41,7 +41,6 @@ type F = BabyBear;
 fn test_1() {
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let axiom_vm_config = AxiomVmConfig {
-        poseidon2_max_constraint_degree: 7,
         max_num_user_public_values: 16,
         app_fri_params: fri_params,
         leaf_fri_params: fri_params,
@@ -237,7 +236,7 @@ fn test_1() {
 
     let root_agg_vm = VirtualMachine::new(
         BabyBearPoseidon2OuterEngine::new(axiom_vm_pk.root_fri_params),
-        axiom_vm_pk.root_agg_vm_config.clone(),
+        axiom_vm_pk.root_vm_config.clone(),
     );
     let prove_root_verifier = |verifier_input: RootVmVerifierInput<SC>| -> Proof<OuterSC> {
         let mut leaf_result = root_agg_vm
@@ -247,7 +246,7 @@ fn test_1() {
             )
             .unwrap();
         let proof = leaf_result.per_segment.pop().unwrap();
-        root_agg_vm.prove_single(&axiom_vm_pk.root_agg_vm_pk, proof)
+        root_agg_vm.prove_single(&axiom_vm_pk.root_vm_pk, proof)
     };
     let app_exe_commit = AppExecutionCommit::compute(
         &axiom_vm_pk.app_vm_config,

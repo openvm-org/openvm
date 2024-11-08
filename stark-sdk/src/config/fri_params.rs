@@ -25,6 +25,10 @@ impl FriParameters {
     pub fn standard_with_100_bits_conjectured_security(log_blowup: usize) -> FriParameters {
         standard_fri_params_with_100_bits_conjectured_security(log_blowup)
     }
+
+    pub fn max_constraint_degree(&self) -> usize {
+        (1 << self.log_blowup) + 1
+    }
 }
 
 /// Pre-defined FRI parameters with 100 bits of conjectured security.

@@ -10,24 +10,26 @@ pub mod leaf;
 pub mod root;
 pub(crate) mod utils;
 
+const SBOX_SIZE: usize = 7;
+
 impl AxiomVmConfig {
     pub fn leaf_vm_config(&self) -> VmConfig {
         VmConfig::aggregation(
             VmVerifierPvs::<u8>::width(),
-            self.poseidon2_max_constraint_degree,
+            SBOX_SIZE.min(self.leaf_fri_params.max_constraint_degree()),
         )
     }
     pub fn internal_vm_config(&self) -> VmConfig {
         VmConfig::aggregation(
             InternalVmVerifierPvs::<u8>::width(),
-            self.poseidon2_max_constraint_degree,
+            SBOX_SIZE.min(self.internal_fri_params.max_constraint_degree()),
         )
     }
     pub fn root_verifier_vm_config(&self) -> VmConfig {
         VmConfig::aggregation(
             // app_commit + leaf_verifier_commit + public_values
             DIGEST_SIZE * 2 + self.max_num_user_public_values,
-            self.poseidon2_max_constraint_degree,
+            SBOX_SIZE.min(self.root_fri_params.max_constraint_degree()),
         )
     }
 }

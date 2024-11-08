@@ -23,7 +23,6 @@ type SC = BabyBearPoseidon2Config;
 
 #[derive(Clone, Debug)]
 pub struct AxiomVmConfig {
-    pub poseidon2_max_constraint_degree: usize,
     pub max_num_user_public_values: usize,
     pub app_fri_params: FriParameters,
     pub leaf_fri_params: FriParameters,
@@ -47,24 +46,18 @@ pub struct AxiomVmProvingKey {
     pub committed_leaf_program: Arc<AxVmCommittedExe<SC>>,
     pub committed_internal_program: Arc<AxVmCommittedExe<SC>>,
     pub root_fri_params: FriParameters,
-    pub root_agg_vm_config: VmConfig,
-    pub root_agg_vm_pk: MultiStarkProvingKey<OuterSC>,
+    pub root_vm_config: VmConfig,
+    pub root_vm_pk: MultiStarkProvingKey<OuterSC>,
     pub committed_root_program: Arc<AxVmCommittedExe<OuterSC>>,
 }
 
 impl AxiomVmProvingKey {
     pub fn keygen(config: AxiomVmConfig) -> Self {
-        assert!(config.poseidon2_max_constraint_degree < 1 << config.leaf_fri_params.log_blowup);
-        assert!(
-            config.poseidon2_max_constraint_degree < 1 << config.internal_fri_params.log_blowup
-        );
-        assert!(config.poseidon2_max_constraint_degree < 1 << config.root_fri_params.log_blowup);
-
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params);
         let app_vm_pk = config
             .app_vm_config
             .generate_pk(app_engine.keygen_builder());
-        assert!(app_vm_pk.max_constraint_degree < 1 << config.app_fri_params.log_blowup);
+        assert!(app_vm_pk.max_constraint_degree <= config.app_fri_params.max_constraint_degree());
         assert_eq!(
             config.max_num_user_public_values,
             config.app_vm_config.num_public_values
@@ -73,6 +66,7 @@ impl AxiomVmProvingKey {
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
         let leaf_vm_config = config.leaf_vm_config();
         let leaf_vm_pk = leaf_vm_config.generate_pk(leaf_engine.keygen_builder());
+        assert!(leaf_vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
         let leaf_vm_vk = leaf_vm_pk.get_vk();
         let leaf_program = LeafVmVerifierConfig {
             app_fri_params: config.app_fri_params,
@@ -88,6 +82,10 @@ impl AxiomVmProvingKey {
         let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
         let internal_vm_config = config.internal_vm_config();
         let internal_vm_pk = internal_vm_config.generate_pk(internal_engine.keygen_builder());
+        assert!(
+            internal_vm_pk.max_constraint_degree
+                <= config.internal_fri_params.max_constraint_degree()
+        );
         let internal_vm_vk = internal_vm_pk.get_vk();
         let internal_program = InternalVmVerifierConfig {
             leaf_fri_params: config.leaf_fri_params,
@@ -101,8 +99,9 @@ impl AxiomVmProvingKey {
         ));
 
         let root_engine = BabyBearPoseidon2OuterEngine::new(config.root_fri_params);
-        let root_agg_vm_config = config.root_verifier_vm_config();
-        let root_agg_vm_pk = root_agg_vm_config.generate_pk(root_engine.keygen_builder());
+        let root_vm_config = config.root_verifier_vm_config();
+        let root_vm_pk = root_vm_config.generate_pk(root_engine.keygen_builder());
+        assert!(root_vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
         let root_program = RootVmVerifierConfig {
             leaf_fri_params: config.leaf_fri_params,
             internal_fri_params: config.internal_fri_params,
@@ -132,8 +131,8 @@ impl AxiomVmProvingKey {
             committed_leaf_program,
             committed_internal_program,
             root_fri_params: config.root_fri_params,
-            root_agg_vm_config,
-            root_agg_vm_pk,
+            root_vm_config,
+            root_vm_pk,
             committed_root_program,
         }
     }
