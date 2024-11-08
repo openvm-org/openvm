@@ -1,8 +1,9 @@
-#![cfg_attr(not(featsre = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use serde::Deserialize;
+use core::fmt::Debug;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct UserProfile<'a> {
     user_id: u64,
@@ -18,7 +19,7 @@ pub struct UserProfile<'a> {
     devices: [Device<'a>; 3],
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct Address<'a> {
     street: &'a str,
@@ -37,7 +38,7 @@ pub struct Address<'a> {
     floor_number: u8,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct Settings<'a> {
     theme: &'a str,
@@ -57,7 +58,7 @@ pub struct Settings<'a> {
     timezone_auto_detect: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct SecuritySettings<'a> {
     two_factor_auth: bool,
@@ -72,7 +73,7 @@ pub struct SecuritySettings<'a> {
     password_expiration_days: u16,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct AdPreferences {
     personalized_ads: bool,
@@ -85,7 +86,7 @@ pub struct AdPreferences {
     ad_relevance: f32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct Preferences {
     color_scheme: u8,
@@ -100,7 +101,7 @@ pub struct Preferences {
     vibration_feedback: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct WorkInfo<'a> {
     position: &'a str,
@@ -116,7 +117,7 @@ pub struct WorkInfo<'a> {
     remote_work_enabled: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct SocialLinks<'a> {
     twitter: &'a str,
@@ -129,7 +130,7 @@ pub struct SocialLinks<'a> {
     youtube: &'a str,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
 pub struct Device<'a> {
     device_name: &'a str,

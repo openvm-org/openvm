@@ -19,28 +19,29 @@ fn main() -> Result<()> {
     let app_log_blowup = 1;
     let agg_log_blowup = 3;
 
-    let elf = build_bench_program("base64")?;
+    let elf = build_bench_program("base64_json")?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata = info_span!("Base64 Program", group = "base64_program").in_scope(|| {
-            let engine = BabyBearPoseidon2Engine::new(
-                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-            );
+        let vdata =
+            info_span!("Base64 Json Program", group = "base64_json_program").in_scope(|| {
+                let engine = BabyBearPoseidon2Engine::new(
+                    FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+                );
 
-            let data = include_str!("../../programs/base64/base64_encoded.txt");
+                let data = include_str!("../../programs/base64_json/json_payload_encoded.txt");
 
-            let fe_bytes = data
-                .to_owned()
-                .into_bytes()
-                .into_iter()
-                .map(AbstractField::from_canonical_u8)
-                .collect::<Vec<BabyBear>>();
-            bench_from_exe(
-                engine,
-                VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32),
-                elf,
-                vec![fe_bytes],
-            )
-        })?;
+                let fe_bytes = data
+                    .to_owned()
+                    .into_bytes()
+                    .into_iter()
+                    .map(AbstractField::from_canonical_u8)
+                    .collect::<Vec<BabyBear>>();
+                bench_from_exe(
+                    engine,
+                    VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32),
+                    elf,
+                    vec![fe_bytes],
+                )
+            })?;
 
         #[cfg(feature = "aggregation")]
         {
