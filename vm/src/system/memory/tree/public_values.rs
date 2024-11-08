@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use p3_field::PrimeField32;
 use p3_util::log2_strict_usize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::hasher::Hasher,
@@ -11,6 +12,11 @@ use crate::{
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: usize = 2;
 
 /// Merkle proof for user public values in the memory state.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "F: Serialize, [F; CHUNK]: Serialize",
+    deserialize = "F: Deserialize<'de>, [F; CHUNK]: Deserialize<'de>"
+))]
 pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of (`bit`, `hash`)
     /// `bit`: If `bit` is true, public values are in the left child, otherwise in the right child.

@@ -19,18 +19,6 @@ use static_assertions::assert_impl_all;
 
 use crate::verifier::common::types::VmVerifierPvs;
 
-#[derive(Debug, AlignedBorrow)]
-#[repr(C)]
-pub struct InternalVmVerifierPvs<T> {
-    pub vm_verifier_pvs: VmVerifierPvs<T>,
-    /// The commitment of the leaf verifier program.
-    pub leaf_verifier_commit: [T; DIGEST_SIZE],
-    /// For recursion verification, a program need its own commitment, but its own commitment cannot
-    /// be hardcoded inside the program itself. So the commitment has to be read from external and
-    /// be committed.
-    pub self_program_commit: [T; DIGEST_SIZE],
-}
-
 /// Input for the leaf VM verifier.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
@@ -42,12 +30,19 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
 }
 assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
+/// Aggregated state of all segments
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[repr(C)]
+pub struct InternalVmVerifierPvs<T> {
+    pub vm_verifier_pvs: VmVerifierPvs<T>,
+    pub extra_pvs: InternalVmVerifierExtraPvs<T>,
+}
+
 impl<F: PrimeField32> InternalVmVerifierPvs<Felt<F>> {
     pub fn uninit<C: Config<F = F>>(builder: &mut Builder<C>) -> Self {
         Self {
             vm_verifier_pvs: VmVerifierPvs::<Felt<F>>::uninit(builder),
-            leaf_verifier_commit: array::from_fn(|_| builder.uninit()),
-            self_program_commit: array::from_fn(|_| builder.uninit()),
+            extra_pvs: InternalVmVerifierExtraPvs::<Felt<F>>::uninit(builder),
         }
     }
 }
@@ -55,6 +50,35 @@ impl<F: PrimeField32> InternalVmVerifierPvs<Felt<F>> {
 impl<F: Default + Clone> InternalVmVerifierPvs<Felt<F>> {
     pub fn flatten(self) -> Vec<Felt<F>> {
         let mut v = vec![Felt(0, Default::default()); InternalVmVerifierPvs::<u8>::width()];
+        *v.as_mut_slice().borrow_mut() = self;
+        v
+    }
+}
+
+/// Extra PVs for internal VM verifier except VmVerifierPvs.
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[repr(C)]
+pub struct InternalVmVerifierExtraPvs<T> {
+    /// The commitment of the leaf verifier program.
+    pub leaf_verifier_commit: [T; DIGEST_SIZE],
+    /// For recursion verification, a program need its own commitment, but its own commitment cannot
+    /// be hardcoded inside the program itself. So the commitment has to be read from external and
+    /// be committed.
+    pub internal_program_commit: [T; DIGEST_SIZE],
+}
+
+impl<F: PrimeField32> InternalVmVerifierExtraPvs<Felt<F>> {
+    pub fn uninit<C: Config<F = F>>(builder: &mut Builder<C>) -> Self {
+        Self {
+            leaf_verifier_commit: array::from_fn(|_| builder.uninit()),
+            internal_program_commit: array::from_fn(|_| builder.uninit()),
+        }
+    }
+}
+
+impl<F: Default + Clone> InternalVmVerifierExtraPvs<Felt<F>> {
+    pub fn flatten(self) -> Vec<Felt<F>> {
+        let mut v = vec![Felt(0, Default::default()); InternalVmVerifierExtraPvs::<u8>::width()];
         *v.as_mut_slice().borrow_mut() = self;
         v
     }

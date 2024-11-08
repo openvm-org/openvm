@@ -1,14 +1,8 @@
-use ax_stark_sdk::{
-    ax_stark_backend::{config::Val, prover::types::Proof},
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
+use ax_stark_sdk::ax_stark_backend::{config::Val, prover::types::Proof};
 use axvm_native_compiler::prelude::*;
-use axvm_recursion::{hints::Hintable, types::InnerConfig, vars::StarkProofVariable};
+use axvm_recursion::{hints::Hintable, vars::StarkProofVariable};
 
-use crate::verifier::root::types::RootVmVerifierInput;
-
-type SC = BabyBearPoseidon2Config;
-type C = InnerConfig;
+use crate::{verifier::root::types::RootVmVerifierInput, C, SC};
 
 #[derive(DslVariable, Clone)]
 pub struct RootVmVerifierInputVariable<C: Config> {

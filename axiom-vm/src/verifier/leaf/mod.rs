@@ -11,33 +11,29 @@ use axvm_circuit::{
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{
-    challenger::duplex::DuplexChallengerVariable,
-    fri::TwoAdicFriPcsVariable,
-    hints::{Hintable, InnerVal},
-    stark::StarkVerifier,
-    types::{new_from_inner_multi_vk, InnerConfig},
-    utils::const_fri_config,
+    challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, hints::Hintable,
+    stark::StarkVerifier, types::new_from_inner_multi_vk, utils::const_fri_config,
     vars::StarkProofVariable,
 };
 
-use crate::verifier::{
-    common::{
-        assert_or_assign_connector_pvs, assert_or_assign_memory_pvs, get_connector_pvs,
-        get_memory_pvs, get_program_commit, types::VmVerifierPvs,
+use crate::{
+    verifier::{
+        common::{
+            assert_or_assign_connector_pvs, assert_or_assign_memory_pvs, get_connector_pvs,
+            get_memory_pvs, get_program_commit, types::VmVerifierPvs,
+        },
+        leaf::types::UserPublicValuesRootProof,
+        utils::VariableP2Compressor,
     },
-    leaf::types::UserPublicValuesRootProof,
-    utils::VariableP2Compressor,
+    C, F,
 };
 
 pub mod types;
 mod vars;
 
-type C = InnerConfig;
-type F = InnerVal;
-
 /// Config to generate leaf VM verifier program.
 pub struct LeafVmVerifierConfig {
-    pub fri_params: FriParameters,
+    pub app_fri_params: FriParameters,
     pub app_vm_config: VmConfig,
     pub compiler_options: CompilerOptions,
 }
@@ -53,7 +49,7 @@ impl LeafVmVerifierConfig {
 
         {
             let pcs = TwoAdicFriPcsVariable {
-                config: const_fri_config(&mut builder, &self.fri_params),
+                config: const_fri_config(&mut builder, &self.app_fri_params),
             };
             let proofs: Array<C, StarkProofVariable<_>> =
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);

@@ -35,7 +35,7 @@ pub struct VmConnectorAir {
     pub program_bus: ProgramBus,
 }
 
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
     /// The initial PC of this segment.
