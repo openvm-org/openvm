@@ -35,7 +35,10 @@ pub fn main() {
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = black_box(EcPointN { x: x1, y: y1 });
+    let mut p1 = black_box(EcPointN {
+        x: x1.clone(),
+        y: y1.clone(),
+    });
     let mut p2 = black_box(EcPointN { x: x2, y: y2 });
 
     let p3 = EcPointN::add(&p1, &p2);
@@ -58,5 +61,18 @@ pub fn main() {
     p2.double_assign();
     if p2.x != x4 || p2.y != y4 {
         panic!();
+    }
+
+    // Ec Mul
+    let scalar = IntModN::from_u32(1);
+    let x5 = IntModN::from_le_bytes(&hex!(
+        "194A93387F790803D972AF9C4A40CB89D106A36F58EE2F31DC48A41768216D6D"
+    ));
+    let y5 = IntModN::from_le_bytes(&hex!(
+        "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
+    ));
+    let result = EcPointN::msm(&[scalar], &[p1]);
+    if result.x != x1 || result.y != y1 {
+        axvm::process::panic();
     }
 }
