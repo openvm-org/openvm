@@ -109,4 +109,5 @@ pub enum PairingBaseFunct7 {
     Mul023By023,
     MulBy023,
     MulBy02345,
+    HintFinalExp,
 }
