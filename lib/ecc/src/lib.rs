@@ -31,17 +31,15 @@ pub mod pairing_hint {
         let hint = MaybeUninit::<[u8; 32 * 12 * 2]>::uninit();
         unsafe {
             bn254_hint_final_exp(f.as_ptr());
-            // Assuming the compiler will unroll this loop
-            // so `i` is a compile time constant:
-            for i in (0..32 * 12 * 2).step_by(4) {
-                axvm::hint_store_u32!(hint.as_ptr() as *const u8, i);
+            let mut ptr = hint.as_ptr() as *const u8;
+            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+            for _ in (0..32 * 12 * 2).step_by(4) {
+                axvm::hint_store_u32!(ptr, 0);
+                ptr = ptr.add(4);
             }
             hint.assume_init()
         }
     }
-
-    // The length must fit into an I-type immediate
-    const _: () = assert!(48 * 12 * 2 < (1 << 11));
 
     /// Writes hint to stack and returns (residue_witness, scaling_factor)
     pub fn bls12_381_final_exp_hint(f: &[u8]) -> [u8; 48 * 12 * 2] {
@@ -49,10 +47,11 @@ pub mod pairing_hint {
         let hint = MaybeUninit::<[u8; 48 * 12 * 2]>::uninit();
         unsafe {
             bls12_381_hint_final_exp(f.as_ptr());
-            // Assuming the compiler will unroll this loop
-            // so `i` is a compile time constant:
-            for i in (0..48 * 12 * 2).step_by(4) {
-                axvm::hint_store_u32!(hint.as_ptr() as *const u8, i);
+            let mut ptr = hint.as_ptr() as *const u8;
+            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+            for _ in (0..48 * 12 * 2).step_by(4) {
+                axvm::hint_store_u32!(ptr, 0);
+                ptr = ptr.add(4);
             }
             hint.assume_init()
         }
