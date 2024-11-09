@@ -2,25 +2,9 @@
 
 extern crate proc_macro;
 
+use axvm_macros_common::Stmts;
 use proc_macro::TokenStream;
-use syn::{
-    parse::{Parse, ParseStream},
-    parse_macro_input, Stmt,
-};
-
-struct Stmts {
-    stmts: Vec<Stmt>,
-}
-
-impl Parse for Stmts {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut stmts = Vec::new();
-        while !input.is_empty() {
-            stmts.push(input.parse()?);
-        }
-        Ok(Stmts { stmts })
-    }
-}
+use syn::{parse_macro_input, Stmt};
 
 fn string_to_bytes(s: &str) -> Vec<u8> {
     if s.starts_with("0x") {

@@ -541,8 +541,9 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
+ "axvm-ec-setup",
+ "axvm-moduli-setup",
  "axvm-platform",
- "axvm-setup-macro",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
@@ -661,6 +662,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-ec-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
 name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
@@ -715,6 +725,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-macros-common"
+version = "0.1.0"
+dependencies = [
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "axvm-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
 name = "axvm-native-compiler"
 version = "0.1.0"
 dependencies = [
@@ -765,7 +791,7 @@ dependencies = [
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
- "axvm-setup-macro",
+ "axvm-moduli-setup",
  "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
@@ -815,14 +841,6 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
-]
-
-[[package]]
-name = "axvm-setup-macro"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn 2.0.87",
 ]
 
 [[package]]
@@ -2373,9 +2391,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.162"
+version = "0.2.161"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18d287de67fe55fd7e1581fe933d965a5a9477b38e949cfa9f8574ef01506398"
+checksum = "8e9489c2807c139ffd9c1794f4af0ebe86a828db53ecdc7fea2111d0fed085d1"
 
 [[package]]
 name = "libloading"
@@ -4182,9 +4200,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-common"
-version = "12.12.1"
+version = "12.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d4d73159efebfb389d819fd479afb2dbd57dcb3e3f4b7fcfa0e675f5a46c1cb"
+checksum = "366f1b4c6baf6cfefc234bbd4899535fca0b06c74443039a73f6dfb2fad88d77"
 dependencies = [
  "debugid",
  "memmap2",
@@ -4194,9 +4212,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-demangle"
-version = "12.12.1"
+version = "12.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a767859f6549c665011970874c3f541838b4835d5aaaa493d3ee383918be9f10"
+checksum = "aba05ba5b9962ea5617baf556293720a8b2d0a282aa14ee4bf10e22efc7da8c8"
 dependencies = [
  "cpp_demangle",
  "rustc-demangle",
