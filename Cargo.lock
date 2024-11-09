@@ -673,6 +673,7 @@ dependencies = [
  "num",
  "num-bigint-dig",
  "rand 0.8.5",
+ "strum_macros",
 ]
 
 [[package]]

@@ -253,6 +253,7 @@ impl Modulus {
     }
 }
 
+// TO BE DELETED:
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EcCurve {
     Secp256k1,
@@ -270,6 +271,7 @@ impl EcCurve {
     }
 }
 
+// TODO: move this to axvm-ecc
 #[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
