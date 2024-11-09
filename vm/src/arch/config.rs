@@ -270,7 +270,7 @@ impl EcCurve {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,

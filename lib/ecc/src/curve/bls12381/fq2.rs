@@ -22,6 +22,10 @@ impl FieldExtension for Fq2 {
         }
     }
 
+    fn to_coeffs(self) -> Self::Coeffs {
+        [self.c0, self.c1]
+    }
+
     fn embed(base_elem: Self::BaseField) -> Self {
         Fq2 {
             c0: base_elem,

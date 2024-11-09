@@ -15,6 +15,9 @@ pub trait FieldExtension: Field {
     /// Generate an extension field element from its base field coefficients.
     fn from_coeffs(coeffs: Self::Coeffs) -> Self;
 
+    /// Convert an extension field element to its base field coefficients.
+    fn to_coeffs(self) -> Self::Coeffs;
+
     /// Embed a base field element into an extension field element.
     fn embed(base_elem: Self::BaseField) -> Self;
 
