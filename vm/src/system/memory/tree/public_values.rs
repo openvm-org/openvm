@@ -30,27 +30,30 @@ pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     pub public_values_commit: [F; CHUNK],
 }
 
-/// Computes the proof of the public values from the final memory state.
-/// Assumption:
-/// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
-pub fn compute_user_public_values_proof<const CHUNK: usize, F: PrimeField32>(
-    memory_dimensions: MemoryDimensions,
-    num_public_values: usize,
-    hasher: &impl Hasher<CHUNK, F>,
-    final_memory: &Equipartition<F, CHUNK>,
-) -> UserPublicValuesProof<CHUNK, F> {
-    let proof = compute_merkle_proof_to_user_public_values_root(
-        memory_dimensions,
-        num_public_values,
-        hasher,
-        final_memory,
-    );
-    let public_values = extract_public_values(&memory_dimensions, num_public_values, final_memory);
-    let public_values_commit = hasher.merkle_root(&public_values);
-    UserPublicValuesProof {
-        proof,
-        public_values,
-        public_values_commit,
+impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
+    /// Computes the proof of the public values from the final memory state.
+    /// Assumption:
+    /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
+    pub fn compute(
+        memory_dimensions: MemoryDimensions,
+        num_public_values: usize,
+        hasher: &impl Hasher<CHUNK, F>,
+        final_memory: &Equipartition<F, CHUNK>,
+    ) -> Self {
+        let proof = compute_merkle_proof_to_user_public_values_root(
+            memory_dimensions,
+            num_public_values,
+            hasher,
+            final_memory,
+        );
+        let public_values =
+            extract_public_values(&memory_dimensions, num_public_values, final_memory);
+        let public_values_commit = hasher.merkle_root(&public_values);
+        UserPublicValuesProof {
+            proof,
+            public_values,
+            public_values_commit,
+        }
     }
 }
 
@@ -143,7 +146,7 @@ mod tests {
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
 
-    use super::{compute_user_public_values_proof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
+    use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
         arch::{
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -171,7 +174,7 @@ mod tests {
 
         let final_memory = memory_image_to_equipartition(memory);
         let hasher = vm_poseidon2_hasher();
-        let pv_proof = compute_user_public_values_proof::<{ CHUNK }, F>(
+        let pv_proof = UserPublicValuesProof::<{ CHUNK }, F>::compute(
             memory_dimensions,
             num_public_values,
             &hasher,

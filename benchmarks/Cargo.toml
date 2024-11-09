@@ -7,6 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+axiom-vm.workspace = true
 axvm-circuit = { workspace = true }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
@@ -19,6 +20,7 @@ tempfile.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 hex.workspace = true
+tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

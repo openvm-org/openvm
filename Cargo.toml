@@ -72,6 +72,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
+axiom-vm = { path = "axiom-vm", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }

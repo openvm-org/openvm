@@ -53,7 +53,7 @@ impl RootVmVerifierConfig {
                 config: const_fri_config(&mut builder, &self.leaf_fri_params),
             };
             let internal_pcs = TwoAdicFriPcsVariable {
-                config: const_fri_config(&mut builder, &self.leaf_fri_params),
+                config: const_fri_config(&mut builder, &self.internal_fri_params),
             };
             let internal_program_commit =
                 array::from_fn(|i| builder.eval(self.internal_vm_verifier_commit[i]));

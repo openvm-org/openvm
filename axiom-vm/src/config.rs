@@ -37,18 +37,21 @@ pub struct AxiomVmProvingKey {
     pub app_fri_params: FriParameters,
     pub app_vm_config: VmConfig,
     pub app_vm_pk: MultiStarkProvingKey<SC>,
+
     pub leaf_fri_params: FriParameters,
     pub leaf_vm_config: VmConfig,
     pub leaf_vm_pk: MultiStarkProvingKey<SC>,
+    pub leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
+
     pub internal_fri_params: FriParameters,
     pub internal_vm_config: VmConfig,
     pub internal_vm_pk: MultiStarkProvingKey<SC>,
-    pub committed_leaf_program: Arc<AxVmCommittedExe<SC>>,
-    pub committed_internal_program: Arc<AxVmCommittedExe<SC>>,
+    pub internal_committed_exe: Arc<AxVmCommittedExe<SC>>,
+
     pub root_fri_params: FriParameters,
     pub root_vm_config: VmConfig,
     pub root_vm_pk: MultiStarkProvingKey<OuterSC>,
-    pub committed_root_program: Arc<AxVmCommittedExe<OuterSC>>,
+    pub root_committed_exe: Arc<AxVmCommittedExe<OuterSC>>,
 }
 
 impl AxiomVmProvingKey {
@@ -74,7 +77,7 @@ impl AxiomVmProvingKey {
             compiler_options: config.compiler_options.clone(),
         }
         .build_program(&app_vm_pk.get_vk());
-        let committed_leaf_program = Arc::new(AxVmCommittedExe::commit(
+        let leaf_committed_exe = Arc::new(AxVmCommittedExe::commit(
             leaf_program.into(),
             leaf_engine.config.pcs(),
         ));
@@ -93,7 +96,7 @@ impl AxiomVmProvingKey {
             compiler_options: config.compiler_options.clone(),
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
-        let committed_internal_program = Arc::new(AxVmCommittedExe::<SC>::commit(
+        let internal_committed_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
             internal_program.into(),
             internal_engine.config.pcs(),
         ));
@@ -106,7 +109,7 @@ impl AxiomVmProvingKey {
             leaf_fri_params: config.leaf_fri_params,
             internal_fri_params: config.internal_fri_params,
             num_public_values: config.max_num_user_public_values,
-            internal_vm_verifier_commit: committed_internal_program
+            internal_vm_verifier_commit: internal_committed_exe
                 .committed_program
                 .prover_data
                 .commit
@@ -114,7 +117,7 @@ impl AxiomVmProvingKey {
             compiler_options: config.compiler_options.clone(),
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
-        let committed_root_program = Arc::new(AxVmCommittedExe::<OuterSC>::commit(
+        let root_committed_exe = Arc::new(AxVmCommittedExe::<OuterSC>::commit(
             root_program.into(),
             root_engine.config.pcs(),
         ));
@@ -125,15 +128,15 @@ impl AxiomVmProvingKey {
             leaf_fri_params: config.leaf_fri_params,
             leaf_vm_config,
             leaf_vm_pk,
+            leaf_committed_exe,
             internal_fri_params: config.internal_fri_params,
             internal_vm_config,
             internal_vm_pk,
-            committed_leaf_program,
-            committed_internal_program,
+            internal_committed_exe,
             root_fri_params: config.root_fri_params,
             root_vm_config,
             root_vm_pk,
-            committed_root_program,
+            root_committed_exe,
         }
     }
 }

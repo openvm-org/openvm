@@ -25,7 +25,7 @@ use axvm_circuit::{
         VirtualMachine, VmConfig, VmExecutor, PUBLIC_VALUES_AIR_ID,
     },
     system::{
-        memory::tree::public_values::compute_user_public_values_proof,
+        memory::tree::public_values::UserPublicValuesProof,
         program::{trace::AxVmCommittedExe, ExecutionError},
     },
 };
@@ -95,7 +95,7 @@ fn test_1() {
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
-    let pv_proof = compute_user_public_values_proof(
+    let pv_proof = UserPublicValuesProof::compute(
         app_vm.config.memory_config.memory_dimensions(),
         max_num_user_public_values,
         &vm_poseidon2_hasher(),
@@ -115,7 +115,7 @@ fn test_1() {
     let run_leaf_verifier =
         |verifier_input: LeafVmVerifierInput<SC>| -> Result<Vec<F>, ExecutionError> {
             let runtime_pvs = leaf_vm.execute(
-                axiom_vm_pk.committed_leaf_program.exe.clone(),
+                axiom_vm_pk.leaf_committed_exe.exe.clone(),
                 verifier_input.write_to_stream(),
             )?;
             let runtime_pvs: Vec<_> = runtime_pvs[..VmVerifierPvs::<u8>::width()]
@@ -189,7 +189,7 @@ fn test_1() {
         axiom_vm_pk.leaf_vm_config.clone(),
     );
     let internal_commit: [F; DIGEST_SIZE] = axiom_vm_pk
-        .committed_internal_program
+        .internal_committed_exe
         .committed_program
         .prover_data
         .commit
@@ -197,7 +197,7 @@ fn test_1() {
     let prove_leaf_verifier = |verifier_input: LeafVmVerifierInput<SC>| -> Proof<SC> {
         let mut result = leaf_vm
             .execute_and_generate_with_cached_program(
-                axiom_vm_pk.committed_leaf_program.clone(),
+                axiom_vm_pk.leaf_committed_exe.clone(),
                 verifier_input.write_to_stream(),
             )
             .unwrap();
@@ -222,7 +222,7 @@ fn test_1() {
     let prove_internal_verifier = |verifier_input: InternalVmVerifierInput<SC>| -> Proof<SC> {
         let mut result = internal_vm
             .execute_and_generate_with_cached_program(
-                axiom_vm_pk.committed_internal_program.clone(),
+                axiom_vm_pk.internal_committed_exe.clone(),
                 verifier_input.write(),
             )
             .unwrap();
@@ -241,7 +241,7 @@ fn test_1() {
     let prove_root_verifier = |verifier_input: RootVmVerifierInput<SC>| -> Proof<OuterSC> {
         let mut leaf_result = root_agg_vm
             .execute_and_generate_with_cached_program(
-                axiom_vm_pk.committed_root_program.clone(),
+                axiom_vm_pk.root_committed_exe.clone(),
                 verifier_input.write(),
             )
             .unwrap();
@@ -251,7 +251,7 @@ fn test_1() {
     let app_exe_commit = AppExecutionCommit::compute(
         &axiom_vm_pk.app_vm_config,
         &committed_exe,
-        &axiom_vm_pk.committed_leaf_program,
+        &axiom_vm_pk.leaf_committed_exe,
     );
 
     let root_proof = prove_root_verifier(RootVmVerifierInput {
