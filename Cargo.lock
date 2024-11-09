@@ -830,6 +830,7 @@ dependencies = [
 name = "axvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
+ "ax-ecc-execution",
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",

@@ -26,14 +26,15 @@ pub mod pairing_hint {
     // TODO: transmute to Fp12 types
 
     /// Writes hint to stack and returns (residue_witness, scaling_factor)
-    pub fn bn254_final_exp_hint(f: &[u8; 32 * 12]) -> [u8; 32 * 12 * 2] {
+    pub fn bn254_final_exp_hint(f: &[u8]) -> [u8; 32 * 12 * 2] {
+        debug_assert_eq!(f.len(), 32 * 12);
         let hint = MaybeUninit::<[u8; 32 * 12 * 2]>::uninit();
         unsafe {
             bn254_hint_final_exp(f.as_ptr());
             // Assuming the compiler will unroll this loop
             // so `i` is a compile time constant:
             for i in (0..32 * 12 * 2).step_by(4) {
-                axvm::hint_store_u32!(hint.as_ptr(), i);
+                axvm::hint_store_u32!(hint.as_ptr() as *const u8, i);
             }
             hint.assume_init()
         }
@@ -43,14 +44,15 @@ pub mod pairing_hint {
     const _: () = assert!(48 * 12 * 2 < (1 << 11));
 
     /// Writes hint to stack and returns (residue_witness, scaling_factor)
-    pub fn bls12_381_final_exp_hint(f: &[u8; 48 * 12]) -> [u8; 48 * 12 * 2] {
+    pub fn bls12_381_final_exp_hint(f: &[u8]) -> [u8; 48 * 12 * 2] {
+        debug_assert_eq!(f.len(), 48 * 12);
         let hint = MaybeUninit::<[u8; 48 * 12 * 2]>::uninit();
         unsafe {
             bls12_381_hint_final_exp(f.as_ptr());
             // Assuming the compiler will unroll this loop
             // so `i` is a compile time constant:
             for i in (0..48 * 12 * 2).step_by(4) {
-                axvm::hint_store_u32!(hint.as_ptr(), i);
+                axvm::hint_store_u32!(hint.as_ptr() as *const u8, i);
             }
             hint.assume_init()
         }
