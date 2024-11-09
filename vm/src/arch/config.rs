@@ -15,7 +15,7 @@ use crate::{
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
 };
 
-pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 21) - 100;
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
@@ -253,6 +253,7 @@ impl Modulus {
     }
 }
 
+// TO BE DELETED:
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EcCurve {
     Secp256k1,
@@ -270,7 +271,8 @@ impl EcCurve {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+// TODO: move this to axvm-ecc
+#[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,

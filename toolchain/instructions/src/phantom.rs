@@ -23,4 +23,7 @@ pub enum PhantomInstruction {
     CtEnd,
     /// Peek string from memory and print it to stdout.
     PrintStrRv32,
+    /// Uses `b` to determine the curve: `b` is the discriminant of `PairingCurve` kind.
+    /// Peeks at `[r32{0}(a)..r32{0}(a) + Fp::NUM_LIMBS * 12]_2` to get `f: Fp12` and then resets the hint stream to equal `final_exp_hint(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` as `Fp::NUM_LIMBS * 12 * 2` bytes.
+    HintFinalExp,
 }

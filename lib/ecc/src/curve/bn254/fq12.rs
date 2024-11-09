@@ -26,6 +26,12 @@ impl FieldExtension for Fq12 {
         }
     }
 
+    fn to_coeffs(self) -> Self::Coeffs {
+        [
+            self.c0.c0, self.c1.c0, self.c0.c1, self.c1.c1, self.c0.c2, self.c1.c2,
+        ]
+    }
+
     fn embed(base_elem: Self::BaseField) -> Self {
         let fq6_pt = Fq6 {
             c0: base_elem,

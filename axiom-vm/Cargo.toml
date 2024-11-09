@@ -18,6 +18,7 @@ derivative = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 static_assertions.workspace = true
+async-trait.workspace = true
 
 [features]
 default = ["parallel"]

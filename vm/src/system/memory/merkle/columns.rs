@@ -27,7 +27,7 @@ pub struct MemoryMerkleCols<T, const CHUNK: usize> {
     pub right_direction_different: T,
 }
 
-#[derive(Debug, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct MemoryMerklePvs<T, const CHUNK: usize> {
     /// The memory state root before the execution of this segment.

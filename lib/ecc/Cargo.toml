@@ -12,6 +12,7 @@ itertools = { workspace = true, default-features = false, features = [
     "use_alloc",
 ] }
 rand = { workspace = true, default-features = false }
+strum_macros.workspace = true
 
 # Used for `halo2curves` feature
 # TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves

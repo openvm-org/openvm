@@ -7,7 +7,7 @@ use axvm_circuit::{
 };
 use axvm_native_compiler::prelude::*;
 
-#[derive(Debug, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct VmVerifierPvs<T> {
     /// The commitment of the app program.

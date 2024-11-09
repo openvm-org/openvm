@@ -6,14 +6,14 @@ use ax_stark_sdk::ax_stark_backend::{
     prover::types::Proof,
 };
 use axvm_native_compiler::prelude::*;
-use axvm_recursion::{
-    hints::{Hintable, InnerVal},
-    types::InnerConfig,
-};
+use axvm_recursion::hints::Hintable;
 
-use crate::verifier::{
-    leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-    utils,
+use crate::{
+    verifier::{
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        utils,
+    },
+    C, F,
 };
 
 #[derive(DslVariable, Clone)]
@@ -24,9 +24,6 @@ pub struct UserPublicValuesRootProofVariable<const CHUNK: usize, C: Config> {
     pub sibling_hashes: Array<C, [Felt<C::F>; CHUNK]>,
     pub public_values_commit: [Felt<C::F>; CHUNK],
 }
-
-type C = InnerConfig;
-type F = InnerVal;
 
 impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
     pub fn write_to_stream<C: Config<N = Val<SC>>>(&self) -> Vec<Vec<Val<SC>>>

@@ -105,3 +105,49 @@ fn test_print_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+#[test]
+fn test_modular_runtime() -> Result<()> {
+    let elf = build_example_program("little")?;
+    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_modulus());
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_matrix_power_runtime() -> Result<()> {
+    let elf = build_example_program("matrix-power")?;
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_int256_alu()
+            .add_int256_m()
+            .add_int256_branch(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_matrix_power_signed_runtime() -> Result<()> {
+    let elf = build_example_program("matrix-power-signed")?;
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_int256_alu()
+            .add_int256_m()
+            .add_int256_branch(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_ec_runtime() -> Result<()> {
+    let elf = build_example_program("ec")?;
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_canonical_modulus()
+            .add_canonical_ec_curves(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}

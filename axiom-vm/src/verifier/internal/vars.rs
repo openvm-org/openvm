@@ -1,12 +1,13 @@
 use std::array;
 
-use ax_stark_sdk::{
-    ax_stark_backend::prover::types::Proof, config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
+use ax_stark_sdk::ax_stark_backend::prover::types::Proof;
 use axvm_native_compiler::{ir::DIGEST_SIZE, prelude::*};
-use axvm_recursion::{hints::Hintable, types::InnerConfig, vars::StarkProofVariable};
+use axvm_recursion::{hints::Hintable, vars::StarkProofVariable};
 
-use crate::verifier::{internal::types::InternalVmVerifierInput, utils::write_field_slice};
+use crate::{
+    verifier::{internal::types::InternalVmVerifierInput, utils::write_field_slice},
+    C, SC,
+};
 
 #[derive(DslVariable, Clone)]
 pub struct InternalVmVerifierInputVariable<C: Config> {
@@ -14,9 +15,6 @@ pub struct InternalVmVerifierInputVariable<C: Config> {
     /// The proofs of the execution segments in the execution order.
     pub proofs: Array<C, StarkProofVariable<C>>,
 }
-
-type SC = BabyBearPoseidon2Config;
-type C = InnerConfig;
 
 impl Hintable<C> for InternalVmVerifierInput<SC> {
     type HintVariable = InternalVmVerifierInputVariable<C>;

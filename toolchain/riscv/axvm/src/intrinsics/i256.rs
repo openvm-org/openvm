@@ -7,7 +7,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use {super::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
+use {super::bigint_to_limbs, num_bigint_dig::BigInt};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom0Funct3, Int256Funct7, CUSTOM_0},
@@ -17,63 +17,77 @@ use {
 
 use crate::impl_bin_op;
 
-/// A 256-bit unsigned integer type.
+/// A 256-bit signed integer type.
 #[derive(Debug)]
 #[repr(align(32), C)]
-pub struct U256 {
+pub struct I256 {
     limbs: [u8; 32],
 }
 
-impl U256 {
-    /// The maximum value of a U256.
-    pub const MAX: Self = Self {
-        limbs: [u8::MAX; 32],
-    };
+impl I256 {
+    /// The minimum value of an I256.
+    pub const MIN: Self = Self::generate_min();
 
-    /// The minimum value of a U256.
-    pub const MIN: Self = Self { limbs: [0u8; 32] };
+    /// The maximum value of an I256.
+    pub const MAX: Self = Self::generate_max();
 
     /// The zero constant.
     pub const ZERO: Self = Self { limbs: [0u8; 32] };
 
-    /// Value of this U256 as a BigUint.
+    /// Value of this I256 as a BigInt.
     #[cfg(not(target_os = "zkvm"))]
-    pub fn as_biguint(&self) -> BigUint {
-        BigUint::from_bytes_le(&self.limbs)
+    pub fn as_bigint(&self) -> BigInt {
+        BigInt::from_signed_bytes_le(&self.limbs)
     }
 
-    /// Creates a new U256 from a BigUint.
+    /// Creates a new I256 from a BigInt.
     #[cfg(not(target_os = "zkvm"))]
-    pub fn from_biguint(value: &BigUint) -> Self {
+    pub fn from_bigint(value: &BigInt) -> Self {
         Self {
-            limbs: biguint_to_limbs(value),
+            limbs: bigint_to_limbs(value),
         }
     }
 
-    /// Creates a new U256 that equals to the given u8 value.
-    pub fn from_u8(value: u8) -> Self {
-        let mut limbs = [0u8; 32];
-        limbs[0] = value;
+    /// Creates a new I256 that equals to the given i8 value.
+    pub fn from_i8(value: i8) -> Self {
+        let mut limbs = if value < 0 { [u8::MAX; 32] } else { [0u8; 32] };
+        limbs[0] = value as u8;
         Self { limbs }
     }
 
-    /// Creates a new U256 that equals to the given u32 value.
-    pub fn from_u32(value: u32) -> Self {
-        let mut limbs = [0u8; 32];
+    /// Creates a new I256 that equals to the given i32 value.
+    pub fn from_i32(value: i32) -> Self {
+        let mut limbs = if value < 0 { [u8::MAX; 32] } else { [0u8; 32] };
+        let value = value as u32;
         limbs[..4].copy_from_slice(&value.to_le_bytes());
         Self { limbs }
     }
 
-    /// Creates a new U256 that equals to the given u64 value.
-    pub fn from_u64(value: u64) -> Self {
-        let mut limbs = [0u8; 32];
+    /// Creates a new I256 that equals to the given i64 value.
+    pub fn from_i64(value: i64) -> Self {
+        let mut limbs = if value < 0 { [u8::MAX; 32] } else { [0u8; 32] };
+        let value = value as u64;
         limbs[..8].copy_from_slice(&value.to_le_bytes());
+        Self { limbs }
+    }
+
+    /// A constant private helper function to generate the minimum value of an I256.
+    const fn generate_min() -> Self {
+        let mut limbs = [0u8; 32];
+        limbs[31] = i8::MIN as u8;
+        Self { limbs }
+    }
+
+    /// A constant private helper function to generate the maximum value of an I256.
+    const fn generate_max() -> Self {
+        let mut limbs = [u8::MAX; 32];
+        limbs[31] = i8::MAX as u8;
         Self { limbs }
     }
 }
 
 impl_bin_op!(
-    U256,
+    I256,
     Add,
     AddAssign,
     add,
@@ -82,11 +96,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Add as u8,
     +=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() + rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() + rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     Sub,
     SubAssign,
     sub,
@@ -95,11 +109,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Sub as u8,
     -=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(U256::MAX.as_biguint() + BigUint::one() + lhs.as_biguint() - rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() - rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     Mul,
     MulAssign,
     mul,
@@ -108,11 +122,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Mul as u8,
     *=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() * rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() * rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     BitXor,
     BitXorAssign,
     bitxor,
@@ -121,11 +135,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Xor as u8,
     ^=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() ^ rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() ^ rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     BitAnd,
     BitAndAssign,
     bitand,
@@ -134,11 +148,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::And as u8,
     &=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() & rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() & rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     BitOr,
     BitOrAssign,
     bitor,
@@ -147,11 +161,11 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Or as u8,
     |=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() | rhs.as_biguint()))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() | rhs.as_bigint()))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     Shl,
     ShlAssign,
     shl,
@@ -160,23 +174,23 @@ impl_bin_op!(
     Custom0Funct3::Int256 as u8,
     Int256Funct7::Sll as u8,
     <<=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() << rhs.limbs[0] as usize))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() << rhs.limbs[0] as usize))}
 );
 
 impl_bin_op!(
-    U256,
+    I256,
     Shr,
     ShrAssign,
     shr,
     shr_assign,
     CUSTOM_0,
     Custom0Funct3::Int256 as u8,
-    Int256Funct7::Srl as u8,
+    Int256Funct7::Sra as u8,
     >>=,
-    |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() >> rhs.limbs[0] as usize))}
+    |lhs: &I256, rhs: &I256| -> I256 {I256::from_bigint(&(lhs.as_bigint() >> rhs.limbs[0] as usize))}
 );
 
-impl PartialEq for U256 {
+impl PartialEq for I256 {
     fn eq(&self, other: &Self) -> bool {
         #[cfg(target_os = "zkvm")]
         {
@@ -195,39 +209,40 @@ impl PartialEq for U256 {
             return is_equal == 1;
         }
         #[cfg(not(target_os = "zkvm"))]
-        return self.as_biguint() == other.as_biguint();
+        return self.as_bigint() == other.as_bigint();
     }
 }
 
-impl Eq for U256 {}
+impl Eq for I256 {}
 
-impl PartialOrd for U256 {
+impl PartialOrd for I256 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for U256 {
+impl Ord for I256 {
     fn cmp(&self, other: &Self) -> Ordering {
         #[cfg(target_os = "zkvm")]
         {
-            let mut cmp_result = unsafe { MaybeUninit::<U256>::uninit().assume_init() };
+            let mut cmp_result = MaybeUninit::<I256>::uninit();
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
-                Int256Funct7::Sltu as u8,
-                &mut cmp_result as *mut U256,
+                Int256Funct7::Slt as u8,
+                cmp_result.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
             );
+            let mut cmp_result = unsafe { cmp_result.assume_init() };
             if cmp_result.limbs[0] != 0 {
                 return Ordering::Less;
             }
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
-                Int256Funct7::Sltu as u8,
-                &mut cmp_result as *mut U256,
+                Int256Funct7::Slt as u8,
+                &mut cmp_result as *mut I256,
                 other as *const Self,
                 self as *const Self
             );
@@ -237,11 +252,11 @@ impl Ord for U256 {
             return Ordering::Equal;
         }
         #[cfg(not(target_os = "zkvm"))]
-        return self.as_biguint().cmp(&other.as_biguint());
+        return self.as_bigint().cmp(&other.as_bigint());
     }
 }
 
-impl Clone for U256 {
+impl Clone for I256 {
     fn clone(&self) -> Self {
         #[cfg(target_os = "zkvm")]
         {

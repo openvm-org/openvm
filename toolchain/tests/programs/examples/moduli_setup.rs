@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use axvm::intrinsics::IntMod;
+
 axvm::entry!(main);
 axvm::moduli_setup! {
     bls12381 = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787";

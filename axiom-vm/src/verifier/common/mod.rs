@@ -8,7 +8,40 @@ use axvm_circuit::{
 use axvm_native_compiler::{ir::Config, prelude::*};
 use axvm_recursion::{digest::DigestVariable, vars::StarkProofVariable};
 
+use crate::verifier::internal::types::InternalVmVerifierPvs;
+
+pub mod non_leaf;
 pub mod types;
+
+pub fn assert_or_assign_app_and_leaf_commit_pvs<C: Config>(
+    builder: &mut Builder<C>,
+    dst: &InternalVmVerifierPvs<Felt<C::F>>,
+    proof_idx: RVar<C::N>,
+    proof_pvs: &InternalVmVerifierPvs<Felt<C::F>>,
+) {
+    builder.if_eq(proof_idx, RVar::zero()).then_or_else(
+        |builder| {
+            builder.assign(
+                &dst.vm_verifier_pvs.app_commit,
+                proof_pvs.vm_verifier_pvs.app_commit,
+            );
+            builder.assign(
+                &dst.extra_pvs.leaf_verifier_commit,
+                proof_pvs.extra_pvs.leaf_verifier_commit,
+            );
+        },
+        |builder| {
+            builder.assert_eq::<[_; DIGEST_SIZE]>(
+                dst.vm_verifier_pvs.app_commit,
+                proof_pvs.vm_verifier_pvs.app_commit,
+            );
+            builder.assert_eq::<[_; DIGEST_SIZE]>(
+                dst.extra_pvs.leaf_verifier_commit,
+                proof_pvs.extra_pvs.leaf_verifier_commit,
+            );
+        },
+    );
+}
 
 pub fn assert_or_assign_connector_pvs<C: Config>(
     builder: &mut Builder<C>,

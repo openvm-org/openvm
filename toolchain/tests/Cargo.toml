@@ -11,6 +11,7 @@ description = "Tests for the axVM toolchain starting from Rust"
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
+ax-ecc-execution.workspace = true
 ax-stark-sdk.workspace = true
 p3-baby-bear.workspace = true
 eyre.workspace = true
