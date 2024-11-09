@@ -10,8 +10,9 @@ on:
         options:
           - verify_fibair
           - fibonacci
-          - small_e2e
           - revm_contract_deployment
+          - regex
+          - base64_json
       instance_type:
         type: string
         required: false

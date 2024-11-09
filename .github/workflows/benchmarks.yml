@@ -53,5 +53,5 @@ jobs:
   benchmark-base64-json:
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: base64-json
+      benchmark_name: base64_json
     secrets: inherit
