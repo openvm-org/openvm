@@ -6,3 +6,5 @@ pub mod utils;
 pub mod basic_tests;
 #[cfg(test)]
 pub mod ecc_tests;
+#[cfg(test)]
+pub mod pairing_tests;

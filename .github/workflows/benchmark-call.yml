@@ -10,8 +10,9 @@ on:
         options:
           - verify_fibair
           - fibonacci
-          - small_e2e
           - revm_contract_deployment
+          - regex
+          - base64_json
       instance_type:
         type: string
         required: false
@@ -101,6 +102,12 @@ jobs:
 
       - name: Run benchmark
         if: inputs.benchmark_name == 'regex'
+        working-directory: benchmarks
+        run: |
+          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+
+      - name: Run benchmark
+        if: inputs.benchmark_name == 'base64_json'
         working-directory: benchmarks
         run: |
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS

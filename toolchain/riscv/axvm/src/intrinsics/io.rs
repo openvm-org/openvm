@@ -3,7 +3,7 @@ use axvm_platform::constants::{Custom0Funct3, PhantomImm, CUSTOM_0};
 /// Store the next 4 bytes from the hint stream to [[rd] + imm]_2.
 #[macro_export]
 macro_rules! hint_store_u32 {
-    ($x:ident, $imm:expr) => {
+    ($x:expr, $imm:expr) => {
         axvm_platform::custom_insn_i!(
             axvm_platform::constants::CUSTOM_0,
             axvm_platform::constants::Custom0Funct3::HintStoreW as u8,
