@@ -69,3 +69,67 @@ jobs:
       app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
       agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
     secrets: inherit
+
+  summarize:
+    needs: [create-matrix, benchmark]
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    steps:
+      - name: Debug print each benchmark
+        run: |
+          names=$(echo "${{ needs.create-matrix.outputs.matrix }}" | jq -r '.[].name' | sort -u)
+          while read name; do
+            echo "Processing results for benchmark: $name"
+          done <<< "$names"
+
+      - name: Collapse previous comment (if exists)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            for (const comment of comments.data) {
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--Benchmark Results-->")) {
+                console.log("collapse comment ", comment.id);
+                const resp = await github.graphql(`
+                  mutation {
+                    minimizeComment(input: {classifier: OUTDATED, subjectId: "${comment.node_id}"}) {
+                      minimizedComment {
+                        isMinimized
+                      }
+                    }
+                  }
+                `);
+              }
+            }
+
+      - name: Load all metadata files from S3
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          mkdir results
+          names=$(echo "${{ needs.create-matrix.outputs.matrix }}" | jq -r '.[].name' | sort -u)
+          while read name; do
+            echo "Downloading results for benchmark: $name"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
+          done <<< "$names"
+          cat results/*.md > results.md
+      
+      - name: Add comment to pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `<!--Benchmark Results-->\n${newBenchmark}`
+            });
