@@ -106,38 +106,22 @@ jobs:
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
           echo "LOG_BLOWUP_ARGS=${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
+      - name: Set working directory
+        id: set-working-dir
+        run: |
+          WORKSPACE_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+            .benchmarks[] |
+            select(.name == $name) |
+            .working_directory
+          ' ./.github/workflows/benchmark-config.json)
+          echo "workspace_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
 
       ######################################################
-      # Run a different benchmark based on benchmark_name:
+      # Find working directory based on benchmark_name and run the benchmark
       - name: Run benchmark
-        if: inputs.benchmark_name == 'verify_fibair'
-        working-directory: lib/recursion
+        working-directory: ${{ steps.set-working-dir.outputs.workspace_dir }}
         run: |
           python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'fibonacci'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'revm_transfer'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'regex'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'base64_json'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
 
       ######################################################
       - name: Store metric json and compute diff with previous
