@@ -68,10 +68,11 @@ jobs:
   benchmark:
     needs: create-matrix
     strategy:
-      matrix: ${{fromJson(needs.create-matrix.outputs.matrix)}}
+      matrix:
+        benchmark_run: ${{fromJson(needs.create-matrix.outputs.matrix)}}
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: ${{ matrix.name }}
-      app_log_blowup: ${{ matrix.app_log_blowup }}
-      agg_log_blowup: ${{ matrix.agg_log_blowup }}
+      benchmark_name: ${{ matrix.benchmark_run.name }}
+      app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
+      agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
     secrets: inherit
