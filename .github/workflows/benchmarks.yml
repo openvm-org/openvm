@@ -26,32 +26,45 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  benchmark-verify-fibair:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: verify_fibair
-    secrets: inherit
+  create-matrix:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    outputs:
+      matrix: ${{ steps.create-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
 
-  benchmark-fibonacci:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: fibonacci
-    secrets: inherit
+      - name: Create benchmark matrix from JSON
+        id: create-matrix
+        run: |
+          if [ ! -f benchmark-config.json ]; then
+            echo "Error: benchmark-config.json not found"
+            exit 1
+          fi
+          matrix=$(jq -c '
+            [
+              .benchmarks[] | 
+              .name as $name |
+              .run_params[] | 
+              {name: $name, app_log_blowup, agg_log_blowup}
+            ]
+          ' benchmark-config.json)
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to parse benchmark-config.json"
+            exit 1
+          fi
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
-  benchmark-revm:
+  benchmark:
+    needs: create-matrix
+    strategy:
+      matrix: ${{fromJson(needs.create-matrix.outputs.matrix)}}
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: revm_transfer
-    secrets: inherit
-
-  benchmark-regex:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: regex
-    secrets: inherit
-
-  benchmark-base64-json:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: base64_json
+      benchmark_name: ${{ matrix.name }}
+      app_log_blowup: ${{ matrix.app_log_blowup }}
+      agg_log_blowup: ${{ matrix.agg_log_blowup }}
     secrets: inherit
