@@ -1,10 +1,16 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::hint::black_box;
+use core::{
+    hint::black_box,
+    ops::{Add, AddAssign, Sub},
+};
 
 use axvm::intrinsics::IntMod;
-use axvm_ecc::sw::{EcPointN, IntModN};
+use axvm_ecc::{
+    group::{msm, Group},
+    sw::{EcPointN, IntModN},
+};
 use hex_literal::hex;
 
 axvm::entry!(main);
@@ -42,17 +48,17 @@ pub fn main() {
     let mut p2 = black_box(EcPointN { x: x2, y: y2 });
 
     // Generic add can handle equal or unequal points.
-    let p3 = p1.add(&p2);
+    let p3 = &p1 + &p2;
     if p3.x != x3 || p3.y != y3 {
         panic!();
     }
-    let p4 = p2.add(&p2);
+    let p4 = &p2 + &p2;
     if p4.x != x4 || p4.y != y4 {
         panic!();
     }
 
     // Add assign and double assign
-    p1.add_assign(&p2);
+    p1 += &p2;
     if p1.x != x3 || p1.y != y3 {
         panic!();
     }
@@ -71,7 +77,7 @@ pub fn main() {
     let y5 = IntModN::from_le_bytes(&hex!(
         "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
     ));
-    let result = EcPointN::msm(&[scalar], &[p1]);
+    let result = msm(&[scalar], &[p1]);
     if result.x != x5 || result.y != y5 {
         panic!();
     }
