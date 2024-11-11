@@ -1200,7 +1200,7 @@ impl VmConfig {
         }
 
         for (local_opcode_idx, class_offset, executor, modulus) in
-            gen_fp2_modular_executor_tuple(&self.supported_fp2_modulus, &self.supported_modulus)
+            gen_fp2_modular_executor_tuple(&self.supported_complex_ext, &self.supported_modulus)
         {
             let global_opcode_idx = local_opcode_idx + class_offset;
             if executors.contains_key(&global_opcode_idx) {
@@ -1480,10 +1480,10 @@ fn gen_modular_executor_tuple(
 }
 
 fn gen_fp2_modular_executor_tuple(
-    supported_fp2_modulus: &[usize],
+    supported_complex_ext: &[usize],
     supported_modulus: &[BigUint],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
-    supported_fp2_modulus
+    supported_complex_ext
         .iter()
         .flat_map(|&modulus_idx| {
             let modulus = &supported_modulus[modulus_idx];

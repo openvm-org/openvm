@@ -5,6 +5,7 @@ use ax_stark_backend::{
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
+use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -47,8 +48,9 @@ pub struct VmConfig {
     pub executors: Vec<ExecutorName>,
     /// List of all supported modulus
     pub supported_modulus: Vec<BigUint>,
-    /// List of all supported Fp2 modulus (stored as indices of supported_modulus)
-    pub supported_fp2_modulus: Vec<usize>,
+    /// List of all supported Complex extensions, stored as indices of supported_modulus.
+    /// The supported modulus must exist in order for the complex extension to be supported.
+    pub supported_complex_ext: Vec<usize>,
     /// List of all supported EC curves
     pub supported_ec_curves: Vec<EcCurve>,
     /// List of all supported pairing curves
@@ -87,7 +89,7 @@ impl VmConfig {
         collect_metrics: bool,
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
-        supported_fp2_modulus: Vec<usize>,
+        supported_complex_ext: Vec<usize>,
         supported_ec_curves: Vec<EcCurve>,
         supported_pairing_curves: Vec<PairingCurve>,
     ) -> Self {
@@ -100,7 +102,7 @@ impl VmConfig {
             max_segment_len,
             collect_metrics,
             supported_modulus,
-            supported_fp2_modulus,
+            supported_complex_ext,
             supported_ec_curves,
             supported_pairing_curves,
         }
@@ -139,19 +141,16 @@ impl VmConfig {
         self.add_modular_support(primes)
     }
 
-    pub fn add_fp2_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
-        let mut res = self;
-        res.supported_modulus.reserve(enabled_modulus.len());
-        for modulus in enabled_modulus {
-            res.supported_fp2_modulus.push(res.supported_modulus.len());
-            res.supported_modulus.push(modulus);
+    pub fn add_complex_ext_support(mut self, enabled_moduli: Vec<BigUint>) -> Self {
+        for modulus in enabled_moduli {
+            let (mod_idx, _) = self
+                .supported_modulus
+                .iter()
+                .find_position(|&m| m == &modulus)
+                .expect("Modulus must be supported to enable complex extension");
+            self.supported_complex_ext.push(mod_idx);
         }
-        res
-    }
-
-    pub fn add_canonical_fp2_modulus(self) -> Self {
-        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
-        self.add_fp2_modular_support(primes)
+        self
     }
 
     pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
@@ -160,6 +159,7 @@ impl VmConfig {
         res
     }
 
+    // TODO: remove canonical ec curves altogether
     pub fn add_canonical_ec_curves(self) -> Self {
         self.add_ecc_support(vec![EcCurve::Secp256k1])
     }
