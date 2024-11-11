@@ -114,6 +114,7 @@ jobs:
             select(.name == $name) |
             .working_directory
           ' ./.github/workflows/benchmark-config.json)
+          echo "workspace_dir=$WORKSPACE_DIR"
           echo "workspace_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
 
       ######################################################
