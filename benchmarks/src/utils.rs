@@ -20,11 +20,11 @@ use tempfile::tempdir;
 #[command(allow_external_subcommands = true)]
 pub struct BenchmarkCli {
     /// Application level log blowup, default set by the benchmark
-    #[arg(short, long)]
+    #[arg(short, long, alias = "app_log_blowup")]
     pub app_log_blowup: Option<usize>,
 
     /// Aggregation level log blowup, default set by the benchmark
-    #[arg(short, long)]
+    #[arg(short, long, alias = "agg_log_blowup")]
     pub agg_log_blowup: Option<usize>,
 }
 

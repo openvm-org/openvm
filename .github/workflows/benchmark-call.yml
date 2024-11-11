@@ -104,7 +104,7 @@ jobs:
         run: |
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          echo "LOG_BLOWUP_ARGS=${CMD_ARGS} ${AGG_ARG}" >> $GITHUB_ENV
+          echo "LOG_BLOWUP_ARGS=${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
 
       ######################################################
