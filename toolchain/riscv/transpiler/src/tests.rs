@@ -5,6 +5,7 @@ use std::{
 
 use axvm_circuit::{
     arch::{VmConfig, VmExecutor},
+    intrinsics::modular::SECP256K1_COORD_PRIME,
     utils::air_test,
 };
 use axvm_platform::memory::MEM_SIZE;
@@ -66,6 +67,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = VmConfig::rv32im()
         .add_canonical_modulus()
+        .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()])
         .add_int256_alu()
         .add_int256_m();
     let (executor, exe) = setup_executor_from_elf(elf_path, config)?;

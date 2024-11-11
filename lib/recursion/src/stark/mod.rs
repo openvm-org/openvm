@@ -550,7 +550,6 @@ where
         pcs.verify(builder, rounds, opening.proof.clone(), challenger);
         builder.cycle_tracker_end("stage-d-verify-pcs");
 
-        // TODO[sp1] CONSTRAIN: that the preprocessed chips get called with verify_constraints.
         builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK

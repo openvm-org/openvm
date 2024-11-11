@@ -33,6 +33,8 @@ use crate::{
     },
 };
 
+/// Final exponent hint instructions
+mod pairing;
 #[cfg(test)]
 mod tests;
 
@@ -205,6 +207,20 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                     Err(err) => {
                         println!("Error peeking string: {err}");
                     }
+                }
+            }
+            PhantomInstruction::HintFinalExp => {
+                let memory = RefCell::borrow(&self.memory);
+                let mut streams = self.streams.get().unwrap().lock();
+                let rs = unsafe_read_rv32_register(&memory, a);
+                let b = b.as_canonical_u32();
+                if let Err(err) = pairing::hint_final_exp(&memory, &mut streams.hint_stream, rs, b)
+                {
+                    println!("Error hint_final_exp: {err}");
+                    return Err(ExecutionError::InvalidPhantomInstruction(
+                        from_state.pc,
+                        discriminant,
+                    ));
                 }
             }
             _ => {}

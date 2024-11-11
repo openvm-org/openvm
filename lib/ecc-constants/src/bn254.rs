@@ -17,5 +17,8 @@ lazy_static! {
         )
         .unwrap(),
         XI: [9, 1],
+        NUM_LIMBS: 32,
+        LIMB_BITS: 8,
+        BLOCK_SIZE: 32,
     };
 }

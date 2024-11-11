@@ -5,6 +5,16 @@ use core::{
 };
 
 use axvm::intrinsics::IntMod;
+#[cfg(target_os = "zkvm")]
+use {
+    axvm_platform::{
+        constants::{
+            ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1,
+        },
+        custom_insn_r,
+    },
+    core::mem::MaybeUninit,
+};
 
 /// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
 /// Elements are represented as `c0 + c1 * u` where `u^2 = -1`.
@@ -21,15 +31,29 @@ pub struct Complex<F> {
 }
 
 impl<F> Complex<F> {
-    const fn new(c0: F, c1: F) -> Self {
+    pub const fn new(c0: F, c1: F) -> Self {
         Self { c0, c1 }
     }
 }
 
 impl<F: IntMod> Complex<F> {
-    const ZERO: Self = Self::new(F::ZERO, F::ZERO);
-    const ONE: Self = Self::new(F::ONE, F::ZERO);
+    // Zero element (i.e. additive identity)
+    pub const ZERO: Self = Self::new(F::ZERO, F::ZERO);
 
+    // One element (i.e. multiplicative identity)
+    pub const ONE: Self = Self::new(F::ONE, F::ZERO);
+
+    /// Set this complex number to be its conjugate
+    pub fn conjugate_assign(&mut self) {
+        self.c1 *= -F::ONE
+    }
+
+    /// Conjugate of this complex number
+    pub fn conjugate(&self) -> Self {
+        Self::new(self.c0.clone(), -self.c1.clone())
+    }
+
+    /// Implementation of AddAssign.
     #[inline(always)]
     fn add_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
@@ -39,11 +63,19 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Add as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
-    /// /// Implementation of SubAssign.
+    /// Implementation of SubAssign.
     #[inline(always)]
     fn sub_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
@@ -53,7 +85,15 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Sub as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
@@ -71,12 +111,19 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Mul as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
-    // TODO[jpw]: add where clause when Self: Field
-    /// Implementation of DivAssign.
+    /// Implementation of DivAssign. Behaviour may be undefined if `other` is not invertible.
     #[inline(always)]
     fn div_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
@@ -91,7 +138,15 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Div as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                self as *mut Self,
+                self as *const Self,
+                other as *const Self
+            )
         }
     }
 
@@ -106,7 +161,17 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Add as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                other as *const Self
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 
@@ -121,7 +186,17 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Sub as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                other as *const Self
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 
@@ -136,7 +211,17 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Mul as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                other as *const Self
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 
@@ -151,7 +236,17 @@ impl<F: IntMod> Complex<F> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            todo!()
+            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
+            custom_insn_r!(
+                CUSTOM_1,
+                Custom1Funct3::ComplexExtField as usize,
+                ComplexExtFieldBaseFunct7::Div as usize
+                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                uninit.as_mut_ptr(),
+                self as *const Self,
+                other as *const Self
+            );
+            unsafe { uninit.assume_init() }
         }
     }
 }
