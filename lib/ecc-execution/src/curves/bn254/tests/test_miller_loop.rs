@@ -7,7 +7,10 @@ use halo2curves_axiom::{
     pairing::MillerLoopResult,
 };
 
-use crate::{curves::bn254::Bn254, tests::utils::generate_test_points};
+use crate::{
+    curves::bn254::{Bn254, BN254_PBE_NAF_LEN},
+    tests::utils::generate_test_points,
+};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {
@@ -29,7 +32,8 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
 
     // Run the multi-miller loop
     let bn254 = Bn254;
-    let f = bn254.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
+    let f =
+        bn254.multi_miller_loop::<BN254_PBE_NAF_LEN>(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = Gt(f);
     let final_f = wrapped_f.final_exponentiation();

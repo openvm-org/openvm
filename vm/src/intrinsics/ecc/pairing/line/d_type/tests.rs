@@ -9,7 +9,6 @@ use ax_ecc_primitives::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc::{
-    field::SexticExtField,
     pairing::{LineMulDType, UnevaluatedLine},
     point::AffinePoint,
 };
@@ -99,7 +98,6 @@ fn test_mul_013_by_013() {
 
     let r_cmp = Bn254::mul_013_by_013(line0, line1);
     let r_cmp_bigint = r_cmp
-        .c
         .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
 
@@ -193,7 +191,7 @@ fn test_mul_by_01234() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp = Bn254::mul_by_01234(f, SexticExtField::new([x0, x1, x2, x3, x4, Fq2::ZERO]));
+    let r_cmp = Bn254::mul_by_01234(f, [x0, x1, x2, x3, x4]);
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {

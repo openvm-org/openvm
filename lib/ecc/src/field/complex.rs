@@ -1,10 +1,10 @@
 use core::{
     fmt::{Debug, Formatter, Result},
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use super::Field;
+use super::{DivUnsafe, DivUnsafeAssign, Field};
 
 /// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
 /// Elements are represented as `c0 + c1 * u` where `u^2 = -1`.
@@ -120,6 +120,45 @@ impl<F: Field> Complex<F> {
         }
     }
 }
+
+// impl<F: Field> DivUnsafe for Complex<F> {
+//     /// Implementation of Div that doesn't cause zkvm to use an additional store.
+//     #[inline(always)]
+//     fn div_refs_impl(&self, other: &Self) -> Self {
+//         #[cfg(not(target_os = "zkvm"))]
+//         {
+//             let mut res = self.clone();
+//             res.div_assign_impl(other);
+//             res
+//         }
+//         #[cfg(target_os = "zkvm")]
+//         {
+//             todo!()
+//         }
+//     }
+// }
+
+// impl<F: Field> DivUnsafeAssign for Complex<F> {
+//     // TODO[jpw]: add where clause when Self: Field
+//     /// Implementation of DivAssign.
+//     #[inline(always)]
+//     fn div_assign_impl(&mut self, other: &Self) {
+//         #[cfg(not(target_os = "zkvm"))]
+//         {
+//             let (c0, c1) = (&self.c0, &self.c1);
+//             let (d0, d1) = (&other.c0, &other.c1);
+//             let denom = F::ONE / (d0.square() + d1.square());
+//             *self = Self::new(
+//                 denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
+//                 denom * &(c1.clone() * d0 - c0.clone() * d1),
+//             );
+//         }
+//         #[cfg(target_os = "zkvm")]
+//         {
+//             todo!()
+//         }
+//     }
+// }
 
 impl<'a, F: Field> AddAssign<&'a Complex<F>> for Complex<F> {
     #[inline(always)]
@@ -277,3 +316,50 @@ impl<F: Field> Debug for Complex<F> {
         write!(f, "{:?} + {:?} * u", self.c0, self.c1)
     }
 }
+
+// // impl<F: Field> DivUnsafe for Complex<F> {}
+
+// impl<'a, F: Field> DivAssign<&'a Complex<F>> for Complex<F> {
+//     /// Undefined behaviour when denominator is not coprime to N
+//     #[inline(always)]
+//     fn div_assign(&mut self, other: &'a Complex<F>) {
+//         self.div_assign_impl(other);
+//     }
+// }
+
+// impl<F: Field> DivAssign for Complex<F> {
+//     /// Undefined behaviour when denominator is not coprime to N
+//     #[inline(always)]
+//     fn div_assign(&mut self, other: Self) {
+//         self.div_assign_impl(&other);
+//     }
+// }
+
+// impl<F: Field> Div for Complex<F> {
+//     type Output = Self;
+//     /// Undefined behaviour when denominator is not coprime to N
+//     #[inline(always)]
+//     fn div(mut self, other: Self) -> Self::Output {
+//         self /= other;
+//         self
+//     }
+// }
+
+// impl<'a, F: Field> Div<&'a Complex<F>> for Complex<F> {
+//     type Output = Self;
+//     /// Undefined behaviour when denominator is not coprime to N
+//     #[inline(always)]
+//     fn div(mut self, other: &'a Complex<F>) -> Self::Output {
+//         self /= other;
+//         self
+//     }
+// }
+
+// impl<'a, F: Field> Div<&'a Complex<F>> for &Complex<F> {
+//     type Output = Complex<F>;
+//     /// Undefined behaviour when denominator is not coprime to N
+//     #[inline(always)]
+//     fn div(self, other: &'a Complex<F>) -> Self::Output {
+//         self.div_refs_impl(other)
+//     }
+// }

@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[allow(non_snake_case)]
-pub trait MultiMillerLoop<const PBE_LEN: usize>: MillerStep
+pub trait MultiMillerLoop: MillerStep
 where
     for<'a> &'a Self::Fp: Add<&'a Self::Fp, Output = Self::Fp>,
     for<'a> &'a Self::Fp: Sub<&'a Self::Fp, Output = Self::Fp>,
@@ -24,7 +24,7 @@ where
     type Fp12: FieldExtension<BaseField = Self::Fp2>;
 
     const SEED_ABS: u64;
-    const PSEUDO_BINARY_ENCODING: [i8; PBE_LEN];
+    const PSEUDO_BINARY_ENCODING: &[i8];
 
     /// Function to evaluate the line functions of the Miller loop
     fn evaluate_lines_vec(
@@ -57,18 +57,18 @@ where
 
     /// Runs the multi-Miller loop with no embedded exponent
     #[allow(non_snake_case)]
-    fn multi_miller_loop(
+    fn multi_miller_loop<const PBE_LEN: usize>(
         &self,
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Self::Fp12 {
-        self.multi_miller_loop_embedded_exp(P, Q, None)
+        self.multi_miller_loop_embedded_exp::<PBE_LEN>(P, Q, None)
     }
 
     /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the residue witness
     /// in the final exponentiation step
     #[allow(non_snake_case)]
-    fn multi_miller_loop_embedded_exp(
+    fn multi_miller_loop_embedded_exp<const PBE_LEN: usize>(
         &self,
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
@@ -112,7 +112,7 @@ where
             Q.iter()
                 .map(|q| match sigma_i {
                     1 => q.clone(),
-                    -1 => q.neg(),
+                    -1 => q.clone().neg(),
                     _ => panic!("Invalid sigma_i"),
                 })
                 .collect()
@@ -133,7 +133,7 @@ where
 
                 let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
                 for (line_2S, x_over_y, y_inv) in lines_iter {
-                    let line = line_2S.evaluate(x_over_y, y_inv);
+                    let line = line_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
                     lines.push(line);
                 }
             } else {
@@ -167,8 +167,9 @@ where
                     y_invs.iter()
                 );
                 for (line_S_plus_Q, line_S_plus_Q_plus_S, x_over_y, y_inv) in lines_iter {
-                    let line0 = line_S_plus_Q.evaluate(x_over_y, y_inv);
-                    let line1 = line_S_plus_Q_plus_S.evaluate(x_over_y, y_inv);
+                    let bc_vals = (x_over_y.clone(), y_inv.clone());
+                    let line0 = line_S_plus_Q.evaluate(&bc_vals);
+                    let line1 = line_S_plus_Q_plus_S.evaluate(&bc_vals);
                     lines.push(line0);
                     lines.push(line1);
                 }

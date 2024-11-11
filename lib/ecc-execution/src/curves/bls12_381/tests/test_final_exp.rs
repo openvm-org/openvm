@@ -8,7 +8,7 @@ use halo2curves_axiom::bls12_381::Fr;
 use itertools::izip;
 use num::{BigInt, Num};
 
-use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
+use crate::curves::bls12_381::{Bls12_381, BLS12_381_PBE_LEN, SEED_NEG};
 
 #[test]
 #[allow(non_snake_case)]
@@ -18,7 +18,7 @@ fn test_bls12_381_final_exp_hint() {
         generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
 
     let bls12_381 = Bls12_381;
-    let f = bls12_381.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+    let f = bls12_381.multi_miller_loop::<BLS12_381_PBE_LEN>(&P_ecpoints, &Q_ecpoints);
     let (c, s) = bls12_381.final_exp_hint(f);
 
     let q = BigInt::from_str_radix(
@@ -46,7 +46,7 @@ fn test_bls12_381_assert_final_exp_is_one_scalar_other() {
 fn assert_final_exp_one(a: &[Fr; 2], b: &[Fr; 2]) {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) = generate_test_points_bls12_381(a, b);
     let bls12_381 = Bls12_381;
-    let f = bls12_381.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+    let f = bls12_381.multi_miller_loop::<BLS12_381_PBE_LEN>(&P_ecpoints, &Q_ecpoints);
     bls12_381.assert_final_exp_is_one(f, &P_ecpoints, &Q_ecpoints);
 }
 

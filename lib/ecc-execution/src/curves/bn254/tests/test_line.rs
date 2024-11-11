@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    field::{FieldExtension, SexticExtField},
+    field::FieldExtension,
     pairing::{LineDType, LineMulDType},
     point::AffinePoint,
 };
@@ -33,11 +33,11 @@ fn test_mul_013_by_013() {
     // Multiply the two line functions & convert to Fq12 to compare
     let mul_013_by_013 = Bn254::mul_013_by_013(line_0, line_1);
     let mul_013_by_013 = Fq12::from_coeffs([
-        mul_013_by_013.c[0],
-        mul_013_by_013.c[1],
-        mul_013_by_013.c[2],
-        mul_013_by_013.c[3],
-        mul_013_by_013.c[4],
+        mul_013_by_013[0],
+        mul_013_by_013[1],
+        mul_013_by_013[2],
+        mul_013_by_013[3],
+        mul_013_by_013[4],
         Fq2::ZERO,
     ]);
 
@@ -68,16 +68,15 @@ fn test_mul_by_013() {
 fn test_mul_by_01234() {
     let mut rng = StdRng::seed_from_u64(8);
     let f = Fq12::random(&mut rng);
-    let x = SexticExtField::new([
+    let x = [
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
-        Fq2::ZERO,
-    ]);
+    ];
     let mul_by_01234 = Bn254::mul_by_01234(f, x.clone());
 
-    let x_f12 = Fq12::from_coeffs([x.c[0], x.c[1], x.c[2], x.c[3], x.c[4], Fq2::ZERO]);
+    let x_f12 = Fq12::from_coeffs([x[0], x[1], x[2], x[3], x[4], Fq2::ZERO]);
     assert_eq!(mul_by_01234, f * x_f12);
 }

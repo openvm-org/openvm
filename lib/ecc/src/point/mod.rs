@@ -3,6 +3,7 @@ use rand::Rng;
 use crate::field::Field;
 
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct AffinePoint<F> {
     pub x: F,
     pub y: F,
@@ -13,10 +14,10 @@ impl<F: Field> AffinePoint<F> {
         Self { x, y }
     }
 
-    pub fn neg(&self) -> Self {
+    pub fn neg(self) -> Self {
         Self {
-            x: self.x.clone(),
-            y: self.y.clone().neg(),
+            x: self.x,
+            y: self.y.neg(),
         }
     }
 }

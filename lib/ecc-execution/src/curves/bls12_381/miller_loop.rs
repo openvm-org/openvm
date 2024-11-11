@@ -5,7 +5,7 @@ use axvm_ecc::{
 };
 use itertools::izip;
 
-use super::{Bls12_381, BLS12_381_PBE, BLS12_381_PBE_LEN, BLS12_381_SEED_ABS};
+use super::{Bls12_381, BLS12_381_PBE, BLS12_381_SEED_ABS};
 
 impl MillerStep for Bls12_381 {
     type Fp = Fq;
@@ -13,11 +13,11 @@ impl MillerStep for Bls12_381 {
 }
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
+impl MultiMillerLoop for Bls12_381 {
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BLS12_381_SEED_ABS;
-    const PSEUDO_BINARY_ENCODING: [i8; BLS12_381_PBE_LEN] = BLS12_381_PBE;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PBE;
 
     fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
         let mut f = f;
@@ -70,7 +70,7 @@ impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
 
         let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
         for (line_2S, x_over_y, y_inv) in lines_iter {
-            let line = line_2S.evaluate(x_over_y, y_inv);
+            let line = line_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
             initial_lines.push(line);
         }
 
@@ -83,7 +83,7 @@ impl MultiMillerLoop<BLS12_381_PBE_LEN> for Bls12_381 {
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
         for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(x_over_y, y_inv);
+            let line = lines_S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
             initial_lines.push(line);
         }
 

@@ -6,7 +6,7 @@ use axvm_ecc::{
 };
 use num::BigInt;
 
-use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
+use super::{Bls12_381, BLS12_381_PBE_LEN, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
@@ -29,7 +29,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // fc = f_{Miller,x,Q}(P) * c^{x}
         // where
         //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
-        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
+        let fc = self.multi_miller_loop_embedded_exp::<BLS12_381_PBE_LEN>(P, Q, Some(c_conj_inv));
 
         assert_eq!(fc * c_q_inv * s, Fq12::one());
     }

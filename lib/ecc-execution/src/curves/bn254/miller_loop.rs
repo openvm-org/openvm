@@ -7,7 +7,7 @@ use axvm_ecc::{
 use halo2curves_axiom::bn256::{FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
-use super::{Bn254, BN254_PBE_NAF, BN254_PBE_NAF_LEN, BN254_SEED};
+use super::{Bn254, BN254_PBE_NAF, BN254_SEED};
 
 impl MillerStep for Bn254 {
     type Fp = Fq;
@@ -15,11 +15,11 @@ impl MillerStep for Bn254 {
 }
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop<BN254_PBE_NAF_LEN> for Bn254 {
+impl MultiMillerLoop for Bn254 {
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BN254_SEED;
-    const PSEUDO_BINARY_ENCODING: [i8; BN254_PBE_NAF_LEN] = BN254_PBE_NAF;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PBE_NAF;
 
     fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
         let mut f = f;
@@ -64,7 +64,7 @@ impl MultiMillerLoop<BN254_PBE_NAF_LEN> for Bn254 {
 
         let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
         for (line_2S, x_over_y, y_inv) in lines_iter {
-            let line = line_2S.evaluate(x_over_y, y_inv);
+            let line = line_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
             initial_lines.push(line);
         }
 
@@ -107,7 +107,7 @@ impl MultiMillerLoop<BN254_PBE_NAF_LEN> for Bn254 {
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
         for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(x_over_y, y_inv);
+            let line = lines_S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
             lines.push(line);
         }
 
@@ -129,7 +129,7 @@ impl MultiMillerLoop<BN254_PBE_NAF_LEN> for Bn254 {
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
         for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(x_over_y, y_inv);
+            let line = lines_S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
             lines.push(line);
         }
 

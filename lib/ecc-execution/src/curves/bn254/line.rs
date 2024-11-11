@@ -2,18 +2,15 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc::{
     curve::bn254::{Fq, Fq12, Fq2},
-    field::{Field, FieldExtension, SexticExtField},
-    pairing::{EvaluatedLine, LineMulDType, UnevaluatedLine},
+    field::{Field, FieldExtension},
+    pairing::{EvaluatedLine, LineMulDType},
     point::AffinePoint,
 };
 
 use super::{Bn254, BN254_XI};
 
 impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {
-    fn mul_013_by_013(
-        line_0: EvaluatedLine<Fq, Fq2>,
-        line_1: EvaluatedLine<Fq, Fq2>,
-    ) -> SexticExtField<Fq2> {
+    fn mul_013_by_013(line_0: EvaluatedLine<Fq, Fq2>, line_1: EvaluatedLine<Fq, Fq2>) -> [Fq2; 5] {
         let b0 = line_0.b;
         let c0 = line_0.c;
         let b1 = line_1.b;
@@ -28,30 +25,16 @@ impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {
         let l3 = c0 + c1;
         let l4 = b0 * c1 + b1 * c0;
 
-        SexticExtField::new([l0, l1, l2, l3, l4, Fq2::ZERO])
+        [l0, l1, l2, l3, l4]
     }
 
     fn mul_by_013(f: Fq12, l: EvaluatedLine<Fq, Fq2>) -> Fq12 {
-        Self::mul_by_01234(
-            f,
-            SexticExtField::new([Fq2::ONE, l.b, Fq2::ZERO, l.c, Fq2::ZERO, Fq2::ZERO]),
-        )
+        Self::mul_by_01234(f, [Fq2::ONE, l.b, Fq2::ZERO, l.c, Fq2::ZERO])
     }
 
-    fn mul_by_01234(f: Fq12, x: SexticExtField<Fq2>) -> Fq12 {
-        let x_fp12 = Fq12::from_coeffs([x.c[0], x.c[1], x.c[2], x.c[3], x.c[4], Fq2::ZERO]);
+    fn mul_by_01234(f: Fq12, x: [Fq2; 5]) -> Fq12 {
+        let x_fp12 = Fq12::from_coeffs([x[0], x[1], x[2], x[3], x[4], Fq2::ZERO]);
         f * x_fp12
-    }
-
-    fn evaluate_line(
-        l: UnevaluatedLine<Fq, Fq2>,
-        x_over_y: Fq,
-        y_inv: Fq,
-    ) -> EvaluatedLine<Fq, Fq2> {
-        EvaluatedLine {
-            b: l.b.mul_base(x_over_y),
-            c: l.c.mul_base(y_inv),
-        }
     }
 }
 

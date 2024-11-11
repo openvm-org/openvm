@@ -10,7 +10,7 @@ use ax_ecc_primitives::{
         bls12381_fq12_to_biguint_vec, bls12381_fq2_to_biguint_vec, bls12381_fq_to_biguint,
     },
 };
-use axvm_ecc::{field::SexticExtField, pairing::LineMulMType, point::AffinePoint};
+use axvm_ecc::{pairing::LineMulMType, point::AffinePoint};
 use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
 use halo2curves_axiom::{
@@ -97,7 +97,6 @@ fn test_mul_023_by_023() {
 
     let r_cmp = Bls12_381::mul_023_by_023(line0, line1);
     let r_cmp_bigint = r_cmp
-        .c
         .map(|x| [bls12381_fq_to_biguint(x.c0), bls12381_fq_to_biguint(x.c1)])
         .concat();
 
@@ -199,7 +198,7 @@ fn test_mul_by_02345() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp = Bls12_381::mul_by_02345(f, SexticExtField::new([x0, Fq2::ZERO, x2, x3, x4, x5]));
+    let r_cmp = Bls12_381::mul_by_02345(f, [x0, x2, x3, x4, x5]);
     let r_cmp_bigint = bls12381_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {
