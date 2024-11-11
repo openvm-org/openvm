@@ -49,7 +49,7 @@ jobs:
               .benchmarks[] | 
               .name as $name |
               .run_params[] | 
-              {name: $name, app_log_blowup, agg_log_blowup}
+              {name: $name, app_log_blowup: .app_log_blowup, agg_log_blowup: .agg_log_blowup}
             ]
           ' ./.github/workflows/benchmark-config.json)
           if [ $? -ne 0 ]; then
@@ -59,7 +59,11 @@ jobs:
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
       - name: Debug matrix
-        run: echo "${{ steps.create-matrix.outputs.matrix }}"
+        run: |
+          echo "Raw matrix output:"
+          echo "${{ steps.create-matrix.outputs.matrix }}"
+          echo "Parsed matrix output:"
+          echo '${{ toJson(fromJson(steps.create-matrix.outputs.matrix)) }}'
 
   benchmark:
     needs: create-matrix
