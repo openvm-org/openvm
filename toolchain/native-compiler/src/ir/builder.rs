@@ -163,7 +163,7 @@ impl<C: Config> Builder<C> {
         self.operations.push(op);
     }
 
-    /// Pushes an operation to the builder and records a trace if SP1_DEBUG.
+    /// Pushes an operation to the builder and records a trace if RUST_BACKTRACE=1.
     pub fn trace_push(&mut self, op: DslIr<C>) {
         self.operations.trace_push(op);
     }

@@ -69,6 +69,22 @@
 	.insn r CUSTOM_0, 5, 10, \rd, \rs1, \rs2
 .endm
 
+.macro fp2_add rd, rs1, rs2
+	.insn r CUSTOM_1, 2, 0, \rd, \rs1, \rs2
+.endm
+
+.macro fp2_sub rd, rs1, rs2
+	.insn r CUSTOM_1, 2, 1, \rd, \rs1, \rs2
+.endm
+
+.macro fp2_mul rd, rs1, rs2
+	.insn r CUSTOM_1, 2, 2, \rd, \rs1, \rs2
+.endm
+
+.macro fp2_div rd, rs1, rs2
+	.insn r CUSTOM_1, 2, 3, \rd, \rs1, \rs2
+.endm
+
 .macro fp12_mul rd, rs1, rs2
 	.insn r CUSTOM_1, 3, 2, \rd, \rs1, \rs2
 .endm
@@ -82,7 +98,7 @@ _start:
 	submod_1 a3, a0, a1
 	mulmod_1 a4, a0, a1
 	divmod_1 a5, a0, a1
-	#iseqmod_1 a6, a0, a1
+	iseqmod_1 a6, a0, a1
 	add256 a2, a0, a1
 	sub256 a3, a0, a1
 	xor256 a4, a0, a1
@@ -93,6 +109,10 @@ _start:
 	sra256 a4, a0, a1
 	slt256 a5, a0, a1
 	sltu256 a6, a0, a1
-	#mul256 a2, a0, a1
-	fp12_mul a2, a0, a1
+	mul256 a2, a0, a1
+	fp2_add a2, a0, a1
+	fp2_sub a2, a0, a1
+	fp2_mul a2, a0, a1
+	fp2_div a2, a0, a1
+	#fp12_mul a2, a0, a1
     .insn i 0x0b, 0, x0, x0, 0

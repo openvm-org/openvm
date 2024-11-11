@@ -1,18 +1,15 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
-    BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, Fp12Opcode, LessThanOpcode, MulHOpcode,
-    MulOpcode, PairingOpcode, PhantomInstruction, Rv32AuipcOpcode, Rv32BaseAlu256Opcode,
-    Rv32BranchEqual256Opcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
-    Rv32KeccakOpcode, Rv32LessThan256Opcode, Rv32LoadStoreOpcode, Rv32ModularArithmeticOpcode,
-    Rv32Mul256Opcode, Rv32Shift256Opcode, Rv32WeierstrassOpcode, ShiftOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, *,
 };
 use axvm_platform::constants::{
+    ComplexExtFieldBaseFunct7,
     Custom0Funct3::{self, *},
     Custom1Funct3::{self, *},
-    Int256Funct7, ModArithBaseFunct7, PairingBaseFunct7, PhantomImm, SwBaseFunct7, CUSTOM_0,
-    CUSTOM_1, MODULAR_ARITHMETIC_MAX_KINDS, PAIRING_MAX_KINDS, SHORT_WEIERSTRASS_MAX_KINDS,
+    Int256Funct7, ModArithBaseFunct7, PairingBaseFunct7, PhantomImm, SwBaseFunct7,
+    COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_0, CUSTOM_1, MODULAR_ARITHMETIC_MAX_KINDS,
+    PAIRING_MAX_KINDS, SHORT_WEIERSTRASS_MAX_KINDS,
 };
 use p3_field::PrimeField32;
 use rrs_lib::{
@@ -394,6 +391,31 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS) as usize
                         * Rv32WeierstrassOpcode::COUNT;
                     let global_opcode = global_opcode + curve_idx_shift;
+                    Some(from_r_type(global_opcode, 2, &dec_insn))
+                }
+                Some(ComplexExtField) => {
+                    // complex operations
+                    let dec_insn = RType::new(instruction_u32);
+                    let base_funct7 = (dec_insn.funct7 as u8) % COMPLEX_EXT_FIELD_MAX_KINDS;
+                    let global_opcode = match ComplexExtFieldBaseFunct7::from_repr(base_funct7) {
+                        Some(ComplexExtFieldBaseFunct7::Add) => {
+                            Fp2Opcode::ADD as usize + Fp2Opcode::default_offset()
+                        }
+                        Some(ComplexExtFieldBaseFunct7::Sub) => {
+                            Fp2Opcode::SUB as usize + Fp2Opcode::default_offset()
+                        }
+                        Some(ComplexExtFieldBaseFunct7::Mul) => {
+                            Fp2Opcode::MUL as usize + Fp2Opcode::default_offset()
+                        }
+                        Some(ComplexExtFieldBaseFunct7::Div) => {
+                            Fp2Opcode::DIV as usize + Fp2Opcode::default_offset()
+                        }
+                        _ => unimplemented!(),
+                    };
+                    assert!(Fp2Opcode::COUNT <= COMPLEX_EXT_FIELD_MAX_KINDS as usize);
+                    let complex_idx_shift = ((dec_insn.funct7 as u8) / COMPLEX_EXT_FIELD_MAX_KINDS) as usize
+                        * Fp2Opcode::COUNT;
+                    let global_opcode = global_opcode + complex_idx_shift;
                     Some(from_r_type(global_opcode, 2, &dec_insn))
                 }
                 Some(Pairing) => {

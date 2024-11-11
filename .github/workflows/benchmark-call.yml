@@ -10,7 +10,7 @@ on:
         options:
           - verify_fibair
           - fibonacci
-          - revm_contract_deployment
+          - revm_transfer
           - regex
           - base64_json
       instance_type:
@@ -95,7 +95,7 @@ jobs:
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
 
       - name: Run benchmark
-        if: inputs.benchmark_name == 'revm_contract_deployment'
+        if: inputs.benchmark_name == 'revm_transfer'
         working-directory: benchmarks
         run: |
           python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS

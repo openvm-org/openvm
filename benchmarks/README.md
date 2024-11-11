@@ -36,7 +36,7 @@ This can then be fed into `bench_from_exe` which will generate a proof of the ex
 
 Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `axvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `AbstractField::from_canonical_u8`.
 
-You can find an example of passing in a single `Vec<u8>` input in [revm_contract_deployment](./src/bin/revm_contract_deployment.rs).
+You can find an example of passing in a single `Vec<u8>` input in [base64_json](./src/bin/base64_json.rs).
 
 #### Testing the Guest Program
 

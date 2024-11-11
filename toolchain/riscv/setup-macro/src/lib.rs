@@ -611,31 +611,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 write!(f, "{:?}", self.as_le_bytes())
                                             }
                                         }
-
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        mod helper {
-                                            use super::*;
-                                            impl core::ops::Mul<u32> for #struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
-
-                                            impl core::ops::Mul<u32> for &#struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
-                                        }
-
                                     },
                                 );
 

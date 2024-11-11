@@ -2,10 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm::intrinsics::IntMod;
-
-axvm::moduli_setup! {
-    IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
-}
+use axvm_ecc::sw::IntModN;
 
 axvm::entry!(main);
 
