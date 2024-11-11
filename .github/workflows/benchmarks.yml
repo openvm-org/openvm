@@ -58,13 +58,6 @@ jobs:
           fi
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
-      - name: Debug matrix
-        run: |
-          echo "Raw matrix output:"
-          echo "${{ steps.create-matrix.outputs.matrix }}"
-          echo "Parsed matrix output:"
-          echo '${{ toJson(fromJson(steps.create-matrix.outputs.matrix)) }}'
-
   benchmark:
     needs: create-matrix
     strategy:
