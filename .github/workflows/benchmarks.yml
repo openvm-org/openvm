@@ -113,6 +113,12 @@ jobs:
               }
             }
 
+      - name: Install s5cmd
+        run: |
+          curl -L https://github.com/peak/s5cmd/releases/download/v2.1.0/s5cmd_2.1.0_Linux-arm64.tar.gz | tar -xz
+          sudo mv s5cmd /usr/local/bin/
+          sudo chmod +x /usr/local/bin/s5cmd
+
       - name: Load all metadata files from S3
         run: |
           current_sha=$(git rev-parse HEAD)
