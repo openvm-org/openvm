@@ -1,8 +1,7 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
-    *
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, *,
 };
 use axvm_platform::constants::{
     ComplexExtFieldBaseFunct7,
