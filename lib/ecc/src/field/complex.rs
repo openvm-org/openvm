@@ -123,8 +123,7 @@ impl<F: IntMod> Complex<F> {
         }
     }
 
-    /// Implementation of DivAssign. Behaviour may be undefined if F is
-    /// not a field.
+    /// Implementation of DivAssign. Behaviour may be undefined if `other` is not invertible.
     #[inline(always)]
     fn div_assign_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
