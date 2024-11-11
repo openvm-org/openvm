@@ -2,11 +2,13 @@
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+
+use super::{DivAssignUnsafe, DivUnsafe};
 
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
@@ -22,23 +24,23 @@ pub trait IntMod:
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
-    + Div<Output = Self>
+    + DivUnsafe<Output = Self>
     + Sum
     + Product
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
     + for<'a> Mul<&'a Self, Output = Self>
-    + for<'a> Div<&'a Self, Output = Self>
+    + for<'a> DivUnsafe<&'a Self, Output = Self>
     + for<'a> Sum<&'a Self>
     + for<'a> Product<&'a Self>
     + AddAssign
     + SubAssign
     + MulAssign
-    + DivAssign
+    + DivAssignUnsafe
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + for<'a> DivAssign<&'a Self>
+    + for<'a> DivAssignUnsafe<&'a Self>
 {
     /// Underlying representation of IntMod.
     type Repr;
@@ -46,7 +48,7 @@ pub trait IntMod:
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
         + Mul<&'a Self, Output = Self>
-        + Div<&'a Self, Output = Self>
+        + DivUnsafe<&'a Self, Output = Self>
     where
         Self: 'a;
 
@@ -91,6 +93,9 @@ pub trait IntMod:
     /// Value of this IntMod as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
     fn as_biguint(&self) -> BigUint;
+
+    /// Inverts this IntMod. Returns `None` if inversion is not possible.
+    fn invert(&self) -> Option<Self>;
 
     /// Doubles this IntMod.
     fn double(&self) -> Self {

@@ -4,9 +4,6 @@ pub use field_trait::*;
 mod field_extension;
 pub use field_extension::*;
 
-mod div_unsafe;
-pub use div_unsafe::*;
-
 mod complex;
 pub use complex::*;
 
