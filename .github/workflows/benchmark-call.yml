@@ -109,20 +109,21 @@ jobs:
       - name: Set working directory
         id: set-working-dir
         run: |
-          WORKSPACE_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+          WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.name == $name) |
             .working_directory
           ' ./.github/workflows/benchmark-config.json)
-          echo "workspace_dir=$WORKSPACE_DIR"
-          echo "workspace_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('/', '$WORKSPACE_DIR'))")
+          echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
       ######################################################
       # Find working directory based on benchmark_name and run the benchmark
       - name: Run benchmark
-        working-directory: ${{ steps.set-working-dir.outputs.workspace_dir }}
+        working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
+          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
 
       ######################################################
       - name: Store metric json and compute diff with previous
