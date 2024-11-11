@@ -12,7 +12,7 @@ pub fn main() {
 
     let mut a = IntModN::from_u32(1234);
     let mut res = IntModN::from_u32(1);
-    let inv = &res / &a;
+    let inv = &res.div_unsafe(&a);
 
     for i in 0..32 {
         for j in 0..8 {

@@ -19,9 +19,9 @@ pub fn main() {
     for _ in 0..32 {
         let mut res = &a * &b;
         res += &a * &Complex::new(IntModN::ZERO, -b.c1.double());
-        res /= &b * &b.conjugate();
+        res.div_assign_unsafe(&b * &b.conjugate());
 
-        if (&a / &b) - res != Complex::<IntModN>::ZERO {
+        if (&a.div_unsafe(&b)) - res != Complex::<IntModN>::ZERO {
             panic!();
         }
 

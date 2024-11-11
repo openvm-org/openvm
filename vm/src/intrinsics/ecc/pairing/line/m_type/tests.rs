@@ -101,12 +101,7 @@ fn test_mul_023_by_023() {
         .concat();
 
     for i in 0..10 {
-        if i >= 2 {
-            // Skip c1 in 02345 representation
-            assert_eq!(output[i], r_cmp_bigint[i + 2]);
-        } else {
-            assert_eq!(output[i], r_cmp_bigint[i]);
-        }
+        assert_eq!(output[i], r_cmp_bigint[i]);
     }
 
     let input_line0_limbs = input_line0

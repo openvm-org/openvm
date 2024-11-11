@@ -9,7 +9,7 @@ pub mod sw;
 #[cfg(feature = "halo2curves")]
 pub mod curve;
 
-#[cfg(feature = "halo2curves")]
+// #[cfg(feature = "halo2curves")]
 pub mod pairing;
 
 // TEMPORARY[jpw]: this should be moved into pairing
