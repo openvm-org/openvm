@@ -76,7 +76,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         self.config.continuation_enabled
     }
 
-    fn execute_segments(
+    pub fn execute_segments(
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
@@ -96,6 +96,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         let mut pc = exe.pc_start;
 
         loop {
+            println!("Executing segment: {}", segments.len());
             let state = segment.execute_from_pc(pc)?;
             pc = state.pc;
 

@@ -19,51 +19,44 @@ use axiom_vm::{
         root::types::RootVmVerifierInput,
     },
 };
+use axvm_benchmarks::utils::build_bench_program;
 use axvm_circuit::{
-    arch::{instructions::program::Program, ExecutorName, VmConfig},
+    arch::{
+        instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
+        VmConfig, VmExecutor,
+    },
     prover::{local::VmLocalProver, ContinuationVmProver, SingleSegmentVmProver},
     system::program::trace::AxVmCommittedExe,
 };
-use axvm_native_compiler::{
-    conversion::CompilerOptions,
-    ir::{Builder, Felt},
-};
-use axvm_recursion::{hints::Hintable, types::InnerConfig};
+use axvm_native_compiler::conversion::CompilerOptions;
+use axvm_recursion::hints::Hintable;
+use axvm_transpiler::axvm_platform::bincode;
 use eyre::Result;
 use p3_field::AbstractField;
 use tracing::info_span;
 
 type OuterSC = BabyBearPoseidon2OuterConfig;
 type SC = BabyBearPoseidon2Config;
-type C = InnerConfig;
 type F = BabyBear;
-const NUM_PUBLIC_VALUES: usize = 16;
+const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
 const NUM_CHILDREN_LEAF: usize = 2;
 const NUM_CHILDREN_INTERNAL: usize = 2;
 
 #[tokio::main]
-
 async fn main() -> Result<()> {
     let num_segments = 8;
-    let segment_len = 100000;
+    // Must be larger than RangeTupleCheckerAir.height == 524288
+    let segment_len = 1_000_000;
     let axiom_vm_pk = {
         let axiom_vm_config = AxiomVmConfig {
-            max_num_user_public_values: 16,
+            max_num_user_public_values: NUM_PUBLIC_VALUES,
             app_fri_params: standard_fri_params_with_100_bits_conjectured_security(1),
             leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
             internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
             root_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
-            app_vm_config: VmConfig {
-                poseidon2_max_constraint_degree: 3,
-                max_segment_len: segment_len,
-                continuation_enabled: true,
-                num_public_values: NUM_PUBLIC_VALUES,
-                ..Default::default()
-            }
-            .add_executor(ExecutorName::BranchEqual)
-            .add_executor(ExecutorName::Jal)
-            .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::FieldArithmetic),
+            app_vm_config: VmConfig::rv32im()
+                .with_num_public_values(NUM_PUBLIC_VALUES)
+                .with_max_segment_len(segment_len),
             compiler_options: CompilerOptions {
                 enable_cycle_tracker: true,
                 ..Default::default()
@@ -72,16 +65,27 @@ async fn main() -> Result<()> {
         AxiomVmProvingKey::keygen(axiom_vm_config)
     };
 
-    let app_committed_exe = generate_fib_exe(axiom_vm_pk.app_fri_params, num_segments, segment_len);
+    let app_committed_exe = generate_fib_exe(axiom_vm_pk.app_fri_params);
+
+    let n = 800_000u64;
+    let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?
+        .into_iter()
+        .map(F::from_canonical_u8)
+        .collect();
     run_with_metric_collection("OUTPUT_PATH", || {
         let app_proofs = info_span!("App VM", group = "app_vm").in_scope(|| {
+            let vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
+            let execution_results = vm
+                .execute_segments(app_committed_exe.exe.clone(), vec![app_input.clone()])
+                .unwrap();
+            assert_eq!(execution_results.len(), num_segments);
             let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
                 axiom_vm_pk.app_fri_params,
                 axiom_vm_pk.app_vm_config.clone(),
                 axiom_vm_pk.app_vm_pk.clone(),
                 app_committed_exe.clone(),
             );
-            ContinuationVmProver::prove(&app_prover, vec![])
+            ContinuationVmProver::prove(&app_prover, vec![app_input])
         });
 
         let leaf_proofs = info_span!("leaf verifier", group = "leaf_verifier").in_scope(|| {
@@ -163,36 +167,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn generate_fib_exe(
-    app_fri_params: FriParameters,
-    num_segments: usize,
-    segment_len: usize,
-) -> Arc<AxVmCommittedExe<SC>> {
-    let program = generate_fib_program(num_segments, segment_len);
+fn generate_fib_exe(app_fri_params: FriParameters) -> Arc<AxVmCommittedExe<SC>> {
+    let elf = build_bench_program("fibonacci").unwrap();
+    let mut exe: AxVmExe<_> = elf.into();
+    println!(
+        "Program size: {}",
+        exe.program.instructions_and_debug_infos.len()
+    );
+    println!("Init memory size: {}", exe.init_memory.len());
+    exe.program.max_num_public_values = NUM_PUBLIC_VALUES;
+
     let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    Arc::new(AxVmCommittedExe::<SC>::commit(
-        program.into(),
-        app_engine.config.pcs(),
-    ))
-}
-fn generate_fib_program(num_segments: usize, segment_len: usize) -> Program<F> {
-    let total_cycles = num_segments * segment_len;
-    let mut program = {
-        // 3 instructions: initialize a,b/ halt.
-        // 4 instructions per iteration.
-        let n = (total_cycles - 3) / 3;
-        let mut builder = Builder::<C>::default();
-        let a: Felt<F> = builder.eval(F::ZERO);
-        let b: Felt<F> = builder.eval(F::ONE);
-        let c: Felt<F> = builder.uninit();
-        builder.range(0, n).for_each(|_, builder| {
-            builder.assign(&c, a + b);
-            builder.assign(&a, b);
-            builder.assign(&b, c);
-        });
-        builder.halt();
-        builder.compile_isa()
-    };
-    program.max_num_public_values = 0;
-    program
+    Arc::new(AxVmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
