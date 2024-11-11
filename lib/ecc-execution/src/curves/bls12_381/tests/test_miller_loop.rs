@@ -78,7 +78,7 @@ fn test_f_mul() {
 
     // Initial step: double
     let (Q_acc_init, l_init) = Bls12_381::miller_double_step(Q_ecpoint.clone());
-    let l_init = l_init.evaluate(&(x_over_y.clone(), y_inv.clone()));
+    let l_init = l_init.evaluate(&(x_over_y, y_inv));
     f = Bls12_381::mul_by_023(f, l_init);
 
     // Test Q_acc_init == Q + Q
@@ -94,10 +94,10 @@ fn test_f_mul() {
     // Left side test: Double and add
     let (Q_acc_daa, l_S_plus_Q, l_S_plus_Q_plus_S) =
         Bls12_381::miller_double_and_add_step(Q_acc.clone(), Q_ecpoint.clone());
-    let l_S_plus_Q_plus_S = l_S_plus_Q_plus_S.evaluate(&(x_over_y.clone(), y_inv.clone()));
-    let l_S_plus_Q = l_S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
+    let l_S_plus_Q_plus_S = l_S_plus_Q_plus_S.evaluate(&(x_over_y, y_inv));
+    let l_S_plus_Q = l_S_plus_Q.evaluate(&(x_over_y, y_inv));
     let l_prod0 = Bls12_381::mul_023_by_023(l_S_plus_Q, l_S_plus_Q_plus_S);
-    let f_mul = Bls12_381::mul_by_02345(f, l_prod0.clone());
+    let f_mul = Bls12_381::mul_by_02345(f, l_prod0);
 
     // Test Q_acc_da == 2(2Q) + Q
     let Q4 = Q2 + Q2;
@@ -109,10 +109,10 @@ fn test_f_mul() {
     // Right side test: Double, then add
     let (Q_acc_d, l_2S) = Bls12_381::miller_double_step(Q_acc.clone());
     let (Q_acc_a, l_2S_plus_Q) = Bls12_381::miller_add_step(Q_acc_d, Q_ecpoint.clone());
-    let l_2S = l_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
-    let l_2S_plus_Q = l_2S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
+    let l_2S = l_2S.evaluate(&(x_over_y, y_inv));
+    let l_2S_plus_Q = l_2S_plus_Q.evaluate(&(x_over_y, y_inv));
     let l_prod1 = Bls12_381::mul_023_by_023(l_2S, l_2S_plus_Q);
-    let f_prod_mul = Bls12_381::mul_by_02345(f, l_prod1.clone());
+    let f_prod_mul = Bls12_381::mul_by_02345(f, l_prod1);
 
     // Test line functions match
     let f_line_daa = Bls12_381::mul_by_02345(Fq12::one(), l_prod0);

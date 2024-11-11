@@ -70,7 +70,7 @@ impl MultiMillerLoop for Bls12_381 {
 
         let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
         for (line_2S, x_over_y, y_inv) in lines_iter {
-            let line = line_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
+            let line = line_2S.evaluate(&(*x_over_y, *y_inv));
             initial_lines.push(line);
         }
 
@@ -83,7 +83,7 @@ impl MultiMillerLoop for Bls12_381 {
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), x_over_ys.iter(), y_invs.iter());
         for (lines_S_plus_Q, x_over_y, y_inv) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(&(x_over_y.clone(), y_inv.clone()));
+            let line = lines_S_plus_Q.evaluate(&(*x_over_y, *y_inv));
             initial_lines.push(line);
         }
 

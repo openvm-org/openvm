@@ -75,7 +75,7 @@ fn test_mul_by_01234() {
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
     ];
-    let mul_by_01234 = Bn254::mul_by_01234(f, x.clone());
+    let mul_by_01234 = Bn254::mul_by_01234(f, x);
 
     let x_f12 = Fq12::from_coeffs([x[0], x[1], x[2], x[3], x[4], Fq2::ZERO]);
     assert_eq!(mul_by_01234, f * x_f12);

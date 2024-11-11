@@ -14,7 +14,7 @@ impl<F: Field> AffinePoint<F> {
         Self { x, y }
     }
 
-    pub fn neg(self) -> Self {
+    pub fn neg_assign(self) -> Self {
         Self {
             x: self.x,
             y: self.y.neg(),

@@ -112,7 +112,7 @@ where
             Q.iter()
                 .map(|q| match sigma_i {
                     1 => q.clone(),
-                    -1 => q.clone().neg(),
+                    -1 => q.clone().neg_assign(),
                     _ => panic!("Invalid sigma_i"),
                 })
                 .collect()

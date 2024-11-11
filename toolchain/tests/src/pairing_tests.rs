@@ -7,7 +7,7 @@ use ax_ecc_execution::{
         pairing::{FinalExp, MultiMillerLoop},
         point::AffinePoint,
     },
-    curves::bls12_381::Bls12_381,
+    curves::bls12_381::{Bls12_381, BLS12_381_PBE_LEN},
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::arch::{VmConfig, VmExecutor};
@@ -28,7 +28,7 @@ fn test_bls12_381_final_exp_hint() -> Result<()> {
     let Q = G2Affine::generator();
     let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];
     let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
-    let f = bls12_381.multi_miller_loop(&ps, &qs);
+    let f = bls12_381.multi_miller_loop::<BLS12_381_PBE_LEN>(&ps, &qs);
     let (c, s) = bls12_381.final_exp_hint(f);
     let io = [f, c, s]
         .into_iter()
