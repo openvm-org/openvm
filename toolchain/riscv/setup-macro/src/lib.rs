@@ -391,8 +391,27 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
 
                                             fn invert(&self) -> Option<Self> {
-                                                // WIP[yj]: modular multiplicative inverse requires a^{p-2} mod p
-                                                None
+                                                if self == &Self::ZERO {
+                                                    None
+                                                } else {
+                                                    let mut mod_minus_2 = Self::MODULUS.clone();
+                                                    mod_minus_2[0] -= 2u8;
+                                                    Some(self.pow_vartime(&mod_minus_2))
+                                                }
+                                            }
+
+                                            fn pow_vartime(&self, exp: &Self) -> Self {
+                                                let mut res = Self::ONE.0;
+                                                for e in exp.0.iter().rev() {
+                                                    for i in (0..8).rev() {
+                                                        res = res.square();
+
+                                                        if ((*e >> i) & 1) == 1 {
+                                                            res *= self;
+                                                        }
+                                                    }
+                                                }
+                                                Self(res)
                                             }
 
                                             fn double(&self) -> Self {
