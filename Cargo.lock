@@ -567,6 +567,7 @@ dependencies = [
  "axvm-native-compiler",
  "axvm-recursion",
  "axvm-transpiler",
+ "clap",
  "criterion",
  "eyre",
  "hex",

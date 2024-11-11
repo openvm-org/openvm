@@ -1,51 +1,7 @@
 {
     "benchmarks": [
         {
-            "name": "verify_fibair",
-            "working_directory": "lib/recursion",
-            "run_params": [
-                {
-                    "app_log_blowup": 1,
-                    "agg_log_blowup": 1
-                },
-                {
-                    "app_log_blowup": 2,
-                    "agg_log_blowup": 2
-                }
-            ]
-        },
-        {
-            "name": "fibonacci",
-            "working_directory": "benchmarks",
-            "run_params": [
-                {
-                    "app_log_blowup": 2,
-                    "agg_log_blowup": 2
-                }
-            ]
-        },
-        {
-            "name": "revm_transfer",
-            "working_directory": "benchmarks",
-            "run_params": [
-                {
-                    "app_log_blowup": 2,
-                    "agg_log_blowup": 2
-                }
-            ]
-        },
-        {
             "name": "regex",
-            "working_directory": "benchmarks",
-            "run_params": [
-                {
-                    "app_log_blowup": 2,
-                    "agg_log_blowup": 2
-                }
-            ]
-        },
-        {
-            "name": "base64_json",
             "working_directory": "benchmarks",
             "run_params": [
                 {

@@ -13,6 +13,7 @@ axvm-build.workspace = true
 axvm-native-compiler.workspace = true
 axvm-recursion = { workspace = true, features = ["test-utils"] }
 ax-stark-sdk.workspace = true
+clap = { version = "4.5.9", features = ["derive", "env"] }
 p3-field.workspace = true
 eyre.workspace = true
 tempfile.workspace = true
