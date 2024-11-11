@@ -41,7 +41,7 @@ jobs:
   benchmark-revm:
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: revm_contract_deployment
+      benchmark_name: revm_transfer
     secrets: inherit
 
   benchmark-regex:
