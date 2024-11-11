@@ -45,3 +45,14 @@ jobs:
         working-directory: circuits/ecc
         run: |
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel,test-utils
+
+      - name: Install cargo-axiom
+        working-directory: cargo-axiom
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          cargo install --force --locked --path .
+
+      - name: Build axvm-ecc crate
+        working-directory: lib/ecc
+        run: |
+          cargo axiom build

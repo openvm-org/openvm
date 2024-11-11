@@ -81,7 +81,9 @@ pub struct BenchCmd {
 
 impl BenchCmd {
     pub fn run(&self) -> Result<()> {
-        let elf_path = build(&self.build_args)?;
+        let elf_path = build(&self.build_args)?
+            .pop()
+            .ok_or_else(|| eyre::eyre!("No bin found"))?;
 
         if self.profile {
             setup_tracing();

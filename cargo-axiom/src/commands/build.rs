@@ -32,7 +32,7 @@ pub struct BuildArgs {
 }
 
 // Returns elf_path for now
-pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
+pub(crate) fn build(build_args: &BuildArgs) -> Result<Vec<PathBuf>> {
     let manifest_dir = build_args
         .manifest_dir
         .clone()
@@ -45,8 +45,6 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
     let pkg = get_package(&manifest_dir);
     build_guest_package(&pkg, &target_dir, &guest_options.into(), None);
     // Assumes the package has a single target binary
-    let elf_path = guest_methods(&pkg, &target_dir, &[])
-        .pop()
-        .expect("No bin found");
-    Ok(elf_path)
+    let elf_paths = guest_methods(&pkg, &target_dir, &[]);
+    Ok(elf_paths)
 }
