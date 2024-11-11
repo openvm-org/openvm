@@ -211,7 +211,12 @@ jobs:
         with:
           script: |
             const fs = require('fs')
-            const newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
+            let newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
+            const text_len = newBenchmark.length
+            // Github comment has a limit of 65,536 characters
+            if (text_len > 60000) {
+              newBenchmark = newBenchmark.substring(0, 30000) + '\n\n...(truncated)...\n\n' + newBenchmark.substring(text_len - 30000)
+            }
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
