@@ -94,12 +94,6 @@ pub trait IntMod:
     #[cfg(not(target_os = "zkvm"))]
     fn as_biguint(&self) -> BigUint;
 
-    /// Inverts this IntMod. Returns `None` if inversion is not possible.
-    fn invert(&self) -> Option<Self>;
-
-    /// Exponentiation of this IntMod by another IntMod.
-    fn pow_vartime(&self, exp: &Self) -> Self;
-
     /// Doubles this IntMod.
     fn double(&self) -> Self {
         let mut ret = self.clone();

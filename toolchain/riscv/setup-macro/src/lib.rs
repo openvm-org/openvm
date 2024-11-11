@@ -289,9 +289,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             fn div_unsafe_refs_impl(&self, other: &Self) -> Self {
                                                 #[cfg(not(target_os = "zkvm"))]
                                                 {
-                                                    let mut res = self.clone();
-                                                    res *= other.invert().unwrap();
-                                                    res
+                                                    let modulus = Self::modulus_biguint();
+                                                    let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
+                                                    Self::from_biguint((self.as_biguint() * inv) % modulus)
                                                 }
                                                 #[cfg(target_os = "zkvm")]
                                                 {
@@ -388,30 +388,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             #[cfg(not(target_os = "zkvm"))]
                                             fn as_biguint(&self) -> num_bigint_dig::BigUint {
                                                 num_bigint_dig::BigUint::from_bytes_le(self.as_le_bytes())
-                                            }
-
-                                            fn invert(&self) -> Option<Self> {
-                                                if self == &Self::ZERO {
-                                                    None
-                                                } else {
-                                                    let mut mod_minus_2 = Self::MODULUS.clone();
-                                                    mod_minus_2[0] -= 2u8;
-                                                    Some(self.pow_vartime(&mod_minus_2))
-                                                }
-                                            }
-
-                                            fn pow_vartime(&self, exp: &Self) -> Self {
-                                                let mut res = Self::ONE.0;
-                                                for e in exp.0.iter().rev() {
-                                                    for i in (0..8).rev() {
-                                                        res = res.square();
-
-                                                        if ((*e >> i) & 1) == 1 {
-                                                            res *= self;
-                                                        }
-                                                    }
-                                                }
-                                                Self(res)
                                             }
 
                                             fn double(&self) -> Self {
