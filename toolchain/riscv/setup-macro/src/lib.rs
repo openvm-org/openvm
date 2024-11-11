@@ -108,8 +108,30 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 let block_size =
                                     syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
+                                let serialized_modulus =
+                                    core::iter::once(1) // 1 for "modulus"
+                                        .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of variables in the elf
+                                        .chain(
+                                            (modulus_bytes.len() as u32)
+                                                .to_le_bytes()
+                                                .iter()
+                                                .copied(),
+                                        )
+                                        .chain(modulus_bytes.iter().copied())
+                                        .collect::<Vec<_>>();
+                                let serialized_name = syn::Ident::new(
+                                    &format!("AXIOM_SERIALIZED_MODULUS_{}", struct_name),
+                                    span.into(),
+                                );
+                                let serialized_len = serialized_modulus.len();
+
                                 let result = TokenStream::from(
                                     quote::quote_spanned! { span.into() =>
+                                        #[cfg(target_os = "zkvm")]
+                                        #[link_section = ".axiom"]
+                                        #[no_mangle]
+                                        #[used]
+                                        static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
 
                                         #[derive(Clone, Eq)]
                                         #[repr(C, align(#block_size))]
@@ -639,24 +661,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             output.push(result.unwrap());
         }
     }
-
-    let mut serialized_moduli = (moduli.len() as u32)
-        .to_le_bytes()
-        .into_iter()
-        .collect::<Vec<_>>();
-    for modulus_bytes in moduli {
-        serialized_moduli.extend((modulus_bytes.len() as u32).to_le_bytes());
-        serialized_moduli.extend(modulus_bytes);
-    }
-    let serialized_len = serialized_moduli.len();
-    // Note: this also prevents the macro from being called twice
-    output.push(TokenStream::from(quote::quote! {
-        #[cfg(target_os = "zkvm")]
-        #[link_section = ".axiom"]
-        #[no_mangle]
-        #[used]
-        static AXIOM_SERIALIZED_MODULI: [u8; #serialized_len] = [#(#serialized_moduli),*];
-    }));
 
     TokenStream::from_iter(output)
 }
