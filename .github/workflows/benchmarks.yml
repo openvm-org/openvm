@@ -78,7 +78,8 @@ jobs:
     steps:
       - name: Debug print each benchmark
         run: |
-          names=$(echo "${{ needs.create-matrix.outputs.matrix }}" | jq -r '.[].name' | sort -u)
+          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[].name' | sort -u)
+          echo $names
           while read name; do
             echo "Processing results for benchmark: $name"
           done <<< "$names"
@@ -112,7 +113,7 @@ jobs:
         run: |
           current_sha=$(git rev-parse HEAD)
           mkdir results
-          names=$(echo "${{ needs.create-matrix.outputs.matrix }}" | jq -r '.[].name' | sort -u)
+          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[].name' | sort -u)
           while read name; do
             echo "Downloading results for benchmark: $name"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
