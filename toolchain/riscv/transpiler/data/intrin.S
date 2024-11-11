@@ -17,11 +17,16 @@
 	.insn r CUSTOM_1, 0, 4, \rd, \rs1, \rs2
 .endm
 
+.macro addmod_2 rd, rs1, rs2
+	.insn r CUSTOM_1, 0, 8, \rd, \rs1, \rs2
+.endm
+
 
 .global _start
 
 _start:
 	addmod_1 a2, a0, a1
+	addmod_2 a2, a0, a1
 	submod_1 a3, a0, a1
 	mulmod_1 a4, a0, a1
 	iseqmod_1 a6, a0, a1
