@@ -5,7 +5,7 @@ use eyre::{eyre, Result};
 use yansi::Paint;
 
 #[derive(Parser)]
-#[command(name = "new", about = "Setup a new project that runs inside the SP1.")]
+#[command(name = "new", about = "Setup a new axVM project.")]
 pub struct NewCmd {
     /// The name of the project.
     name: String,
@@ -14,7 +14,7 @@ pub struct NewCmd {
     #[arg(long, action)]
     evm: bool,
 
-    /// Version of sp1-project-template to use (branch or tag).
+    /// Version of axvm-project-template to use (branch or tag).
     #[arg(long, default_value = "main")]
     version: String,
 }
