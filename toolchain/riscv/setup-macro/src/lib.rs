@@ -344,7 +344,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                             const ZERO: Self = Self([0; #limbs]);
 
-                                        const NUM_BYTES: usize = #num_bytes;
+                                            const NUM_BYTES: usize = #num_bytes;
 
                                             const ONE: Self = Self::from_const_u8(1);
 
