@@ -12,7 +12,7 @@ pub fn main() {
 
     let mut a = IntModN::from_u32(1234);
     let mut res = IntModN::from_u32(1);
-    let inv = &res.div_unsafe(&a);
+    let inv = res.clone().div_unsafe(&a);
 
     for i in 0..32 {
         for j in 0..8 {
@@ -24,7 +24,7 @@ pub fn main() {
     }
 
     // https://en.wikipedia.org/wiki/Fermat%27s_little_theorem
-    if res != *inv {
+    if res != inv {
         axvm::process::panic();
     }
 

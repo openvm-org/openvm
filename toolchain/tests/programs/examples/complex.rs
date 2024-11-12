@@ -21,7 +21,7 @@ pub fn main() {
         res += &a * &Complex::new(IntModN::ZERO, -b.c1.double());
         res.div_assign_unsafe(&b * &b.conjugate());
 
-        if a.div_unsafe(&b) - res != Complex::<IntModN>::ZERO {
+        if a.clone().div_unsafe(&b) - res != Complex::<IntModN>::ZERO {
             panic!();
         }
 
