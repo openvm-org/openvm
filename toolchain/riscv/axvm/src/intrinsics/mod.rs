@@ -19,8 +19,5 @@ pub use i256::*;
 mod modular;
 pub use modular::*;
 
-mod div_unsafe;
-pub use div_unsafe::*;
-
 mod utils;
 pub use utils::*;

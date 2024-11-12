@@ -569,7 +569,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_unsafe(mut self, other: Self) -> Self::Output {
-                                                self = self.div_unsafe_refs_impl(&other);
+                                                self.div_assign_unsafe(other);
                                                 self
                                             }
                                         }
@@ -579,7 +579,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_unsafe(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self = self.div_unsafe_refs_impl(other);
+                                                self.div_assign_unsafe_impl(other);
                                                 self
                                             }
                                         }
