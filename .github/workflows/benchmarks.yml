@@ -88,11 +88,13 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           GH_PAGES_PATH="benchmarks"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Load all metadata files from S3
         run: |
