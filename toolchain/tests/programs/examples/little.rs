@@ -24,7 +24,7 @@ pub fn main() {
     }
 
     // https://en.wikipedia.org/wiki/Fermat%27s_little_theorem
-    if res != inv {
+    if res != *inv {
         axvm::process::panic();
     }
 
