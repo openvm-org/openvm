@@ -67,6 +67,9 @@ jobs:
       - run-id=${{ github.run_id }}
       - tag=bench-${{ inputs.benchmark_name }}
     steps:
+      ##########################################################################
+      # Environment setup                                                      #
+      ##########################################################################
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
@@ -118,14 +121,17 @@ jobs:
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
-      ######################################################
-      # Find working directory based on benchmark_name and run the benchmark
+      ##########################################################################
+      # Find working directory based on benchmark_name and run the benchmark   #
+      ##########################################################################
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
 
-      ######################################################
+      ##########################################################################
+      # Generate result .md files and flamegraphs, store them in S3            #
+      ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
           METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
@@ -215,8 +221,11 @@ jobs:
               }
             }
 
+      ##########################################################################
+      # Update gh-pages with individual results upon a push event              #
+      ##########################################################################
       - name: Update latest main result in s3
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
 
@@ -225,18 +234,18 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           ref: gh-pages-test
 
       - name: set up git
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p benchmarks/individual
           s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" benchmarks/individual/${METRIC_NAME}.md

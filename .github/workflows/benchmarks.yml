@@ -77,18 +77,49 @@ jobs:
       - runner=8cpu-linux-arm64
       - image=arm64-rust-dev-32gb
     steps:
+      ##########################################################################
+      # Download individual result .md files from S3 and combine them          #
+      ##########################################################################
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
 
-      - name: Debug print each benchmark
+      - name: Load all metadata files from S3
         run: |
-          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)"')
-          echo $names
+          mkdir results
+          echo "| group | fri.log_blowup | total_cells_used | total_cycles | total_proof_time_ms | instance |" > results.md
+          echo "| --- | --- | --- | --- | --- | --- |" >> results.md
+
+          current_sha=$(git rev-parse HEAD)
+          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)"' | sort)
           while read name; do
-            echo "Processing results for benchmark: $name"
+            echo "Downloading results for benchmark: $name"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
+            awk '
+              /\| group \| fri\.log_blowup \| total_cells_used \| total_cycles \| total_proof_time_ms \|/ {
+                getline;
+                getline;
+                table_row=$0;
+                next;
+              }
+              /Instance Type:/ {
+                if (table_row) {
+                  print table_row " " $3 " |";
+                  exit;
+                }
+              }
+            ' "results/${name}.md" >> results.md
           done <<< "$names"
 
+          echo "<br>  " >> results.md
+          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
+          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
+          mkdir -p /tmp/benchmark-results/
+          cp results.md /tmp/benchmark-results/
+
+      ##########################################################################
+      # Update PR comment upon a pull request event                            #
+      ##########################################################################
       - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -113,24 +144,6 @@ jobs:
                 `);
               }
             }
-
-      - name: Load all metadata files from S3
-        run: |
-          current_sha=$(git rev-parse HEAD)
-          mkdir results
-          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)"')
-          while read name; do
-            echo "Downloading results for benchmark: $name"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
-            sed -i '/^Commit: /d' "results/${name}.md"
-            sed -i '/^\[Benchmark Workflow\]/d' "results/${name}.md"
-            echo "<br>  " >> "results/${name}.md"
-          done <<< "$names"
-          cat $(ls results/*.md | sort) > results.md
-          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
-          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
-          mkdir -p /tmp/benchmark-results/
-          cp results.md /tmp/benchmark-results/
       
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
@@ -147,6 +160,9 @@ jobs:
               body: `<!--Benchmark Results-->\n${newBenchmark}`
             });
 
+      ##########################################################################
+      # Update gh-pages with summary upon a push event                         #
+      ##########################################################################
       - uses: actions/checkout@v4
         # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
@@ -162,7 +178,7 @@ jobs:
       - name: Update github pages with new bench results
         # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          rm -f benchmarks/*.md
+          git rm -f benchmarks/*.md || true
           cp /tmp/benchmark-results/results.md benchmarks/summary.md
           git add benchmarks/summary.md
           git commit --allow-empty -m "Update summarized benchmark results"
