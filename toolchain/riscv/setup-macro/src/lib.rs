@@ -569,7 +569,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_unsafe(mut self, other: Self) -> Self::Output {
-                                                self.div_assign_unsafe(other);
+                                                self.div_assign_unsafe_impl(&other);
                                                 self
                                             }
                                         }
