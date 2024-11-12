@@ -46,11 +46,6 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                 }
 
                                 impl #struct_name {
-                                    pub const IDENTITY: Self = Self {
-                                        x: #intmod_type::ZERO,
-                                        y: #intmod_type::ZERO,
-                                    };
-
                                     pub const EC_IDX: usize = #ec_idx;
 
                                     // Below are wrapper functions for the intrinsic instructions.
@@ -70,7 +65,8 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                             custom_insn_r!(
                                                 CUSTOM_1,
                                                 Custom1Funct3::ShortWeierstrass as usize,
-                                                SwBaseFunct7::SwAddNe as usize,
+                                                SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
+                                                    * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                                                 uninit.as_mut_ptr(),
                                                 p1 as *const #struct_name,
                                                 p2 as *const #struct_name
@@ -94,7 +90,8 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                             custom_insn_r!(
                                                 CUSTOM_1,
                                                 Custom1Funct3::ShortWeierstrass as usize,
-                                                SwBaseFunct7::SwAddNe as usize,
+                                                SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
+                                                    * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                                                 self as *mut #struct_name,
                                                 self as *const #struct_name,
                                                 p2 as *const #struct_name
@@ -106,8 +103,8 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                     fn double_impl(p: &#struct_name) -> #struct_name {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let two = IntModN::from_u8(2);
-                                            let lambda = &p.x * &p.x * IntModN::from_u8(3).div_unsafe(&p.y * &two);
+                                            let two = #intmod_type::from_u8(2);
+                                            let lambda = &p.x * &p.x * #intmod_type::from_u8(3).div_unsafe(&p.y * &two);
                                             let x3 = &lambda * &lambda - &p.x * &two;
                                             let y3 = &lambda * &(&p.x - &x3) - &p.y;
                                             #struct_name { x: x3, y: y3 }
@@ -118,7 +115,8 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                             custom_insn_r!(
                                                 CUSTOM_1,
                                                 Custom1Funct3::ShortWeierstrass as usize,
-                                                SwBaseFunct7::SwDouble as usize,
+                                                SwBaseFunct7::SwDouble as usize + Self::EC_IDX
+                                                    * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                                                 uninit.as_mut_ptr(),
                                                 p as *const #struct_name,
                                                 "x0"
@@ -131,8 +129,8 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                     fn double_assign_impl(&mut self) {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let two = IntModN::from_u8(2);
-                                            let lambda = &self.x * &self.x * IntModN::from_u8(3).div_unsafe(&self.y * &two);
+                                            let two = #intmod_type::from_u8(2);
+                                            let lambda = &self.x * &self.x * #intmod_type::from_u8(3).div_unsafe(&self.y * &two);
                                             let x3 = &lambda * &lambda - &self.x * &two;
                                             let y3 = &lambda * &(&self.x - &x3) - &self.y;
                                             self.x = x3;
@@ -143,14 +141,180 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                             custom_insn_r!(
                                                 CUSTOM_1,
                                                 Custom1Funct3::ShortWeierstrass as usize,
-                                                SwBaseFunct7::SwDouble as usize,
+                                                SwBaseFunct7::SwDouble as usize + Self::EC_IDX
+                                                    * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                                                 self as *mut #struct_name,
                                                 self as *const #struct_name,
                                                 "x0"
                                             );
                                         }
                                     }
-                               }
+                                }
+
+
+                                impl Group for #struct_name {
+                                    type SelfRef<'a> = &'a Self;
+
+                                    fn identity() -> Self {
+                                        Self {
+                                            x: #intmod_type::ZERO,
+                                            y: #intmod_type::ZERO,
+                                        }
+                                    }
+
+                                    fn is_identity(&self) -> bool {
+                                        self.x == #intmod_type::ZERO && self.y == #intmod_type::ZERO
+                                    }
+
+                                    fn generator() -> Self {
+                                        unimplemented!()
+                                    }
+
+                                    fn double(&self) -> Self {
+                                        if self.is_identity() {
+                                            self.clone()
+                                        } else {
+                                            Self::double_impl(self)
+                                        }
+                                    }
+
+                                    fn double_assign(&mut self) {
+                                        if !self.is_identity() {
+                                            Self::double_assign_impl(self);
+                                        }
+                                    }
+                                }
+
+                                impl Add<&#struct_name> for #struct_name {
+                                    type Output = Self;
+
+                                    fn add(self, p2: &#struct_name) -> Self::Output {
+                                        if self.is_identity() {
+                                            p2.clone()
+                                        } else if p2.is_identity() {
+                                            self.clone()
+                                        } else if self.x == p2.x {
+                                            if &self.y + &p2.y == #intmod_type::ZERO {
+                                                Self::identity()
+                                            } else {
+                                                Self::double_impl(&self)
+                                            }
+                                        } else {
+                                            Self::add_ne(&self, p2)
+                                        }
+                                    }
+                                }
+
+                                impl Add for #struct_name {
+                                    type Output = Self;
+
+                                    fn add(self, rhs: Self) -> Self::Output {
+                                        self.add(&rhs)
+                                    }
+                                }
+
+                                impl Add<&#struct_name> for &#struct_name {
+                                    type Output = #struct_name;
+
+                                    fn add(self, p2: &#struct_name) -> Self::Output {
+                                        if self.is_identity() {
+                                            p2.clone()
+                                        } else if p2.is_identity() {
+                                            self.clone()
+                                        } else if self.x == p2.x {
+                                            if &self.y + &p2.y == #intmod_type::ZERO {
+                                                #struct_name::identity()
+                                            } else {
+                                                #struct_name::double_impl(self)
+                                            }
+                                        } else {
+                                            #struct_name::add_ne(self, p2)
+                                        }
+                                    }
+                                }
+
+                                impl AddAssign<&#struct_name> for #struct_name {
+                                    fn add_assign(&mut self, p2: &#struct_name) {
+                                        if self.is_identity() {
+                                            *self = p2.clone();
+                                        } else if p2.is_identity() {
+                                            // do nothing
+                                        } else if self.x == p2.x {
+                                            if &self.y + &p2.y == #intmod_type::ZERO {
+                                                *self = Self::identity();
+                                            } else {
+                                                Self::double_assign_impl(self);
+                                            }
+                                        } else {
+                                            Self::add_ne_assign(self, p2);
+                                        }
+                                    }
+                                }
+
+                                impl AddAssign for #struct_name {
+                                    fn add_assign(&mut self, rhs: Self) {
+                                        self.add_assign(&rhs);
+                                    }
+                                }
+
+                                impl Neg for #struct_name {
+                                    type Output = Self;
+
+                                    fn neg(self) -> Self::Output {
+                                        Self {
+                                            x: self.x,
+                                            y: -self.y,
+                                        }
+                                    }
+                                }
+
+                                impl Neg for &#struct_name {
+                                    type Output = #struct_name;
+
+                                    fn neg(self) -> Self::Output {
+                                        #struct_name {
+                                            x: self.x.clone(),
+                                            y: -self.y.clone(),
+                                        }
+                                    }
+                                }
+
+                                impl Sub<&#struct_name> for #struct_name {
+                                    type Output = Self;
+
+                                    fn sub(self, rhs: &#struct_name) -> Self::Output {
+                                        self.add(&rhs.neg())
+                                    }
+                                }
+
+                                impl Sub for #struct_name {
+                                    type Output = #struct_name;
+
+                                    fn sub(self, rhs: Self) -> Self::Output {
+                                        self.sub(&rhs)
+                                    }
+                                }
+
+                                impl Sub<&#struct_name> for &#struct_name {
+                                    type Output = #struct_name;
+
+                                    fn sub(self, p2: &#struct_name) -> Self::Output {
+                                        self.add(&p2.neg())
+                                    }
+                                }
+
+                                impl SubAssign<&#struct_name> for #struct_name {
+                                    fn sub_assign(&mut self, p2: &#struct_name) {
+                                        self.add_assign(&p2.neg());
+                                    }
+                                }
+
+                                impl SubAssign for #struct_name {
+                                    fn sub_assign(&mut self, rhs: Self) {
+                                        self.sub_assign(&rhs);
+                                    }
+                                }
+
 
                             });
 
@@ -175,24 +339,6 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
             output.push(result.unwrap());
         }
     }
-
-    // let mut serialized_moduli = (moduli.len() as u32)
-    //     .to_le_bytes()
-    //     .into_iter()
-    //     .collect::<Vec<_>>();
-    // for modulus_bytes in moduli {
-    //     serialized_moduli.extend((modulus_bytes.len() as u32).to_le_bytes());
-    //     serialized_moduli.extend(modulus_bytes);
-    // }
-    // let serialized_len = serialized_moduli.len();
-    // // Note: this also prevents the macro from being called twice
-    // output.push(TokenStream::from(quote::quote! {
-    //     #[cfg(target_os = "zkvm")]
-    //     #[link_section = ".axiom"]
-    //     #[no_mangle]
-    //     #[used]
-    //     static AXIOM_SERIALIZED_MODULI: [u8; #serialized_len] = [#(#serialized_moduli),*];
-    // }));
 
     TokenStream::from_iter(output)
 }
