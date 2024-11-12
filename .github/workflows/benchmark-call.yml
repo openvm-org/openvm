@@ -222,7 +222,41 @@ jobs:
             }
 
       ##########################################################################
-      # Update gh-pages with individual results upon a push event              #
+      # Update gh-pages with individual results                                #
+      ##########################################################################
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        with:
+          ref: gh-pages-test
+
+      - name: Set up git
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Set github pages path for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+
+      - name: Set github pages path for push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          GH_PAGES_PATH="benchmarks"
+
+      - name: Update PR github pages with new bench results
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          mkdir -p ${GH_PAGES_PATH}/individual
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
+          git add ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md"
+          git push
+
+      ##########################################################################
+      # Update S3 with individual results upon a push event                    #
       ##########################################################################
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -232,23 +266,3 @@ jobs:
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        with:
-          ref: gh-pages-test
-
-      - name: set up git
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      - name: Update github pages with new bench results
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p benchmarks/individual
-          s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" benchmarks/individual/${METRIC_NAME}.md
-          git add benchmarks/individual/${METRIC_NAME}.md
-          git commit --allow-empty -m "Update benchmark result for ${METRIC_NAME}"
-          git push

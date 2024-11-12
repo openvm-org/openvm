@@ -84,6 +84,16 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref }}
 
+      - name: Set github pages path for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+
+      - name: Set github pages path for push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          GH_PAGES_PATH="benchmarks"
+
       - name: Load all metadata files from S3
         run: |
           mkdir results
@@ -95,27 +105,56 @@ jobs:
           while read name; do
             echo "Downloading results for benchmark: $name"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
-            awk '
+            awk -v name="$name" -v repo="${{ github.repository }}" -v bench_path="${GH_PAGES_PATH}" '
               /\| group \| fri\.log_blowup \| total_cells_used \| total_cycles \| total_proof_time_ms \|/ {
                 getline;
                 getline;
-                table_row=$0;
+                split($0, cols, " \\| ");
+                link="[ " cols[1] " ](https://github.com/" repo "/blob/gh-pages-test/" bench_path "/individual/" name ".md)";
+                table_row = "| " link;
+                for (i = 2; i <= length(cols); i++) {
+                  table_row = table_row " | " cols[i]
+                }
                 next;
               }
               /Instance Type:/ {
                 if (table_row) {
-                  print table_row " " $3 " |";
+                  print table_row " | " $3 " |";
                   exit;
                 }
               }
             ' "results/${name}.md" >> results.md
           done <<< "$names"
 
+          echo "" >> results.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
           echo "" >> results.md
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
           mkdir -p /tmp/benchmark-results/
           cp results.md /tmp/benchmark-results/
+
+      ##########################################################################
+      # Update gh-pages with summary upon a PR event                           #
+      ##########################################################################
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        with:
+          ref: gh-pages-test
+
+      - name: Set up git
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # TODO[stephenh]: remove rm line after backfill
+      - name: Update github pages with new bench results
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          cp /tmp/benchmark-results/results.md ${GH_PAGES_PATH}/summary.md
+          git add ${GH_PAGES_PATH}/summary.md
+          git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
+          git push
 
       ##########################################################################
       # Update PR comment upon a pull request event                            #
@@ -160,26 +199,3 @@ jobs:
               body: `<!--Benchmark Results-->\n${newBenchmark}`
             });
 
-      ##########################################################################
-      # Update gh-pages with summary upon a push event                         #
-      ##########################################################################
-      - uses: actions/checkout@v4
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        with:
-          ref: gh-pages-test
-
-      - name: set up git
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      # TODO[stephenh]: remove rm line after backfill
-      - name: Update github pages with new bench results
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git rm -f benchmarks/*.md || true
-          cp /tmp/benchmark-results/results.md benchmarks/summary.md
-          git add benchmarks/summary.md
-          git commit --allow-empty -m "Update summarized benchmark results"
-          git push
