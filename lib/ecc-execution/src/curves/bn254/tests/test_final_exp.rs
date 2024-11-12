@@ -5,10 +5,7 @@ use axvm_ecc::{
 };
 use num::{BigInt, Num};
 
-use crate::{
-    curves::bn254::{Bn254, BN254_PBE_NAF_LEN},
-    tests::utils::generate_test_points_generator_scalar,
-};
+use crate::{curves::bn254::Bn254, tests::utils::generate_test_points_generator_scalar};
 
 #[test]
 #[allow(non_snake_case)]
