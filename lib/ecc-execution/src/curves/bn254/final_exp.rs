@@ -6,7 +6,7 @@ use axvm_ecc::{
 };
 use halo2curves_axiom::ff::Field;
 
-use super::{Bn254, BN254_PBE_NAF_LEN, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
+use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {

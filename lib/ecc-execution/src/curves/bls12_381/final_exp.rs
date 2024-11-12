@@ -6,7 +6,7 @@ use axvm_ecc::{
 };
 use num::BigInt;
 
-use super::{Bls12_381, BLS12_381_PBE_LEN, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
+use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {

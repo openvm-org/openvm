@@ -6,6 +6,11 @@ pub mod field;
 pub mod point;
 pub mod sw;
 
+mod group;
+pub use group::*;
+mod msm;
+pub use msm::*;
+
 #[cfg(feature = "halo2curves")]
 pub mod curve;
 

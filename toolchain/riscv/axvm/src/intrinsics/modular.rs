@@ -58,6 +58,9 @@ pub trait IntMod:
     /// Modulus as a Repr.
     const MODULUS: Self::Repr;
 
+    /// Number of bytes in the modulus.
+    const NUM_BYTES: usize;
+
     /// The zero element (i.e. the additive identity).
     const ZERO: Self;
 

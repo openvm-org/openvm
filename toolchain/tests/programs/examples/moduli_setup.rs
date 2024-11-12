@@ -24,6 +24,7 @@ pub fn main() {
         res += res.clone();
     }
     assert_eq!(res, Mersenne61::from_u32(1));
-
-    core::hint::black_box(AXIOM_SERIALIZED_MODULI);
+    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_bls12381);
+    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_Mod1e18);
+    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_Mersenne61);
 }
