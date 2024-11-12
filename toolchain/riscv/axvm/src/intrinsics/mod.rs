@@ -19,6 +19,6 @@ pub use i256::*;
 mod modular;
 pub use modular::*;
 
-#[allow(unused)]
 mod utils;
+#[allow(unused)]
 pub use utils::*;
