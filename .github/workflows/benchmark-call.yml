@@ -104,6 +104,8 @@ jobs:
         run: |
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          echo "APP_LOG_BLOWUP=${APP_ARG}" >> $GITHUB_ENV
+          echo "AGG_LOG_BLOWUP=${AGG_ARG}" >> $GITHUB_ENV
           echo "LOG_BLOWUP_ARGS=${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
       - name: Set working directory
@@ -128,7 +130,10 @@ jobs:
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_PATH=".bench_metrics/${BIN_NAME}.json"
+          METRIC_NAME="${BIN_NAME}-${APP_LOG_BLOWUP}-${AGG_LOG_BLOWUP}"
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
           current_sha=$(git rev-parse HEAD)
@@ -136,9 +141,9 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.json
+            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
-            prev_path="${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
 
             if [[ $count -gt 0 ]]; then
@@ -184,8 +189,9 @@ jobs:
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
+          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
+      # TODO[stephenh]: remove this collapse after old PR workflow phased out
       - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -212,29 +218,30 @@ jobs:
             }
 
       - name: Update latest main result in s3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
 
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
 
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          ref: gh-pages
+          ref: gh-pages-test
 
       - name: set up git
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
-          git add benchmarks/${{ inputs.benchmark_name }}.md
-          git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
+          mkdir -p benchmarks/individual
+          s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" benchmarks/individual/${METRIC_NAME}.md
+          git add benchmarks/individual/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result for ${METRIC_NAME}"
           git push

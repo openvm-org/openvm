@@ -14,7 +14,7 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup):
     # Change the current working directory to the Git root
     os.chdir(git_root)
     create_bench_metrics_dir()
-    output_path = f".bench_metrics/{bin_name}.json"
+    output_path = f".bench_metrics/{bin_name}-{app_log_blowup}-{agg_log_blowup}.json"
     output_path_old = None
 
     if os.path.exists(output_path):
