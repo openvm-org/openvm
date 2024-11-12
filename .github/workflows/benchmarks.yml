@@ -154,6 +154,7 @@ jobs:
       - name: Update github pages with new bench results
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
+          git rm -f ${GH_PAGES_PATH}/*.md || true
           cp /tmp/benchmark-results/results.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
