@@ -114,12 +114,6 @@ jobs:
               }
             }
 
-      # - name: Install s5cmd
-      #   run: |
-      #     curl -L https://github.com/peak/s5cmd/releases/download/v2.1.0/s5cmd_2.1.0_Linux-arm64.tar.gz | tar -xz
-      #     sudo mv s5cmd /usr/local/bin/
-      #     sudo chmod +x /usr/local/bin/s5cmd
-
       - name: Load all metadata files from S3
         run: |
           current_sha=$(git rev-parse HEAD)
@@ -128,8 +122,13 @@ jobs:
           while read name; do
             echo "Downloading results for benchmark: $name"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
+            sed -i '/^Commit: /d' "results/${name}.md"
+            sed -i '/^\[Benchmark Workflow\]/d' "results/${name}.md"
+            echo "" >> "results/${name}.md"
           done <<< "$names"
           cat $(ls results/*.md | sort) > results.md
+          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
+          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
       
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
