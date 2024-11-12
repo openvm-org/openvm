@@ -57,22 +57,32 @@ where
 
     /// Runs the multi-Miller loop with no embedded exponent
     #[allow(non_snake_case)]
-    fn multi_miller_loop<const PBE_LEN: usize>(
+    fn multi_miller_loop(
         &self,
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Self::Fp12 {
-        self.multi_miller_loop_embedded_exp::<PBE_LEN>(P, Q, None)
+        self.multi_miller_loop_embedded_exp(P, Q, None)
+    }
+
+    fn multi_miller_loop_embedded_exp(
+        &self,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+    ) -> Self::Fp12 {
+        self.multi_miller_loop_embedded_exp_impl(P, Q, c, Self::PSEUDO_BINARY_ENCODING)
     }
 
     /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the residue witness
     /// in the final exponentiation step
     #[allow(non_snake_case)]
-    fn multi_miller_loop_embedded_exp<const PBE_LEN: usize>(
+    fn multi_miller_loop_embedded_exp_impl(
         &self,
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
+        PSEUDO_BINARY_ENCODING: &[i8],
     ) -> Self::Fp12 {
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
@@ -118,7 +128,7 @@ where
                 .collect()
         }
 
-        for i in (0..PBE_LEN - 2).rev() {
+        for i in (0..PSEUDO_BINARY_ENCODING.len() - 2).rev() {
             f = &f * &f;
 
             let mut lines = Vec::<EvaluatedLine<Self::Fp, Self::Fp2>>::new();

@@ -7,10 +7,7 @@ use halo2curves_axiom::bls12_381::{G2Prepared, MillerLoopResult};
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
-use crate::{
-    curves::bls12_381::{Bls12_381, BLS12_381_PBE_LEN},
-    tests::utils::generate_test_points,
-};
+use crate::{curves::bls12_381::Bls12_381, tests::utils::generate_test_points};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {
@@ -28,8 +25,7 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
 
     // Run the multi-miller loop
     let bls12_381 = Bls12_381;
-    let f = bls12_381
-        .multi_miller_loop::<BLS12_381_PBE_LEN>(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
+    let f = bls12_381.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = MillerLoopResult(f);
     let final_f = wrapped_f.final_exponentiation();

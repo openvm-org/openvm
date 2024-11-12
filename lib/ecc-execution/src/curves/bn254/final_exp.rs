@@ -26,7 +26,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let c_mul = c_q3 * c_q2_inv * c_q;
 
         // Compute miller loop with c_inv
-        let fc = self.multi_miller_loop_embedded_exp::<BN254_PBE_NAF_LEN>(P, Q, Some(c_inv));
+        let fc = self.multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         assert_eq!(fc * c_mul * u, Fq12::ONE);
     }

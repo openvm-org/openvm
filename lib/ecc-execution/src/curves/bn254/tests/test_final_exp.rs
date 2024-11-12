@@ -20,7 +20,7 @@ fn test_bn254_final_exp_hint() {
         );
 
     let bn254 = Bn254;
-    let f = bn254.multi_miller_loop::<BN254_PBE_NAF_LEN>(&P_ecpoints, &Q_ecpoints);
+    let f = bn254.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
     let (c, u) = bn254.final_exp_hint(f);
 
     let q = BigInt::from_str_radix(
@@ -53,6 +53,6 @@ fn assert_final_exp_one<const N: usize>(a: &[Fr; N], b: &[Fr; N]) {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
         generate_test_points_generator_scalar::<G1Affine, G2Affine, Fr, Fq, Fq2, N>(a, b);
     let bn254 = Bn254;
-    let f = bn254.multi_miller_loop::<BN254_PBE_NAF_LEN>(&P_ecpoints, &Q_ecpoints);
+    let f = bn254.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
     bn254.assert_final_exp_is_one(f, &P_ecpoints, &Q_ecpoints);
 }
