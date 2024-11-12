@@ -87,13 +87,36 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     .chain(vec![0u8; limbs])
                                     .take(limbs)
                                     .collect::<Vec<_>>();
+                                let num_bytes = modulus_bytes.len();
 
                                 let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
                                 let block_size =
                                     syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
+                                let serialized_modulus =
+                                    core::iter::once(1) // 1 for "modulus"
+                                        .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of variables in the elf
+                                        .chain(
+                                            (modulus_bytes.len() as u32)
+                                                .to_le_bytes()
+                                                .iter()
+                                                .copied(),
+                                        )
+                                        .chain(modulus_bytes.iter().copied())
+                                        .collect::<Vec<_>>();
+                                let serialized_name = syn::Ident::new(
+                                    &format!("AXIOM_SERIALIZED_MODULUS_{}", struct_name),
+                                    span.into(),
+                                );
+                                let serialized_len = serialized_modulus.len();
+
                                 let result = TokenStream::from(
                                     quote::quote_spanned! { span.into() =>
+                                        #[cfg(target_os = "zkvm")]
+                                        #[link_section = ".axiom"]
+                                        #[no_mangle]
+                                        #[used]
+                                        static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
 
                                         #[derive(Clone, Eq)]
                                         #[repr(C, align(#block_size))]
@@ -178,7 +201,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
 
                                             #[inline(always)]
-                                            fn div_assign_impl(&mut self, other: &Self) {
+                                            fn div_assign_unsafe_impl(&mut self, other: &Self) {
                                                 #[cfg(not(target_os = "zkvm"))]
                                                 {
                                                     let modulus = Self::modulus_biguint();
@@ -270,12 +293,12 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
 
                                             #[inline(always)]
-                                            fn div_refs_impl(&self, other: &Self) -> Self {
+                                            fn div_unsafe_refs_impl(&self, other: &Self) -> Self {
                                                 #[cfg(not(target_os = "zkvm"))]
                                                 {
-                                                    let mut res = self.clone();
-                                                    res /= other;
-                                                    res
+                                                    let modulus = Self::modulus_biguint();
+                                                    let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
+                                                    Self::from_biguint((self.as_biguint() * inv) % modulus)
                                                 }
                                                 #[cfg(target_os = "zkvm")]
                                                 {
@@ -326,6 +349,8 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             const MODULUS: Self::Repr = [#(#modulus_bytes),*];
 
                                             const ZERO: Self = Self([0; #limbs]);
+
+                                            const NUM_BYTES: usize = #num_bytes;
 
                                             const ONE: Self = Self::from_const_u8(1);
 
@@ -507,48 +532,48 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> core::ops::DivAssign<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
-                                            fn div_assign(&mut self, other: &'a #struct_name) {
-                                                self.div_assign_impl(other);
+                                            fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
+                                                self.div_assign_unsafe_impl(other);
                                             }
                                         }
 
-                                        impl core::ops::DivAssign for #struct_name {
+                                        impl axvm::intrinsics::DivAssignUnsafe for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
-                                            fn div_assign(&mut self, other: Self) {
-                                                self.div_assign_impl(&other);
+                                            fn div_assign_unsafe(&mut self, other: Self) {
+                                                self.div_assign_unsafe_impl(&other);
                                             }
                                         }
 
-                                        impl core::ops::Div for #struct_name {
+                                        impl axvm::intrinsics::DivUnsafe for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
-                                            fn div(mut self, other: Self) -> Self::Output {
-                                                self /= other;
+                                            fn div_unsafe(mut self, other: Self) -> Self::Output {
+                                                self.div_assign_unsafe_impl(&other);
                                                 self
                                             }
                                         }
 
-                                        impl<'a> core::ops::Div<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
-                                            fn div(mut self, other: &'a #struct_name) -> Self::Output {
-                                                self /= other;
+                                            fn div_unsafe(mut self, other: &'a #struct_name) -> Self::Output {
+                                                self.div_assign_unsafe_impl(other);
                                                 self
                                             }
                                         }
 
-                                        impl<'a> core::ops::Div<&'a #struct_name> for &#struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for &#struct_name {
                                             type Output = #struct_name;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
-                                            fn div(self, other: &'a #struct_name) -> Self::Output {
-                                                self.div_refs_impl(other)
+                                            fn div_unsafe(self, other: &'a #struct_name) -> Self::Output {
+                                                self.div_unsafe_refs_impl(other)
                                             }
                                         }
 
@@ -595,31 +620,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 write!(f, "{:?}", self.as_le_bytes())
                                             }
                                         }
-
-                                        #[cfg(not(target_os = "zkvm"))]
-                                        mod helper {
-                                            use super::*;
-                                            impl core::ops::Mul<u32> for #struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
-
-                                            impl core::ops::Mul<u32> for &#struct_name {
-                                                type Output = #struct_name;
-                                                #[inline(always)]
-                                                fn mul(self, other: u32) -> Self::Output {
-                                                    let mut res = self.clone();
-                                                    res *= #struct_name::from_u32(other);
-                                                    res
-                                                }
-                                            }
-                                        }
-
                                     },
                                 );
 
@@ -648,24 +648,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             output.push(result.unwrap());
         }
     }
-
-    let mut serialized_moduli = (moduli.len() as u32)
-        .to_le_bytes()
-        .into_iter()
-        .collect::<Vec<_>>();
-    for modulus_bytes in moduli {
-        serialized_moduli.extend((modulus_bytes.len() as u32).to_le_bytes());
-        serialized_moduli.extend(modulus_bytes);
-    }
-    let serialized_len = serialized_moduli.len();
-    // Note: this also prevents the macro from being called twice
-    output.push(TokenStream::from(quote::quote! {
-        #[cfg(target_os = "zkvm")]
-        #[link_section = ".axiom"]
-        #[no_mangle]
-        #[used]
-        static AXIOM_SERIALIZED_MODULI: [u8; #serialized_len] = [#(#serialized_moduli),*];
-    }));
 
     TokenStream::from_iter(output)
 }

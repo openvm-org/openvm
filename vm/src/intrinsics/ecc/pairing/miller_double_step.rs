@@ -16,8 +16,8 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
-// Input: EcPoint<Fp2>: 4 field elements
-// Output: (EcPoint<Fp2>, Fp2, Fp2) -> 8 field elements
+// Input: AffinePoint<Fp2>: 4 field elements
+// Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct MillerDoubleStepChip<
     F: PrimeField32,
@@ -93,11 +93,12 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
+    use ax_ecc_execution::curves::bn254::Bn254;
     use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
-    use axvm_ecc::{pairing::miller_double_step, point::EcPoint};
+    use axvm_ecc::{pairing::MillerStep, point::AffinePoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use halo2curves_axiom::bn256::{Fq, Fq2, G2Affine};
+    use halo2curves_axiom::bn256::G2Affine;
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
@@ -155,13 +156,13 @@ mod tests {
         let Q = G2Affine::random(&mut rng0);
         let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(bn254_fq_to_biguint);
 
-        let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
-        let (Q_acc_init, l_init) = miller_double_step::<Fq, Fq2>(Q_ecpoint.clone());
+        let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
+        let (Q_acc_init, l_init) = Bn254::miller_double_step(Q_ecpoint.clone());
         let result = chip
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
-        assert_eq!(result.len(), 8); // EcPoint<Fp2> and two Fp2 coefficients
+        assert_eq!(result.len(), 8); // AffinePoint<Fp2> and two Fp2 coefficients
         assert_eq!(result[0], bn254_fq_to_biguint(Q_acc_init.x.c0));
         assert_eq!(result[1], bn254_fq_to_biguint(Q_acc_init.x.c1));
         assert_eq!(result[2], bn254_fq_to_biguint(Q_acc_init.y.c0));

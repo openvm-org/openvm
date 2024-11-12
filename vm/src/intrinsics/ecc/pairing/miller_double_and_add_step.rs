@@ -16,8 +16,8 @@ use crate::{
     system::memory::MemoryControllerRef,
 };
 
-// Input: two EcPoint<Fp2>: 4 field elements each
-// Output: (EcPoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
+// Input: two AffinePoint<Fp2>: 4 field elements each
+// Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct MillerDoubleAndAddStepChip<
     F: PrimeField32,
@@ -107,11 +107,12 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
+    use ax_ecc_execution::curves::bn254::Bn254;
     use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
-    use axvm_ecc::{pairing::miller_double_and_add_step, point::EcPoint};
+    use axvm_ecc::{pairing::MillerStep, point::AffinePoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use halo2curves_axiom::bn256::{Fq, Fq2, G2Affine};
+    use halo2curves_axiom::bn256::G2Affine;
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
@@ -161,15 +162,15 @@ mod tests {
         ]
         .map(bn254_fq_to_biguint);
 
-        let Q_ecpoint = EcPoint { x: Q.x, y: Q.y };
-        let Q_ecpoint2 = EcPoint { x: Q2.x, y: Q2.y };
-        let (Q_daa, l_qa, l_sqs) = miller_double_and_add_step::<Fq, Fq2>(Q_ecpoint, Q_ecpoint2);
+        let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
+        let Q_ecpoint2 = AffinePoint { x: Q2.x, y: Q2.y };
+        let (Q_daa, l_qa, l_sqs) = Bn254::miller_double_and_add_step(Q_ecpoint, Q_ecpoint2);
         let result = chip
             .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
-        assert_eq!(result.len(), 12); // EcPoint<Fp2> and 4 Fp2 coefficients
+        assert_eq!(result.len(), 12); // AffinePoint<Fp2> and 4 Fp2 coefficients
         assert_eq!(result[0], bn254_fq_to_biguint(Q_daa.x.c0));
         assert_eq!(result[1], bn254_fq_to_biguint(Q_daa.x.c1));
         assert_eq!(result[2], bn254_fq_to_biguint(Q_daa.y.c0));

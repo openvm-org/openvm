@@ -38,7 +38,7 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                         if let syn::Expr::Path(intmod_type) = &*assign.right {
                             let result = TokenStream::from(quote::quote_spanned! { span.into() =>
 
-                                #[derive(Eq, PartialEq, Clone)]
+                                #[derive(Eq, PartialEq, Clone, Debug)]
                                 #[repr(C)]
                                 pub struct #struct_name {
                                     pub x: #intmod_type,
@@ -53,32 +53,13 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
 
                                     pub const EC_IDX: usize = #ec_idx;
 
-                                    pub fn is_identity(&self) -> bool {
-                                        self.x == Self::IDENTITY.x && self.y == Self::IDENTITY.y
-                                    }
-
-                                    // Two points can be equal or not.
-                                    pub fn add(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
-                                        if p1.is_identity() {
-                                            p2.clone()
-                                        } else if p2.is_identity() {
-                                            p1.clone()
-                                        } else if p1.x == p2.x {
-                                            if &p1.y + &p2.y == #intmod_type::ZERO {
-                                                Self::IDENTITY
-                                            } else {
-                                                Self::double(p1)
-                                            }
-                                        } else {
-                                            Self::add_ne(p1, p2)
-                                        }
-                                    }
-
+                                    // Below are wrapper functions for the intrinsic instructions.
+                                    // Should not be called directly.
                                     #[inline(always)]
-                                    pub fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
+                                    fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let lambda = (&p2.y - &p1.y) / (&p2.x - &p1.x);
+                                            let lambda = (&p2.y - &p1.y).div_unsafe(&p2.x - &p1.x);
                                             let x3 = &lambda * &lambda - &p1.x - &p2.x;
                                             let y3 = &lambda * &(&p1.x - &x3) - &p1.y;
                                             #struct_name { x: x3, y: y3 }
@@ -99,10 +80,10 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                     }
 
                                     #[inline(always)]
-                                    pub fn add_ne_assign(&mut self, p2: &#struct_name) {
+                                    fn add_ne_assign(&mut self, p2: &#struct_name) {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let lambda = (&p2.y - &self.y) / (&p2.x - &self.x);
+                                            let lambda = (&p2.y - &self.y).div_unsafe(&p2.x - &self.x);
                                             let x3 = &lambda * &lambda - &self.x - &p2.x;
                                             let y3 = &lambda * &(&self.x - &x3) - &self.y;
                                             self.x = x3;
@@ -122,11 +103,12 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                     }
 
                                     #[inline(always)]
-                                    pub fn double(p: &#struct_name) -> #struct_name {
+                                    fn double_impl(p: &#struct_name) -> #struct_name {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let lambda = &p.x * &p.x * 3 / (&p.y * 2);
-                                            let x3 = &lambda * &lambda - &p.x * 2;
+                                            let two = IntModN::from_u8(2);
+                                            let lambda = &p.x * &p.x * IntModN::from_u8(3).div_unsafe(&p.y * &two);
+                                            let x3 = &lambda * &lambda - &p.x * &two;
                                             let y3 = &lambda * &(&p.x - &x3) - &p.y;
                                             #struct_name { x: x3, y: y3 }
                                         }
@@ -146,11 +128,12 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                     }
 
                                     #[inline(always)]
-                                    pub fn double_assign(&mut self) {
+                                    fn double_assign_impl(&mut self) {
                                         #[cfg(not(target_os = "zkvm"))]
                                         {
-                                            let lambda = &self.x * &self.x * 3 / (&self.y * 2);
-                                            let x3 = &lambda * &lambda - &self.x * 2;
+                                            let two = IntModN::from_u8(2);
+                                            let lambda = &self.x * &self.x * IntModN::from_u8(3).div_unsafe(&self.y * &two);
+                                            let x3 = &lambda * &lambda - &self.x * &two;
                                             let y3 = &lambda * &(&self.x - &x3) - &self.y;
                                             self.x = x3;
                                             self.y = y3;
@@ -167,7 +150,7 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                                             );
                                         }
                                     }
-                                }
+                               }
 
                             });
 

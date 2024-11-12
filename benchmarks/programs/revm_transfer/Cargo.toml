@@ -1,11 +1,11 @@
 [workspace]
 [package]
-name = "example-contract-deployment"
+name = "axvm-revm-transfer"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-revm = { version = "17.1.0", default-features = false }
+revm = { version = "18.0.0", default-features = false }
 axvm = { path = "../../../toolchain/riscv/axvm" }
 tracing = { version = "0.1.40", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [

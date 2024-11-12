@@ -12,4 +12,7 @@ pub struct CurveConst {
     pub MODULUS: BigUint,
     pub ORDER: BigUint,
     pub XI: [isize; 2],
+    pub NUM_LIMBS: usize,
+    pub LIMB_BITS: usize,
+    pub BLOCK_SIZE: usize,
 }

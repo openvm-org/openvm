@@ -25,6 +25,7 @@ members = [
     "toolchain/riscv/macros",
     "toolchain/build",
     "toolchain/tests",
+    "cargo-axiom",
     "lib/ecc",
     "lib/ecc-constants",
     "lib/ecc-execution",
@@ -71,6 +72,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
+cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
