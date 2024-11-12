@@ -10,12 +10,12 @@ repository = { workspace = true }
 [dependencies]
 axvm-platform = { workspace = true, features = ["rust-runtime"] }
 axvm-setup-macro = { workspace = true }
-serde = { workspace = true, features = ["alloc", "derive"] }
+serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint-dig = { version = "0.8.4", default-features = false }
-num-traits = { version = "0.2.19", default-features = false }
+num-bigint-dig-no-def.workspace = true
+num-traits-no-def.workspace = true
 tiny-keccak.workspace = true
 
 [dev-dependencies]

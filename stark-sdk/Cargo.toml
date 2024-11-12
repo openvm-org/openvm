@@ -31,10 +31,7 @@ tracing.workspace = true
 ax-stark-backend = { workspace = true }
 ax-circuit-derive = { workspace = true }
 
-serde = { workspace = true, default-features = false, features = [
-    "derive",
-    "alloc",
-] }
+serde = { workspace = true, features = ["alloc"] }
 rand.workspace = true
 metrics.workspace = true
 serde_json.workspace = true

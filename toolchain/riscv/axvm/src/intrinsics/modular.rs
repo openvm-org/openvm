@@ -6,7 +6,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::BigUint;
+use num_bigint_dig_no_def::BigUint;
 
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
