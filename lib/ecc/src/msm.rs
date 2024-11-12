@@ -59,11 +59,19 @@ where
         impl<EcPoint: Group> Bucket<EcPoint>
         where
             for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
+            for<'a> &'a EcPoint: Neg<Output = EcPoint>,
         {
             fn add_assign(&mut self, other: &EcPoint) {
                 *self = match self {
                     Bucket::None => Bucket::Affine(other.clone()),
                     Bucket::Affine(ref a) => Bucket::Affine(a + other),
+                }
+            }
+
+            fn sub_assign(&mut self, other: &EcPoint) {
+                *self = match self {
+                    Bucket::None => Bucket::Affine(other.neg().clone()),
+                    Bucket::Affine(ref a) => Bucket::Affine(a + &other.neg()),
                 }
             }
 
@@ -86,7 +94,7 @@ where
                 buckets[coeff as usize - 1].add_assign(base);
             }
             if coeff.is_negative() {
-                buckets[coeff.unsigned_abs() as usize - 1].add_assign(&base.neg());
+                buckets[coeff.unsigned_abs() as usize - 1].sub_assign(base);
             }
         }
 
