@@ -111,8 +111,8 @@ jobs:
             ' "results/${name}.md" >> results.md
           done <<< "$names"
 
-          echo "<br>  " >> results.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
+          echo "" >> results.md
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
           mkdir -p /tmp/benchmark-results/
           cp results.md /tmp/benchmark-results/
