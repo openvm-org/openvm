@@ -111,6 +111,7 @@ jobs:
               /\| group \| fri\.log_blowup \| total_cells_used \| total_cycles \| total_proof_time_ms \|/ {
                 getline;
                 getline;
+                gsub(/^ *\| | \| *$/, "", $0);
                 split($0, cols, " \\| ");
                 link="[ " cols[1] " ](https://github.com/" repo "/blob/gh-pages-test/" bench_path "/individual/" name ".md)";
                 table_row = "| " link;
