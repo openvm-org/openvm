@@ -73,10 +73,9 @@ jobs:
   summarize:
     needs: [create-matrix, benchmark]
     runs-on:
-      - runs-on
-      - runner=${{ inputs.instance_type }}
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-arm64
       - image=arm64-rust-dev-32gb
-      - run-id=${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
