@@ -18,6 +18,8 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name):
 
     # Process counters
     for counter in metrics_dict.get('counter', []):
+        if counter['metric'] != metric_name:
+            continue
         # list of pairs -> dict
         labels = dict(counter['labels'])
         filter = False
@@ -30,12 +32,11 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name):
 
         stack_values = []
         for key in stack_keys:
-            if key in labels:
-                stack_values.append(labels[key])
-        if len(stack_values) == 0:
-            continue
-
-        if counter['metric'] != metric_name:
+            if key not in labels:
+                filter = True
+                break
+            stack_values.append(labels[key])
+        if filter:
             continue
 
         stack = ';'.join(stack_values)
@@ -45,6 +46,7 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name):
 
     # Currently cycle tracker does not use gauge
     return lines
+
 
 def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name, reverse=False):
     lines = get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name)
@@ -69,7 +71,7 @@ def create_flamegraph(fname, metrics_dict, group_by_kvs, stack_keys, metric_name
             command.append("--reverse")
 
         subprocess.run(command, stdout=f, check=False)
-        print (f"Created flamegraph at {flamegraph_path}")
+        print(f"Created flamegraph at {flamegraph_path}")
 
 
 def create_flamegraphs(metrics_file, group_by, stack_keys, metric_name, reverse=False):
@@ -95,8 +97,10 @@ def create_flamegraphs(metrics_file, group_by, stack_keys, metric_name, reverse=
 
 def create_custom_flamegraphs(metrics_file, group_by=["group"]):
     for reverse in [False, True]:
-        create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency", reverse=reverse)
-        create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode", "air_name"], "cells_used", reverse=reverse)
+        create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode"], "frequency",
+                           reverse=reverse)
+        create_flamegraphs(metrics_file, group_by, ["cycle_tracker_span", "dsl_ir", "opcode", "air_name"], "cells_used",
+                           reverse=reverse)
 
 
 def main():
