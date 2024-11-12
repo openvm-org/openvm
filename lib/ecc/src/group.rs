@@ -31,6 +31,3 @@ pub trait Group:
     fn double(&self) -> Self;
     fn double_assign(&mut self);
 }
-
-mod msm;
-pub use msm::*;

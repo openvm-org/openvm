@@ -8,8 +8,9 @@ use core::{
 
 use axvm::intrinsics::IntMod;
 use axvm_ecc::{
-    group::{msm, Group},
+    msm,
     sw::{EcPointN, IntModN},
+    Group,
 };
 use hex_literal::hex;
 

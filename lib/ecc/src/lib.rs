@@ -3,9 +3,13 @@
 extern crate alloc;
 
 pub mod field;
-pub mod group;
 pub mod point;
 pub mod sw;
+
+mod group;
+pub use group::*;
+mod msm;
+pub use msm::*;
 
 #[cfg(feature = "halo2curves")]
 pub mod curve;
