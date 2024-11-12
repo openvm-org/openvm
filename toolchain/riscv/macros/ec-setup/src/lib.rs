@@ -33,6 +33,7 @@ pub fn ec_setup(input: TokenStream) -> TokenStream {
                             .get_ident()
                             .expect("Left hand side must be an identifier")
                             .to_string();
+                        let struct_name = syn::Ident::new(&struct_name, span.into());
 
                         if let syn::Expr::Path(intmod_type) = &*assign.right {
                             let result = TokenStream::from(quote::quote_spanned! { span.into() =>
