@@ -1,5 +1,5 @@
 [package]
-name = "axvm-ec-setup"
+name = "axvm-sw-setup"
 version = { workspace = true }
 edition = "2021"
 

@@ -547,9 +547,9 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-ec-setup",
  "axvm-moduli-setup",
  "axvm-platform",
+ "axvm-sw-setup",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
@@ -665,15 +665,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "axvm-ec-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.87",
 ]
 
 [[package]]
@@ -847,6 +838,15 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-sw-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]

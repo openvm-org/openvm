@@ -15,6 +15,6 @@ axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
 
-axvm::ec_setup! {
+axvm::sw_setup! {
     EcPointN = IntModN;
 }

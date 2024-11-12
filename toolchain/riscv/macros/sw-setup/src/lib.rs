@@ -9,13 +9,13 @@ use syn::{parse_macro_input, Stmt};
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
 /// ```
-/// ec_setup! {
+/// sw_setup! {
 ///     [TODO]
 /// }
 /// ```
 /// This [TODO add description].
 #[proc_macro]
-pub fn ec_setup(input: TokenStream) -> TokenStream {
+pub fn sw_setup(input: TokenStream) -> TokenStream {
     let Stmts { stmts } = parse_macro_input!(input as Stmts);
 
     let mut output = Vec::new();
