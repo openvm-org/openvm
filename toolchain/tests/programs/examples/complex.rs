@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::intrinsics::IntMod;
+use axvm::intrinsics::{DivUnsafe, IntMod};
 use axvm_ecc::{field::Complex, sw::IntModN};
 
 axvm::entry!(main);
