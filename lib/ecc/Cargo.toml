@@ -8,7 +8,6 @@ description = "axVM elliptic curve cryptography library."
 [dependencies]
 axvm = { workspace = true }
 axvm-platform = { workspace = true }
-ff = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
 strum_macros.workspace = true
