@@ -104,8 +104,6 @@ jobs:
         run: |
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          echo "APP_LOG_BLOWUP=${APP_ARG}" >> $GITHUB_ENV
-          echo "AGG_LOG_BLOWUP=${AGG_ARG}" >> $GITHUB_ENV
           echo "LOG_BLOWUP_ARGS=${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
       - name: Set working directory
@@ -130,7 +128,7 @@ jobs:
       ######################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_NAME="${BIN_NAME}-${APP_LOG_BLOWUP}-${AGG_LOG_BLOWUP}"
+          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
 
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
