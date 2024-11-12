@@ -1,4 +1,4 @@
-name: axVM Clean PR GitHub Benchmark Pages
+name: Closed PR Cleaner
 
 on:
   pull_request:

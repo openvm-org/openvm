@@ -155,6 +155,7 @@ jobs:
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           git rm -f ${GH_PAGES_PATH}/*.md || true
+          mkdir -p ${GH_PAGES_PATH}
           cp /tmp/benchmark-results/results.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
