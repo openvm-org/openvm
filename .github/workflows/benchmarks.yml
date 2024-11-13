@@ -49,7 +49,13 @@ jobs:
               .benchmarks[] | 
               .name as $name |
               .run_params[] | 
-              {name: $name, app_log_blowup: .app_log_blowup, agg_log_blowup: .agg_log_blowup}
+              {
+                name: $name,
+                instance_type: .instance_type,
+                memory_allocator: .memory_allocator,
+                app_log_blowup: .app_log_blowup,
+                agg_log_blowup: .agg_log_blowup
+              }
             ]
           ' ./.github/workflows/benchmark-config.json)
           if [ $? -ne 0 ]; then
@@ -66,6 +72,8 @@ jobs:
     uses: ./.github/workflows/benchmark-call.yml
     with:
       benchmark_name: ${{ matrix.benchmark_run.name }}
+      instance_type: ${{ matrix.benchmark_run.instance_type }}
+      memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
       app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
       agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
     secrets: inherit
@@ -99,8 +107,8 @@ jobs:
       - name: Load all metadata files from S3
         run: |
           mkdir results
-          echo "| group | fri.log_blowup | total_cells_used | total_cycles | total_proof_time_ms | instance |" > results.md
-          echo "| --- | --- | --- | --- | --- | --- |" >> results.md
+          echo "| group | fri.log_blowup | total_cells_used | total_cycles | total_proof_time_ms | instance | memory_allocator |" > results.md
+          echo "| --- | --- | --- | --- | --- | --- | --- |" >> results.md
 
           current_sha=$(git rev-parse HEAD)
           names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)"' | sort)
@@ -121,6 +129,12 @@ jobs:
                 next;
               }
               /Instance Type:/ {
+                if (table_row) {
+                  table_row = table_row " | " $3;
+                  next;
+                }
+              }
+              /Memory Allocator:/ {
                 if (table_row) {
                   print table_row " | " $3 " |";
                   exit;

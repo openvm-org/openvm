@@ -16,8 +16,13 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x86})
         default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
       app_log_blowup:
         type: number
         required: false
@@ -37,8 +42,13 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x86})
         default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
       app_log_blowup:
         type: number
         required: false
@@ -54,7 +64,7 @@ env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
+  FEATURE_FLAGS: "bench-metrics,parallel,${{ inputs.memory_allocator }}"
   CMD_ARGS: ""
 
 jobs:
@@ -105,9 +115,10 @@ jobs:
 
       - name: Set application and aggregation level log blowup
         run: |
+          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          echo "LOG_BLOWUP_ARGS=${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
       - name: Set working directory
         id: set-working-dir
@@ -127,7 +138,7 @@ jobs:
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $LOG_BLOWUP_ARGS
+          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
       ##########################################################################
       # Generate result .md files and flamegraphs, store them in S3            #
@@ -194,6 +205,8 @@ jobs:
           echo "" >> $RESULT_PATH
           echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
           echo "" >> $RESULT_PATH
+          echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
@@ -226,7 +239,6 @@ jobs:
       ##########################################################################
       # Update gh-pages with individual results                                #
       ##########################################################################
-
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:

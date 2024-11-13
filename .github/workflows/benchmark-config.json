@@ -5,10 +5,14 @@
             "working_directory": "lib/recursion",
             "run_params": [
                 {
+                    "instance_type": "64cpu-linux-arm64",
+                    "memory_allocator": "mimalloc",
                     "app_log_blowup": 2,
                     "agg_log_blowup": 2
                 },
                 {
+                    "instance_type": "64cpu-linux-x86",
+                    "memory_allocator": "jemalloc",
                     "app_log_blowup": 3,
                     "agg_log_blowup": 3
                 }
@@ -19,6 +23,8 @@
             "working_directory": "benchmarks",
             "run_params": [
                 {
+                    "instance_type": "64cpu-linux-arm64",
+                    "memory_allocator": "mimalloc",
                     "app_log_blowup": 2,
                     "agg_log_blowup": 2
                 }
@@ -29,6 +35,8 @@
             "working_directory": "benchmarks",
             "run_params": [
                 {
+                    "instance_type": "64cpu-linux-arm64",
+                    "memory_allocator": "mimalloc",
                     "app_log_blowup": 2,
                     "agg_log_blowup": 2
                 }
@@ -39,6 +47,8 @@
             "working_directory": "benchmarks",
             "run_params": [
                 {
+                    "instance_type": "64cpu-linux-arm64",
+                    "memory_allocator": "mimalloc",
                     "app_log_blowup": 2,
                     "agg_log_blowup": 2
                 }
@@ -49,6 +59,8 @@
             "working_directory": "benchmarks",
             "run_params": [
                 {
+                    "instance_type": "64cpu-linux-arm64",
+                    "memory_allocator": "mimalloc",
                     "app_log_blowup": 2,
                     "agg_log_blowup": 2
                 }

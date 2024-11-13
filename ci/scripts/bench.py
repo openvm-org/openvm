@@ -52,11 +52,16 @@ def bench():
     parser = argparse.ArgumentParser()
     parser.add_argument('bench_name', type=str, help="Name of the benchmark to run")
     parser.add_argument('--features', type=str, help="Additional features")
+    parser.add_argument('--instance_type', type=str, help="Instance this benchmark is running on")
     parser.add_argument('--app_log_blowup', type=str, help="Application level log blowup")
     parser.add_argument('--agg_log_blowup', type=str, help="Aggregation level log blowup")
     args = parser.parse_args()
 
-    feature_flags = ["bench-metrics", "parallel", "mimalloc"] + ([args.features] if args.features else [])
+    feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else [])
+    assert "mimalloc" in feature_flags or "jemalloc" in feature_flags
+
+    if args.instance_type and 'x86' in args.instance_type:
+        feature_flags.append('nightly-features') 
 
     run_cargo_command(args.bench_name, feature_flags, args.app_log_blowup, args.agg_log_blowup)
 
