@@ -2,14 +2,14 @@ use std::any::type_name;
 
 use ff::PrimeField;
 use p3_baby_bear::BabyBear;
-use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254, FFBn254Fr};
+use p3_bn254_fr::{Bn254Fr, FFBn254Fr};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
+use p3_poseidon2::Poseidon2;
 use p3_symmetric::{CryptographicPermutation, MultiField32PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
 use zkhash::{

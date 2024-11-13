@@ -1,13 +1,13 @@
 use std::any::type_name;
 
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
+use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
+use p3_poseidon2::ExternalLayerConstants;
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
 use p3_uni_stark::StarkConfig;
 use rand::{rngs::StdRng, SeedableRng};
@@ -33,7 +33,7 @@ const DIGEST_WIDTH: usize = 8;
 type Val = BabyBear;
 type PackedVal = <Val as Field>::Packing;
 type Challenge = BinomialExtensionField<Val, 4>;
-type Perm = Poseidon2<Val, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, WIDTH, 7>;
+type Perm = Poseidon2BabyBear<WIDTH>;
 type InstrPerm = Instrumented<Perm>;
 
 // Generic over P: CryptographicPermutation<[F; WIDTH]>
@@ -165,26 +165,13 @@ where
 /// with a p3 Monty reduction factor.
 pub fn default_perm() -> Perm {
     let (external_constants, internal_constants) = horizen_round_consts_16();
-    let rounds_f = 8;
-    let rounds_p = 13;
-    Perm::new(
-        rounds_f,
-        external_constants,
-        Poseidon2ExternalMatrixGeneral,
-        rounds_p,
-        internal_constants,
-        DiffusionMatrixBabyBear::default(),
-    )
+    Perm::new(external_constants, internal_constants)
 }
 
 pub fn random_perm() -> Perm {
     let seed = [42; 32];
     let mut rng = StdRng::from_seed(seed);
-    Perm::new_from_rng_128(
-        Poseidon2ExternalMatrixGeneral,
-        DiffusionMatrixBabyBear::default(),
-        &mut rng,
-    )
+    Perm::new_from_rng_128(&mut rng)
 }
 
 pub fn random_instrumented_perm() -> InstrPerm {
@@ -196,7 +183,7 @@ fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
     BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
 }
 
-fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>) {
+fn horizen_round_consts_16() -> (ExternalLayerConstants<BabyBear, 16>, Vec<BabyBear>) {
     let p3_rc16: Vec<Vec<BabyBear>> = RC16
         .iter()
         .map(|round| {
@@ -211,9 +198,13 @@ fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>) {
     let rounds_p = 13;
     let rounds_f_beginning = rounds_f / 2;
     let p_end = rounds_f_beginning + rounds_p;
-    let external_round_constants: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
+    let initial: Vec<[BabyBear; 16]> = p3_rc16[..rounds_f_beginning]
         .iter()
-        .chain(p3_rc16[p_end..].iter())
+        .cloned()
+        .map(|round| round.try_into().unwrap())
+        .collect();
+    let terminal: Vec<[BabyBear; 16]> = p3_rc16[p_end..]
+        .iter()
         .cloned()
         .map(|round| round.try_into().unwrap())
         .collect();
@@ -221,7 +212,10 @@ fn horizen_round_consts_16() -> (Vec<[BabyBear; 16]>, Vec<BabyBear>) {
         .iter()
         .map(|round| round[0])
         .collect();
-    (external_round_constants, internal_round_constants)
+    (
+        ExternalLayerConstants::new(initial, terminal),
+        internal_round_constants,
+    )
 }
 
 /// Logs hash count statistics to stdout and returns as struct.
