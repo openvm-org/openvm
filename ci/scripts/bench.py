@@ -29,7 +29,7 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup):
 
     # Command to run
     command = [
-        "cargo", "run", "--bin", bin_name, "--release", "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "--bin", bin_name, "--release", "--features", ",".join(feature_flags), "--"
     ]
     if app_log_blowup is not None:
         command.extend(["--app_log_blowup", app_log_blowup])
@@ -57,7 +57,7 @@ def bench():
     parser.add_argument('--agg_log_blowup', type=str, help="Aggregation level log blowup")
     args = parser.parse_args()
 
-    assert "mimalloc" in args.features or "jemalloc" in args.features
+    assert (args.features.count("mimalloc") + args.features.count("jemalloc")) == 1
     feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else [])
 
     if args.instance_type and 'x86' in args.instance_type:
