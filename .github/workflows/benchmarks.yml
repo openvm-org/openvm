@@ -115,8 +115,8 @@ jobs:
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
           done <<< "$md_files"
 
-          python3 ci/scripts/metric_unify/summarize.py ${md_file_list}
-            --aggregation-json ci/scripts/metric_unify/aggregation.json 
+          python3 ci/scripts/metric_unify/summarize.py ${md_file_list} \
+            --aggregation-json ci/scripts/metric_unify/aggregation.json \
             --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages-test/${GH_PAGES_PATH}"
           
           echo "" >> summary.md
