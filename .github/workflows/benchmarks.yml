@@ -99,56 +99,32 @@ jobs:
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           GH_PAGES_PATH="benchmarks"
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Load all metadata files from S3
         run: |
-          mkdir results
-          echo "| group | fri.log_blowup | total_cells_used | total_cycles | total_proof_time_ms | instance | memory_allocator |" > results.md
-          echo "| --- | --- | --- | --- | --- | --- | --- |" >> results.md
-
           current_sha=$(git rev-parse HEAD)
-          names=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)"' | sort)
-          while read name; do
-            echo "Downloading results for benchmark: $name"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${name}.md" "results/${name}.md"
-            awk -v name="$name" -v repo="${{ github.repository }}" -v bench_path="${GH_PAGES_PATH}" '
-              /\| group \| fri\.log_blowup \| total_cells_used \| total_cycles \| total_proof_time_ms \|/ {
-                getline;
-                getline;
-                gsub(/^ *\| | \| *$/, "", $0);
-                split($0, cols, " \\| ");
-                link="[ " cols[1] " ](https://github.com/" repo "/blob/gh-pages-test/" bench_path "/individual/" name ".md)";
-                table_row = "| " link;
-                for (i = 2; i <= length(cols); i++) {
-                  table_row = table_row " | " cols[i]
-                }
-                next;
-              }
-              /Instance Type:/ {
-                if (table_row) {
-                  table_row = table_row " | " $3;
-                  next;
-                }
-              }
-              /Memory Allocator:/ {
-                if (table_row) {
-                  print table_row " | " $3 " |";
-                  exit;
-                }
-              }
-            ' "results/${name}.md" >> results.md
-          done <<< "$names"
+          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup).md"' | sort)
+          md_file_list=$(echo "$names" | paste -sd "," -)  # Generate a comma-separated list
+          
+          while read md_file; do
+            echo "Downloading results for benchmark: $md_file"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
+          done <<< "$md_files"
 
-          echo "" >> results.md
-          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> results.md
-          echo "" >> results.md
-          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> results.md
+          python3 ci/scripts/metric_unify/summarize.py ${md_file_list}
+            --aggregation-json ci/scripts/metric_unify/aggregation.json 
+            --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages-test/${GH_PAGES_PATH}"
+          
+          echo "" >> summary.md
+          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> summary.md
+          echo "" >> summary.md
+          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary.md
           mkdir -p /tmp/benchmark-results/
-          cp results.md /tmp/benchmark-results/
+          cp summary.md /tmp/benchmark-results/
 
       ##########################################################################
       # Update gh-pages with summary upon a PR event                           #
@@ -170,7 +146,7 @@ jobs:
         run: |
           git rm -f -r=false ${GH_PAGES_PATH}/*.md || true
           mkdir -p ${GH_PAGES_PATH}
-          cp /tmp/benchmark-results/results.md ${GH_PAGES_PATH}/summary.md
+          cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
           git push
@@ -209,7 +185,7 @@ jobs:
         with:
           script: |
             const fs = require('fs')
-            const newBenchmark = fs.readFileSync('/tmp/benchmark-results/results.md', { encoding: 'utf8', flag: 'r' })
+            const newBenchmark = fs.readFileSync('/tmp/benchmark-results/summary.md', { encoding: 'utf8', flag: 'r' })
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
