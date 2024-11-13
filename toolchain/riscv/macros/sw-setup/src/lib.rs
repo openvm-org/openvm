@@ -157,17 +157,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
                                     fn identity() -> Self {
                                         Self {
-                                            x: #intmod_type::ZERO,
-                                            y: #intmod_type::ZERO,
+                                            x: <#intmod_type as IntMod>::ZERO,
+                                            y: <#intmod_type as IntMod>::ZERO,
                                         }
                                     }
 
                                     fn is_identity(&self) -> bool {
-                                        self.x == #intmod_type::ZERO && self.y == #intmod_type::ZERO
-                                    }
-
-                                    fn generator() -> Self {
-                                        unimplemented!()
+                                        self.x == <#intmod_type as IntMod>::ZERO && self.y == <#intmod_type as IntMod>::ZERO
                                     }
 
                                     fn double(&self) -> Self {
@@ -188,20 +184,9 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                 impl Add<&#struct_name> for #struct_name {
                                     type Output = Self;
 
-                                    fn add(self, p2: &#struct_name) -> Self::Output {
-                                        if self.is_identity() {
-                                            p2.clone()
-                                        } else if p2.is_identity() {
-                                            self.clone()
-                                        } else if self.x == p2.x {
-                                            if &self.y + &p2.y == #intmod_type::ZERO {
-                                                Self::identity()
-                                            } else {
-                                                Self::double_impl(&self)
-                                            }
-                                        } else {
-                                            Self::add_ne(&self, p2)
-                                        }
+                                    fn add(mut self, p2: &#struct_name) -> Self::Output {
+                                        self.add_assign(p2);
+                                        self
                                     }
                                 }
 
@@ -222,7 +207,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                         } else if p2.is_identity() {
                                             self.clone()
                                         } else if self.x == p2.x {
-                                            if &self.y + &p2.y == #intmod_type::ZERO {
+                                            if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
                                                 #struct_name::identity()
                                             } else {
                                                 #struct_name::double_impl(self)
@@ -240,7 +225,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                         } else if p2.is_identity() {
                                             // do nothing
                                         } else if self.x == p2.x {
-                                            if &self.y + &p2.y == #intmod_type::ZERO {
+                                            if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
                                                 *self = Self::identity();
                                             } else {
                                                 Self::double_assign_impl(self);

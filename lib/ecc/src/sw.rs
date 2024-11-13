@@ -11,10 +11,12 @@ use {
 use super::group::Group;
 
 // Secp256k1 modulus
+// TODO[jpw] rename to Secp256k1Coord
 axvm::moduli_setup! {
     IntModN = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
 }
 
+// TODO[jpw] rename to Secp256k1
 axvm::sw_setup! {
     EcPointN = IntModN;
 }
