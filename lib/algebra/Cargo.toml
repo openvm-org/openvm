@@ -5,6 +5,6 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-num-bigint-dig = { workspace = true, features = ["std"] }
+num-bigint-dig = { workspace = true, default-features = false }
 
 [dev-dependencies]
