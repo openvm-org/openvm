@@ -13,7 +13,7 @@ use elf::{
     ElfBytes,
 };
 use eyre::{self, bail, ContextCompat};
-use num_bigint_dig_no_def::BigUint;
+use num_bigint_dig::BigUint;
 
 pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 

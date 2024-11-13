@@ -1,5 +1,5 @@
 #[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig_no_def::{
+use num_bigint_dig::{
     traits::ModInverse,
     {BigInt, BigUint, Sign, ToBigInt},
 };
