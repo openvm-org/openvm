@@ -1,29 +1,10 @@
-pub use halo2curves_axiom::{
-    bls12_381::{Fq, Fq12, Fq2, Fq6},
-    ff::Field,
-};
+pub use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Fq6};
 
+// use super::{Fq, Fq12, Fq2, Fq6};
 use crate::{
-    field::{ExpBigInt, FieldExtension},
+    field::{ExpBigInt, Field, FieldExtension},
     pairing::{EvaluatedLine, LineMType},
 };
-
-// impl Fp12Constructor<Fq2> for Fq12 {
-//     fn new(c00: Fq2, c01: Fq2, c02: Fq2, c10: Fq2, c11: Fq2, c12: Fq2) -> Self {
-//         Fq12 {
-//             c0: Fq6 {
-//                 c0: c00,
-//                 c1: c01,
-//                 c2: c02,
-//             },
-//             c1: Fq6 {
-//                 c0: c10,
-//                 c1: c11,
-//                 c2: c12,
-//             },
-//         }
-//     }
-// }
 
 ///
 /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the intermediate points manually.
@@ -32,6 +13,7 @@ use crate::{
 impl FieldExtension for Fq12 {
     type BaseField = Fq2;
     type Coeffs = [Self::BaseField; 6];
+    type SelfRef<'a> = &'a Self;
 
     fn from_coeffs(coeffs: Self::Coeffs) -> Self {
         Fq12 {

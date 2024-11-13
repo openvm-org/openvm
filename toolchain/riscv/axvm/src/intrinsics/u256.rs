@@ -211,15 +211,16 @@ impl Ord for U256 {
     fn cmp(&self, other: &Self) -> Ordering {
         #[cfg(target_os = "zkvm")]
         {
-            let mut cmp_result = unsafe { MaybeUninit::<U256>::uninit().assume_init() };
+            let mut cmp_result = MaybeUninit::<U256>::uninit();
             custom_insn_r!(
                 CUSTOM_0,
                 Custom0Funct3::Int256 as u8,
                 Int256Funct7::Sltu as u8,
-                &mut cmp_result as *mut U256,
+                cmp_result.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
             );
+            let mut cmp_result = unsafe { cmp_result.assume_init() };
             if cmp_result.limbs[0] != 0 {
                 return Ordering::Less;
             }

@@ -66,12 +66,16 @@ impl VerifierProgram<InnerConfig> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");
+        builder.cycle_tracker_start("ReadingProofFromInput");
         let input: StarkProofVariable<_> = builder.uninit();
         Proof::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+        builder.cycle_tracker_end("ReadingProofFromInput");
 
+        builder.cycle_tracker_start("InitializePcsConst");
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
+        builder.cycle_tracker_end("InitializePcsConst");
         StarkVerifier::verify::<DuplexChallengerVariable<_>>(
             &mut builder,
             &pcs,

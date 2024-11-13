@@ -1,18 +1,16 @@
 use axvm_ecc::{
+    curve::bn254::{Fq, Fq12, Fq2},
     field::{ExpBigInt, FieldExtension},
     pairing::{FinalExp, MultiMillerLoop},
-    point::EcPoint,
+    point::AffinePoint,
 };
-use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2},
-    ff::Field,
-};
+use halo2curves_axiom::ff::Field;
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
-    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
         let (c, u) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 

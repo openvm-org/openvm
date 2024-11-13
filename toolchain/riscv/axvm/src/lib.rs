@@ -18,11 +18,12 @@ pub mod host;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
+pub use axvm_moduli_setup::*;
 // always include rust_rt so the memory allocator is enabled
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;
-pub use axvm_setup_macro::*;
+pub use axvm_sw_setup::*;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));

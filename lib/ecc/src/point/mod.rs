@@ -1,18 +1,20 @@
-use ff::Field;
 use rand::Rng;
 
+use crate::field::Field;
+
 #[derive(Debug, Clone)]
-pub struct EcPoint<F> {
+#[repr(C)]
+pub struct AffinePoint<F> {
     pub x: F,
     pub y: F,
 }
 
-impl<F: Field> EcPoint<F> {
+impl<F: Field> AffinePoint<F> {
     pub fn new(x: F, y: F) -> Self {
         Self { x, y }
     }
 
-    pub fn neg(&self) -> Self {
+    pub fn neg_assign(self) -> Self {
         Self {
             x: self.x,
             y: self.y.neg(),

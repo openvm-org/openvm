@@ -20,4 +20,5 @@ mod modular;
 pub use modular::*;
 
 mod utils;
+#[allow(unused)]
 pub use utils::*;

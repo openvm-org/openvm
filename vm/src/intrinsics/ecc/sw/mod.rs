@@ -21,7 +21,7 @@ use crate::{
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
-/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per input EcPoint, BLOCKS = 6.
+/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per input AffinePoint, BLOCKS = 6.
 /// For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(

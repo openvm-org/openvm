@@ -1,6 +1,9 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap};
+use std::{
+    cmp::min,
+    collections::{BTreeMap, HashMap},
+};
 
 use axvm_platform::WORD_SIZE;
 use elf::{
@@ -171,7 +174,8 @@ impl Elf {
         let axiom_section_header = elf
             .section_header_by_name(".axiom")
             .expect("section table should be parsable");
-        let supported_moduli = if let Some(shdr) = axiom_section_header {
+        let mut supported_moduli = HashMap::new();
+        if let Some(shdr) = axiom_section_header {
             let data = elf.section_data(&shdr).unwrap();
             let ptr = std::cell::Cell::new(0);
             let next = || {
@@ -183,24 +187,37 @@ impl Elf {
                 result
             };
             let next_u32 = || u32::from_le_bytes(std::array::from_fn(|_| next()));
-            let len = next_u32();
-            (0..len)
-                .map(|_| {
-                    let cnt_bytes = next_u32() as usize;
-                    BigUint::from_bytes_le(&(0..cnt_bytes).map(|_| next()).collect::<Vec<_>>())
-                        .to_str_radix(10)
-                })
-                .collect()
+
+            while ptr.get() < data.0.len() {
+                match next() {
+                    1 => {
+                        let mod_idx = next() as u32;
+                        eprintln!("discovered modulus #{mod_idx}");
+                        supported_moduli.insert(mod_idx, {
+                            let cnt_bytes = next_u32() as usize;
+                            BigUint::from_bytes_le(
+                                &(0..cnt_bytes).map(|_| next()).collect::<Vec<_>>(),
+                            )
+                            .to_str_radix(10)
+                        });
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
+            }
         } else {
-            vec![]
-        };
+            eprintln!("no .axiom section found");
+        }
 
         Ok(Elf::new(
             instructions,
             entry,
             base_address,
             image,
-            supported_moduli,
+            (0..supported_moduli.len())
+                .map(|x| supported_moduli[&(x as u32)].clone())
+                .collect(),
         ))
     }
 }

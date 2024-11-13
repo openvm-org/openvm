@@ -8,11 +8,8 @@ description = "axVM elliptic curve cryptography library."
 [dependencies]
 axvm = { workspace = true }
 axvm-platform = { workspace = true }
-ff = { workspace = true }
-itertools = { workspace = true, default-features = false, features = [
-    "use_alloc",
-] }
-rand = { workspace = true, default-features = false }
+itertools = { workspace = true, features = ["use_alloc"] }
+rand.workspace = true
 strum_macros.workspace = true
 
 # Used for `halo2curves` feature
@@ -29,6 +26,6 @@ num-bigint-dig.workspace = true
 
 [features]
 default = []
-std = ["axvm/std", "ff/std"]
+std = ["axvm/std"]
 # TODO[yj]: Switch to `halo2curves` and remove `num` dependency
 halo2curves = ["dep:halo2curves-axiom", "dep:num"]

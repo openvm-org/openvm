@@ -1,94 +1,120 @@
 use alloc::vec::Vec;
+use core::ops::{Add, Mul, Neg, Sub};
 
-use ff::Field;
 use itertools::{izip, Itertools};
 
-use super::EvaluatedLine;
+use super::{EvaluatedLine, MillerStep};
 use crate::{
-    field::FieldExtension,
-    pairing::miller_step::{miller_double_and_add_step, miller_double_step},
-    point::EcPoint,
+    field::{Field, FieldExtension},
+    point::AffinePoint,
 };
 
 #[allow(non_snake_case)]
-pub trait MultiMillerLoop<Fp, Fp2, Fp12, const BITS: usize>
+pub trait MultiMillerLoop: MillerStep
 where
-    Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
-    Fp12: FieldExtension<BaseField = Fp2>,
+    for<'a> &'a Self::Fp: Add<&'a Self::Fp, Output = Self::Fp>,
+    for<'a> &'a Self::Fp: Sub<&'a Self::Fp, Output = Self::Fp>,
+    for<'a> &'a Self::Fp: Mul<&'a Self::Fp, Output = Self::Fp>,
+    for<'a> &'a Self::Fp2: Add<&'a Self::Fp2, Output = Self::Fp2>,
+    for<'a> &'a Self::Fp2: Sub<&'a Self::Fp2, Output = Self::Fp2>,
+    for<'a> &'a Self::Fp2: Mul<&'a Self::Fp2, Output = Self::Fp2>,
+    for<'a> &'a Self::Fp2: Neg<Output = Self::Fp2>,
+    for<'a> &'a Self::Fp12: Mul<&'a Self::Fp12, Output = Self::Fp12>,
 {
-    /// We use the field extension tower `Fp12 = Fp2[w]/(w^6 - xi)`.
-    fn xi() -> Fp2;
+    type Fp12: FieldExtension<BaseField = Self::Fp2>;
 
-    /// Seed value for the curve
-    fn seed() -> u64;
-
-    /// Pseudo-binary used for the loop counter of the curve
-    fn pseudo_binary_encoding() -> [i8; BITS];
+    const SEED_ABS: u64;
+    const PSEUDO_BINARY_ENCODING: &[i8];
 
     /// Function to evaluate the line functions of the Miller loop
-    fn evaluate_lines_vec(&self, f: Fp12, lines: Vec<EvaluatedLine<Fp, Fp2>>) -> Fp12;
+    fn evaluate_lines_vec(
+        &self,
+        f: Self::Fp12,
+        lines: Vec<EvaluatedLine<Self::Fp, Self::Fp2>>,
+    ) -> Self::Fp12;
 
     /// Runs before the main loop in the Miller loop function
     fn pre_loop(
         &self,
-        f: Fp12,
-        Q_acc: Vec<EcPoint<Fp2>>,
-        Q: &[EcPoint<Fp2>],
-        c: Option<Fp12>,
-        x_over_ys: Vec<Fp>,
-        y_invs: Vec<Fp>,
-    ) -> (Fp12, Vec<EcPoint<Fp2>>);
+        f: &Self::Fp12,
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+        x_over_ys: Vec<Self::Fp>,
+        y_invs: Vec<Self::Fp>,
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>);
 
     /// Runs after the main loop in the Miller loop function
     fn post_loop(
         &self,
-        f: Fp12,
-        Q_acc: Vec<EcPoint<Fp2>>,
-        Q: &[EcPoint<Fp2>],
-        c: Option<Fp12>,
-        x_over_ys: Vec<Fp>,
-        y_invs: Vec<Fp>,
-    ) -> (Fp12, Vec<EcPoint<Fp2>>);
+        f: &Self::Fp12,
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+        x_over_ys: Vec<Self::Fp>,
+        y_invs: Vec<Self::Fp>,
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>);
 
     /// Runs the multi-Miller loop with no embedded exponent
     #[allow(non_snake_case)]
-    fn multi_miller_loop(&self, P: &[EcPoint<Fp>], Q: &[EcPoint<Fp2>]) -> Fp12 {
+    fn multi_miller_loop(
+        &self,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Self::Fp12 {
         self.multi_miller_loop_embedded_exp(P, Q, None)
+    }
+
+    fn multi_miller_loop_embedded_exp(
+        &self,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+    ) -> Self::Fp12 {
+        self.multi_miller_loop_embedded_exp_impl(P, Q, c, Self::PSEUDO_BINARY_ENCODING)
     }
 
     /// Runs the multi-Miller loop with an embedded exponent, removing the need to calculate the residue witness
     /// in the final exponentiation step
     #[allow(non_snake_case)]
-    fn multi_miller_loop_embedded_exp(
+    fn multi_miller_loop_embedded_exp_impl(
         &self,
-        P: &[EcPoint<Fp>],
-        Q: &[EcPoint<Fp2>],
-        c: Option<Fp12>,
-    ) -> Fp12 {
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+        PSEUDO_BINARY_ENCODING: &[i8],
+    ) -> Self::Fp12 {
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
 
-        let y_invs = P.iter().map(|P| P.y.invert().unwrap()).collect::<Vec<Fp>>();
+        let y_invs = P
+            .iter()
+            .map(|P| P.y.invert().unwrap())
+            .collect::<Vec<Self::Fp>>();
         let x_over_ys = P
             .iter()
             .zip(y_invs.iter())
-            .map(|(P, y_inv)| P.x * y_inv)
-            .collect::<Vec<Fp>>();
-        let c_inv = if let Some(c) = c {
+            .map(|(P, y_inv)| &P.x * y_inv)
+            .collect::<Vec<Self::Fp>>();
+        let c_inv = if let Some(c) = c.clone() {
             c.invert().unwrap()
         } else {
-            Fp12::ONE
+            Self::Fp12::ONE
         };
 
-        let mut f = if let Some(c) = c { c } else { Fp12::ONE };
+        let mut f = if let Some(c) = c.clone() {
+            c
+        } else {
+            Self::Fp12::ONE
+        };
         let mut Q_acc = Q.to_vec();
 
-        let (f_out, Q_acc_out) = self.pre_loop(f, Q_acc, Q, c, x_over_ys.clone(), y_invs.clone());
+        let (f_out, Q_acc_out) =
+            self.pre_loop(&f, Q_acc, Q, c.clone(), x_over_ys.clone(), y_invs.clone());
         f = f_out;
         Q_acc = Q_acc_out;
 
-        fn q_signed<Fp, Fp2>(Q: &[EcPoint<Fp2>], sigma_i: i8) -> Vec<EcPoint<Fp2>>
+        fn q_signed<Fp, Fp2>(Q: &[AffinePoint<Fp2>], sigma_i: i8) -> Vec<AffinePoint<Fp2>>
         where
             Fp: Field,
             Fp2: FieldExtension<BaseField = Fp>,
@@ -96,37 +122,36 @@ where
             Q.iter()
                 .map(|q| match sigma_i {
                     1 => q.clone(),
-                    -1 => q.neg(),
+                    -1 => q.clone().neg_assign(),
                     _ => panic!("Invalid sigma_i"),
                 })
                 .collect()
         }
 
-        let pseudo_binary_encoding = Self::pseudo_binary_encoding();
-        for i in (0..pseudo_binary_encoding.len() - 2).rev() {
-            f = f.square();
+        for i in (0..PSEUDO_BINARY_ENCODING.len() - 2).rev() {
+            f = &f * &f;
 
-            let mut lines = Vec::<EvaluatedLine<Fp, Fp2>>::new();
+            let mut lines = Vec::<EvaluatedLine<Self::Fp, Self::Fp2>>::new();
 
-            if pseudo_binary_encoding[i] == 0 {
+            if Self::PSEUDO_BINARY_ENCODING[i] == 0 {
                 // Run miller double step if \sigma_i == 0
                 let (Q_out, lines_2S) = Q_acc
                     .into_iter()
-                    .map(miller_double_step::<Fp, Fp2>)
+                    .map(Self::miller_double_step)
                     .unzip::<_, _, Vec<_>, Vec<_>>();
                 Q_acc = Q_out;
 
                 let lines_iter = izip!(lines_2S.iter(), x_over_ys.iter(), y_invs.iter());
                 for (line_2S, x_over_y, y_inv) in lines_iter {
-                    let line = line_2S.evaluate(*x_over_y, *y_inv);
+                    let line = line_2S.evaluate(&(x_over_y.clone(), y_inv.clone()));
                     lines.push(line);
                 }
             } else {
                 // use embedded exponent technique if c is provided
-                f = if let Some(c) = c {
-                    match pseudo_binary_encoding[i] {
-                        1 => f * c,
-                        -1 => f * c_inv,
+                f = if let Some(c) = c.clone() {
+                    match Self::PSEUDO_BINARY_ENCODING[i] {
+                        1 => &f * &c,
+                        -1 => &f * &c_inv,
                         _ => panic!("Invalid sigma_i"),
                     }
                 } else {
@@ -134,13 +159,13 @@ where
                 };
 
                 // Run miller double and add if \sigma_i != 0
-                let Q_signed = q_signed(Q, pseudo_binary_encoding[i]);
+                let Q_signed = q_signed(Q, Self::PSEUDO_BINARY_ENCODING[i]);
                 let (Q_out, lines_S_plus_Q, lines_S_plus_Q_plus_S): (Vec<_>, Vec<_>, Vec<_>) =
                     Q_acc
                         .iter()
                         .zip(Q_signed.iter())
                         .map(|(Q_acc, Q_signed)| {
-                            miller_double_and_add_step::<Fp, Fp2>(Q_acc.clone(), Q_signed.clone())
+                            Self::miller_double_and_add_step(Q_acc.clone(), Q_signed.clone())
                         })
                         .multiunzip();
                 Q_acc = Q_out;
@@ -152,8 +177,9 @@ where
                     y_invs.iter()
                 );
                 for (line_S_plus_Q, line_S_plus_Q_plus_S, x_over_y, y_inv) in lines_iter {
-                    let line0 = line_S_plus_Q.evaluate(*x_over_y, *y_inv);
-                    let line1 = line_S_plus_Q_plus_S.evaluate(*x_over_y, *y_inv);
+                    let bc_vals = (x_over_y.clone(), y_inv.clone());
+                    let line0 = line_S_plus_Q.evaluate(&bc_vals);
+                    let line1 = line_S_plus_Q_plus_S.evaluate(&bc_vals);
                     lines.push(line0);
                     lines.push(line1);
                 }
@@ -162,7 +188,7 @@ where
             f = self.evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = self.post_loop(f, Q_acc, Q, c, x_over_ys, y_invs);
+        let (f_out, _) = self.post_loop(&f, Q_acc, Q, c, x_over_ys, y_invs);
         f = f_out;
 
         f

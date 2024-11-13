@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::intrinsics::IntMod;
+use axvm::intrinsics::{DivAssignUnsafe, DivUnsafe, IntMod};
 use axvm_ecc::{field::Complex, sw::IntModN};
 
 axvm::entry!(main);
@@ -19,9 +19,9 @@ pub fn main() {
     for _ in 0..32 {
         let mut res = &a * &b;
         res += &a * &Complex::new(IntModN::ZERO, -b.c1.double());
-        res /= &b * &b.conjugate();
+        res.div_assign_unsafe(&b * &b.conjugate());
 
-        if (&a / &b) - res != Complex::<IntModN>::ZERO {
+        if a.clone().div_unsafe(&b) - res != Complex::<IntModN>::ZERO {
             panic!();
         }
 

@@ -5,7 +5,7 @@ use ax_ecc_execution::{
         curve::bls12381::{G1Affine, G2Affine},
         field::FieldExtension,
         pairing::{FinalExp, MultiMillerLoop},
-        point::EcPoint,
+        point::AffinePoint,
     },
     curves::bls12_381::Bls12_381,
 };
@@ -26,8 +26,8 @@ fn test_bls12_381_final_exp_hint() -> Result<()> {
     let bls12_381 = Bls12_381;
     let P = G1Affine::generator();
     let Q = G2Affine::generator();
-    let ps = vec![EcPoint::new(P.x, P.y), EcPoint::new(P.x, -P.y)];
-    let qs = vec![EcPoint::new(Q.x, Q.y), EcPoint::new(Q.x, Q.y)];
+    let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];
+    let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
     let f = bls12_381.multi_miller_loop(&ps, &qs);
     let (c, s) = bls12_381.final_exp_hint(f);
     let io = [f, c, s]

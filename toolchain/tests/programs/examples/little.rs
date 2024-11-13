@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::intrinsics::IntMod;
+use axvm::intrinsics::{DivUnsafe, IntMod};
 use axvm_ecc::sw::IntModN;
 
 axvm::entry!(main);
@@ -12,7 +12,7 @@ pub fn main() {
 
     let mut a = IntModN::from_u32(1234);
     let mut res = IntModN::from_u32(1);
-    let inv = &res / &a;
+    let inv = res.clone().div_unsafe(&a);
 
     for i in 0..32 {
         for j in 0..8 {

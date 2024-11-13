@@ -1,10 +1,10 @@
 use core::{
     fmt::{Debug, Formatter, Result},
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use axvm::intrinsics::IntMod;
+use axvm::intrinsics::{DivAssignUnsafe, DivUnsafe, IntMod};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::{
@@ -123,14 +123,14 @@ impl<F: IntMod> Complex<F> {
         }
     }
 
-    /// Implementation of DivAssign. Behaviour may be undefined if `other` is not invertible.
+    /// Implementation of DivAssignUnsafe.
     #[inline(always)]
-    fn div_assign_impl(&mut self, other: &Self) {
+    fn div_assign_unsafe_impl(&mut self, other: &Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             let (c0, c1) = (&self.c0, &self.c1);
             let (d0, d1) = (&other.c0, &other.c1);
-            let denom = F::ONE / (d0.square() + d1.square());
+            let denom = F::ONE.div_unsafe(d0.square() + d1.square());
             *self = Self::new(
                 denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
                 denom * &(c1.clone() * d0 - c0.clone() * d1),
@@ -151,7 +151,6 @@ impl<F: IntMod> Complex<F> {
     }
 
     /// Implementation of Add that doesn't cause zkvm to use an additional store.
-    #[inline(always)]
     fn add_refs_impl(&self, other: &Self) -> Self {
         #[cfg(not(target_os = "zkvm"))]
         {
@@ -225,13 +224,13 @@ impl<F: IntMod> Complex<F> {
         }
     }
 
-    /// Implementation of Div that doesn't cause zkvm to use an additional store.
+    /// Implementation of DivUnsafe that doesn't cause zkvm to use an additional store.
     #[inline(always)]
-    fn div_refs_impl(&self, other: &Self) -> Self {
+    fn div_unsafe_refs_impl(&self, other: &Self) -> Self {
         #[cfg(not(target_os = "zkvm"))]
         {
             let mut res = self.clone();
-            res.div_assign_impl(other);
+            res.div_assign_unsafe_impl(other);
             res
         }
         #[cfg(target_os = "zkvm")]
@@ -371,48 +370,43 @@ impl<'a, F: IntMod> Mul<&'a Complex<F>> for &Complex<F> {
     }
 }
 
-impl<'a, F: IntMod> DivAssign<&'a Complex<F>> for Complex<F> {
-    /// Undefined behaviour when denominator is not coprime to N
+impl<'a, F: IntMod> DivAssignUnsafe<&'a Complex<F>> for Complex<F> {
     #[inline(always)]
-    fn div_assign(&mut self, other: &'a Complex<F>) {
-        self.div_assign_impl(other);
+    fn div_assign_unsafe(&mut self, other: &'a Complex<F>) {
+        self.div_assign_unsafe_impl(other);
     }
 }
 
-impl<F: IntMod> DivAssign for Complex<F> {
-    /// Undefined behaviour when denominator is not coprime to N
+impl<F: IntMod> DivAssignUnsafe for Complex<F> {
     #[inline(always)]
-    fn div_assign(&mut self, other: Self) {
-        self.div_assign_impl(&other);
+    fn div_assign_unsafe(&mut self, other: Self) {
+        self.div_assign_unsafe_impl(&other);
     }
 }
 
-impl<F: IntMod> Div for Complex<F> {
+impl<F: IntMod> DivUnsafe for Complex<F> {
     type Output = Self;
-    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div(mut self, other: Self) -> Self::Output {
-        self /= other;
+    fn div_unsafe(mut self, other: Self) -> Self::Output {
+        self = self.div_unsafe_refs_impl(&other);
         self
     }
 }
 
-impl<'a, F: IntMod> Div<&'a Complex<F>> for Complex<F> {
+impl<'a, F: IntMod> DivUnsafe<&'a Complex<F>> for Complex<F> {
     type Output = Self;
-    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div(mut self, other: &'a Complex<F>) -> Self::Output {
-        self /= other;
+    fn div_unsafe(mut self, other: &'a Complex<F>) -> Self::Output {
+        self = self.div_unsafe_refs_impl(other);
         self
     }
 }
 
-impl<'a, F: IntMod> Div<&'a Complex<F>> for &Complex<F> {
+impl<'a, F: IntMod> DivUnsafe<&'a Complex<F>> for &Complex<F> {
     type Output = Complex<F>;
-    /// Undefined behaviour when denominator is not coprime to N
     #[inline(always)]
-    fn div(self, other: &'a Complex<F>) -> Self::Output {
-        self.div_refs_impl(other)
+    fn div_unsafe(self, other: &'a Complex<F>) -> Self::Output {
+        self.div_unsafe_refs_impl(other)
     }
 }
 

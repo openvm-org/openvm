@@ -1,14 +1,12 @@
-pub use halo2curves_axiom::{
-    bls12_381::{Fq, Fq2},
-    ff::Field,
-};
+pub use halo2curves_axiom::bls12_381::{Fq, Fq2};
 
-use crate::field::FieldExtension;
+use crate::field::{Field, FieldExtension};
 
 /// FieldExtension for Fq2 with Fq as base field
 impl FieldExtension for Fq2 {
     type BaseField = Fq;
     type Coeffs = [Self::BaseField; 2];
+    type SelfRef<'a> = &'a Self;
 
     fn from_coeffs(coeffs: Self::Coeffs) -> Self {
         // TODO[yj]: conversion for PSE halo2curves implementation
