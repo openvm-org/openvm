@@ -25,7 +25,7 @@ def get_summary_rows(md_files, headers, gh_pages_link):
                 if len(agg_cols) == len(app_cols) and "leaf" in agg_cols[0]:
                     row += agg_cols[1:]
                 else:
-                    row += (["-"] * (len(agg_cols) - 1))
+                    row += (["-"] * (len(app_cols) - 1))
                 break
         
         for line in lines:
