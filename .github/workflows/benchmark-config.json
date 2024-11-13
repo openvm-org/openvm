@@ -11,7 +11,7 @@
                     "agg_log_blowup": 2
                 },
                 {
-                    "instance_type": "64cpu-linux-x86",
+                    "instance_type": "64cpu-linux-arm64",
                     "memory_allocator": "jemalloc",
                     "app_log_blowup": 3,
                     "agg_log_blowup": 3
