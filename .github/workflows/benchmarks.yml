@@ -108,7 +108,7 @@ jobs:
         run: |
           current_sha=$(git rev-parse HEAD)
           md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup).md"' | sort)
-          md_file_list=$(echo "$names" | paste -sd "," -)  # Generate a comma-separated list
+          md_file_list=$(echo "$md_files" | paste -sd "," -)
           
           while read md_file; do
             echo "Downloading results for benchmark: $md_file"
