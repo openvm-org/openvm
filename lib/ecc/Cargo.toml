@@ -11,6 +11,9 @@ axvm-platform = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
 strum_macros.workspace = true
+ecdsa = { workspace = true }
+elliptic-curve = { workspace = true }
+k256 = { workspace = true, default-features = false }
 
 # Used for `halo2curves` feature
 # TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves

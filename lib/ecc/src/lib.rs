@@ -10,6 +10,8 @@ mod group;
 pub use group::*;
 mod msm;
 pub use msm::*;
+mod ecdsa;
+pub use ecdsa::*;
 
 #[cfg(feature = "halo2curves")]
 pub mod curve;

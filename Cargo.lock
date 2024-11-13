@@ -675,7 +675,6 @@ dependencies = [
  "axvm-platform",
  "ecdsa",
  "elliptic-curve",
- "ff 0.13.0",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
