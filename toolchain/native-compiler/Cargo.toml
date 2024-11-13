@@ -24,7 +24,7 @@ tracing.workspace = true
 itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-backtrace = { version = "0.3.71", features = ["serde"] }
+backtrace = { workspace = true, features = ["serde"] }
 strum_macros = "0.26.4"
 num-bigint-dig.workspace = true
 num-bigint.workspace = true

@@ -9,7 +9,7 @@ description = "axVM build tool"
 
 [dependencies]
 axvm-platform = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 serde_json.workspace = true
 eyre.workspace = true
 cargo_metadata = "0.18"

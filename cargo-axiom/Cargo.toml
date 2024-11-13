@@ -30,7 +30,7 @@ tracing.workspace = true
 # indicatif = "0.17.8"
 # tokio = { version = "1", features = ["full"] }
 dirs = "5.0"
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 rand = "0.8"
 # downloader = { version = "0.2", default-features = false, features = [
 #     "rustls-tls",
