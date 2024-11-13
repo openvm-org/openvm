@@ -19,5 +19,9 @@ axvm::moduli_setup! {
 
 // TODO[jpw] rename to Secp256k1
 axvm::sw_setup! {
-    EcPointN = IntModN;
+    EcPointN = (
+        IntModN,
+        "0x79be667e f9dcbbac 55a06295 ce870b07 029bfcdb 2dce28d9 59f2815b 16f81798",
+        "0x483ada77 26a3c465 5da4fbfc 0e1108a8 fd17b448 a6855419 9c47d08f fb10d4b8",
+    );
 }
