@@ -32,6 +32,7 @@ members = [
     "lib/recursion",
     "axiom-vm",
     "benchmarks",
+    "wasm",
 ]
 resolver = "2"
 
