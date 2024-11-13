@@ -149,7 +149,7 @@ jobs:
           cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
-          git push
+          git push --force
 
       ##########################################################################
       # Update PR comment upon a pull request event                            #

@@ -271,7 +271,7 @@ jobs:
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md"
-          git push
+          git push --force
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
