@@ -559,6 +559,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra"
+version = "0.1.0"
+dependencies = [
+ "num-bigint-dig",
+]
+
+[[package]]
 name = "axvm-benchmarks"
 version = "0.1.0"
 dependencies = [
@@ -672,6 +679,7 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm-algebra",
  "axvm-platform",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",

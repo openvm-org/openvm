@@ -2,9 +2,25 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::Stmts;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, Stmt};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Stmt,
+};
+
+struct Stmts {
+    stmts: Vec<Stmt>,
+}
+
+impl Parse for Stmts {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut stmts = Vec::new();
+        while !input.is_empty() {
+            stmts.push(input.parse()?);
+        }
+        Ok(Stmts { stmts })
+    }
+}
 
 fn string_to_bytes(s: &str) -> Vec<u8> {
     if s.starts_with("0x") {
@@ -532,7 +548,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivAssignUnsafe<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
@@ -540,7 +556,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl axvm_algebra::DivAssignUnsafe for #struct_name {
+                                        impl axvm::intrinsics::DivAssignUnsafe for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_assign_unsafe(&mut self, other: Self) {
@@ -548,7 +564,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl axvm_algebra::DivUnsafe for #struct_name {
+                                        impl axvm::intrinsics::DivUnsafe for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
@@ -558,7 +574,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
@@ -568,7 +584,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for &#struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for &#struct_name {
                                             type Output = #struct_name;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
