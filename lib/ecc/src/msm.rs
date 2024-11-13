@@ -10,7 +10,6 @@ use super::Group;
 pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
     for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
-    for<'a> &'a EcPoint: Neg<Output = EcPoint>,
 {
     let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes()).collect();
     let mut acc = EcPoint::identity();
@@ -59,19 +58,26 @@ where
         impl<EcPoint: Group> Bucket<EcPoint>
         where
             for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
-            for<'a> &'a EcPoint: Neg<Output = EcPoint>,
         {
             fn add_assign(&mut self, other: &EcPoint) {
-                *self = match self {
-                    Bucket::None => Bucket::Affine(other.clone()),
-                    Bucket::Affine(ref a) => Bucket::Affine(a + other),
+                match self {
+                    Bucket::None => {
+                        *self = Bucket::Affine(other.clone());
+                    }
+                    Bucket::Affine(a) => {
+                        a.add_assign(other);
+                    }
                 }
             }
 
             fn sub_assign(&mut self, other: &EcPoint) {
-                *self = match self {
-                    Bucket::None => Bucket::Affine(other.neg().clone()),
-                    Bucket::Affine(ref a) => Bucket::Affine(a + &other.neg()),
+                match self {
+                    Bucket::None => {
+                        *self = Bucket::Affine(other.clone().neg());
+                    }
+                    Bucket::Affine(a) => {
+                        a.sub_assign(other);
+                    }
                 }
             }
 
@@ -79,7 +85,7 @@ where
                 match self {
                     Bucket::None => other.clone(),
                     Bucket::Affine(a) => {
-                        other += &a;
+                        other += a;
                         other
                     }
                 }
