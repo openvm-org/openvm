@@ -57,10 +57,8 @@ def bench():
     parser.add_argument('--agg_log_blowup', type=str, help="Aggregation level log blowup")
     args = parser.parse_args()
 
-    if args.features:
-        print(args.features)
+    assert "mimalloc" in args.features or "jemalloc" in args.features
     feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else [])
-    assert "mimalloc" in feature_flags or "jemalloc" in feature_flags
 
     if args.instance_type and 'x86' in args.instance_type:
         feature_flags.append('nightly-features')
