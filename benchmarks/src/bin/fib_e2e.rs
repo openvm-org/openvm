@@ -77,7 +77,11 @@ async fn main() -> Result<()> {
         .map(F::from_canonical_u8)
         .collect();
     run_with_metric_collection("OUTPUT_PATH", || {
-        let app_proofs = info_span!("App VM", group = "app_vm").in_scope(|| {
+        let app_proofs = info_span!(
+            "Fibonacci Continuation Program",
+            group = "fibonacci_continuation_program"
+        )
+        .in_scope(|| {
             let mut vm_config = axiom_vm_pk.app_vm_config.clone();
             vm_config.collect_metrics = true;
             let vm = VmExecutor::new(vm_config);

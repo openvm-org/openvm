@@ -58,6 +58,7 @@ jobs:
 
   benchmark-fib-e2e:
     uses: ./.github/workflows/benchmark-call.yml
+    if: contains(github.event.pull_request.labels.*.name, 'run-benchmark')
     with:
       benchmark_name: fib_e2e
     secrets: inherit
