@@ -18,9 +18,7 @@ pub trait Group:
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
 {
-    type SelfRef<'a>: Add<&'a Self, Output = Self>
-        + Sub<&'a Self, Output = Self>
-        + Neg<Output = Self>
+    type SelfRef<'a>: Add<&'a Self, Output = Self> + Sub<&'a Self, Output = Self>
     where
         Self: 'a;
 
