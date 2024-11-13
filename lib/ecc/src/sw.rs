@@ -1,6 +1,7 @@
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use axvm::intrinsics::{DivUnsafe, IntMod};
+use elliptic_curve::{CurveArithmetic, FieldBytes, Scalar};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom1Funct3, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_1},

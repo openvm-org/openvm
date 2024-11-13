@@ -13,6 +13,7 @@ axvm-moduli-setup = { workspace = true }
 axvm-sw-setup = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
+elliptic-curve = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true

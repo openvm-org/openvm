@@ -4,7 +4,7 @@
 use core::hint::black_box;
 
 use axvm::intrinsics::keccak256;
-use axvm_ecc::AxvmVerifyingKey;
+use axvm_ecc::{sw::IntModN, AxvmVerifyingKey};
 use hex_literal::hex;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 
@@ -30,7 +30,7 @@ pub fn main() {
     // TODO: Swap out this function with axvm intrinsics.
     let recovered_key = VerifyingKey::recover_from_prehash(&prehash, &signature, recid).unwrap();
 
-    AxvmVerifyingKey::recover_from_prehash(&prehash, &signature, recid);
+    AxvmVerifyingKey::recover_from_prehash::<IntModN>(&prehash, &signature, recid);
 
     let expected_key = VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"

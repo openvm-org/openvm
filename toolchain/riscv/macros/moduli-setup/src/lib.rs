@@ -380,6 +380,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 Self(bytes)
                                             }
 
+                                            fn from_scalar<C: CurveArithmetic>(scalar: &Scalar<C>) -> Self {
+                                                let field_bytes: FieldBytes<C> = (*scalar).into();
+                                                Self::from_le_bytes(field_bytes.as_slice())
+                                            }
+
                                             fn as_le_bytes(&self) -> &[u8] {
                                                 &(self.0)
                                             }

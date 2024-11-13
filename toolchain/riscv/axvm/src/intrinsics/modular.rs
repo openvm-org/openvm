@@ -5,6 +5,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+use elliptic_curve::{CurveArithmetic, Scalar};
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 
@@ -94,6 +95,9 @@ pub trait IntMod:
 
     /// Creates a new IntMod from a u64.
     fn from_u64(val: u64) -> Self;
+
+    /// Creates a new IntMod from a CurveArithmetic Scalar.
+    fn from_scalar<C: CurveArithmetic>(scalar: &Scalar<C>) -> Self;
 
     /// Value of this IntMod as an array of bytes.
     fn as_le_bytes(&self) -> &[u8];

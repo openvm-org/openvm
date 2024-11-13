@@ -551,6 +551,7 @@ dependencies = [
  "axvm-platform",
  "axvm-sw-setup",
  "chrono",
+ "elliptic-curve",
  "hex-literal",
  "num-bigint-dig",
  "num-traits",
