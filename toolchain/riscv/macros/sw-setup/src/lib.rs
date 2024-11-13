@@ -99,6 +99,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                         }
                                     }
 
+                                    /// Assumes that `p` is not identity.
                                     #[inline(always)]
                                     fn double_impl(p: &#struct_name) -> #struct_name {
                                         #[cfg(not(target_os = "zkvm"))]
@@ -249,17 +250,6 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                         Self {
                                             x: self.x,
                                             y: -self.y,
-                                        }
-                                    }
-                                }
-
-                                impl Neg for &#struct_name {
-                                    type Output = #struct_name;
-
-                                    fn neg(self) -> Self::Output {
-                                        #struct_name {
-                                            x: self.x.clone(),
-                                            y: -self.y.clone(),
                                         }
                                     }
                                 }
