@@ -242,35 +242,37 @@ jobs:
       # Update gh-pages with individual results                                #
       ##########################################################################
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
           ref: gh-pages-test
 
       - name: Set up git
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
+      - name: Set github pages path for dispatch
+        run: |
+          GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
         run: |
-          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          GH_PAGES_PATH="benchmarks"
+          GH_PAGES_PATH="benchmarks/individual"
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
       - name: Update PR github pages with new bench results
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
-          mkdir -p ${GH_PAGES_PATH}/individual
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
-          git add ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/individual/${METRIC_NAME}.md"
+          mkdir -p ${GH_PAGES_PATH}
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
           git push --force
 
       ##########################################################################
