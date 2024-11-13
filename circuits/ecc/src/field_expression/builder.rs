@@ -181,6 +181,7 @@ impl<F: Field> BaseAir<F> for FieldExpr {
             + self.builder.carry_limbs.iter().sum::<usize>()
             + self.builder.num_flags
             + 1 // is_valid
+            + 1 // is_setup
     }
 }
 
@@ -200,6 +201,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
     {
         let FieldExprCols {
             is_valid,
+            is_setup,
             inputs,
             vars,
             q_limbs,
@@ -222,9 +224,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
                         carries: carry_limbs[i].clone(),
                         quotient: q_limbs[i].clone(),
                     },
-                    is_valid,
+                    is_valid - is_setup,
                 ),
-            )
+            );
         }
 
         for var in vars.iter() {
@@ -246,6 +248,7 @@ type Vecs<T> = Vec<Vec<T>>;
 
 pub struct FieldExprCols<T> {
     pub is_valid: T,
+    pub is_setup: T,
     pub inputs: Vecs<T>,
     pub vars: Vecs<T>,
     pub q_limbs: Vecs<T>,
@@ -347,7 +350,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // TODO: avoid all these copies and directly allocate
         sub_row.copy_from_slice(
             &[
-                vec![F::ONE],
+                vec![F::ONE, F::ZERO],
                 input_limbs.concat(),
                 vars_limbs.concat(),
                 all_q.concat(),
@@ -388,7 +391,8 @@ impl FieldExpr {
 
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
         let is_valid = arr[0].clone();
-        let mut idx = 1;
+        let is_setup = arr[1].clone();
+        let mut idx = 2;
         let mut inputs = vec![];
         for _ in 0..self.num_input {
             inputs.push(arr[idx..idx + self.num_limbs].to_vec());
@@ -412,6 +416,7 @@ impl FieldExpr {
         let flags = arr[idx..idx + self.num_flags].to_vec();
         FieldExprCols {
             is_valid,
+            is_setup,
             inputs,
             vars,
             q_limbs,

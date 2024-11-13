@@ -114,7 +114,7 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
             (
                 expr,
                 CheckCarryModToZeroCols { carries, quotient },
-                is_valid,
+                is_valid.into(),
             ),
         );
     }

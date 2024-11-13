@@ -102,8 +102,10 @@ impl<AB: InteractionBuilder, const N: usize> Air<AB> for TestCarryAir<N> {
         let y_overflow = OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(y, self.limb_bits);
         let expr = (x_overflow.clone() * x_overflow.clone()) - y_overflow.clone();
 
-        self.test_carry_sub_air
-            .eval(builder, (expr, CheckCarryToZeroCols { carries }, is_valid));
+        self.test_carry_sub_air.eval(
+            builder,
+            (expr, CheckCarryToZeroCols { carries }, is_valid.into()),
+        );
     }
 }
 

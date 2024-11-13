@@ -49,7 +49,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         = (
         OverflowInt<AB::Expr>,
         CheckCarryModToZeroCols<AB::Var>,
-        AB::Var,
+        AB::Expr,
     )
     where
         AB::Var: 'a,
@@ -62,14 +62,14 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
         (expr, cols, is_valid): (
             OverflowInt<AB::Expr>,
             CheckCarryModToZeroCols<AB::Var>,
-            AB::Var,
+            AB::Expr,
         ),
     ) where
         AB::Var: 'a,
         AB::Expr: 'a,
     {
         let CheckCarryModToZeroCols { quotient, carries } = cols;
-        builder.assert_bool(is_valid);
+        builder.assert_bool(is_valid.clone());
         let q_offset = AB::F::from_canonical_usize(1 << self.check_carry_to_zero.limb_bits);
         for &q in quotient.iter() {
             range_check(
@@ -78,7 +78,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryModToZeroSubAir {
                 self.check_carry_to_zero.decomp,
                 self.check_carry_to_zero.limb_bits + 1,
                 q + q_offset,
-                is_valid,
+                is_valid.clone(),
             );
         }
         let limb_bits = self.check_carry_to_zero.limb_bits;
