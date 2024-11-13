@@ -258,7 +258,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                     type Output = Self;
 
                                     fn sub(self, rhs: &#struct_name) -> Self::Output {
-                                        self.add(&rhs.neg())
+                                        self.sub(rhs.clone())
                                     }
                                 }
 
@@ -266,7 +266,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                     type Output = #struct_name;
 
                                     fn sub(self, rhs: Self) -> Self::Output {
-                                        self.sub(&rhs)
+                                        self.add(rhs.neg())
                                     }
                                 }
 
@@ -274,23 +274,21 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                     type Output = #struct_name;
 
                                     fn sub(self, p2: &#struct_name) -> Self::Output {
-                                        self.add(&p2.neg())
+                                        self.add(&p2.clone().neg())
                                     }
                                 }
 
                                 impl SubAssign<&#struct_name> for #struct_name {
                                     fn sub_assign(&mut self, p2: &#struct_name) {
-                                        self.add_assign(&p2.neg());
+                                        self.sub_assign(p2.clone());
                                     }
                                 }
 
                                 impl SubAssign for #struct_name {
                                     fn sub_assign(&mut self, rhs: Self) {
-                                        self.sub_assign(&rhs);
+                                        self.add_assign(rhs.neg());
                                     }
                                 }
-
-
                             });
 
                             ec_idx += 1;
