@@ -134,7 +134,7 @@ jobs:
 
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
-            --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages-test/${GH_PAGES_PATH}"
+            --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
 
           echo "" >> summary.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> summary.md
@@ -149,7 +149,7 @@ jobs:
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
-          ref: gh-pages-test
+          ref: gh-pages
 
       - name: Set up git
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')

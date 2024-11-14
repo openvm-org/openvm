@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: gh-pages-test
+          ref: gh-pages
 
       - name: Set up git
         run: |
