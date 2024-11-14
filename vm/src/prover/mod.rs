@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::system::memory::{tree::public_values::UserPublicValuesProof, CHUNK};
 
 pub mod local;
+pub mod types;
 
 #[derive(Serialize, Deserialize, Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]

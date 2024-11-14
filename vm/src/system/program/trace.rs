@@ -45,6 +45,9 @@ where
             exe,
         }
     }
+    pub fn get_program_commit(&self) -> Com<SC> {
+        self.committed_program.prover_data.commit.clone()
+    }
 }
 
 impl<F: PrimeField64> ProgramChip<F> {

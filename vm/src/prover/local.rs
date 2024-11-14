@@ -3,17 +3,16 @@ use std::{collections::VecDeque, marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use ax_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
-    keygen::types::MultiStarkProvingKey,
     prover::types::Proof,
 };
-use ax_stark_sdk::{config::FriParameters, engine::StarkFriEngine};
+use ax_stark_sdk::engine::StarkFriEngine;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, VirtualMachine, VmConfig},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, VirtualMachine},
     prover::{
-        AsyncContinuationVmProver, AsyncSingleSegmentVmProver, ContinuationVmProof,
-        ContinuationVmProver, SingleSegmentVmProver,
+        types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
+        ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
     system::{
         memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
@@ -28,9 +27,7 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    pub fri_parameters: FriParameters,
-    pub vm_config: VmConfig,
-    pub vm_pk: MultiStarkProvingKey<SC>,
+    pub pk: VmProvingKey<SC>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
     _marker: PhantomData<E>,
 }
@@ -43,16 +40,9 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    pub fn new(
-        fri_parameters: FriParameters,
-        vm_config: VmConfig,
-        vm_pk: MultiStarkProvingKey<SC>,
-        committed_exe: Arc<AxVmCommittedExe<SC>>,
-    ) -> Self {
+    pub fn new(pk: VmProvingKey<SC>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
         Self {
-            fri_parameters,
-            vm_config,
-            vm_pk,
+            pk,
             committed_exe,
             _marker: PhantomData,
         }
@@ -70,19 +60,19 @@ where
     Val<SC>: PrimeField32,
 {
     fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> ContinuationVmProof<SC> {
-        assert!(self.vm_config.continuation_enabled);
-        let e = E::new(self.fri_parameters);
-        let vm = VirtualMachine::new(e, self.vm_config.clone());
+        assert!(self.pk.vm_config.continuation_enabled);
+        let e = E::new(self.pk.fri_params);
+        let vm = VirtualMachine::new(e, self.pk.vm_config.clone());
         let results = vm
             .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
             .unwrap();
         let user_public_values = UserPublicValuesProof::compute(
-            self.vm_config.memory_config.memory_dimensions(),
-            self.vm_config.num_public_values,
+            self.pk.vm_config.memory_config.memory_dimensions(),
+            self.pk.vm_config.num_public_values,
             &vm_poseidon2_hasher(),
             results.final_memory.as_ref().unwrap(),
         );
-        let per_segment = vm.prove(&self.vm_pk, results);
+        let per_segment = vm.prove(&self.pk.vm_pk, results);
         ContinuationVmProof {
             per_segment,
             user_public_values,
@@ -121,14 +111,14 @@ where
     Val<SC>: PrimeField32,
 {
     fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> Proof<SC> {
-        assert!(!self.vm_config.continuation_enabled);
-        let e = E::new(self.fri_parameters);
-        let vm = VirtualMachine::new(e, self.vm_config.clone());
+        assert!(!self.pk.vm_config.continuation_enabled);
+        let e = E::new(self.pk.fri_params);
+        let vm = VirtualMachine::new(e, self.pk.vm_config.clone());
         let mut results = vm
             .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
             .unwrap();
         let segment = results.per_segment.pop().unwrap();
-        vm.prove_single(&self.vm_pk, segment)
+        vm.prove_single(&self.pk.vm_pk, segment)
     }
 }
 

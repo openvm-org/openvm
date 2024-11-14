@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use ax_stark_sdk::{
-    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof},
+    ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
@@ -21,9 +21,10 @@ use axiom_vm::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor,
-        VirtualMachine, VmConfig, VmExecutor, PUBLIC_VALUES_AIR_ID,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor, VmConfig,
+        VmExecutor, PUBLIC_VALUES_AIR_ID,
     },
+    prover::{local::VmLocalProver, SingleSegmentVmProver},
     system::{
         memory::tree::public_values::UserPublicValuesProof,
         program::{trace::AxVmCommittedExe, ExecutionError},
@@ -64,7 +65,7 @@ fn test_1() {
     };
     let max_num_user_public_values = axiom_vm_config.max_num_user_public_values;
     let axiom_vm_pk = AxiomVmProvingKey::keygen(axiom_vm_config);
-    let app_engine = BabyBearPoseidon2Engine::new(axiom_vm_pk.app_fri_params);
+    let app_engine = BabyBearPoseidon2Engine::new(axiom_vm_pk.app_vm_pk.fri_params);
 
     let mut program = {
         let n = 200;
@@ -89,7 +90,7 @@ fn test_1() {
     let expected_program_commit: [F; DIGEST_SIZE] =
         committed_exe.committed_program.prover_data.commit.into();
 
-    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_config.clone());
+    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_pk.vm_config.clone());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(committed_exe.clone(), vec![])
         .unwrap();
@@ -106,11 +107,11 @@ fn test_1() {
     let mut app_vm_seg_proofs: Vec<_> = app_vm_result
         .per_segment
         .into_iter()
-        .map(|proof_input| app_engine.prove(&axiom_vm_pk.app_vm_pk, proof_input))
+        .map(|proof_input| app_engine.prove(&axiom_vm_pk.app_vm_pk.vm_pk, proof_input))
         .collect();
 
     let last_proof = app_vm_seg_proofs.pop().unwrap();
-    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_config.clone());
+    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_pk.vm_config.clone());
 
     let run_leaf_verifier =
         |verifier_input: LeafVmVerifierInput<SC>| -> Result<Vec<F>, ExecutionError> {
@@ -184,80 +185,64 @@ fn test_1() {
         }
     }
 
-    let leaf_vm = VirtualMachine::new(
-        BabyBearPoseidon2Engine::new(axiom_vm_pk.leaf_fri_params),
-        axiom_vm_pk.leaf_vm_config.clone(),
+    let leaf_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
+        axiom_vm_pk.leaf_vm_pk.clone(),
+        axiom_vm_pk.leaf_committed_exe.clone(),
     );
     let internal_commit: [F; DIGEST_SIZE] = axiom_vm_pk
         .internal_committed_exe
-        .committed_program
-        .prover_data
-        .commit
+        .get_program_commit()
         .into();
-    let prove_leaf_verifier = |verifier_input: LeafVmVerifierInput<SC>| -> Proof<SC> {
-        let mut result = leaf_vm
-            .execute_and_generate_with_cached_program(
-                axiom_vm_pk.leaf_committed_exe.clone(),
-                verifier_input.write_to_stream(),
-            )
-            .unwrap();
-        let proof = result.per_segment.pop().unwrap();
-        leaf_vm.prove_single(&axiom_vm_pk.leaf_vm_pk, proof)
-    };
     let leaf_proofs = vec![
-        prove_leaf_verifier(LeafVmVerifierInput {
-            proofs: app_vm_seg_proofs.clone(),
-            public_values_root_proof: None,
-        }),
-        prove_leaf_verifier(LeafVmVerifierInput {
-            proofs: vec![last_proof.clone()],
-            public_values_root_proof: Some(pv_root_proof.clone()),
-        }),
+        SingleSegmentVmProver::prove(
+            &leaf_prover,
+            LeafVmVerifierInput {
+                proofs: app_vm_seg_proofs.clone(),
+                public_values_root_proof: None,
+            }
+            .write_to_stream(),
+        ),
+        SingleSegmentVmProver::prove(
+            &leaf_prover,
+            LeafVmVerifierInput {
+                proofs: vec![last_proof.clone()],
+                public_values_root_proof: Some(pv_root_proof.clone()),
+            }
+            .write_to_stream(),
+        ),
     ];
 
-    let internal_vm = VirtualMachine::new(
-        BabyBearPoseidon2Engine::new(axiom_vm_pk.internal_fri_params),
-        axiom_vm_pk.internal_vm_config.clone(),
+    let internal_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
+        axiom_vm_pk.internal_vm_pk.clone(),
+        axiom_vm_pk.internal_committed_exe.clone(),
     );
-    let prove_internal_verifier = |verifier_input: InternalVmVerifierInput<SC>| -> Proof<SC> {
-        let mut result = internal_vm
-            .execute_and_generate_with_cached_program(
-                axiom_vm_pk.internal_committed_exe.clone(),
-                verifier_input.write(),
-            )
-            .unwrap();
-        let proof = result.per_segment.pop().unwrap();
-        internal_vm.prove_single(&axiom_vm_pk.internal_vm_pk, proof)
-    };
-    let internal_proofs = vec![prove_internal_verifier(InternalVmVerifierInput {
-        self_program_commit: internal_commit,
-        proofs: leaf_proofs.clone(),
-    })];
+    let internal_proofs = vec![SingleSegmentVmProver::prove(
+        &internal_prover,
+        InternalVmVerifierInput {
+            self_program_commit: internal_commit,
+            proofs: leaf_proofs.clone(),
+        }
+        .write(),
+    )];
 
-    let root_agg_vm = VirtualMachine::new(
-        BabyBearPoseidon2OuterEngine::new(axiom_vm_pk.root_fri_params),
-        axiom_vm_pk.root_vm_config.clone(),
+    let root_prover = VmLocalProver::<OuterSC, BabyBearPoseidon2OuterEngine>::new(
+        axiom_vm_pk.root_vm_pk.clone(),
+        axiom_vm_pk.root_committed_exe.clone(),
     );
-    let prove_root_verifier = |verifier_input: RootVmVerifierInput<SC>| -> Proof<OuterSC> {
-        let mut leaf_result = root_agg_vm
-            .execute_and_generate_with_cached_program(
-                axiom_vm_pk.root_committed_exe.clone(),
-                verifier_input.write(),
-            )
-            .unwrap();
-        let proof = leaf_result.per_segment.pop().unwrap();
-        root_agg_vm.prove_single(&axiom_vm_pk.root_vm_pk, proof)
-    };
     let app_exe_commit = AppExecutionCommit::compute(
-        &axiom_vm_pk.app_vm_config,
+        &axiom_vm_pk.app_vm_pk.vm_config,
         &committed_exe,
         &axiom_vm_pk.leaf_committed_exe,
     );
 
-    let root_proof = prove_root_verifier(RootVmVerifierInput {
-        proofs: internal_proofs.clone(),
-        public_values: pv_proof.public_values,
-    });
+    let root_proof = SingleSegmentVmProver::prove(
+        &root_prover,
+        RootVmVerifierInput {
+            proofs: internal_proofs.clone(),
+            public_values: pv_proof.public_values,
+        }
+        .write(),
+    );
     let root_pvs = RootVmVerifierPvs::from_flatten(
         root_proof.per_air[PUBLIC_VALUES_AIR_ID]
             .public_values

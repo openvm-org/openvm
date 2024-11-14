@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
         AxiomVmProvingKey::keygen(axiom_vm_config)
     };
 
-    let app_committed_exe = generate_fib_exe(axiom_vm_pk.app_fri_params);
+    let app_committed_exe = generate_fib_exe(axiom_vm_pk.app_vm_pk.fri_params);
 
     let n = 800_000u64;
     let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
             group = "fibonacci_continuation_program"
         )
         .in_scope(|| {
-            let mut vm_config = axiom_vm_pk.app_vm_config.clone();
+            let mut vm_config = axiom_vm_pk.app_vm_pk.vm_config.clone();
             vm_config.collect_metrics = true;
             let vm = VmExecutor::new(vm_config);
             let execution_results = vm
@@ -90,12 +90,10 @@ async fn main() -> Result<()> {
                 .unwrap();
             assert_eq!(execution_results.len(), num_segments);
             let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.app_fri_params,
-                axiom_vm_pk.app_vm_config.clone(),
                 axiom_vm_pk.app_vm_pk.clone(),
                 app_committed_exe.clone(),
             );
-            counter!("fri.log_blowup").absolute(axiom_vm_pk.app_fri_params.log_blowup as u64);
+            counter!("fri.log_blowup").absolute(axiom_vm_pk.app_vm_pk.fri_params.log_blowup as u64);
             ContinuationVmProver::prove(&app_prover, vec![app_input])
         });
 
@@ -103,8 +101,6 @@ async fn main() -> Result<()> {
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proofs, NUM_CHILDREN_LEAF);
             let leaf_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.leaf_fri_params,
-                axiom_vm_pk.leaf_vm_config.clone(),
                 axiom_vm_pk.leaf_vm_pk.clone(),
                 axiom_vm_pk.leaf_committed_exe.clone(),
             );
@@ -120,9 +116,7 @@ async fn main() -> Result<()> {
         });
         let final_internal_proof = {
             let internal_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.internal_fri_params,
-                axiom_vm_pk.internal_vm_config.clone(),
-                axiom_vm_pk.internal_vm_pk.clone(),
+                axiom_vm_pk.internal_vm_pk,
                 axiom_vm_pk.internal_committed_exe.clone(),
             );
             let mut internal_node_idx = 0;
@@ -164,8 +158,6 @@ async fn main() -> Result<()> {
         #[allow(unused_variables)]
         let root_proof = info_span!("root verifier", group = "root_verifier").in_scope(move || {
             let root_prover = VmLocalProver::<OuterSC, BabyBearPoseidon2OuterEngine>::new(
-                axiom_vm_pk.root_fri_params,
-                axiom_vm_pk.root_vm_config.clone(),
                 axiom_vm_pk.root_vm_pk.clone(),
                 axiom_vm_pk.root_committed_exe.clone(),
             );
@@ -206,8 +198,8 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    counter!("fri.log_blowup").absolute(prover.fri_parameters.log_blowup as u64);
-    let mut vm_config = prover.vm_config.clone();
+    counter!("fri.log_blowup").absolute(prover.pk.fri_params.log_blowup as u64);
+    let mut vm_config = prover.pk.vm_config.clone();
     vm_config.collect_metrics = true;
     let vm = SingleSegmentVmExecutor::new(vm_config);
     vm.execute(prover.committed_exe.exe.clone(), input.clone())
