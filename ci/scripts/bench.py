@@ -35,7 +35,6 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, i
         command.extend(["--app_log_blowup", app_log_blowup])
     if agg_log_blowup is not None:
         command.extend(["--agg_log_blowup", agg_log_blowup])
-    print(" ".join(command))
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=False, env=env)
@@ -45,7 +44,6 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, i
     markdown_output = generate_displayable_metrics(output_path, output_path_old)
     with open(f"{git_root}/.bench_metrics/{bin_name}.md", "w") as f:
         f.write(markdown_output)
-    print(markdown_output)
 
 
 def bench():

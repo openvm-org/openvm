@@ -184,11 +184,9 @@ jobs:
 
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
-            cat ${METRIC_PATH}
 
             prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
-            echo prev_path
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
@@ -196,13 +194,11 @@ jobs:
               python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
-              echo "not diffed"
               python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
           fi
-          cat results.md
 
       - name: Install inferno-flamegraph
         run: cargo install inferno
@@ -213,6 +209,9 @@ jobs:
             python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
+            echo "yes flamegraph"
+          else
+            echo "No flamegraph"
           fi
 
       - name: Add benchmark metadata
@@ -312,8 +311,8 @@ jobs:
         # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
-          echo "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           if [[ -f $METRIC_PATH ]]; then
-            echo copied
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
+          else
+            echo why
           fi
