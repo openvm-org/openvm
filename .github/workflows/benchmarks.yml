@@ -83,8 +83,25 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
-      - image=arm64-rust-dev-32gb
     steps:
+      ##########################################################################
+      # Install S3 if necessary                                                #
+      ##########################################################################
+      - name: Install architecture specific tools
+        run: |
+          S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
+
       ##########################################################################
       # Download individual result .md files from S3 and combine them          #
       ##########################################################################
