@@ -205,6 +205,33 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    impl SwPoint for #struct_name {
+                        type Coordinate = #intmod_type;
+
+                        fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
+                        where
+                            C::FieldBytesSize: ModulusSize
+                        {
+                            match p.coordinates() {
+                                Coordinates::Identity => Self::identity(),
+                                Coordinates::Uncompressed { x, y } => {
+                                    // Are x y le?
+                                    let x = Self::Coordinate::from_le_bytes(x);
+                                    let y = Self::Coordinate::from_le_bytes(y);
+
+                                    // Check that the point is on the curve
+                                    let valid = x.cube() - y.square() == Self::Coordinate::ZERO;
+                                    // TODO: b term
+                                    // TODO: how to fail?
+
+                                    Self { x, y }
+
+                                }
+                                Coordinates::Compact { x } => unimplemented!(),
+                                Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
+                            }
+                        }
+                    }
 
                     impl Group for #struct_name {
                         type SelfRef<'a> = &'a Self;

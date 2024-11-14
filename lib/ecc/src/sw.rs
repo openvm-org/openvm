@@ -1,7 +1,11 @@
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use axvm::intrinsics::{DivUnsafe, IntMod};
-use elliptic_curve::{CurveArithmetic, FieldBytes, Scalar};
+use elliptic_curve::{
+    point::AffineCoordinates,
+    sec1::{Coordinates, EncodedPoint, ModulusSize},
+    Curve, CurveArithmetic, FieldBytes, Scalar,
+};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom1Funct3, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_1},
@@ -10,6 +14,14 @@ use {
 };
 
 use super::group::Group;
+
+pub trait SwPoint: Group {
+    type Coordinate: IntMod;
+
+    fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
+    where
+        C::FieldBytesSize: ModulusSize;
+}
 
 // Secp256k1 modulus
 // TODO[jpw] rename to Secp256k1Coord
