@@ -183,6 +183,7 @@ jobs:
 
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+            cat ${METRIC_PATH}
 
             prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
@@ -197,6 +198,7 @@ jobs:
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
           fi
+          cat results.md
 
       - name: Install inferno-flamegraph
         run: cargo install inferno
