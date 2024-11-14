@@ -208,6 +208,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     impl SwPoint for #struct_name {
                         type Coordinate = #intmod_type;
 
+                        // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
                         fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
                         where
                             C::FieldBytesSize: ModulusSize
@@ -230,6 +231,23 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                 Coordinates::Compact { x } => unimplemented!(),
                                 Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
                             }
+                        }
+
+                        fn to_sec1_bytes(&self) -> Vec<u8>
+                        {
+                            let mut bytes = Vec::new();
+                            bytes.push(0x04);
+                            bytes.extend_from_slice(&self.x().as_le_bytes());
+                            bytes.extend_from_slice(&self.y().as_le_bytes());
+                            bytes
+                        }
+
+                        fn x(&self) -> Self::Coordinate {
+                            self.x.clone()
+                        }
+
+                        fn y(&self) -> Self::Coordinate {
+                            self.y.clone()
                         }
                     }
 

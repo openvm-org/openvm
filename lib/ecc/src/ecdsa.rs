@@ -1,9 +1,14 @@
+use core::ops::{Add, Mul};
+
 use axvm::intrinsics::IntMod;
-use ecdsa::{RecoveryId, Result, Signature, SignatureSize, VerifyingKey};
+use ecdsa::{Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey};
 use elliptic_curve::{
+    bigint::CheckedAdd,
     generic_array::{ArrayLength, GenericArray},
+    point::DecompressPoint,
     sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytes, FieldBytesSize, PrimeCurve, Scalar,
+    AffinePoint, CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
+    PrimeField, Scalar,
 };
 
 use crate::{msm, sw::SwPoint};
@@ -16,43 +21,87 @@ impl<C> AxvmVerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     SignatureSize<C>: ArrayLength<u8>,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C> + DecompressPoint<C>,
     FieldBytesSize<C>: ModulusSize,
 {
-    pub fn recover_from_prehash<Scalar: IntMod>(
+    // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/recovery.rs.html#281-316
+    #[allow(non_snake_case)]
+    pub fn recover_from_prehash<Scalar: IntMod, Point: SwPoint>(
         prehash: &[u8],
         sig: &Signature<C>,
         recovery_id: RecoveryId,
-    ) {
+    ) -> Result<()>
+    where
+        for<'a> &'a Point: Add<&'a Point, Output = Point>,
+        for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
+    {
         let (r, s) = sig.split_scalars();
+        // is prehash le?
+        let z = Scalar::from_le_bytes(prehash);
+
+        let mut r_bytes = r.to_repr();
+        if recovery_id.is_x_reduced() {
+            match Option::<C::Uint>::from(
+                C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
+            ) {
+                Some(restored) => r_bytes = restored.encode_field_bytes(),
+                // No reduction should happen here if r was reduced
+                None => return Err(Error::new()),
+            };
+        }
+        let R = AffinePoint::<C>::decompress(&r_bytes, u8::from(recovery_id.is_y_odd()).into());
+
+        if R.is_none().into() {
+            return Err(Error::new());
+        }
+        let R = Point::from_encoded_point::<C>(&R.unwrap().to_encoded_point(false));
+
         let r = Scalar::from_scalar::<C>(r.as_ref());
+        let s = Scalar::from_scalar::<C>(s.as_ref());
+        let r_inv = Scalar::ONE.div_unsafe(r);
+        let u1 = -(&z * &r_inv);
+        let u2 = &s * &r_inv;
+        let G = Point::generator();
+        let public_key = msm(&[u1, u2], &[G, R]);
 
-        // z: IntMod = prehash mod curve order
+        let vk = AxvmVerifyingKey(
+            VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes()).unwrap(),
+        );
 
-        // Deal with recovery id
-
-        // Recover the key
-
-        // verify_prehash(vk, prehash, sig)
+        vk.verify_prehashed(prehash, sig)?;
+        Ok(())
     }
 
+    // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
+    #[allow(non_snake_case)]
     pub fn verify_prehashed<Scalar: IntMod, Point: SwPoint>(
         &self,
         prehash: &[u8],
         sig: &Signature<C>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        for<'a> &'a Point: Add<&'a Point, Output = Point>,
+        for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
+    {
+        // is prehash le?
         let z = Scalar::from_le_bytes(prehash);
         let (r, s) = sig.split_scalars();
         let r = Scalar::from_scalar::<C>(r.as_ref());
         let s = Scalar::from_scalar::<C>(s.as_ref());
         let s_inv = Scalar::ONE.div_unsafe(s); // should IntMod have inv_unsafe?
-        let u1 = z * &s_inv;
-        let u2 = r * &s_inv;
+        let u1 = &z * &s_inv;
+        let u2 = &r * &s_inv;
 
-        let g = Point::generator();
-        let q = Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
-        let result = msm(&[u1, u2], &[g, q]);
+        let G = Point::generator();
+        let Q = Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
+        let result = msm(&[u1, u2], &[G, Q]);
 
-        Ok(())
+        // TODO: this only works when coord and scalar has same number of bytes
+        let x_in_scalar = Scalar::from_le_bytes(result.x().as_le_bytes());
+        if x_in_scalar == r {
+            Ok(())
+        } else {
+            Err(Error::new())
+        }
     }
 }

@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use axvm::intrinsics::{DivUnsafe, IntMod};
@@ -6,6 +7,7 @@ use elliptic_curve::{
     sec1::{Coordinates, EncodedPoint, ModulusSize},
     Curve, CurveArithmetic, FieldBytes, Scalar,
 };
+use generic_array::GenericArray;
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom1Funct3, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_1},
@@ -21,6 +23,13 @@ pub trait SwPoint: Group {
     fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
     where
         C::FieldBytesSize: ModulusSize;
+
+    // TODO: I(lunkai) tried to do to_encoded_point, but that requires the IntMod
+    // to integrate with ModulusSize which is very annoying. So just gave up for now and use bytes.
+    fn to_sec1_bytes(&self) -> Vec<u8>;
+
+    fn x(&self) -> Self::Coordinate;
+    fn y(&self) -> Self::Coordinate;
 }
 
 // Secp256k1 modulus
