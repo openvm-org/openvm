@@ -171,7 +171,7 @@ jobs:
       ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
+          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
 
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"

@@ -46,9 +46,9 @@ jobs:
           fi
           matrix=$(jq -c '
             [
-              .benchmarks[] | 
+              .benchmarks[] |
               .name as $name |
-              .run_params[] | 
+              .run_params[] |
               {
                 name: $name,
                 instance_type: .instance_type,
@@ -107,9 +107,9 @@ jobs:
       - name: Load all metadata files from S3
         run: |
           current_sha=$(git rev-parse HEAD)
-          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup).md"' | sort)
+          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' | sort)
           md_file_list=$(echo "$md_files" | paste -sd "," -)
-          
+
           while read md_file; do
             echo "Downloading results for benchmark: $md_file"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
@@ -118,7 +118,7 @@ jobs:
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
             --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages-test/${GH_PAGES_PATH}"
-          
+
           echo "" >> summary.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> summary.md
           echo "" >> summary.md
@@ -178,7 +178,7 @@ jobs:
                 `);
               }
             }
-      
+
       - name: Add comment to pull request
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -193,4 +193,3 @@ jobs:
               repo: context.repo.repo,
               body: `<!--Benchmark Results-->\n${newBenchmark}`
             });
-            
