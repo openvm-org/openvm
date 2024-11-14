@@ -49,6 +49,18 @@
       ]
     },
     {
+      "name": "fibonacci",
+      "working_directory": "benchmarks",
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-x64",
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 3,
+          "agg_log_blowup": 3
+        }
+      ]
+    },
+    {
       "name": "revm_transfer",
       "working_directory": "benchmarks",
       "run_params": [

@@ -306,7 +306,7 @@ jobs:
       # Update S3 with individual results upon a push event                    #
       ##########################################################################
       - name: Update latest main result in s3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
 
