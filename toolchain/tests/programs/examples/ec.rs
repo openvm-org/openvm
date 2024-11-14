@@ -9,7 +9,7 @@ use core::{
 use axvm::intrinsics::IntMod;
 use axvm_ecc::{
     msm,
-    sw::{EcPointN, IntModN},
+    sw::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     Group,
 };
 use hex_literal::hex;
@@ -69,8 +69,8 @@ pub fn main() {
     }
 
     // Ec Mul
-    let p1 = black_box(EcPointN { x: x1, y: y1 });
-    let scalar = IntModN::from_u32(12345678);
+    let p1 = black_box(Secp256k1Point { x: x1, y: y1 });
+    let scalar = Secp256k1Scalar::from_u32(12345678);
     // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
     let x5 = IntModN::from_le_bytes(&hex!(
         "194A93387F790803D972AF9C4A40CB89D106A36F58EE2F31DC48A41768216D6D"

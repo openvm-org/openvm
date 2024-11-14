@@ -2,15 +2,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::hint::black_box;
+extern crate alloc;
+use alloc::string::ToString;
 
-use axvm::intrinsics::keccak256;
+use axvm::{intrinsics::keccak256, io::print};
 use axvm_ecc::{
-    sw::{EcPointN, IntModN},
+    sw::{Secp256k1Point, Secp256k1Scalar},
     AxvmVerifyingKey,
 };
 use hex_literal::hex;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-
 axvm::entry!(main);
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
@@ -33,7 +34,9 @@ pub fn main() {
     // TODO: Swap out this function with axvm intrinsics.
     let recovered_key = VerifyingKey::recover_from_prehash(&prehash, &signature, recid).unwrap();
 
-    AxvmVerifyingKey::recover_from_prehash::<IntModN, EcPointN>(&prehash, &signature, recid);
+    AxvmVerifyingKey::recover_from_prehash::<Secp256k1Scalar, Secp256k1Point>(
+        &prehash, &signature, recid,
+    );
 
     let expected_key = VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"

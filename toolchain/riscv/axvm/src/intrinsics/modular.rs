@@ -1,4 +1,5 @@
 //! Modular arithmetic traits for use with axVM intrinsics.
+use alloc::vec::Vec;
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
@@ -84,8 +85,11 @@ pub trait IntMod:
     /// Creates a new IntMod from an instance of Repr.
     fn from_repr(repr: Self::Repr) -> Self;
 
-    /// Creates a new IntMod from an array of bytes.
+    /// Creates a new IntMod from an array of bytes, little endian.
     fn from_le_bytes(bytes: &[u8]) -> Self;
+
+    /// Creates a new IntMod from an array of bytes, big endian.
+    fn from_be_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -100,8 +104,11 @@ pub trait IntMod:
     // TODO: move this out to other trait, not in core IntMod
     fn from_scalar<C: CurveArithmetic>(scalar: &Scalar<C>) -> Self;
 
-    /// Value of this IntMod as an array of bytes.
+    /// Value of this IntMod as an array of bytes, little endian.
     fn as_le_bytes(&self) -> &[u8];
+
+    /// Value of this IntMod as an array of bytes, big endian.
+    fn as_be_bytes(&self) -> Vec<u8>;
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]

@@ -331,6 +331,12 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 Self(arr)
                                             }
 
+                                            fn from_be_bytes(bytes: &[u8]) -> Self {
+                                                let mut arr = [0u8; #limbs];
+                                                arr.copy_from_slice(&bytes.iter().rev().copied().collect::<Vec<_>>());
+                                                Self(arr)
+                                            }
+
                                             fn from_u8(val: u8) -> Self {
                                                 Self::from_const_u8(val)
                                             }
@@ -349,11 +355,15 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                             fn from_scalar<C: CurveArithmetic>(scalar: &Scalar<C>) -> Self {
                                                 let field_bytes: FieldBytes<C> = (*scalar).into();
-                                                Self::from_le_bytes(field_bytes.as_slice())
+                                                Self::from_be_bytes(field_bytes.as_slice())
                                             }
 
                                             fn as_le_bytes(&self) -> &[u8] {
                                                 &(self.0)
+                                            }
+
+                                            fn as_be_bytes(&self) -> Vec<u8> {
+                                                self.0.iter().rev().copied().collect::<Vec<_>>()
                                             }
 
                                             #[cfg(not(target_os = "zkvm"))]

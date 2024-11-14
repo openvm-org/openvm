@@ -216,9 +216,9 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                             match p.coordinates() {
                                 Coordinates::Identity => Self::identity(),
                                 Coordinates::Uncompressed { x, y } => {
-                                    // Are x y le?
-                                    let x = Self::Coordinate::from_le_bytes(x);
-                                    let y = Self::Coordinate::from_le_bytes(y);
+                                    // Sec1 bytes are in big endian.
+                                    let x = Self::Coordinate::from_be_bytes(x.as_ref());
+                                    let y = Self::Coordinate::from_be_bytes(y.as_ref());
 
                                     // Check that the point is on the curve
                                     let valid = x.cube() - y.square() == Self::Coordinate::ZERO;
@@ -233,12 +233,22 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                             }
                         }
 
-                        fn to_sec1_bytes(&self) -> Vec<u8>
+                        fn to_sec1_bytes(&self, is_compressed: bool) -> Vec<u8>
                         {
                             let mut bytes = Vec::new();
-                            bytes.push(0x04);
-                            bytes.extend_from_slice(&self.x().as_le_bytes());
-                            bytes.extend_from_slice(&self.y().as_le_bytes());
+                            if is_compressed {
+                                let y_is_odd = self.y().as_le_bytes()[0] & 1;
+                                if y_is_odd == 1 {
+                                    bytes.push(0x03);
+                                } else {
+                                    bytes.push(0x02);
+                                }
+                                bytes.extend_from_slice(&self.x().as_be_bytes());
+                            } else {
+                                bytes.push(0x04);
+                                bytes.extend_from_slice(&self.x().as_be_bytes());
+                                bytes.extend_from_slice(&self.y().as_be_bytes());
+                            }
                             bytes
                         }
 

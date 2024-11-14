@@ -1,10 +1,16 @@
+use alloc::{
+    format,
+    string::{String, ToString},
+};
 use core::ops::{Add, Mul};
 
-use axvm::intrinsics::IntMod;
-use ecdsa::{Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey};
+use axvm::{intrinsics::IntMod, io::print};
+use ecdsa::{
+    hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey,
+};
 use elliptic_curve::{
     bigint::CheckedAdd,
-    generic_array::{ArrayLength, GenericArray},
+    generic_array::ArrayLength,
     point::DecompressPoint,
     sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
@@ -36,8 +42,8 @@ where
         for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
     {
         let (r, s) = sig.split_scalars();
-        // is prehash le?
-        let z = Scalar::from_le_bytes(prehash);
+
+        let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
 
         let mut r_bytes = r.to_repr();
         if recovery_id.is_x_reduced() {
@@ -65,10 +71,11 @@ where
         let public_key = msm(&[u1, u2], &[G, R]);
 
         let vk = AxvmVerifyingKey(
-            VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes()).unwrap(),
+            VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
         );
 
         vk.verify_prehashed(prehash, sig)?;
+
         Ok(())
     }
 
@@ -83,8 +90,7 @@ where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
         for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
     {
-        // is prehash le?
-        let z = Scalar::from_le_bytes(prehash);
+        let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
         let (r, s) = sig.split_scalars();
         let r = Scalar::from_scalar::<C>(r.as_ref());
         let s = Scalar::from_scalar::<C>(s.as_ref());
@@ -98,7 +104,8 @@ where
 
         // TODO: this only works when coord and scalar has same number of bytes
         let x_in_scalar = Scalar::from_le_bytes(result.x().as_le_bytes());
-        if x_in_scalar == r {
+        let check = x_in_scalar - r;
+        if check == Scalar::ZERO {
             Ok(())
         } else {
             Err(Error::new())
