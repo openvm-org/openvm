@@ -5,8 +5,8 @@ use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    utils::LIMB_BITS, Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar,
-    SymbolicExt, SymbolicFelt, SymbolicVar, Usize, Var, Variable,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
+    SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
@@ -114,7 +114,6 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub bigint_repr_size: u32,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }
@@ -132,17 +131,9 @@ impl<C: Config> Builder<C> {
             witness_felt_count: 0,
             witness_ext_count: 0,
             operations: Default::default(),
-            bigint_repr_size: self.bigint_repr_size,
             nb_public_values: self.nb_public_values,
             flags: self.flags,
             is_sub_builder: true,
-        }
-    }
-
-    pub fn bigint_builder() -> Self {
-        Self {
-            bigint_repr_size: LIMB_BITS as u32,
-            ..Default::default()
         }
     }
 
