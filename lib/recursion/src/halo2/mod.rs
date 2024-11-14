@@ -81,13 +81,15 @@ impl Halo2Prover {
     }
 
     /// Executes the prover in testing mode with a circuit definition and witness.
+    ///
+    /// Returns the public instances.
     pub fn mock<
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         k: usize,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
-    ) {
+    ) -> Vec<Vec<Fr>> {
         let builder = Self::builder(CircuitBuilderStage::Mock, k);
         let mut builder = Self::populate(builder, dsl_operations, witness);
 
@@ -96,9 +98,10 @@ impl Halo2Prover {
 
         builder.calculate_params(Some(20));
 
-        MockProver::run(k as u32, &builder, public_instances)
+        MockProver::run(k as u32, &builder, public_instances.clone())
             .unwrap()
             .assert_satisfied();
+        public_instances
     }
 
     /// Populates builder, tunes circuit, keygen

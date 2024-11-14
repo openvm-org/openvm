@@ -2,7 +2,10 @@ mod multi_field32;
 mod outer_poseidon2;
 mod stark;
 
-use axvm_native_compiler::ir::{Builder, Witness};
+use axvm_native_compiler::{
+    constraints::halo2::compiler::convert_fr,
+    ir::{Builder, Witness},
+};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::{reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField};
@@ -18,10 +21,11 @@ fn test_publish() {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
     let value_u32 = 1345237507;
-    let value = builder.eval(Bn254Fr::from_canonical_u32(value_u32));
+    let value_fr = Bn254Fr::from_canonical_u32(value_u32);
+    let value = builder.eval(value_fr);
     builder.static_commit_public_value(0, value);
 
-    Halo2Prover::mock::<OuterConfig>(
+    let pis = Halo2Prover::mock::<OuterConfig>(
         10,
         DslOperations {
             operations: builder.operations,
@@ -29,6 +33,7 @@ fn test_publish() {
         },
         Witness::default(),
     );
+    assert_eq!(pis, vec![vec![convert_fr(&value_fr)]]);
 }
 
 #[test]
