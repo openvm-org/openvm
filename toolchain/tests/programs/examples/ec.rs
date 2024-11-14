@@ -19,34 +19,34 @@ axvm::entry!(main);
 pub fn main() {
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
-    let x1 = IntModN::from_u32(1);
-    let y1 = IntModN::from_le_bytes(&hex!(
+    let x1 = Secp256k1Coord::from_u32(1);
+    let y1 = Secp256k1Coord::from_le_bytes(&hex!(
         "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
     ));
-    let x2 = IntModN::from_u32(2);
-    let y2 = IntModN::from_le_bytes(&hex!(
+    let x2 = Secp256k1Coord::from_u32(2);
+    let y2 = Secp256k1Coord::from_le_bytes(&hex!(
         "D1A847A8F879E0AEE32544DA5BA0B3BD1703A1F52867A5601FF6454DD8180499"
     ));
     // This is the sum of (x1, y1) and (x2, y2).
-    let x3 = IntModN::from_le_bytes(&hex!(
+    let x3 = Secp256k1Coord::from_le_bytes(&hex!(
         "BE675E31F8AC8200CBCC6B10CECCD6EB93FB07D99BB9E7C99CC9245C862D3AF2"
     ));
-    let y3 = IntModN::from_le_bytes(&hex!(
+    let y3 = Secp256k1Coord::from_le_bytes(&hex!(
         "B44573B48FD3416DD256A8C0E1BAD03E88A78BF176778682589B9CB478FC1D79"
     ));
     // This is the double of (x2, y2).
-    let x4 = IntModN::from_le_bytes(&hex!(
+    let x4 = Secp256k1Coord::from_le_bytes(&hex!(
         "3BFFFFFF32333333333333333333333333333333333333333333333333333333"
     ));
-    let y4 = IntModN::from_le_bytes(&hex!(
+    let y4 = Secp256k1Coord::from_le_bytes(&hex!(
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = black_box(EcPointN {
+    let mut p1 = black_box(Secp256k1Point {
         x: x1.clone(),
         y: y1.clone(),
     });
-    let mut p2 = black_box(EcPointN { x: x2, y: y2 });
+    let mut p2 = black_box(Secp256k1Point { x: x2, y: y2 });
 
     // Generic add can handle equal or unequal points.
     let p3 = &p1 + &p2;
@@ -72,10 +72,10 @@ pub fn main() {
     let p1 = black_box(Secp256k1Point { x: x1, y: y1 });
     let scalar = Secp256k1Scalar::from_u32(12345678);
     // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
-    let x5 = IntModN::from_le_bytes(&hex!(
+    let x5 = Secp256k1Coord::from_le_bytes(&hex!(
         "194A93387F790803D972AF9C4A40CB89D106A36F58EE2F31DC48A41768216D6D"
     ));
-    let y5 = IntModN::from_le_bytes(&hex!(
+    let y5 = Secp256k1Coord::from_le_bytes(&hex!(
         "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
     ));
     let result = msm(&[scalar], &[p1]);

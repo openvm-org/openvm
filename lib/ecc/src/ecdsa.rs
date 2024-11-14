@@ -19,7 +19,7 @@ use elliptic_curve::{
 
 use crate::{msm, sw::SwPoint};
 
-pub struct AxvmVerifyingKey<C>(VerifyingKey<C>)
+pub struct AxvmVerifyingKey<C>(pub VerifyingKey<C>)
 where
     C: PrimeCurve + CurveArithmetic;
 
@@ -36,7 +36,7 @@ where
         prehash: &[u8],
         sig: &Signature<C>,
         recovery_id: RecoveryId,
-    ) -> Result<()>
+    ) -> Result<AxvmVerifyingKey<C>>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
         for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
@@ -62,8 +62,8 @@ where
         }
         let R = Point::from_encoded_point::<C>(&R.unwrap().to_encoded_point(false));
 
-        let r = Scalar::from_scalar::<C>(r.as_ref());
-        let s = Scalar::from_scalar::<C>(s.as_ref());
+        let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
+        let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
         let r_inv = Scalar::ONE.div_unsafe(r);
         let u1 = -(&z * &r_inv);
         let u2 = &s * &r_inv;
@@ -76,7 +76,7 @@ where
 
         vk.verify_prehashed(prehash, sig)?;
 
-        Ok(())
+        Ok(vk)
     }
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
@@ -92,8 +92,8 @@ where
     {
         let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
         let (r, s) = sig.split_scalars();
-        let r = Scalar::from_scalar::<C>(r.as_ref());
-        let s = Scalar::from_scalar::<C>(s.as_ref());
+        let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
+        let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
         let s_inv = Scalar::ONE.div_unsafe(s); // should IntMod have inv_unsafe?
         let u1 = &z * &s_inv;
         let u2 = &r * &s_inv;

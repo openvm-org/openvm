@@ -100,10 +100,6 @@ pub trait IntMod:
     /// Creates a new IntMod from a u64.
     fn from_u64(val: u64) -> Self;
 
-    /// Creates a new IntMod from a CurveArithmetic Scalar.
-    // TODO: move this out to other trait, not in core IntMod
-    fn from_scalar<C: CurveArithmetic>(scalar: &Scalar<C>) -> Self;
-
     /// Value of this IntMod as an array of bytes, little endian.
     fn as_le_bytes(&self) -> &[u8];
 

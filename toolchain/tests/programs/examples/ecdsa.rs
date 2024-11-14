@@ -31,19 +31,17 @@ pub fn main() {
 
     let prehash = keccak256(black_box(msg));
 
-    // TODO: Swap out this function with axvm intrinsics.
-    let recovered_key = VerifyingKey::recover_from_prehash(&prehash, &signature, recid).unwrap();
-
-    AxvmVerifyingKey::recover_from_prehash::<Secp256k1Scalar, Secp256k1Point>(
+    let recovered_key = AxvmVerifyingKey::recover_from_prehash::<Secp256k1Scalar, Secp256k1Point>(
         &prehash, &signature, recid,
-    );
+    )
+    .unwrap();
 
     let expected_key = VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"
     ))
     .unwrap();
 
-    if recovered_key != expected_key {
+    if recovered_key.0 != expected_key {
         panic!();
     }
 }
