@@ -50,7 +50,7 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, i
 
 def bench():
     parser = argparse.ArgumentParser()
-    parser.add_argument('bench_name', type=str, required=True, help="Name of the benchmark to run")
+    parser.add_argument('bench_name', type=str, help="Name of the benchmark to run")
     parser.add_argument('--instance_type', type=str, required=True, help="Instance this benchmark is running on")
     parser.add_argument('--memory_allocator', type=str, required=True, help="Memory allocator for this benchmark")
     parser.add_argument('--app_log_blowup', type=str, required=True, help="Application level log blowup")
