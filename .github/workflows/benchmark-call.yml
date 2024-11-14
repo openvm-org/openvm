@@ -65,7 +65,7 @@ env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,${{ inputs.memory_allocator }}"
+  FEATURE_FLAGS: "bench-metrics,parallel"
   CMD_ARGS: ""
 
 jobs:
@@ -142,9 +142,10 @@ jobs:
       - name: Set application and aggregation level log blowup
         run: |
           INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
+          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          echo "INPUT_ARGS=${INSTANCE_TYPE} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
       - name: Set working directory
         id: set-working-dir

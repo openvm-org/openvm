@@ -7,14 +7,14 @@ from metric_unify.main import generate_displayable_metrics;
 from metric_unify.utils import get_git_root, create_bench_metrics_dir
 
 
-def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup):
+def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, instance_type, memory_allocator):
      # Get the root directory of the Git repository
     git_root = get_git_root()
 
     # Change the current working directory to the Git root
     os.chdir(git_root)
     create_bench_metrics_dir()
-    output_path = f".bench_metrics/{bin_name}-{app_log_blowup}-{agg_log_blowup}.json"
+    output_path = f".bench_metrics/{bin_name}-{app_log_blowup}-{agg_log_blowup}-{instance_type}-{memory_allocator}.json"
     output_path_old = None
 
     if os.path.exists(output_path):
@@ -50,20 +50,21 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup):
 
 def bench():
     parser = argparse.ArgumentParser()
-    parser.add_argument('bench_name', type=str, help="Name of the benchmark to run")
+    parser.add_argument('bench_name', type=str, required=True, help="Name of the benchmark to run")
+    parser.add_argument('--instance_type', type=str, required=True, help="Instance this benchmark is running on")
+    parser.add_argument('--memory_allocator', type=str, required=True, help="Memory allocator for this benchmark")
+    parser.add_argument('--app_log_blowup', type=str, required=True, help="Application level log blowup")
+    parser.add_argument('--agg_log_blowup', type=str, required=True, help="Aggregation level log blowup")
     parser.add_argument('--features', type=str, help="Additional features")
-    parser.add_argument('--instance_type', type=str, help="Instance this benchmark is running on")
-    parser.add_argument('--app_log_blowup', type=str, help="Application level log blowup")
-    parser.add_argument('--agg_log_blowup', type=str, help="Aggregation level log blowup")
     args = parser.parse_args()
 
+    feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else []) + [args.memory_allocator]
     assert (args.features.count("mimalloc") + args.features.count("jemalloc")) == 1
-    feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else [])
 
     if args.instance_type and 'x86' in args.instance_type:
         feature_flags.append('nightly-features')
 
-    run_cargo_command(args.bench_name, feature_flags, args.app_log_blowup, args.agg_log_blowup)
+    run_cargo_command(args.bench_name, feature_flags, args.app_log_blowup, args.agg_log_blowup, args.instance_type, args.memory_allocator)
 
 
 if __name__ == '__main__':
