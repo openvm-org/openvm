@@ -188,12 +188,15 @@ jobs:
 
             prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
+            echo prev_path
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
+              echo diffed
               python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
+              echo "not diffed"
               python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             fi
           else
@@ -306,10 +309,11 @@ jobs:
       # Update S3 with individual results upon a push event                    #
       ##########################################################################
       - name: Update latest main result in s3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
-
+          echo "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           if [[ -f $METRIC_PATH ]]; then
+            echo copied
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
