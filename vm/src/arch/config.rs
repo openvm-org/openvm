@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -34,11 +36,13 @@ pub struct MemoryConfig {
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     pub decomp: usize,
+    /// Maximum N AccessAdapter AIR to support.
+    pub max_access_adapter_n: usize,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 16)
+        Self::new(29, 1, 29, 29, 16, 64)
     }
 }
 
@@ -46,6 +50,8 @@ impl Default for MemoryConfig {
 pub struct VmConfig {
     /// List of all executors except modular executors.
     pub executors: Vec<ExecutorName>,
+    /// Optional. Can be used to override the height of the trace of an executor.
+    pub overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
     /// List of all supported modulus
     pub supported_modulus: Vec<BigUint>,
     /// List of all supported Complex extensions, stored as indices of supported_modulus.
@@ -95,6 +101,7 @@ impl VmConfig {
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
+            overridden_executor_heights: None,
             continuation_enabled,
             poseidon2_max_constraint_degree,
             memory_config,
@@ -249,6 +256,11 @@ impl VmConfig {
         VmConfig {
             poseidon2_max_constraint_degree,
             continuation_enabled: false,
+            memory_config: MemoryConfig {
+                // By default, eDSL never uses AccessAdapterAir with N > 8.
+                max_access_adapter_n: 8,
+                ..Default::default()
+            },
             num_public_values,
             max_segment_len: (1 << 24) - 100,
             ..VmConfig::default()
