@@ -190,7 +190,6 @@ jobs:
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
-              echo diffed
               python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
@@ -205,12 +204,10 @@ jobs:
 
       - name: Generate flamegraphs
         run: |
-          echo "check pls: ${METRIC_PATH}"
           if [[ -f $METRIC_PATH ]]; then
             python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
-            echo "yes flamegraph"
           else
             echo "No flamegraph"
           fi
@@ -220,12 +217,6 @@ jobs:
           commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
-          echo "check pls: ${METRIC_PATH}"
-          if [[ -f $METRIC_PATH ]]; then
-            echo "yes"
-          else
-            echo "No"
-          fi
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             echo "<details>" >> $RESULT_PATH
             echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
@@ -275,6 +266,17 @@ jobs:
             }
 
       ##########################################################################
+      # Update S3 with individual results upon a push event                    #
+      ##########################################################################
+      - name: Update latest main result in s3
+        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
+          if [[ -f $METRIC_PATH ]]; then
+            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
+          fi
+
+      ##########################################################################
       # Update gh-pages with individual results                                #
       ##########################################################################
       - uses: actions/checkout@v4
@@ -283,12 +285,6 @@ jobs:
 
       - name: Set up git
         run: |
-          echo "check pls: ${METRIC_PATH}"
-          if [[ -f $METRIC_PATH ]]; then
-            echo "yes"
-          else
-            echo "No"
-          fi
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
@@ -311,33 +307,8 @@ jobs:
 
       - name: Update PR github pages with new bench results
         run: |
-          echo "check pls: ${METRIC_PATH}"
-          if [[ -f $METRIC_PATH ]]; then
-            echo "yes"
-          else
-            echo "No"
-          fi
           mkdir -p ${GH_PAGES_PATH}
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
           git push --force
-          echo "check pls: ${METRIC_PATH}"
-          if [[ -f $METRIC_PATH ]]; then
-            echo "yes"
-          else
-            echo "No"
-          fi
-
-      ##########################################################################
-      # Update S3 with individual results upon a push event                    #
-      ##########################################################################
-      - name: Update latest main result in s3
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
-          if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
-          else
-            echo why
-          fi
