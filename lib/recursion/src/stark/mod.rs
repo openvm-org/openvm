@@ -37,6 +37,7 @@ use crate::{
     view::get_advice_per_air,
 };
 
+#[cfg(feature = "static-verifier")]
 pub mod outer;
 
 #[derive(Debug, Clone, Copy)]

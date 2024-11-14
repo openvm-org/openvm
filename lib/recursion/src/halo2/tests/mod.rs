@@ -9,9 +9,27 @@ use p3_field::{reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField
 
 use crate::{
     config::outer::OuterConfig,
-    halo2::Halo2Prover,
+    halo2::{DslOperations, Halo2Prover},
     utils::{reduce_32, split_32},
 };
+
+#[test]
+fn test_publish() {
+    let mut builder = Builder::<OuterConfig>::default();
+    builder.flags.static_only = true;
+    let value_u32 = 1345237507;
+    let value = builder.eval(Bn254Fr::from_canonical_u32(value_u32));
+    builder.static_commit_public_value(0, value);
+
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 1,
+        },
+        Witness::default(),
+    );
+}
 
 #[test]
 fn test_num2bits_v() {
@@ -25,7 +43,14 @@ fn test_num2bits_v() {
         value_u32 >>= 1;
     }
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -41,7 +66,14 @@ fn test_reduce_32() {
     let result = reduce_32(&mut builder, &[value_1, value_2]);
     builder.assert_var_eq(result, gt);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -59,5 +91,12 @@ fn test_split_32() {
     builder.assert_felt_eq(result[1], gt[1]);
     builder.assert_felt_eq(result[2], gt[2]);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }

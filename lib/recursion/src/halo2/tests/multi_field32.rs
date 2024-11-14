@@ -9,7 +9,7 @@ use p3_symmetric::Hash;
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable,
     config::outer::{OuterChallenger, OuterConfig},
-    halo2::Halo2Prover,
+    halo2::{DslOperations, Halo2Prover},
     OUTER_DIGEST_SIZE,
 };
 
@@ -49,7 +49,14 @@ fn test_challenger() {
     let result3 = challenger.sample(&mut builder);
     builder.assert_felt_eq(gt3, result3);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -90,5 +97,12 @@ fn test_challenger_sample_ext() {
     builder.assert_ext_eq(SymbolicExt::from_f(gt1), result1);
     builder.assert_ext_eq(SymbolicExt::from_f(gt2), result2);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }

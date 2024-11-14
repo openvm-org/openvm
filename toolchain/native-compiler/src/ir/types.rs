@@ -76,6 +76,13 @@ impl<N: PrimeField> Usize<N> {
         }
     }
 
+    pub fn get_var(&self) -> Var<N> {
+        match self {
+            Usize::Const(_) => panic!("Cannot get the variable of a constant"),
+            Usize::Var(v) => *v,
+        }
+    }
+
     pub fn from_field(value: N) -> Self {
         Usize::Const(Rc::new(RefCell::new(value)))
     }
