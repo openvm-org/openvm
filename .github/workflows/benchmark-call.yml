@@ -13,11 +13,10 @@ on:
           - revm_transfer
           - regex
           - base64_json
-          - fib_e2e
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x86})
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
         default: 64cpu-linux-arm64
       memory_allocator:
         type: string
@@ -43,7 +42,7 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x86})
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
         default: 64cpu-linux-arm64
       memory_allocator:
         type: string
@@ -208,8 +207,6 @@ jobs:
             python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
-          else
-            echo "No flamegraph"
           fi
 
       - name: Add benchmark metadata
@@ -269,7 +266,7 @@ jobs:
       # Update S3 with individual results upon a push event                    #
       ##########################################################################
       - name: Update latest main result in s3
-        # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
           if [[ -f $METRIC_PATH ]]; then

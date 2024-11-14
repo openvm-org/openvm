@@ -11,7 +11,6 @@ def get_summary_rows(md_files, headers, gh_pages_link):
         row = []
         for line in lines:
             cols = [col.strip() for col in line.split('|') if col.strip()]
-            print(cols)
             if cols == headers:
                 next(lines)
 
@@ -39,7 +38,6 @@ def get_summary_rows(md_files, headers, gh_pages_link):
         
         if len(row) != 0:
             outputs.append(row)
-    print(outputs)
     return outputs
 
 def write_to_md_table(rows, headers, file_path='summary.md'):
