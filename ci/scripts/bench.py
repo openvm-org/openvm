@@ -59,7 +59,7 @@ def bench():
     args = parser.parse_args()
 
     feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else []) + [args.memory_allocator]
-    assert (args.features.count("mimalloc") + args.features.count("jemalloc")) == 1
+    assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
     if args.instance_type and 'x86' in args.instance_type:
         feature_flags.append('nightly-features')
