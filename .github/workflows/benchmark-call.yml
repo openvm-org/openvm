@@ -205,6 +205,7 @@ jobs:
 
       - name: Generate flamegraphs
         run: |
+          echo "check pls: ${METRIC_PATH}"
           if [[ -f $METRIC_PATH ]]; then
             python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
@@ -219,6 +220,12 @@ jobs:
           commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
+          echo "check pls: ${METRIC_PATH}"
+          if [[ -f $METRIC_PATH ]]; then
+            echo "yes"
+          else
+            echo "No"
+          fi
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
             echo "<details>" >> $RESULT_PATH
             echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
@@ -276,6 +283,12 @@ jobs:
 
       - name: Set up git
         run: |
+          echo "check pls: ${METRIC_PATH}"
+          if [[ -f $METRIC_PATH ]]; then
+            echo "yes"
+          else
+            echo "No"
+          fi
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
@@ -298,11 +311,23 @@ jobs:
 
       - name: Update PR github pages with new bench results
         run: |
+          echo "check pls: ${METRIC_PATH}"
+          if [[ -f $METRIC_PATH ]]; then
+            echo "yes"
+          else
+            echo "No"
+          fi
           mkdir -p ${GH_PAGES_PATH}
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
           git push --force
+          echo "check pls: ${METRIC_PATH}"
+          if [[ -f $METRIC_PATH ]]; then
+            echo "yes"
+          else
+            echo "No"
+          fi
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
