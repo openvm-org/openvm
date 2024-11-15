@@ -219,11 +219,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                                     // Sec1 bytes are in big endian.
                                     let x = Self::Coordinate::from_be_bytes(x.as_ref());
                                     let y = Self::Coordinate::from_be_bytes(y.as_ref());
-
-                                    // Check that the point is on the curve
-                                    let valid = x.cube() - y.square() == Self::Coordinate::ZERO;
-                                    // TODO: b term
-                                    // TODO: how to fail?
+                                    // TODO: Verify that the point is on the curve
 
                                     Self { x, y }
 

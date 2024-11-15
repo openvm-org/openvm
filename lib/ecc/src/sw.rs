@@ -3,9 +3,8 @@ use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use axvm::intrinsics::{DivUnsafe, IntMod};
 use elliptic_curve::{
-    point::AffineCoordinates,
     sec1::{Coordinates, EncodedPoint, ModulusSize},
-    Curve, CurveArithmetic, FieldBytes, Scalar,
+    Curve,
 };
 #[cfg(target_os = "zkvm")]
 use {

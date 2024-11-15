@@ -1,10 +1,6 @@
-use alloc::{
-    format,
-    string::{String, ToString},
-};
 use core::ops::{Add, Mul};
 
-use axvm::{intrinsics::IntMod, io::print};
+use axvm::intrinsics::IntMod;
 use ecdsa::{
     hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey,
 };
@@ -14,7 +10,7 @@ use elliptic_curve::{
     point::DecompressPoint,
     sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
-    PrimeField, Scalar,
+    PrimeField,
 };
 
 use crate::{msm, sw::SwPoint};

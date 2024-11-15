@@ -6,7 +6,6 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use elliptic_curve::{CurveArithmetic, Scalar};
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 

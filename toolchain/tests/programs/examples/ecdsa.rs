@@ -2,10 +2,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::hint::black_box;
-extern crate alloc;
-use alloc::string::ToString;
 
-use axvm::{intrinsics::keccak256, io::print};
+use axvm::intrinsics::keccak256;
 use axvm_ecc::{
     sw::{Secp256k1Point, Secp256k1Scalar},
     AxvmVerifyingKey,
