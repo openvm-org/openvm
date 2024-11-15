@@ -943,11 +943,10 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy01234 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy01234Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -959,11 +958,10 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy02345 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,

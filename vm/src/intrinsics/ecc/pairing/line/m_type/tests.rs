@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use crate::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     intrinsics::ecc::pairing::{EcLineMul023By023Chip, EcLineMulBy02345Chip},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
+    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
     utils::{biguint_to_limbs, rv32_write_heap_default_with_increment},
 };
 
@@ -135,15 +135,10 @@ fn test_mul_023_by_023() {
 #[ignore]
 fn test_mul_by_02345() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 36, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
+    let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
-        bitwise_chip.clone(),
     );
     let mut chip = EcLineMulBy02345Chip::new(
         adapter,
@@ -157,23 +152,17 @@ fn test_mul_by_02345() {
         PairingOpcode::default_offset(),
     );
 
-    let mut rng = StdRng::seed_from_u64(8);
+    let mut rng = StdRng::seed_from_u64(19);
     let f = Fq12::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(12);
     let x0 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(5);
     let x2 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(77);
     let x3 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(31);
     let x4 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(1);
     let x5 = Fq2::random(&mut rng);
 
     let input_f = bls12381_fq12_to_biguint_vec(f);
     let input_x = [
         bls12381_fq2_to_biguint_vec(x0),
-        bls12381_fq2_to_biguint_vec(Fq2::zero()),
         bls12381_fq2_to_biguint_vec(x2),
         bls12381_fq2_to_biguint_vec(x3),
         bls12381_fq2_to_biguint_vec(x4),
@@ -222,6 +211,6 @@ fn test_mul_by_02345() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
