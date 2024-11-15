@@ -12,7 +12,7 @@ type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
 #[test]
-fn test_fri_fold() {
+fn test_single_reduced_opening_eval() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let mut rng = thread_rng();
@@ -65,11 +65,11 @@ fn test_fri_fold() {
 
     let cur_alpha_pow: Ext<_, _> = builder.uninit();
     builder.assign(&cur_alpha_pow, initial_alpha_pow);
-    let fri_fold_result =
-        builder.fri_mat_reduced_opening(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
+    let single_ro_eval_res =
+        builder.fri_single_reduced_opening_eval(alpha, cur_alpha_pow, &mat_opening, &ps_at_z);
     let actual_final_alpha_pow = cur_alpha_pow;
     let actual_result: Ext<_, _> = builder.uninit();
-    builder.assign(&actual_result, fri_fold_result / (z - x));
+    builder.assign(&actual_result, single_ro_eval_res / (z - x));
 
     //builder.print_e(actual_result);
     //builder.print_e(actual_final_alpha_pow);

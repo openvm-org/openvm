@@ -66,7 +66,7 @@ use crate::{
         castf::{CastFChip, CastFCoreChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
-        fri::FriMatOpeningChip,
+        fri::FriReducedOpeningChip,
         jal::{JalCoreChip, KernelJalChip},
         loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
@@ -409,8 +409,8 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
-                ExecutorName::FriMatOpening => {
-                    let chip = Rc::new(RefCell::new(FriMatOpeningChip::new(
+                ExecutorName::FriReducedOpening => {
+                    let chip = Rc::new(RefCell::new(FriReducedOpeningChip::new(
                         memory_controller.clone(),
                         execution_bus,
                         program_bus,
@@ -1604,7 +1604,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32KeccakOpcode::COUNT,
             Rv32KeccakOpcode::default_offset(),
         ),
-        ExecutorName::FriMatOpening => (
+        ExecutorName::FriReducedOpening => (
             FriOpcode::default_offset(),
             FriOpcode::COUNT,
             FriOpcode::default_offset(),
