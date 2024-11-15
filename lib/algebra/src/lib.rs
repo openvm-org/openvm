@@ -141,3 +141,10 @@ pub trait IntMod:
         ret
     }
 }
+
+// Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
+pub trait Reduce {
+    /// Interpret the given bytes as an integer and perform a modular reduction.
+    fn reduce_le_bytes(bytes: &[u8]) -> Self;
+    fn reduce_be_bytes(bytes: &[u8]) -> Self;
+}

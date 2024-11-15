@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul};
 
-use axvm_algebra::IntMod;
+use axvm_algebra::{IntMod, Reduce};
 use ecdsa::{
     hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey,
 };
@@ -28,7 +28,7 @@ where
 {
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/recovery.rs.html#281-316
     #[allow(non_snake_case)]
-    pub fn recover_from_prehash<Scalar: IntMod, Point: SwPoint>(
+    pub fn recover_from_prehash<Scalar: IntMod + Reduce, Point: SwPoint>(
         prehash: &[u8],
         sig: &Signature<C>,
         recovery_id: RecoveryId,
@@ -77,7 +77,7 @@ where
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
     #[allow(non_snake_case)]
-    pub fn verify_prehashed<Scalar: IntMod, Point: SwPoint>(
+    pub fn verify_prehashed<Scalar: IntMod + Reduce, Point: SwPoint>(
         &self,
         prehash: &[u8],
         sig: &Signature<C>,
@@ -90,7 +90,7 @@ where
         let (r, s) = sig.split_scalars();
         let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
         let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let s_inv = Scalar::ONE.div_unsafe(s); // should IntMod have inv_unsafe?
+        let s_inv = Scalar::ONE.div_unsafe(s);
         let u1 = &z * &s_inv;
         let u2 = &r * &s_inv;
 
@@ -98,10 +98,8 @@ where
         let Q = Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
         let result = msm(&[u1, u2], &[G, Q]);
 
-        // TODO: this only works when coord and scalar has same number of bytes
-        let x_in_scalar = Scalar::from_le_bytes(result.x().as_le_bytes());
-        let check = x_in_scalar - r;
-        if check == Scalar::ZERO {
+        let x_in_scalar = Scalar::reduce_le_bytes(result.x().as_le_bytes());
+        if x_in_scalar == r {
             Ok(())
         } else {
             Err(Error::new())
