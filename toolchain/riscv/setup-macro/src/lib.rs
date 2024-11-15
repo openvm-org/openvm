@@ -356,7 +356,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl axvm::intrinsics::IntMod for #struct_name {
+                                        impl axvm_algebra::IntMod for #struct_name {
                                             type Repr = [u8; #limbs];
                                             type SelfRef<'a> = &'a Self;
 

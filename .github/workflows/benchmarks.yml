@@ -18,7 +18,7 @@ on:
       - ".github/workflows/benchmarks.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: benchmark-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -26,32 +26,187 @@ env:
   AXIOM_FAST_TEST: "1"
 
 jobs:
-  benchmark-verify-fibair:
+  create-matrix:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    outputs:
+      matrix: ${{ steps.create-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Create benchmark matrix from JSON
+        id: create-matrix
+        run: |
+          if [ ! -f ./.github/workflows/benchmark-config.json ]; then
+            echo "Error: ./.github/workflows/benchmark-config.json not found"
+            exit 1
+          fi
+          matrix=$(jq -c '
+            [
+              .benchmarks[] |
+              .name as $name |
+              .run_params[] |
+              {
+                name: $name,
+                instance_type: .instance_type,
+                memory_allocator: .memory_allocator,
+                app_log_blowup: .app_log_blowup,
+                agg_log_blowup: .agg_log_blowup
+              }
+            ]
+          ' ./.github/workflows/benchmark-config.json)
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to parse ./.github/workflows/benchmark-config.json"
+            exit 1
+          fi
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  benchmark:
+    needs: create-matrix
+    strategy:
+      matrix:
+        benchmark_run: ${{fromJson(needs.create-matrix.outputs.matrix)}}
     uses: ./.github/workflows/benchmark-call.yml
     with:
-      benchmark_name: verify_fibair
+      benchmark_name: ${{ matrix.benchmark_run.name }}
+      instance_type: ${{ matrix.benchmark_run.instance_type }}
+      memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
+      app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
+      agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
     secrets: inherit
 
-  benchmark-fibonacci:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: fibonacci
-    secrets: inherit
+  summarize:
+    needs: [create-matrix, benchmark]
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-arm64
+    steps:
+      ##########################################################################
+      # Install S3 if necessary                                                #
+      ##########################################################################
+      - name: Install architecture specific tools
+        run: |
+          S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
 
-  benchmark-revm:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: revm_transfer
-    secrets: inherit
+      ##########################################################################
+      # Download individual result .md files from S3 and combine them          #
+      ##########################################################################
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
 
-  benchmark-regex:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: regex
-    secrets: inherit
+      - name: Set github pages path for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
-  benchmark-base64-json:
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: base64_json
-    secrets: inherit
+      - name: Set github pages path for push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          GH_PAGES_PATH="benchmarks"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Load all metadata files from S3
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' | sort)
+          md_file_list=$(echo "$md_files" | paste -sd "," -)
+
+          while read md_file; do
+            echo "Downloading results for benchmark: $md_file"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
+          done <<< "$md_files"
+
+          python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
+            --aggregation-json ci/scripts/metric_unify/aggregation.json \
+            --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
+
+          echo "" >> summary.md
+          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> summary.md
+          echo "" >> summary.md
+          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary.md
+          mkdir -p /tmp/benchmark-results/
+          cp summary.md /tmp/benchmark-results/
+
+      ##########################################################################
+      # Update gh-pages with summary upon a PR event                           #
+      ##########################################################################
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        with:
+          ref: gh-pages
+
+      - name: Set up git
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # TODO[stephenh]: remove rm line after backfill
+      - name: Update github pages with new bench results
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git rm -f -r=false ${GH_PAGES_PATH}/*.md || true
+          mkdir -p ${GH_PAGES_PATH}
+          cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
+          git add ${GH_PAGES_PATH}/summary.md
+          git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
+          git push --force
+
+      ##########################################################################
+      # Update PR comment upon a pull request event                            #
+      ##########################################################################
+      - name: Collapse previous comment (if exists)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            for (const comment of comments.data) {
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--Benchmark Results-->")) {
+                console.log("collapse comment ", comment.id);
+                const resp = await github.graphql(`
+                  mutation {
+                    minimizeComment(input: {classifier: OUTDATED, subjectId: "${comment.node_id}"}) {
+                      minimizedComment {
+                        isMinimized
+                      }
+                    }
+                  }
+                `);
+              }
+            }
+
+      - name: Add comment to pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const newBenchmark = fs.readFileSync('/tmp/benchmark-results/summary.md', { encoding: 'utf8', flag: 'r' })
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `<!--Benchmark Results-->\n${newBenchmark}`
+            });

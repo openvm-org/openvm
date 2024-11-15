@@ -22,9 +22,11 @@ members = [
     "toolchain/riscv/transpiler",
     "toolchain/riscv/platform",
     "toolchain/riscv/axvm",
+    "toolchain/riscv/macros",
     "toolchain/build",
     "toolchain/tests",
     "cargo-axiom",
+    "lib/algebra",
     "lib/ecc",
     "lib/ecc-constants",
     "lib/ecc-execution",
@@ -71,6 +73,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
+axiom-vm = { path = "axiom-vm", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
@@ -78,12 +81,14 @@ axvm-instructions-derive = { path = "toolchain/instructions/derive", default-fea
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
 axvm-build = { path = "toolchain/build", default-features = false }
+axvm-algebra = { path = "lib/algebra", default-features = false }
 axvm-ecc = { path = "lib/ecc", default-features = false }
 axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }
 axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
 axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
-axvm-setup-macro = { path = "toolchain/riscv/setup-macro", default-features = false }
+axvm-moduli-setup = { path = "toolchain/riscv/macros/moduli-setup", default-features = false }
+axvm-sw-setup = { path = "toolchain/riscv/macros/sw-setup", default-features = false }
 axvm-circuit = { path = "vm", default-features = false }
 axvm-circuit-derive = { path = "vm/derive", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }

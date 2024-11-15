@@ -14,7 +14,7 @@ use super::{
     PartitionedAirBuilder, ViewPair,
 };
 use crate::{
-    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    interaction::{Interaction, InteractionBuilder, InteractionType},
     rap::PermutationAirBuilderWithExposedValues,
 };
 
@@ -32,9 +32,6 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub constraint_index: usize,
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
-
-    /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
-    pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
     /// Number of interactions to bundle in permutation trace
     pub interaction_chunk_size: usize,
@@ -200,13 +197,7 @@ where
         &self.interactions
     }
 
-    fn finalize_interactions(&mut self) {
-        assert_eq!(
-            self.symbolic_interactions.len(),
-            self.interactions.len(),
-            "Interaction count does not match vkey"
-        );
-    }
+    fn finalize_interactions(&mut self) {}
 
     fn interaction_chunk_size(&self) -> usize {
         self.interaction_chunk_size

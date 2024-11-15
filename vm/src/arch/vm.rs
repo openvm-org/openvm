@@ -7,7 +7,7 @@ use ax_stark_backend::{
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
-    prover::types::{Proof, ProofInput},
+    prover::types::{CommittedTraceData, Proof, ProofInput},
     verifier::VerificationError,
 };
 use axvm_instructions::exe::AxVmExe;
@@ -76,7 +76,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         self.config.continuation_enabled
     }
 
-    fn execute_segments(
+    pub fn execute_segments(
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
@@ -96,6 +96,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         let mut pc = exe.pc_start;
 
         loop {
+            println!("Executing segment: {}", segments.len());
             let state = segment.execute_from_pc(pc)?;
             pc = state.pc;
 
@@ -166,16 +167,7 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let mut segments = self.execute_segments(exe, input)?;
-        let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
-
-        Ok(VmExecutorResult {
-            per_segment: segments
-                .into_iter()
-                .map(|seg| seg.generate_proof_input(None))
-                .collect(),
-            final_memory,
-        })
+        self.execute_and_generate_impl(exe.into(), None, input.into())
     }
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
@@ -185,13 +177,38 @@ impl<F: PrimeField32> VmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let mut segments = self.execute_segments(commited_exe.exe.clone(), input)?;
+        self.execute_and_generate_impl(
+            commited_exe.exe.clone(),
+            Some(commited_exe.committed_program.clone()),
+            input.into(),
+        )
+    }
+    fn execute_and_generate_impl<SC: StarkGenericConfig>(
+        &self,
+        exe: AxVmExe<F>,
+        committed_program: Option<CommittedTraceData<SC>>,
+        input: VecDeque<Vec<F>>,
+    ) -> Result<VmExecutorResult<SC>, ExecutionError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
 
+        #[allow(unused_variables)]
         Ok(VmExecutorResult {
             per_segment: segments
                 .into_iter()
-                .map(|seg| seg.generate_proof_input(Some(commited_exe.committed_program.clone())))
+                .enumerate()
+                .map(|(seg_idx, seg)| {
+                    #[cfg(feature = "bench-metrics")]
+                    let start = std::time::Instant::now();
+                    let ret = seg.generate_proof_input(committed_program.clone());
+                    #[cfg(feature = "bench-metrics")]
+                    metrics::gauge!("execute_and_trace_gen_time_ms", "segment" => seg_idx.to_string())
+                        .set(start.elapsed().as_millis() as f64);
+                    ret
+                })
                 .collect(),
             final_memory,
         })
@@ -364,7 +381,8 @@ where
         SC::Challenge: Send + Sync,
         PcsProof<SC>: Send + Sync,
     {
-        self.engine.prove(pk, proof_input)
+        tracing::info_span!("prove_segment", segment = 0)
+            .in_scope(|| self.engine.prove(pk, proof_input))
     }
 
     pub fn prove(

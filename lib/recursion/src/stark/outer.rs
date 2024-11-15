@@ -2,19 +2,19 @@ use ax_stark_backend::prover::types::Proof;
 use ax_stark_sdk::config::{
     baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
 };
-use axvm_native_compiler::ir::{Builder, DslIr, TracedVec};
+use axvm_native_compiler::ir::Builder;
 
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable, config::outer::OuterConfig,
-    fri::TwoAdicFriPcsVariable, stark::StarkVerifier, types::MultiStarkVerificationAdvice,
-    utils::const_fri_config, witness::Witnessable,
+    fri::TwoAdicFriPcsVariable, halo2::DslOperations, stark::StarkVerifier,
+    types::MultiStarkVerificationAdvice, utils::const_fri_config, witness::Witnessable,
 };
 
 pub fn build_circuit_verify_operations(
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
     proof: &Proof<BabyBearPoseidon2OuterConfig>,
-) -> TracedVec<DslIr<OuterConfig>> {
+) -> DslOperations<OuterConfig> {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
 
@@ -27,5 +27,8 @@ pub fn build_circuit_verify_operations(
     StarkVerifier::verify::<MultiField32ChallengerVariable<_>>(&mut builder, &pcs, &advice, &input);
 
     builder.cycle_tracker_end("VerifierProgram");
-    builder.operations
+    DslOperations {
+        operations: builder.operations,
+        num_public_values: 0,
+    }
 }

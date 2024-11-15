@@ -393,6 +393,7 @@ impl<
             })
         });
         let read_data = read_records.map(|r| r.map(|x| x.data));
+        assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.air.address_bits));
 
         let record = Rv32VecHeapReadRecord {
             rs: rs_records,

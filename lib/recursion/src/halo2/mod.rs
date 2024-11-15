@@ -8,7 +8,7 @@ mod tests;
 use std::{fmt::Debug, fs::File};
 
 use axvm_native_compiler::{
-    constraints::{halo2::compiler::Halo2State, ConstraintCompiler},
+    constraints::halo2::compiler::{Halo2ConstraintCompiler, Halo2State},
     ir::{Config, DslIr, TracedVec, Witness},
 };
 use itertools::Itertools;
@@ -37,6 +37,12 @@ use crate::halo2::utils::read_params;
 #[derive(Debug, Clone)]
 pub struct Halo2Prover;
 
+#[derive(Debug, Clone)]
+pub struct DslOperations<C: Config> {
+    pub operations: TracedVec<DslIr<C>>,
+    pub num_public_values: usize,
+}
+
 /// Necessary metadata to prove a Halo2 circuit
 #[derive(Debug, Clone)]
 pub struct Halo2ProvingPinning {
@@ -59,7 +65,7 @@ impl Halo2Prover {
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         builder: BaseCircuitBuilder<Fr>,
-        operations: TracedVec<DslIr<C>>,
+        dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> BaseCircuitBuilder<Fr> {
         let mut state = Halo2State {
@@ -68,31 +74,34 @@ impl Halo2Prover {
         };
         state.load_witness(witness);
 
-        let backend = ConstraintCompiler::<C>::default();
-        backend.constrain_halo2(&mut state, operations);
+        let backend = Halo2ConstraintCompiler::<C>::new(dsl_operations.num_public_values);
+        backend.constrain_halo2(&mut state, dsl_operations.operations);
 
         state.builder
     }
 
     /// Executes the prover in testing mode with a circuit definition and witness.
+    ///
+    /// Returns the public instances.
     pub fn mock<
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         k: usize,
-        operations: TracedVec<DslIr<C>>,
+        dsl_operations: DslOperations<C>,
         witness: Witness<C>,
-    ) {
+    ) -> Vec<Vec<Fr>> {
         let builder = Self::builder(CircuitBuilderStage::Mock, k);
-        let mut builder = Self::populate(builder, operations, witness);
+        let mut builder = Self::populate(builder, dsl_operations, witness);
 
         let public_instances = builder.instances();
         println!("Public instances: {:?}", public_instances);
 
         builder.calculate_params(Some(20));
 
-        MockProver::run(k as u32, &builder, public_instances)
+        MockProver::run(k as u32, &builder, public_instances.clone())
             .unwrap()
             .assert_satisfied();
+        public_instances
     }
 
     /// Populates builder, tunes circuit, keygen
@@ -100,11 +109,11 @@ impl Halo2Prover {
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         k: usize,
-        operations: TracedVec<DslIr<C>>,
+        dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> Halo2ProvingPinning {
         let builder = Self::builder(CircuitBuilderStage::Keygen, k);
-        let mut builder = Self::populate(builder, operations, witness);
+        let mut builder = Self::populate(builder, dsl_operations, witness);
         builder.calculate_params(Some(20));
 
         let params = read_params(k as u32);
@@ -144,14 +153,14 @@ impl Halo2Prover {
         config_params: BaseCircuitParams,
         break_points: MultiPhaseThreadBreakPoints,
         pk: &ProvingKey<G1Affine>,
-        operations: TracedVec<DslIr<C>>,
+        dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> Snark {
         let k = config_params.k;
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
-        let builder = Self::populate(builder, operations, witness);
+        let builder = Self::populate(builder, dsl_operations, witness);
         #[cfg(feature = "bench-metrics")]
         {
             let stats = builder.statistics();
@@ -178,7 +187,7 @@ impl Halo2Prover {
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         k: usize,
-        operations: TracedVec<DslIr<C>>,
+        dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> Snark {
         let Halo2ProvingPinning {
@@ -186,7 +195,7 @@ impl Halo2Prover {
             config_params,
             break_points,
             ..
-        } = Self::keygen(k, operations.clone(), witness.clone());
-        Self::prove(config_params, break_points, &pk, operations, witness)
+        } = Self::keygen(k, dsl_operations.clone(), witness.clone());
+        Self::prove(config_params, break_points, &pk, dsl_operations, witness)
     }
 }

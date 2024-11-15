@@ -10,10 +10,23 @@ use ax_stark_sdk::{
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig, VmExecutor};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
+use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};
 use p3_field::PrimeField32;
 use tempfile::tempdir;
+
+#[derive(Parser, Debug)]
+#[command(allow_external_subcommands = true)]
+pub struct BenchmarkCli {
+    /// Application level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "app_log_blowup")]
+    pub app_log_blowup: Option<usize>,
+
+    /// Aggregation level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "agg_log_blowup")]
+    pub agg_log_blowup: Option<usize>,
+}
 
 fn get_programs_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();

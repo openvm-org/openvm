@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use axvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
@@ -17,18 +17,22 @@ use snark_verifier_sdk::snark_verifier::{
 
 use super::stats::Halo2Stats;
 use crate::{
-    constraints::{
-        halo2::{
-            baby_bear::{
-                AssignedBabyBear, AssignedBabyBearExt4, BabyBearChip, BabyBearExt4,
-                BabyBearExt4Chip,
-            },
-            poseidon2_perm::{Poseidon2Params, Poseidon2State},
+    constraints::halo2::{
+        baby_bear::{
+            AssignedBabyBear, AssignedBabyBearExt4, BabyBearChip, BabyBearExt4, BabyBearExt4Chip,
+            BABYBEAR_MAX_BITS,
         },
-        ConstraintCompiler,
+        poseidon2_perm::{Poseidon2Params, Poseidon2State},
     },
     ir::{Config, DslIr, TracedVec, Witness},
 };
+
+/// The backend for the Halo2 constraint compiler.
+#[derive(Debug, Clone)]
+pub struct Halo2ConstraintCompiler<C: Config> {
+    pub num_public_values: usize,
+    pub phantom: PhantomData<C>,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Halo2State<C: Config> {
@@ -55,7 +59,13 @@ impl<C: Config> Halo2State<C> {
     }
 }
 
-impl<C: Config + Debug> ConstraintCompiler<C> {
+impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
+    pub fn new(num_public_values: usize) -> Self {
+        Self {
+            num_public_values,
+            phantom: PhantomData,
+        }
+    }
     // Create halo2-lib constraints from a list of operations in the DSL.
     // Assume: C::N = C::F = C::EF is type Fr
     pub fn constrain_halo2(&self, halo2_state: &mut Halo2State<C>, operations: TracedVec<DslIr<C>>)
@@ -68,6 +78,7 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
         let ext_chip = BabyBearExt4Chip::new(Arc::clone(&f_chip));
         let gate = f_chip.gate();
         let ctx = halo2_state.builder.main(0);
+        let mut public_values = vec![ctx.load_zero(); self.num_public_values];
 
         // Local variables for referencing during the course of constraint building
         let mut vars = HashMap::new();
@@ -229,6 +240,15 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     let x = ext_chip.neg(ctx, exts[&b.0]);
                     exts.insert(a.0, x);
                 }
+                DslIr::CastFV(a, b) => {
+                    let felt = felts[&b.0];
+                    let reduced_felt = if felt.max_bits > BABYBEAR_MAX_BITS {
+                        f_chip.reduce(ctx, felt)
+                    } else {
+                        felt
+                    };
+                    vars.insert(a.0, reduced_felt.value);
+                }
                 DslIr::CircuitNum2BitsV(value, bits, output) => {
                     let shortened_bits = bits.min(Fr::NUM_BITS as usize);
                     let mut x = gate.num_to_bits(ctx, vars[&value.0], shortened_bits);
@@ -383,6 +403,9 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 DslIr::CycleTrackerEnd(name) => {
                     cell_tracker.end(name);
                 }
+                DslIr::CircuitPublish(val, index) => {
+                    public_values[index] = vars[&val.0];
+                }
                 _ => panic!("unsupported {:?}", instruction),
             };
             #[cfg(feature = "bench-metrics")]
@@ -392,9 +415,8 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                 new_stats.increment(cell_tracker.get_full_name());
             }
         }
-        let vkey_hash = vkey_hash.unwrap_or_else(|| ctx.load_zero());
-        let committed_values_digest = committed_values_digest.unwrap_or_else(|| ctx.load_zero());
-        halo2_state.builder.assigned_instances = vec![vec![vkey_hash, committed_values_digest]];
+
+        halo2_state.builder.assigned_instances = vec![public_values];
     }
 }
 

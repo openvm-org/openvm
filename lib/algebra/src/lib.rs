@@ -1,3 +1,5 @@
+#![no_std]
+
 //! Modular arithmetic traits for use with axVM intrinsics.
 use core::{
     fmt::Debug,

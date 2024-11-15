@@ -547,8 +547,9 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
+ "axvm-moduli-setup",
  "axvm-platform",
- "axvm-setup-macro",
+ "axvm-sw-setup",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
@@ -558,15 +559,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra"
+version = "0.1.0"
+dependencies = [
+ "num-bigint-dig",
+]
+
+[[package]]
 name = "axvm-benchmarks"
 version = "0.1.0"
 dependencies = [
  "ax-stark-sdk",
+ "axiom-vm",
  "axvm-build",
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
  "axvm-transpiler",
+ "clap",
  "criterion",
  "eyre",
  "hex",
@@ -574,6 +584,7 @@ dependencies = [
  "p3-field",
  "pprof",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
@@ -596,6 +607,7 @@ name = "axvm-circuit"
 version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
+ "async-trait",
  "ax-circuit-derive",
  "ax-circuit-primitives",
  "ax-ecc-execution",
@@ -671,6 +683,7 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm-algebra",
  "axvm-platform",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -718,6 +731,22 @@ dependencies = [
  "strum",
  "strum_macros",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "axvm-macros-common"
+version = "0.1.0"
+dependencies = [
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "axvm-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -771,7 +800,7 @@ dependencies = [
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
- "axvm-setup-macro",
+ "axvm-moduli-setup",
  "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
@@ -824,9 +853,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-setup-macro"
+name = "axvm-sw-setup"
 version = "0.1.0"
 dependencies = [
+ "axvm-macros-common",
  "quote",
  "syn 2.0.87",
 ]
@@ -2677,9 +2707,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.162"
+version = "0.2.161"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18d287de67fe55fd7e1581fe933d965a5a9477b38e949cfa9f8574ef01506398"
+checksum = "8e9489c2807c139ffd9c1794f4af0ebe86a828db53ecdc7fea2111d0fed085d1"
 
 [[package]]
 name = "libgit2-sys"
@@ -4607,9 +4637,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-common"
-version = "12.12.1"
+version = "12.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d4d73159efebfb389d819fd479afb2dbd57dcb3e3f4b7fcfa0e675f5a46c1cb"
+checksum = "366f1b4c6baf6cfefc234bbd4899535fca0b06c74443039a73f6dfb2fad88d77"
 dependencies = [
  "debugid",
  "memmap2",
@@ -4619,9 +4649,9 @@ dependencies = [
 
 [[package]]
 name = "symbolic-demangle"
-version = "12.12.1"
+version = "12.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a767859f6549c665011970874c3f541838b4835d5aaaa493d3ee383918be9f10"
+checksum = "aba05ba5b9962ea5617baf556293720a8b2d0a282aa14ee4bf10e22efc7da8c8"
 dependencies = [
  "cpp_demangle",
  "rustc-demangle",
@@ -4882,6 +4912,28 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tokio"
+version = "1.41.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
+dependencies = [
+ "backtrace",
+ "pin-project-lite",
+ "tokio-macros",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]

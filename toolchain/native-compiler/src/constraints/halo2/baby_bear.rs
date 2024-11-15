@@ -18,6 +18,8 @@ use snark_verifier_sdk::snark_verifier::{
     util::arithmetic::{Field as _, PrimeField as _},
 };
 
+pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
+
 #[derive(Copy, Clone, Debug)]
 pub struct AssignedBabyBear {
     pub value: AssignedValue<Fr>,
@@ -50,10 +52,10 @@ impl BabyBearChip {
 
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBear) -> AssignedBabyBear {
         let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
-        self.range.range_check(ctx, value, 31);
+        self.range.range_check(ctx, value, BABYBEAR_MAX_BITS);
         AssignedBabyBear {
             value,
-            max_bits: 31,
+            max_bits: BABYBEAR_MAX_BITS,
         }
     }
 
@@ -67,7 +69,7 @@ impl BabyBearChip {
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, BabyBear::ORDER_U32, a.max_bits);
         let r = AssignedBabyBear {
             value: r,
-            max_bits: 31,
+            max_bits: BABYBEAR_MAX_BITS,
         };
         debug_assert_eq!(a.to_baby_bear(), r.to_baby_bear());
         r

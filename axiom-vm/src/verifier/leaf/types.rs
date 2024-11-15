@@ -5,7 +5,9 @@ use ax_stark_sdk::{
     },
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
-use axvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
+use axvm_circuit::{
+    prover::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
+};
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use derivative::Derivative;
 use p3_baby_bear::BabyBear;
@@ -36,6 +38,25 @@ pub struct UserPublicValuesRootProof<F> {
     pub public_values_commit: [F; DIGEST_SIZE],
 }
 assert_impl_all!(UserPublicValuesRootProof<BabyBear>: Serialize, DeserializeOwned);
+
+impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
+    pub fn chunk_continuation_vm_proof(proof: &ContinuationVmProof<SC>, chunk: usize) -> Vec<Self> {
+        let ContinuationVmProof {
+            per_segment,
+            user_public_values,
+        } = proof;
+        let mut ret: Vec<Self> = per_segment
+            .chunks(chunk)
+            .map(|proof| Self {
+                proofs: proof.to_vec(),
+                public_values_root_proof: None,
+            })
+            .collect();
+        ret.last_mut().unwrap().public_values_root_proof =
+            Some(UserPublicValuesRootProof::extract(user_public_values));
+        ret
+    }
+}
 
 impl<F: Clone> UserPublicValuesRootProof<F> {
     pub fn extract(pvs_proof: &UserPublicValuesProof<{ DIGEST_SIZE }, F>) -> Self {

@@ -18,15 +18,12 @@ pub trait Group:
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
 {
-    type SelfRef<'a>: Add<&'a Self, Output = Self>
-        + Sub<&'a Self, Output = Self>
-        + Neg<Output = Self>
+    type SelfRef<'a>: Add<&'a Self, Output = Self> + Sub<&'a Self, Output = Self>
     where
         Self: 'a;
 
     fn identity() -> Self;
     fn is_identity(&self) -> bool;
-    fn generator() -> Self;
 
     fn double(&self) -> Self;
     fn double_assign(&mut self);

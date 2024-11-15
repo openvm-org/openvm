@@ -69,14 +69,11 @@ rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program
 
 ## Adding a Benchmark to CI
 
-To add the benchmark to CI, update the [.github/workflows/benchmarks.yml](./.github/workflows/benchmarks.yml) file. If you want the benchmark to run on every PR, follow the existing format. For longer benchmarks, you can set it to only run conditionally with labels:
+To add the benchmark to CI, update the [.github/workflows/benchmark-config.json](../.github/workflows/benchmark-config.json) file and set it's configuration parameters. If you want the benchmark to run on every PR, follow the existing format.
 
-```yaml
-- name: Feature flags
-  if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-```
+TODO[stephenh]: Allow selectively run benchmarks via labels. Tracked in INT-2602.
 
-The `benchmarks.yml` file calls the [.github/workflows/benchmark-call.yml](./.github/workflows/benchmark-call.yml) file which is a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results. You only need to add your benchmark name and then the run benchmark command in the appropriate section.
+The `benchmarks.yml` file reads this JSON and generates a matrix of inputs for the [.github/workflows/benchmark-call.yml](../.github/workflows/benchmark-call.yml) file, a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results.
 
 ## Metric Labels
 

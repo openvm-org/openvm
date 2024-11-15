@@ -27,7 +27,7 @@ ax-ecc-execution = { workspace = true } # needed for hint_final_exp
 axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
-ax-stark-sdk = { workspace = true, optional = true }
+ax-stark-sdk = { workspace = true }
 
 parking_lot.workspace = true
 enum-utils.workspace = true
@@ -55,6 +55,7 @@ rustc-hash.workspace = true
 eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
+async-trait.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
@@ -82,7 +83,7 @@ hex.workspace = true
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:ax-stark-sdk", "axvm-ecc/halo2curves"]
+test-utils = ["axvm-ecc/halo2curves"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
