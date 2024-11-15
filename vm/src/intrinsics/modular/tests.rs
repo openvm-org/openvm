@@ -317,6 +317,24 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
         tester.memory_controller(),
     );
 
+    {
+        let vec = big_uint_to_limbs(&modulus, LIMB_BITS);
+        let modulus_limbs: [F; TOTAL_LIMBS] = std::array::from_fn(|i| {
+            if i < vec.len() {
+                F::from_canonical_usize(vec[i])
+            } else {
+                F::ZERO
+            }
+        });
+
+        let setup_instruction = rv32_write_heap_default::<TOTAL_LIMBS>(
+            &mut tester,
+            vec![modulus_limbs],
+            vec![[F::ZERO; TOTAL_LIMBS]],
+            opcode_offset + Rv32ModularArithmeticOpcode::SETUP as usize,
+        );
+        tester.execute(&mut chip, setup_instruction);
+    }
     for _ in 0..num_tests {
         let b = generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(&modulus, &mut rng);
         let c = if rng.gen_bool(0.5) {
