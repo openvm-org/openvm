@@ -1,31 +1,14 @@
 use std::{
     cmp::{max, min},
-    marker::PhantomData,
-    ops::{Add, Mul, Sub},
+    ops::{Add, AddAssign, Mul, MulAssign, Sub},
 };
 
 use num_bigint_dig::BigUint;
-use p3_air::AirBuilder;
 use p3_util::log2_ceil_usize;
 
 pub mod check_carry_mod_to_zero;
 pub mod check_carry_to_zero;
 pub mod utils;
-
-#[cfg(test)]
-pub mod tests;
-
-pub trait LimbConfig {
-    fn limb_bits() -> usize;
-}
-
-#[derive(Debug, Clone)]
-pub struct DefaultLimbConfig;
-impl LimbConfig for DefaultLimbConfig {
-    fn limb_bits() -> usize {
-        8
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct OverflowInt<T> {
@@ -33,80 +16,112 @@ pub struct OverflowInt<T> {
     // T can be AB::Expr, for example when the OverflowInt represents x * y
     // a0 = x0 * y0
     // a1 = x0 * y1 + x1 * y0 ...
-    pub limbs: Vec<T>,
+    limbs: Vec<T>,
 
     // Track the max abs of limbs, so we can do arithmetic on them.
-    pub limb_max_abs: usize,
+    limb_max_abs: usize,
 
     // All limbs should be within [-2^max_overflow_bits, 2^max_overflow_bits)
-    pub max_overflow_bits: usize,
-}
-
-// It's also a big unit similar to OverflowInt, but its limbs don't overflow.
-#[derive(Debug, Clone)]
-pub struct CanonicalUint<T, C: LimbConfig> {
-    pub limbs: Vec<T>,
-    _marker: PhantomData<C>,
-}
-
-impl<T, C: LimbConfig> CanonicalUint<T, C> {
-    pub fn from_big_uint(x: &BigUint, min_limbs: Option<usize>) -> CanonicalUint<isize, C> {
-        let limbs = match min_limbs {
-            Some(min_limbs) => utils::big_uint_to_num_limbs(x, C::limb_bits(), min_limbs),
-            None => utils::big_uint_to_limbs(x, C::limb_bits()),
-        };
-        CanonicalUint {
-            limbs: limbs.into_iter().map(|x| x as isize).collect(),
-            _marker: PhantomData::<C>,
-        }
-    }
-
-    pub fn from_vec(x: Vec<T>) -> CanonicalUint<T, C> {
-        CanonicalUint {
-            limbs: x,
-            _marker: PhantomData::<C>,
-        }
-    }
-}
-
-impl<T, C: LimbConfig, S> From<CanonicalUint<T, C>> for OverflowInt<S>
-where
-    T: Into<S>,
-{
-    fn from(x: CanonicalUint<T, C>) -> OverflowInt<S> {
-        OverflowInt {
-            limbs: x.limbs.into_iter().map(|x| x.into()).collect(),
-            max_overflow_bits: C::limb_bits(),
-            limb_max_abs: (1 << C::limb_bits()) - 1,
-        }
-    }
+    max_overflow_bits: usize,
 }
 
 impl<T> OverflowInt<T> {
-    // Similar to CanonicalUint, but specify the limb bits as a param.
-    pub fn from_var_vec<AB: AirBuilder, V: Into<AB::Expr>>(
-        x: Vec<V>,
-        limb_bits: usize,
-    ) -> OverflowInt<AB::Expr> {
-        let limbs = x.into_iter().map(|x| x.into()).collect();
+    // Note: sign or unsigned are not about the type T.
+    // It's how we will range check the limbs. If the limbs are non-negative, use this one.
+    pub fn from_canonical_unsigned_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
         OverflowInt {
-            limbs,
+            limbs: x,
             max_overflow_bits: limb_bits,
             limb_max_abs: (1 << limb_bits) - 1,
         }
     }
 
-    // Similar to CanonicalUint, but specify the limb bits as a param.
-    pub fn from_vec(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
+    // Limbs can be negative. So the max_overflow_bits and limb_max_abs are different from the range check result.
+    pub fn from_canonical_signed_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
         OverflowInt {
             limbs: x,
-            max_overflow_bits: limb_bits,
-            limb_max_abs: (1 << limb_bits) - 1,
+            max_overflow_bits: limb_bits + 1,
+            limb_max_abs: (1 << limb_bits),
+        }
+    }
+
+    // Used only when limbs are hand calculated.
+    pub fn from_computed_limbs(
+        x: Vec<T>,
+        limb_max_abs: usize,
+        max_overflow_bits: usize,
+    ) -> OverflowInt<T> {
+        OverflowInt {
+            limbs: x,
+            max_overflow_bits,
+            limb_max_abs,
+        }
+    }
+
+    pub fn max_overflow_bits(&self) -> usize {
+        self.max_overflow_bits
+    }
+
+    pub fn limb_max_abs(&self) -> usize {
+        self.limb_max_abs
+    }
+
+    pub fn num_limbs(&self) -> usize {
+        self.limbs.len()
+    }
+
+    pub fn limb(&self, i: usize) -> &T {
+        self.limbs.get(i).unwrap()
+    }
+
+    pub fn limbs(&self) -> &[T] {
+        &self.limbs
+    }
+}
+
+impl<T> OverflowInt<T>
+where
+    T: Clone + AddAssign + MulAssign,
+{
+    pub fn int_add(&self, s: isize, convert: fn(isize) -> T) -> OverflowInt<T> {
+        let mut limbs = self.limbs.clone();
+        limbs[0] += convert(s);
+        let limb_max_abs = self.limb_max_abs + s.unsigned_abs();
+        OverflowInt {
+            limbs,
+            limb_max_abs,
+            max_overflow_bits: log2_ceil_usize(limb_max_abs),
+        }
+    }
+
+    pub fn int_mul(&self, s: isize, convert: fn(isize) -> T) -> OverflowInt<T> {
+        let mut limbs = self.limbs.clone();
+        for limb in limbs.iter_mut() {
+            *limb *= convert(s);
+        }
+        let limb_max_abs = self.limb_max_abs * s.unsigned_abs();
+        OverflowInt {
+            limbs,
+            limb_max_abs,
+            max_overflow_bits: log2_ceil_usize(limb_max_abs),
         }
     }
 }
 
 impl OverflowInt<isize> {
+    pub fn from_big_uint(
+        x: &BigUint,
+        limb_bits: usize,
+        min_limbs: Option<usize>,
+    ) -> OverflowInt<isize> {
+        let limbs = match min_limbs {
+            Some(min_limbs) => utils::big_uint_to_num_limbs(x, limb_bits, min_limbs),
+            None => utils::big_uint_to_limbs(x, limb_bits),
+        };
+        let limbs: Vec<isize> = limbs.iter().map(|x| *x as isize).collect();
+        OverflowInt::from_canonical_unsigned_limbs(limbs, limb_bits)
+    }
+
     pub fn calculate_carries(&self, limb_bits: usize) -> Vec<isize> {
         let mut carries = Vec::with_capacity(self.limbs.len());
 
