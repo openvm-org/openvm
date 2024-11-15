@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul};
 
-use axvm::intrinsics::IntMod;
+use axvm_algebra::IntMod;
 use ecdsa::{
     hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey,
 };

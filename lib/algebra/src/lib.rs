@@ -1,6 +1,7 @@
 #![no_std]
 
 //! Modular arithmetic traits for use with axVM intrinsics.
+extern crate alloc;
 use alloc::vec::Vec;
 use core::{
     fmt::Debug,
