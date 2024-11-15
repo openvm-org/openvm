@@ -105,9 +105,7 @@ where
         let local_opcode_idx = (flags[0] - is_setup)
             * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::MUL as usize)
             + is_setup
-                * AB::Expr::from_canonical_usize(
-                    Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
-                )
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP as usize)
             + (AB::Expr::ONE - flags[0])
                 * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::DIV as usize);
 
@@ -185,13 +183,13 @@ where
 
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_mul_flag = match local_opcode {
-            // for SETUP_MULDIV, we want to fictiously multiply by zero and not divide
-            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
+            // for SETUP, we want to fictiously multiply by zero and not divide
+            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::SETUP => true,
             Rv32ModularArithmeticOpcode::DIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
         let is_setup = match local_opcode {
-            Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
+            Rv32ModularArithmeticOpcode::SETUP => true,
             Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::DIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };

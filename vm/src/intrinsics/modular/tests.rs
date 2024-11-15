@@ -81,7 +81,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
-    let mut all_ops = vec![ADD_LOCAL + 2]; // setup
+    let mut all_ops = vec![Rv32ModularArithmeticOpcode::SETUP as usize]; // setup
     let mut all_a = vec![modulus.clone()];
     let mut all_b = vec![BigUint::zero()];
 
@@ -208,7 +208,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
-    let mut all_ops = vec![MUL_LOCAL + 2];
+    let mut all_ops = vec![Rv32ModularArithmeticOpcode::SETUP as usize];
     let mut all_a = vec![modulus.clone()];
     let mut all_b = vec![BigUint::zero()];
 

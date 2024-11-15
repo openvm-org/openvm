@@ -11,6 +11,7 @@ use backtrace::Backtrace;
 use itertools::{zip_eq, Itertools};
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
+use strum::EnumCount;
 
 use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
 use crate::{
@@ -184,8 +185,28 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             }
             prev_backtrace = trace;
 
+            let mut opcode_lookup = opcode;
+            for i in 0..self.config.supported_modulus.len() {
+                if opcode
+                    == Rv32ModularArithmeticOpcode::SETUP.with_default_offset()
+                        + i * Rv32ModularArithmeticOpcode::COUNT
+                {
+                    opcode_lookup = Rv32ModularArithmeticOpcode::default_offset()
+                        + i * Rv32ModularArithmeticOpcode::COUNT;
+                    if instruction.f == F::ZERO {
+                        opcode_lookup += Rv32ModularArithmeticOpcode::ADD as usize;
+                    } else if instruction.f == F::ONE {
+                        opcode_lookup += Rv32ModularArithmeticOpcode::MUL as usize;
+                    } else if instruction.f == F::TWO {
+                        opcode_lookup += Rv32ModularArithmeticOpcode::IS_EQ as usize;
+                    } else {
+                        panic!("invalid f argument with modular SETUP opcode");
+                    }
+                }
+            }
+
             let mut opcode_name = None;
-            if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {
+            if let Some(executor) = self.chip_set.executors.get_mut(&opcode_lookup) {
                 let next_state = InstructionExecutor::execute(
                     executor,
                     instruction,

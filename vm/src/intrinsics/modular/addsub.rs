@@ -92,9 +92,7 @@ where
         let local_opcode_idx = flags[0]
             * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::ADD as usize)
             + is_setup
-                * AB::Expr::from_canonical_usize(
-                    Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
-                )
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP as usize)
             + (AB::Expr::ONE - is_setup - flags[0])
                 * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SUB as usize);
 
@@ -174,11 +172,11 @@ where
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_add_flag = match local_opcode {
             Rv32ModularArithmeticOpcode::ADD => true,
-            Rv32ModularArithmeticOpcode::SUB | Rv32ModularArithmeticOpcode::SETUP_ADDSUB => false,
+            Rv32ModularArithmeticOpcode::SUB | Rv32ModularArithmeticOpcode::SETUP => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
         let is_setup_flag = match local_opcode {
-            Rv32ModularArithmeticOpcode::SETUP_ADDSUB => true,
+            Rv32ModularArithmeticOpcode::SETUP => true,
             Rv32ModularArithmeticOpcode::ADD | Rv32ModularArithmeticOpcode::SUB => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };

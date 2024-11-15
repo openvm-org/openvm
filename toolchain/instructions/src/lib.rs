@@ -354,12 +354,10 @@ pub struct Rv32Mul256Opcode(pub MulOpcode);
 pub enum Rv32ModularArithmeticOpcode {
     ADD,
     SUB,
-    SETUP_ADDSUB,
     MUL,
     DIV,
-    SETUP_MULDIV,
     IS_EQ,
-    SETUP_ISEQ,
+    SETUP,
 }
 
 // to be deleted and replaced by Rv32SwOpcode
