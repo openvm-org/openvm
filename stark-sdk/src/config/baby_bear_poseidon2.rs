@@ -183,7 +183,7 @@ fn horizen_to_p3(horizen_babybear: HorizenBabyBear) -> BabyBear {
     BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
 }
 
-fn horizen_round_consts_16() -> (ExternalLayerConstants<BabyBear, 16>, Vec<BabyBear>) {
+pub fn horizen_round_consts_16() -> (ExternalLayerConstants<BabyBear, 16>, Vec<BabyBear>) {
     let p3_rc16: Vec<Vec<BabyBear>> = RC16
         .iter()
         .map(|round| {

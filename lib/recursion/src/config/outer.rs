@@ -2,14 +2,13 @@ use ax_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey}
 use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use axvm_native_compiler::ir::Config;
 use p3_baby_bear::BabyBear;
-use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254};
+use p3_bn254_fr::{Bn254Fr, Poseidon2Bn254};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
 
 use crate::{
@@ -36,8 +35,7 @@ impl Config for OuterConfig {
 /// A configuration for outer recursion.
 pub type OuterVal = BabyBear;
 pub type OuterChallenge = BinomialExtensionField<OuterVal, 4>;
-pub type OuterPerm =
-    Poseidon2<Bn254Fr, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBN254, WIDTH, 5>;
+pub type OuterPerm = Poseidon2Bn254<WIDTH>;
 pub type OuterHash =
     MultiField32PaddingFreeSponge<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE, DIGEST_WIDTH>;
 pub type OuterDigest = [Bn254Fr; 1];

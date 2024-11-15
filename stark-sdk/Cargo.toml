@@ -50,3 +50,8 @@ axvm-instructions.workspace = true
 [features]
 default = ["parallel"]
 parallel = ["ax-stark-backend/parallel"]
+nightly-features = [
+    "p3-dft/nightly-features",
+    "p3-keccak/nightly-features",
+    "p3-poseidon2/nightly-features",
+]
