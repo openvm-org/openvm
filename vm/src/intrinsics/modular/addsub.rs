@@ -77,6 +77,7 @@ where
 
         let FieldExprCols {
             is_valid,
+            is_setup,
             inputs,
             vars,
             flags,
@@ -87,12 +88,19 @@ where
         assert_eq!(flags.len(), 1);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
-        // flag = 1 means add (opcode = 0), flag = 0 means sub (opcode = 1)
-        let expected_opcode = AB::Expr::ONE - flags[0];
+
+        let local_opcode_idx = flags[0]
+            * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::ADD as usize)
+            + is_setup
+                * AB::Expr::from_canonical_usize(
+                    Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+                )
+            + (AB::Expr::ONE - is_setup - flags[0])
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SUB as usize);
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
-            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+            opcode: local_opcode_idx + AB::Expr::from_canonical_usize(self.offset),
         };
 
         let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
@@ -126,6 +134,7 @@ pub struct ModularAddSubCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
     pub is_add_flag: bool,
+    pub is_setup: bool,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularAddSubCoreChip
@@ -165,7 +174,12 @@ where
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_add_flag = match local_opcode {
             Rv32ModularArithmeticOpcode::ADD => true,
-            Rv32ModularArithmeticOpcode::SUB => false,
+            Rv32ModularArithmeticOpcode::SUB | Rv32ModularArithmeticOpcode::SETUP_ADDSUB => false,
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
+        };
+        let is_setup_flag = match local_opcode {
+            Rv32ModularArithmeticOpcode::SETUP_ADDSUB => true,
+            Rv32ModularArithmeticOpcode::ADD | Rv32ModularArithmeticOpcode::SUB => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
@@ -188,6 +202,7 @@ where
                 x: x_biguint,
                 y: y_biguint,
                 is_add_flag,
+                is_setup: is_setup_flag,
             },
         ))
     }
@@ -205,6 +220,7 @@ where
             ),
             row_slice,
         );
+        row_slice[1] = F::from_bool(record.is_setup);
     }
 
     fn air(&self) -> &Self::Air {

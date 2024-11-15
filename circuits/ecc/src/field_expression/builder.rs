@@ -17,7 +17,7 @@ use ax_stark_backend::{
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use p3_air::{AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField64};
+use p3_field::{AbstractField, Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
 
@@ -208,8 +208,29 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             carry_limbs,
             flags,
         } = self.load_vars(local);
+
+        {
+            let modulus_limbs = big_uint_to_limbs(&self.builder.prime, self.builder.limb_bits);
+            for i in 0..inputs[0].len().max(modulus_limbs.len()) {
+                let lhs = if i < inputs[0].len() {
+                    inputs[0][i].into()
+                } else {
+                    AB::Expr::ZERO
+                };
+                let rhs = if i < modulus_limbs.len() {
+                    AB::Expr::from_canonical_usize(modulus_limbs[i])
+                } else {
+                    AB::Expr::ZERO
+                };
+                builder.when(is_setup).assert_eq(lhs, rhs);
+            }
+        }
+
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
+
+        // TODO: turn back on once we also support this in ecc and everywhere
+        // builder.when_first_row().assert_one(is_setup);
 
         for flag in flags.iter() {
             builder.assert_bool(*flag);
@@ -224,7 +245,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
                         carries: carry_limbs[i].clone(),
                         quotient: q_limbs[i].clone(),
                     },
-                    is_valid - is_setup,
+                    is_valid.into(),
                 ),
             );
         }

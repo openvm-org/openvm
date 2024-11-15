@@ -89,6 +89,7 @@ where
 
         let FieldExprCols {
             is_valid,
+            is_setup,
             inputs,
             vars,
             flags,
@@ -99,8 +100,16 @@ where
         assert_eq!(flags.len(), 1);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
-        // flag = 1 means mul (local opcode idx = 2), flag = 0 means div (local opcode idx = 3)
-        let local_opcode_idx = AB::Expr::from_canonical_usize(3) - flags[0];
+
+        // Attention: we multiply in the setup case, hence flags[0] (is_mul_flag) does NOT imply that is_setup is false!
+        let local_opcode_idx = (flags[0] - is_setup)
+            * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::MUL as usize)
+            + is_setup
+                * AB::Expr::from_canonical_usize(
+                    Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
+                )
+            + (AB::Expr::ONE - flags[0])
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::DIV as usize);
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -137,6 +146,7 @@ pub struct ModularMulDivCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
     pub is_mul_flag: bool,
+    pub is_setup: bool,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularMulDivCoreChip
@@ -175,8 +185,14 @@ where
 
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_mul_flag = match local_opcode {
-            Rv32ModularArithmeticOpcode::MUL => true,
+            // for SETUP_MULDIV, we want to fictiously multiply by zero and not divide
+            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
             Rv32ModularArithmeticOpcode::DIV => false,
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
+        };
+        let is_setup = match local_opcode {
+            Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
+            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::DIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
@@ -199,6 +215,7 @@ where
                 x: x_biguint,
                 y: y_biguint,
                 is_mul_flag,
+                is_setup,
             },
         ))
     }
@@ -216,6 +233,7 @@ where
             ),
             row_slice,
         );
+        row_slice[1] = F::from_bool(record.is_setup);
     }
 
     fn air(&self) -> &Self::Air {

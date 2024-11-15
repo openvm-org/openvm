@@ -68,6 +68,11 @@ generates classes `Bls12381` and `Bn254` that represent the elements of the corr
 
 **NB:** we need to use the `AXIOM_SERIALIZED_MODULI` variable for the linker not to optimize it away at the moment. This can be done, for example, by putting `core::hint::black_box(AXIOM_SERIALIZED_MODULI)` anywhere in the main function.
 
+To sync the modular chips with the particular value of the modulus, they handle a special `setup<N>` instruction that reads the value of the modulus from memory and verifies that this value is the same that the chips uses.
+The opcode is separate for each chip. This should be the first instruction every modular chip receives.
+
+**TODO** fix the table below
+
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
 **Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See [above](#modular-arithmetic) for more details.
@@ -79,6 +84,7 @@ We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list 
 | mulmod\<N\>  | R   | 0101011     | 000    | `idx*8+2` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 * [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                        |
 | divmod\<N\>  | R   | 0101011     | 000    | `idx*8+3` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 / [rs2: N::NUM_LIMBS]_2 (mod N)` (undefined when `gcd([rs2: N::NUM_LIMBS]_2, N) != 1`)                                                                                  |
 | iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value. |
+| setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rd: N::NUM_LIMBS]_2 == N)`                                                                                                                                                                                   |
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -217,6 +223,7 @@ The transpilation will only be valid for programs where:
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`         |
+| setup\<N\>     | SETUP_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2`                 |
 | sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`       |
 | sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`              |
 | hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`          |
