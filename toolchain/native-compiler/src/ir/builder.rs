@@ -5,8 +5,8 @@ use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    utils::LIMB_BITS, Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar,
-    SymbolicExt, SymbolicFelt, SymbolicVar, Usize, Var, Variable,
+    Array, Config, DslIr, Ext, Felt, FromConstant, MemIndex, MemVariable, RVar, SymbolicExt,
+    SymbolicFelt, SymbolicVar, Usize, Var, Variable,
 };
 
 /// TracedVec is a Vec wrapper that records a trace whenever an element is pushed. When extending
@@ -114,42 +114,26 @@ pub struct Builder<C: Config> {
     pub(crate) witness_var_count: u32,
     pub(crate) witness_felt_count: u32,
     pub(crate) witness_ext_count: u32,
-    pub bigint_repr_size: u32,
     pub flags: BuilderFlags,
     pub is_sub_builder: bool,
 }
 
 impl<C: Config> Builder<C> {
     /// Creates a new builder with a given number of counts for each type.
-    pub fn new_sub_builder(
-        var_count: u32,
-        felt_count: u32,
-        ext_count: u32,
-        nb_public_values: Option<Var<C::N>>,
-        flags: BuilderFlags,
-        bigint_repr_size: u32,
-    ) -> Self {
+    pub fn create_sub_builder(&self) -> Self {
         Self {
-            var_count,
-            felt_count,
-            ext_count,
+            var_count: self.var_count,
+            felt_count: self.felt_count,
+            ext_count: self.ext_count,
             // Witness counts are only used when the target is a gnark circuit.  And sub-builders are
             // not used when the target is a gnark circuit, so it's fine to set the witness counts to 0.
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
-            bigint_repr_size,
             operations: Default::default(),
-            nb_public_values,
-            flags,
+            nb_public_values: self.nb_public_values,
+            flags: self.flags,
             is_sub_builder: true,
-        }
-    }
-
-    pub fn bigint_builder() -> Self {
-        Self {
-            bigint_repr_size: LIMB_BITS as u32,
-            ..Default::default()
         }
     }
 
@@ -206,20 +190,10 @@ impl<C: Config> Builder<C> {
         dst.assign(expr.into(), self);
     }
 
-    /// Casts a Felt to a Var. Please use carefully.
+    /// Casts a Felt to a Var.
     pub fn cast_felt_to_var(&mut self, felt: Felt<C::F>) -> Var<C::N> {
-        if self.flags.static_only {
-            panic!("Cannot cast a Felt to a Var in static mode");
-        }
         let var: Var<_> = self.uninit();
-        let buffer = self.alloc(1, 1);
-        let idx = MemIndex {
-            index: RVar::zero(),
-            offset: 0,
-            size: 1,
-        };
-        felt.store(buffer, idx, self);
-        var.load(buffer, idx, self);
+        self.operations.push(DslIr::CastFV(var, felt));
         var
     }
 
@@ -383,14 +357,7 @@ impl<C: Config> Builder<C> {
 
     /// Evaluate a block of operations repeatedly (until a break).
     pub fn do_loop(&mut self, mut f: impl FnMut(&mut Builder<C>) -> Result<(), BreakLoop>) {
-        let mut loop_body_builder = Builder::<C>::new_sub_builder(
-            self.var_count,
-            self.felt_count,
-            self.ext_count,
-            self.nb_public_values,
-            self.flags,
-            self.bigint_repr_size,
-        );
+        let mut loop_body_builder = self.create_sub_builder();
 
         f(&mut loop_body_builder).expect("should not be break issues in dynamic loop");
 
@@ -577,8 +544,21 @@ impl<C: Config> Builder<C> {
     }
 
     fn commit_public_value_and_increment(&mut self, val: Felt<C::F>, nb_public_values: Var<C::N>) {
+        assert!(
+            !self.flags.static_only,
+            "Static mode should use static_commit_public_value"
+        );
         self.operations.push(DslIr::Publish(val, nb_public_values));
         self.assign(&nb_public_values, nb_public_values + C::N::ONE);
+    }
+
+    /// Commits a Var as public value. This value will be constrained when verified. This method should only be used in static mode.
+    pub fn static_commit_public_value(&mut self, index: usize, val: Var<C::N>) {
+        assert!(
+            self.flags.static_only,
+            "Dynamic mode should use commit_public_value instead."
+        );
+        self.operations.push(DslIr::CircuitPublish(val, index));
     }
 
     /// Register and commits a felt as public value.  This value will be constrained when verified.
@@ -676,14 +656,7 @@ impl<C: Config> IfBuilder<'_, C> {
         );
 
         // Execute the `then` block and collect the instructions.
-        let mut f_builder = Builder::<C>::new_sub_builder(
-            self.builder.var_count,
-            self.builder.felt_count,
-            self.builder.ext_count,
-            self.builder.nb_public_values,
-            self.builder.flags,
-            self.builder.bigint_repr_size,
-        );
+        let mut f_builder = self.builder.create_sub_builder();
         f(&mut f_builder).expect("BreakLoop should never be returned in a dynamic if");
         let then_instructions = f_builder.operations;
 
@@ -755,27 +728,13 @@ impl<C: Config> IfBuilder<'_, C> {
             !self.builder.flags.static_only,
             "Cannot use dynamic branch in static mode"
         );
-        let mut then_builder = Builder::<C>::new_sub_builder(
-            self.builder.var_count,
-            self.builder.felt_count,
-            self.builder.ext_count,
-            self.builder.nb_public_values,
-            self.builder.flags,
-            self.builder.bigint_repr_size,
-        );
+        let mut then_builder = self.builder.create_sub_builder();
 
         // Execute the `then` and `else_then` blocks and collect the instructions.
         then_f(&mut then_builder).expect("BreakLoop should never be returned in a dynamic if");
         let then_instructions = then_builder.operations;
 
-        let mut else_builder = Builder::<C>::new_sub_builder(
-            self.builder.var_count,
-            self.builder.felt_count,
-            self.builder.ext_count,
-            self.builder.nb_public_values,
-            self.builder.flags,
-            self.builder.bigint_repr_size,
-        );
+        let mut else_builder = self.builder.create_sub_builder();
         else_f(&mut else_builder).expect("BreakLoop should never be returned in a dynamic if");
         let else_instructions = else_builder.operations;
 
@@ -942,14 +901,7 @@ impl<'a, C: Config> RangeBuilder<'a, C> {
         );
         let step_size = C::N::from_canonical_usize(self.step_size);
         let loop_variable: Var<C::N> = self.builder.uninit();
-        let mut loop_body_builder = Builder::<C>::new_sub_builder(
-            self.builder.var_count,
-            self.builder.felt_count,
-            self.builder.ext_count,
-            self.builder.nb_public_values,
-            self.builder.flags,
-            self.builder.bigint_repr_size,
-        );
+        let mut loop_body_builder = self.builder.create_sub_builder();
 
         f(loop_variable.into(), &mut loop_body_builder)
             .expect("BreakLoop should never be returned in a dynamic loop");

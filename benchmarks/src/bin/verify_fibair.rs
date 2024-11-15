@@ -9,16 +9,18 @@ use ax_stark_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
 };
-use axvm_benchmarks::utils::bench_from_exe;
+use axvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
 use axvm_circuit::arch::VmConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use clap::Parser;
 use eyre::Result;
 use tracing::info_span;
 
 fn main() -> Result<()> {
-    let app_log_blowup = 2;
-    let agg_log_blowup = 2;
+    let cli_args = BenchmarkCli::parse();
+    let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
+    let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let n = 16; // STARK to calculate 16th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);

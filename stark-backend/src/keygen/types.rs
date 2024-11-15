@@ -81,7 +81,8 @@ pub struct MultiStarkVerifyingKey<SC: StarkGenericConfig> {
 }
 
 /// Proving key for a single STARK (corresponding to single AIR matrix)
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
@@ -101,7 +102,8 @@ pub struct StarkProvingKey<SC: StarkGenericConfig> {
 ///
 /// This struct contains the necessary data for the prover to generate proofs for multiple AIRs
 /// using a single proving key.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"
@@ -141,7 +143,8 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
 
 /// Prover only data for preprocessed trace for a single AIR.
 /// Currently assumes each AIR has it's own preprocessed commitment
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 #[serde(bound(
     serialize = "PcsProverData<SC>: Serialize",
     deserialize = "PcsProverData<SC>: Deserialize<'de>"

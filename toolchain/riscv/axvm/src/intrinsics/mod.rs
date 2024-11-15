@@ -15,10 +15,6 @@ pub use u256::*;
 mod i256;
 pub use i256::*;
 
-// TODO[jpw]: move this to axvm-ecc; currently axvm_ecc::sw is calling moduli_setup! which breaks things
-mod modular;
-pub use modular::*;
-
 mod utils;
 #[allow(unused)]
 pub use utils::*;

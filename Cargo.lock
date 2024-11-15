@@ -559,15 +559,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra"
+version = "0.1.0"
+dependencies = [
+ "num-bigint-dig",
+]
+
+[[package]]
 name = "axvm-benchmarks"
 version = "0.1.0"
 dependencies = [
  "ax-stark-sdk",
+ "axiom-vm",
  "axvm-build",
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
  "axvm-transpiler",
+ "clap",
  "criterion",
  "eyre",
  "hex",
@@ -575,6 +584,7 @@ dependencies = [
  "p3-field",
  "pprof",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 
@@ -597,6 +607,7 @@ name = "axvm-circuit"
 version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
+ "async-trait",
  "ax-circuit-derive",
  "ax-circuit-primitives",
  "ax-ecc-execution",
@@ -672,6 +683,7 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm-algebra",
  "axvm-platform",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -4900,6 +4912,28 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tokio"
+version = "1.41.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
+dependencies = [
+ "backtrace",
+ "pin-project-lite",
+ "tokio-macros",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]
