@@ -1,7 +1,7 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
-    system::memory::tree::public_values::compute_user_public_values_proof,
+    system::memory::tree::public_values::UserPublicValuesProof,
     utils::air_test_with_min_segments,
 };
 use axvm_transpiler::{axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES};
@@ -72,7 +72,7 @@ fn test_reveal_runtime() -> Result<()> {
     let executor = VmExecutor::<F>::new(config.clone());
     let final_memory = executor.execute(elf, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
-    let pv_proof = compute_user_public_values_proof(
+    let pv_proof = UserPublicValuesProof::compute(
         config.memory_config.memory_dimensions(),
         ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
         &hasher,

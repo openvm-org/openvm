@@ -6,18 +6,19 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_benchmarks::utils::{bench_from_exe, build_bench_program};
+use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::{ExecutorName, VmConfig};
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use clap::Parser;
 use eyre::Result;
 use p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {
-    // TODO[jpw]: benchmark different combinations
-    let app_log_blowup = 2;
-    let agg_log_blowup = 2;
+    let cli_args = BenchmarkCli::parse();
+    let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
+    let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("base64_json")?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {

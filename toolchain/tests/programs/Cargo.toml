@@ -8,6 +8,7 @@ edition = "2021"
 axvm = { path = "../../riscv/axvm" }
 axvm-platform = { path = "../../riscv/platform" }
 axvm-ecc = { path = "../../../lib/ecc", default-features = false }
+axvm-algebra = { path = "../../../lib/algebra" }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",

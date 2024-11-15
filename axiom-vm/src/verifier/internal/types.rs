@@ -17,7 +17,7 @@ use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 
-use crate::verifier::common::types::VmVerifierPvs;
+use crate::{verifier::common::types::VmVerifierPvs, SC};
 
 /// Input for the leaf VM verifier.
 #[derive(Serialize, Deserialize, Derivative)]
@@ -30,6 +30,21 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
 }
 assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
+impl InternalVmVerifierInput<SC> {
+    pub fn chunk_leaf_or_internal_proofs(
+        self_program_commit: [Val<SC>; DIGEST_SIZE],
+        proofs: &[Proof<SC>],
+        chunk: usize,
+    ) -> Vec<Self> {
+        proofs
+            .chunks(chunk)
+            .map(|chunk| Self {
+                self_program_commit,
+                proofs: chunk.to_vec(),
+            })
+            .collect()
+    }
+}
 /// Aggregated state of all segments
 #[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]

@@ -26,6 +26,7 @@ members = [
     "toolchain/build",
     "toolchain/tests",
     "cargo-axiom",
+    "lib/algebra",
     "lib/ecc",
     "lib/ecc-constants",
     "lib/ecc-execution",
@@ -72,6 +73,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
+axiom-vm = { path = "axiom-vm", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
@@ -79,6 +81,7 @@ axvm-instructions-derive = { path = "toolchain/instructions/derive", default-fea
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
 axvm-build = { path = "toolchain/build", default-features = false }
+axvm-algebra = { path = "lib/algebra", default-features = false }
 axvm-ecc = { path = "lib/ecc", default-features = false }
 axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
 axvm-recursion = { path = "lib/recursion", default-features = false }

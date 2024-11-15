@@ -2,9 +2,58 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::{string_to_bytes, Stmts};
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, Stmt};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Stmt,
+};
+
+struct Stmts {
+    stmts: Vec<Stmt>,
+}
+
+impl Parse for Stmts {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut stmts = Vec::new();
+        while !input.is_empty() {
+            stmts.push(input.parse()?);
+        }
+        Ok(Stmts { stmts })
+    }
+}
+
+fn string_to_bytes(s: &str) -> Vec<u8> {
+    if s.starts_with("0x") {
+        return s
+            .chars()
+            .skip(2)
+            .filter(|c| !c.is_whitespace())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .chunks(2)
+            .map(|ch| u8::from_str_radix(&ch.iter().rev().collect::<String>(), 16).unwrap())
+            .collect();
+    }
+    let mut digits = s
+        .chars()
+        .map(|c| c.to_digit(10).expect("Invalid numeric literal"))
+        .collect::<Vec<_>>();
+    let mut bytes = Vec::new();
+    while !digits.is_empty() {
+        let mut rem = 0u32;
+        let mut new_digits = Vec::new();
+        for &d in digits.iter() {
+            rem = rem * 10 + d;
+            new_digits.push(rem / 256);
+            rem %= 256;
+        }
+        digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
+        bytes.push(rem as u8);
+    }
+    bytes
+}
 
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -331,12 +380,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 Self(arr)
                                             }
 
-                                            fn from_be_bytes(bytes: &[u8]) -> Self {
-                                                let mut arr = [0u8; #limbs];
-                                                arr.copy_from_slice(&bytes.iter().rev().copied().collect::<Vec<_>>());
-                                                Self(arr)
-                                            }
-
                                             fn from_u8(val: u8) -> Self {
                                                 Self::from_const_u8(val)
                                             }
@@ -355,10 +398,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                             fn as_le_bytes(&self) -> &[u8] {
                                                 &(self.0)
-                                            }
-
-                                            fn as_be_bytes(&self) -> Vec<u8> {
-                                                self.0.iter().rev().copied().collect::<Vec<_>>()
                                             }
 
                                             #[cfg(not(target_os = "zkvm"))]
@@ -509,7 +548,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivAssignUnsafe<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
@@ -517,7 +556,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl axvm_algebra::DivAssignUnsafe for #struct_name {
+                                        impl axvm::intrinsics::DivAssignUnsafe for #struct_name {
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
                                             fn div_assign_unsafe(&mut self, other: Self) {
@@ -525,7 +564,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl axvm_algebra::DivUnsafe for #struct_name {
+                                        impl axvm::intrinsics::DivUnsafe for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
@@ -535,7 +574,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for #struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for #struct_name {
                                             type Output = Self;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]
@@ -545,7 +584,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
-                                        impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for &#struct_name {
+                                        impl<'a> axvm::intrinsics::DivUnsafe<&'a #struct_name> for &#struct_name {
                                             type Output = #struct_name;
                                             /// Undefined behaviour when denominator is not coprime to N
                                             #[inline(always)]

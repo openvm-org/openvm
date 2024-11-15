@@ -174,6 +174,16 @@ impl VmConfig {
         self.add_pairing_support(vec![PairingCurve::Bn254])
     }
 
+    pub fn with_num_public_values(mut self, n: usize) -> Self {
+        self.num_public_values = n;
+        self
+    }
+
+    pub fn with_max_segment_len(mut self, n: usize) -> Self {
+        self.max_segment_len = n;
+        self
+    }
+
     /// Generate a proving key for the VM.
     pub fn generate_pk<SC: StarkGenericConfig>(
         &self,

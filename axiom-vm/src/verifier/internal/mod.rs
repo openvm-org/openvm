@@ -40,16 +40,20 @@ impl InternalVmVerifierConfig {
         let internal_advice = new_from_inner_multi_vk(internal_vm_vk);
         let mut builder = Builder::<C>::default();
         {
+            builder.cycle_tracker_start("ReadProofsFromInput");
             let InternalVmVerifierInputVariable {
                 self_program_commit,
                 proofs,
             } = InternalVmVerifierInput::<BabyBearPoseidon2Config>::read(&mut builder);
+            builder.cycle_tracker_end("ReadProofsFromInput");
+            builder.cycle_tracker_start("InitializePcsConst");
             let leaf_pcs = TwoAdicFriPcsVariable {
                 config: const_fri_config(&mut builder, &self.leaf_fri_params),
             };
             let internal_pcs = TwoAdicFriPcsVariable {
                 config: const_fri_config(&mut builder, &self.internal_fri_params),
             };
+            builder.cycle_tracker_end("InitializePcsConst");
             let non_leaf_verifier = NonLeafVerifierVariables {
                 internal_program_commit: self_program_commit,
                 leaf_pcs,
@@ -57,8 +61,10 @@ impl InternalVmVerifierConfig {
                 internal_pcs,
                 internal_advice,
             };
+            builder.cycle_tracker_start("VerifyProofs");
             let (vm_verifier_pvs, leaf_verifier_commit) =
                 non_leaf_verifier.verify_internal_or_leaf_verifier_proofs(&mut builder, &proofs);
+            builder.cycle_tracker_end("VerifyProofs");
             let pvs = InternalVmVerifierPvs {
                 vm_verifier_pvs,
                 extra_pvs: InternalVmVerifierExtraPvs {

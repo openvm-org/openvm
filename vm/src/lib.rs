@@ -9,6 +9,7 @@ pub mod intrinsics;
 pub mod kernels;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
+pub mod prover;
 /// Chips to support RV32IM instructions.
 pub mod rv32im;
 /// System chips that are always required by the architecture.

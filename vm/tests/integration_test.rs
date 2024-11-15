@@ -16,7 +16,7 @@ use axvm_circuit::{
     },
     intrinsics::hashes::keccak256::utils::keccak256,
     system::{
-        memory::{tree::public_values::compute_user_public_values_proof, CHUNK},
+        memory::{tree::public_values::UserPublicValuesProof, CHUNK},
         program::trace::AxVmCommittedExe,
     },
     utils::{air_test, air_test_with_min_segments},
@@ -400,12 +400,8 @@ fn test_vm_continuations() {
     let final_state = air_test_with_min_segments(config, program, vec![], 3).unwrap();
     let hasher = vm_poseidon2_hasher();
     let num_public_values = 8;
-    let pv_proof = compute_user_public_values_proof(
-        memory_dimensions,
-        num_public_values,
-        &hasher,
-        &final_state,
-    );
+    let pv_proof =
+        UserPublicValuesProof::compute(memory_dimensions, num_public_values, &hasher, &final_state);
     assert_eq!(pv_proof.public_values.len(), num_public_values);
     assert_eq!(pv_proof.public_values[0], expected_output);
 }
