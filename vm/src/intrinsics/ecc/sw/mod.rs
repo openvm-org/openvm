@@ -10,6 +10,8 @@ mod tests;
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use axvm_circuit_derive::InstructionExecutor;
+use num_bigint_dig::BigUint;
+use num_traits::Zero;
 use p3_field::PrimeField32;
 
 use crate::{
@@ -72,7 +74,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let expr = ec_double_expr(config, memory_controller.borrow().range_checker.bus());
+        let expr = ec_double_expr(
+            config,
+            memory_controller.borrow().range_checker.bus(),
+            BigUint::zero(),
+        );
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,

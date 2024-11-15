@@ -2,7 +2,7 @@ use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, 
 
 use ax_stark_backend::interaction::InteractionBuilder;
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, Num, One, ToPrimitive, Zero};
 use p3_field::PrimeField64;
 
 use crate::var_range::VariableRangeCheckerBus;
@@ -22,14 +22,6 @@ pub fn range_check<AB: InteractionBuilder>(
     bus.range_check(expr, bits).eval(builder, count);
 }
 
-pub fn secp256k1_prime() -> BigUint {
-    let mut result = BigUint::one() << 256;
-    for power in [32, 9, 8, 7, 6, 4, 0] {
-        result -= BigUint::one() << power;
-    }
-    result
-}
-
 pub fn secp256k1_coord_prime() -> BigUint {
     let mut result = BigUint::one() << 256;
     for power in [32, 9, 8, 7, 6, 4, 0] {
@@ -41,6 +33,23 @@ pub fn secp256k1_coord_prime() -> BigUint {
 pub fn secp256k1_scalar_prime() -> BigUint {
     BigUint::from_str(
         "115792089237316195423570985008687907852837564279074904382605163141518161494337",
+    )
+    .unwrap()
+}
+
+// aka P256
+pub fn secp256r1_coord_prime() -> BigUint {
+    BigUint::from_str_radix(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+        16,
+    )
+    .unwrap()
+}
+
+pub fn secp256r1_scalar_prime() -> BigUint {
+    BigUint::from_str_radix(
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+        16,
     )
     .unwrap()
 }

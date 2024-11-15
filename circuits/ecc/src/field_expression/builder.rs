@@ -17,7 +17,7 @@ use ax_stark_backend::{
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use p3_air::{AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField64};
+use p3_field::{AbstractField, Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
 
@@ -47,7 +47,7 @@ pub struct ExprBuilder {
     // This should be equal to number of constraints, but declare it to be explicit.
     pub num_variables: usize,
 
-    pub constants: HashMap<char, (BigUint, Vec<usize>)>, // value and limbs
+    pub constants: HashMap<char, (BigUint, Vec<usize>)>, // name -> value and limbs
 
     /// The number of bits in a canonical representation of a limb.
     pub limb_bits: usize,
@@ -127,6 +127,30 @@ impl ExprBuilder {
             self.num_variables - 1,
             SymbolicExpr::Var(self.num_variables - 1),
         )
+    }
+
+    pub fn new_const(
+        builder: Rc<RefCell<ExprBuilder>>,
+        name: char,
+        value: BigUint,
+    ) -> FieldVariable {
+        // Is it ok to have less limbs than input/variables, or we should pad it?
+        let mut borrowed = builder.borrow_mut();
+        let limbs = big_uint_to_limbs(&value, borrowed.limb_bits);
+        let num_limbs = limbs.len();
+        let range_checker_bits = borrowed.range_checker_bits;
+        let limb_bits = borrowed.limb_bits;
+        borrowed.constants.insert(name, (value.clone(), limbs));
+        drop(borrowed);
+
+        FieldVariable {
+            expr: SymbolicExpr::Const(name, value, num_limbs),
+            builder,
+            limb_max_abs: (1 << limb_bits) - 1,
+            max_overflow_bits: limb_bits,
+            expr_limbs: num_limbs,
+            range_checker_bits,
+        }
     }
 
     pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
@@ -211,18 +235,19 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         } = self.load_vars(local);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
-        // let constants = self
-        //     .constants
-        //     .iter()
-        //     .map(|(name, (val, limbs))| {
-        //         let limbs_var = limbs
-        //             .iter()
-        //             .map(|i| AB::Expr::from_canonical_usize(*i))
-        //             .collect();
-        //         (name, limbs_var)
-        //     })
-        //     .collect();
-        let constants = HashMap::new();
+        let constants = self
+            .constants
+            .iter()
+            .map(|(name, (_, limbs))| {
+                let limbs_expr: Vec<_> = limbs
+                    .iter()
+                    .map(|i| AB::Expr::from_canonical_usize(*i))
+                    .collect();
+                let limbs_overflow =
+                    OverflowInt::from_canonical_unsigned_limbs(limbs_expr, self.limb_bits);
+                (*name, limbs_overflow)
+            })
+            .collect();
 
         for flag in flags.iter() {
             builder.assert_bool(*flag);
@@ -301,8 +326,16 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         let mut vars_overflow = vec![zero; self.num_variables];
         let prime_overflow = biguint_to_overflow_int(&self.prime, self.num_limbs, self.limb_bits);
 
-        let constants = HashMap::new();
-        // TODO:
+        let constants = self
+            .constants
+            .iter()
+            .map(|(name, (_, limbs))| {
+                let limbs_isize: Vec<_> = limbs.iter().map(|i| *i as isize).collect();
+                let limbs_overflow =
+                    OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits);
+                (*name, limbs_overflow)
+            })
+            .collect();
 
         let mut all_q = vec![];
         let mut all_carry = vec![];
