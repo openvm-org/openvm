@@ -317,7 +317,7 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -687,7 +687,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)

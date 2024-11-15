@@ -128,6 +128,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     mem_config.as_height,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
+                    mem_config.boundary_air_height,
                 ),
             },
             memory: Memory::new(&Equipartition::<_, 1>::new()),
