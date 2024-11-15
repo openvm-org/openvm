@@ -11,6 +11,9 @@ axvm::moduli_setup! {
 }
 
 pub fn main() {
+    setup_bls12381();
+    setup_Mod1e18();
+    setup_Mersenne61();
     let x = bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
@@ -24,7 +27,4 @@ pub fn main() {
         res += res.clone();
     }
     assert_eq!(res, Mersenne61::from_u32(1));
-    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_bls12381);
-    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_Mod1e18);
-    core::hint::black_box(AXIOM_SERIALIZED_MODULUS_Mersenne61);
 }
