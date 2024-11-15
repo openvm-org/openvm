@@ -134,7 +134,6 @@ impl ExprBuilder {
         name: char,
         value: BigUint,
     ) -> FieldVariable {
-        // Is it ok to have less limbs than input/variables, or we should pad it?
         let mut borrowed = builder.borrow_mut();
         let limbs = big_uint_to_limbs(&value, borrowed.limb_bits);
         let num_limbs = limbs.len();
@@ -320,11 +319,12 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // OverflowInt type is required for computing the carries.
         let input_overflow = inputs
             .iter()
-            .map(|x| biguint_to_overflow_int(x, self.num_limbs, self.limb_bits))
+            .map(|x| OverflowInt::<isize>::from_biguint(x, self.limb_bits, Some(self.num_limbs)))
             .collect::<Vec<_>>();
         let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
-        let prime_overflow = biguint_to_overflow_int(&self.prime, self.num_limbs, self.limb_bits);
+        let prime_overflow =
+            OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, Some(self.num_limbs));
 
         let constants = self
             .constants
@@ -343,7 +343,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);
             vars[i] = r.clone();
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
-            vars_overflow[i] = biguint_to_overflow_int(&vars[i], self.num_limbs, self.limb_bits);
+            vars_overflow[i] =
+                OverflowInt::<isize>::from_biguint(&vars[i], self.limb_bits, Some(self.num_limbs));
         }
         // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
         for i in 0..self.constraints.len() {
@@ -482,12 +483,4 @@ fn load_overflow<AB: AirBuilder>(
         ));
     }
     result
-}
-
-fn biguint_to_overflow_int(x: &BigUint, num_limbs: usize, limb_bits: usize) -> OverflowInt<isize> {
-    let x_limbs = big_uint_to_num_limbs(x, limb_bits, num_limbs)
-        .iter()
-        .map(|x| *x as isize)
-        .collect();
-    OverflowInt::from_canonical_unsigned_limbs(x_limbs, limb_bits)
 }

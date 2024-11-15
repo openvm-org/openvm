@@ -109,7 +109,7 @@ where
 }
 
 impl OverflowInt<isize> {
-    pub fn from_big_uint(
+    pub fn from_biguint(
         x: &BigUint,
         limb_bits: usize,
         min_limbs: Option<usize>,

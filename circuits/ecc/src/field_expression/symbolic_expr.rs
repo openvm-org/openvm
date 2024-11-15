@@ -397,19 +397,10 @@ impl SymbolicExpr {
         match self {
             SymbolicExpr::IntAdd(lhs, s) => {
                 let left = lhs.evaluate_overflow_isize(inputs, variables, constants, flags);
-                // left.limbs[0] += *s;
-                // // TODO[jpw]: add some debug_assert!(*s < (1 << self.limb_bits)); since this is the only case it is used for
-                // left.limb_max_abs += s.unsigned_abs();
-                // left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left.int_add(*s, identity)
             }
             SymbolicExpr::IntMul(lhs, s) => {
                 let left = lhs.evaluate_overflow_isize(inputs, variables, constants, flags);
-                // for limb in left.limbs.iter_mut() {
-                //     *limb *= *s;
-                // }
-                // left.limb_max_abs *= s.unsigned_abs();
-                // left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
                 left.int_mul(*s, identity)
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
