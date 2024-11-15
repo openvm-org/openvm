@@ -2,16 +2,39 @@ mod multi_field32;
 mod outer_poseidon2;
 mod stark;
 
-use axvm_native_compiler::ir::{Builder, Witness};
+use axvm_native_compiler::{
+    constraints::halo2::compiler::convert_fr,
+    ir::{Builder, Witness},
+};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::{reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField};
 
 use crate::{
     config::outer::OuterConfig,
-    halo2::Halo2Prover,
+    halo2::{DslOperations, Halo2Prover},
     utils::{reduce_32, split_32},
 };
+
+#[test]
+fn test_publish() {
+    let mut builder = Builder::<OuterConfig>::default();
+    builder.flags.static_only = true;
+    let value_u32 = 1345237507;
+    let value_fr = Bn254Fr::from_canonical_u32(value_u32);
+    let value = builder.eval(value_fr);
+    builder.static_commit_public_value(0, value);
+
+    let pis = Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 1,
+        },
+        Witness::default(),
+    );
+    assert_eq!(pis, vec![vec![convert_fr(&value_fr)]]);
+}
 
 #[test]
 fn test_num2bits_v() {
@@ -25,7 +48,14 @@ fn test_num2bits_v() {
         value_u32 >>= 1;
     }
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -41,7 +71,14 @@ fn test_reduce_32() {
     let result = reduce_32(&mut builder, &[value_1, value_2]);
     builder.assert_var_eq(result, gt);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -59,5 +96,12 @@ fn test_split_32() {
     builder.assert_felt_eq(result[1], gt[1]);
     builder.assert_felt_eq(result[2], gt[2]);
 
-    Halo2Prover::mock::<OuterConfig>(10, builder.operations, Witness::default());
+    Halo2Prover::mock::<OuterConfig>(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }

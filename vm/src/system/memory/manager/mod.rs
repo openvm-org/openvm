@@ -108,6 +108,12 @@ pub struct MemoryController<F> {
 }
 
 impl<F: PrimeField32> MemoryController<F> {
+    pub fn continuation_enabled(&self) -> bool {
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => false,
+            MemoryInterface::Persistent { .. } => true,
+        }
+    }
     pub fn with_volatile_memory(
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
@@ -379,15 +385,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 .push(record);
         }
 
-        traces.extend([
-            self.generate_access_adapter_trace::<2>(),
-            self.generate_access_adapter_trace::<4>(),
-            self.generate_access_adapter_trace::<8>(),
-            self.generate_access_adapter_trace::<16>(),
-            self.generate_access_adapter_trace::<32>(),
-            self.generate_access_adapter_trace::<64>(),
-        ]);
-        pvs.extend(vec![vec![]; 6]);
+        self.add_access_adapter_trace::<2>(&mut traces, &mut pvs);
+        self.add_access_adapter_trace::<4>(&mut traces, &mut pvs);
+        self.add_access_adapter_trace::<8>(&mut traces, &mut pvs);
+        self.add_access_adapter_trace::<16>(&mut traces, &mut pvs);
+        self.add_access_adapter_trace::<32>(&mut traces, &mut pvs);
+        self.add_access_adapter_trace::<64>(&mut traces, &mut pvs);
 
         self.result = Some(MemoryControllerResult {
             traces,
@@ -395,6 +398,16 @@ impl<F: PrimeField32> MemoryController<F> {
         });
 
         final_memory
+    }
+    fn add_access_adapter_trace<const N: usize>(
+        &self,
+        traces: &mut Vec<RowMajorMatrix<F>>,
+        pvs: &mut Vec<Vec<F>>,
+    ) {
+        if self.mem_config.max_access_adapter_n >= N {
+            traces.push(self.generate_access_adapter_trace::<N>());
+            pvs.push(vec![]);
+        }
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
@@ -436,29 +449,34 @@ impl<F: PrimeField32> MemoryController<F> {
             }
         }
 
-        airs.push(Arc::new(self.access_adapter_air::<2>()));
-        airs.push(Arc::new(self.access_adapter_air::<4>()));
-        airs.push(Arc::new(self.access_adapter_air::<8>()));
-        airs.push(Arc::new(self.access_adapter_air::<16>()));
-        airs.push(Arc::new(self.access_adapter_air::<32>()));
-        airs.push(Arc::new(self.access_adapter_air::<64>()));
+        self.add_access_adapter_air::<SC, 2>(&mut airs);
+        self.add_access_adapter_air::<SC, 4>(&mut airs);
+        self.add_access_adapter_air::<SC, 8>(&mut airs);
+        self.add_access_adapter_air::<SC, 16>(&mut airs);
+        self.add_access_adapter_air::<SC, 32>(&mut airs);
+        self.add_access_adapter_air::<SC, 64>(&mut airs);
+
         airs
+    }
+    fn add_access_adapter_air<SC: StarkGenericConfig, const N: usize>(
+        &self,
+        airs: &mut Vec<Arc<dyn AnyRap<SC>>>,
+    ) {
+        if self.mem_config.max_access_adapter_n >= N {
+            airs.push(Arc::new(self.access_adapter_air::<N>()));
+        }
     }
 
     pub fn air_names(&self) -> Vec<String> {
         let mut air_names = vec!["Boundary".to_string()];
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent { .. } => air_names.push("Merkle".to_string()),
+        if self.continuation_enabled() {
+            air_names.push("Merkle".to_string());
         }
-        air_names.extend([
-            "AccessAdapter<2>".to_string(),
-            "AccessAdapter<4>".to_string(),
-            "AccessAdapter<8>".to_string(),
-            "AccessAdapter<16>".to_string(),
-            "AccessAdapter<32>".to_string(),
-            "AccessAdapter<64>".to_string(),
-        ]);
+        for n in [2, 4, 8, 16, 32, 64] {
+            if self.mem_config.max_access_adapter_n >= n {
+                air_names.push(format!("AccessAdapter<{}>", n));
+            }
+        }
         air_names
     }
 
@@ -477,26 +495,15 @@ impl<F: PrimeField32> MemoryController<F> {
                 heights.push(merkle_chip.current_height());
             }
         };
-        heights.extend([
-            self.adapter_records
-                .get(&2)
-                .map_or(0, |records| records.len()),
-            self.adapter_records
-                .get(&4)
-                .map_or(0, |records| records.len()),
-            self.adapter_records
-                .get(&8)
-                .map_or(0, |records| records.len()),
-            self.adapter_records
-                .get(&16)
-                .map_or(0, |records| records.len()),
-            self.adapter_records
-                .get(&32)
-                .map_or(0, |records| records.len()),
-            self.adapter_records
-                .get(&64)
-                .map_or(0, |records| records.len()),
-        ]);
+        for n in [2, 4, 8, 16, 32, 64] {
+            if self.mem_config.max_access_adapter_n >= n {
+                heights.push(
+                    self.adapter_records
+                        .get(&n)
+                        .map_or(0, |records| records.len()),
+                );
+            }
+        }
         heights
     }
 
@@ -515,15 +522,18 @@ impl<F: PrimeField32> MemoryController<F> {
                 widths.push(BaseAir::<F>::width(&merkle_chip.air));
             }
         };
-        widths.extend([
-            BaseAir::<F>::width(&self.access_adapter_air::<2>()),
-            BaseAir::<F>::width(&self.access_adapter_air::<4>()),
-            BaseAir::<F>::width(&self.access_adapter_air::<8>()),
-            BaseAir::<F>::width(&self.access_adapter_air::<16>()),
-            BaseAir::<F>::width(&self.access_adapter_air::<32>()),
-            BaseAir::<F>::width(&self.access_adapter_air::<64>()),
-        ]);
+        self.add_access_adapter_width::<2>(&mut widths);
+        self.add_access_adapter_width::<4>(&mut widths);
+        self.add_access_adapter_width::<8>(&mut widths);
+        self.add_access_adapter_width::<16>(&mut widths);
+        self.add_access_adapter_width::<32>(&mut widths);
+        self.add_access_adapter_width::<64>(&mut widths);
         widths
+    }
+    fn add_access_adapter_width<const N: usize>(&self, widths: &mut Vec<usize>) {
+        if self.mem_config.max_access_adapter_n >= N {
+            widths.push(BaseAir::<F>::width(&self.access_adapter_air::<N>()));
+        }
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {

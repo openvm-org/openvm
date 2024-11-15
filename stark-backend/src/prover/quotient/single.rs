@@ -162,8 +162,6 @@ where
                 accumulator,
                 public_values,
                 exposed_values_after_challenge,
-
-                symbolic_interactions: &symbolic_constraints.interactions,
                 interactions: vec![],
                 interaction_chunk_size,
                 has_common_main: rap.common_main_width() > 0,

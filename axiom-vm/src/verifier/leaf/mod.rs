@@ -48,14 +48,19 @@ impl LeafVmVerifierConfig {
         let mut builder = Builder::<C>::default();
 
         {
+            builder.cycle_tracker_start("InitializePcsConst");
             let pcs = TwoAdicFriPcsVariable {
                 config: const_fri_config(&mut builder, &self.app_fri_params),
             };
+            builder.cycle_tracker_end("InitializePcsConst");
+            builder.cycle_tracker_start("ReadProofsFromInput");
             let proofs: Array<C, StarkProofVariable<_>> =
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
             // At least 1 proof should be provided.
             builder.assert_ne::<Usize<_>>(proofs.len(), RVar::zero());
+            builder.cycle_tracker_end("ReadProofsFromInput");
 
+            builder.cycle_tracker_start("VerifyProofs");
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             builder.range(0, proofs.len()).for_each(|i, builder| {
                 let proof = builder.get(&proofs, i);
@@ -78,7 +83,8 @@ impl LeafVmVerifierConfig {
                 let proof_memory_pvs = get_memory_pvs(builder, &proof);
                 assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
             });
-
+            builder.cycle_tracker_end("VerifyProofs");
+            builder.cycle_tracker_start("ExtractPublicValuesCommit");
             let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
             builder.if_eq(is_terminate, F::ONE).then(|builder| {
                 let (pv_commit, expected_memory_root) =
@@ -89,6 +95,7 @@ impl LeafVmVerifierConfig {
             for pv in pvs.flatten() {
                 builder.commit_public_value(pv);
             }
+            builder.cycle_tracker_end("ExtractPublicValuesCommit");
 
             builder.halt();
         }

@@ -108,6 +108,9 @@ pub enum DslIr<C: Config> {
     /// Compares a variable and an immediate
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
 
+    /// Cast a Felt to a Var.
+    CastFV(Var<C::N>, Felt<C::F>),
+
     // =======
 
     // Control flow.
@@ -236,6 +239,8 @@ pub enum DslIr<C: Config> {
     /// Asserts that the inputted var is equal the circuit's commited values digest public input. Should
     /// only be used when target is a gnark circuit.
     CircuitCommitCommitedValuesDigest(Var<C::N>),
+    /// Publish a field element as the ith public value. Should only be used when target is a halo2 circuit.
+    CircuitPublish(Var<C::N>, usize),
 
     // FRI specific instructions.
     /// Select's a variable based on a condition. (select(cond, true_val, false_val) => output).

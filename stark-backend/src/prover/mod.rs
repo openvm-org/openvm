@@ -167,6 +167,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .map(|&degree| pcs.natural_domain_for_degree(degree))
             .collect();
 
+        // TODO[zach]: Use trait for this.
         let (cumulative_sum_per_air, perm_trace_per_air) =
             generate_permutation_traces_and_cumulative_sums(
                 &mpk,

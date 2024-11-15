@@ -14,35 +14,50 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::VmChipWrapper, intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
+    rv32im::adapters::Rv32VecHeapTwoReadsAdapterChip, system::memory::MemoryControllerRef,
 };
 
-// TODO[yj]: Update to use 10 FE for 2nd input once the adapter change is merged for unbalanced inputs
-// Input: 2 Fp12: 2 x 12 field elements
-// Output: Fp12 -> 12 field elements
+// Input: Fp12 (12 field elements), [Fp2; 5] (5 x 2 field elements)
+// Output: Fp12 (12 field elements)
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcLineMulBy01234Chip<
     F: PrimeField32,
-    const INPUT_BLOCKS: usize,
+    const INPUT_BLOCKS1: usize,
+    const INPUT_BLOCKS2: usize,
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
     pub  VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        Rv32VecHeapTwoReadsAdapterChip<
+            F,
+            INPUT_BLOCKS1,
+            INPUT_BLOCKS2,
+            OUTPUT_BLOCKS,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+        >,
         FieldExpressionCoreChip,
     >,
 );
 
 impl<
         F: PrimeField32,
-        const INPUT_BLOCKS: usize,
+        const INPUT_BLOCKS1: usize,
+        const INPUT_BLOCKS2: usize,
         const OUTPUT_BLOCKS: usize,
         const BLOCK_SIZE: usize,
-    > EcLineMulBy01234Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
+    > EcLineMulBy01234Chip<F, INPUT_BLOCKS1, INPUT_BLOCKS2, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        adapter: Rv32VecHeapTwoReadsAdapterChip<
+            F,
+            INPUT_BLOCKS1,
+            INPUT_BLOCKS2,
+            OUTPUT_BLOCKS,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+        >,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         xi: [isize; 2],
@@ -90,8 +105,6 @@ pub fn mul_by_01234_expr(
     let mut x2 = Fp2::new(builder.clone());
     let mut x3 = Fp2::new(builder.clone());
     let mut x4 = Fp2::new(builder.clone());
-    // x5 is unused; required for input sizes to balance to 12 on the adapter
-    let _x5 = Fp2::new(builder.clone());
 
     let mut r = f.mul_by_01234(&mut x0, &mut x1, &mut x2, &mut x3, &mut x4, xi);
     r.save_output();

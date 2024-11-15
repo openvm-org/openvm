@@ -14,7 +14,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::VmChipWrapper, intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
+    rv32im::adapters::Rv32VecHeapTwoReadsAdapterChip, system::memory::MemoryControllerRef,
 };
 
 // Input: 2 Fp12: 2 x 12 field elements
@@ -22,26 +22,42 @@ use crate::{
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
 pub struct EcLineMulBy02345Chip<
     F: PrimeField32,
-    const INPUT_BLOCKS: usize,
+    const INPUT_BLOCKS1: usize,
+    const INPUT_BLOCKS2: usize,
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
     pub  VmChipWrapper<
         F,
-        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        Rv32VecHeapTwoReadsAdapterChip<
+            F,
+            INPUT_BLOCKS1,
+            INPUT_BLOCKS2,
+            OUTPUT_BLOCKS,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+        >,
         FieldExpressionCoreChip,
     >,
 );
 
 impl<
         F: PrimeField32,
-        const INPUT_BLOCKS: usize,
+        const INPUT_BLOCKS1: usize,
+        const INPUT_BLOCKS2: usize,
         const OUTPUT_BLOCKS: usize,
         const BLOCK_SIZE: usize,
-    > EcLineMulBy02345Chip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
+    > EcLineMulBy02345Chip<F, INPUT_BLOCKS1, INPUT_BLOCKS2, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        adapter: Rv32VecHeapTwoReadsAdapterChip<
+            F,
+            INPUT_BLOCKS1,
+            INPUT_BLOCKS2,
+            OUTPUT_BLOCKS,
+            BLOCK_SIZE,
+            BLOCK_SIZE,
+        >,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         xi: [isize; 2],
@@ -85,8 +101,6 @@ pub fn mul_by_02345_expr(
 
     let mut f = Fp12::new(builder.clone());
     let mut x0 = Fp2::new(builder.clone());
-    // x1 is unused; required for input sizes to balance to 12 on the adapter
-    let _x1 = Fp2::new(builder.clone());
     let mut x2 = Fp2::new(builder.clone());
     let mut x3 = Fp2::new(builder.clone());
     let mut x4 = Fp2::new(builder.clone());

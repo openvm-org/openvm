@@ -6,7 +6,7 @@ use core::{
     ops::{Add, AddAssign, Sub},
 };
 
-use axvm::intrinsics::IntMod;
+use axvm_algebra::IntMod;
 use axvm_ecc::{
     msm,
     sw::{EcPointN, IntModN},

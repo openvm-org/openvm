@@ -122,11 +122,30 @@ pub struct VmChipSet<F: PrimeField32> {
     /// PublicValuesChip is disabled when num_public_values == 0.
     pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
     pub chips: Vec<AxVmChip<F>>,
+    pub overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
     pub memory_controller: MemoryControllerRef<F>,
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
+    /// Returns the AIR ID of the given executor if it exists.
+    pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
+        let mut air_id = PUBLIC_VALUES_AIR_ID;
+        if self.public_values_chip.is_some() {
+            air_id += 1;
+        }
+        air_id += self.memory_controller.borrow().air_names().len();
+        for chip in &self.chips {
+            if let AxVmChip::Executor(chip) = chip {
+                let name: ExecutorName = chip.into();
+                if name == executor {
+                    return Some(air_id);
+                }
+            }
+            air_id += 1
+        }
+        None
+    }
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
     }
@@ -200,11 +219,27 @@ impl<F: PrimeField32> VmChipSet<F> {
         }
         // Non-system chips: ONLY AirProofInput generation to release strong references.
         // Will be added after MemoryController for AIR ordering.
-        let non_sys_inputs: Vec<_> = self
-            .chips
-            .into_iter()
-            .map(|chip| chip.generate_air_proof_input())
-            .collect();
+        let non_sys_inputs: Vec<_> =
+            self.chips
+                .into_iter()
+                .map(|chip| {
+                    if let AxVmChip::Executor(executor) = chip {
+                        let height = self.overridden_executor_heights.as_ref().and_then(
+                            |overridden_heights| {
+                                let executor_name: ExecutorName = (&executor).into();
+                                overridden_heights.get(&executor_name).copied()
+                            },
+                        );
+                        if let Some(height) = height {
+                            executor.generate_air_proof_input_with_height(height)
+                        } else {
+                            executor.generate_air_proof_input()
+                        }
+                    } else {
+                        chip.generate_air_proof_input()
+                    }
+                })
+                .collect();
         // System: Memory Controller
         {
             // memory
@@ -908,11 +943,10 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy01234 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy01234Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -924,11 +958,10 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy02345 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -1296,6 +1329,7 @@ impl VmConfig {
             connector_chip,
             public_values_chip,
             chips,
+            overridden_executor_heights: self.overridden_executor_heights.clone(),
             memory_controller,
             range_checker_chip: range_checker,
         }

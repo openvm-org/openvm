@@ -285,6 +285,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 DslIr::MulEFI(dst, lhs, rhs) => {
                     self.mul_ext_felti(dst, lhs, rhs, debug_info);
                 }
+                DslIr::CastFV(dst, src) => {
+                    self.push(
+                        AsmInstruction::AddFI(dst.fp(), src.fp(), F::ZERO),
+                        debug_info,
+                    );
+                }
                 DslIr::IfEq(lhs, rhs, then_block, else_block) => {
                     let if_compiler = IfCompiler {
                         compiler: self,

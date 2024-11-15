@@ -16,8 +16,23 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
         default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
+      app_log_blowup:
+        type: number
+        required: false
+        description: Application level log blowup
+        default: 2
+      agg_log_blowup:
+        type: number
+        required: false
+        description: Aggregation level log blowup
+        default: 2
   workflow_call:
     inputs:
       benchmark_name:
@@ -27,14 +42,29 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
         default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
+      app_log_blowup:
+        type: number
+        required: false
+        description: Application level log blowup
+        default: 2
+      agg_log_blowup:
+        type: number
+        required: false
+        description: Aggregation level log blowup
+        default: 2
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
+  FEATURE_FLAGS: "bench-metrics,parallel"
   CMD_ARGS: ""
 
 jobs:
@@ -43,10 +73,12 @@ jobs:
     runs-on:
       - runs-on
       - runner=${{ inputs.instance_type }}
-      - image=arm64-rust-dev-32gb
       - run-id=${{ github.run_id }}
       - tag=bench-${{ inputs.benchmark_name }}
     steps:
+      ##########################################################################
+      # Environment setup                                                      #
+      ##########################################################################
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
@@ -55,9 +87,35 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install rust src
+      - name: Install architecture specific tools
         run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
 
       - name: Feature flags
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -80,42 +138,43 @@ jobs:
           echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
-      ######################################################
-      # Run a different benchmark based on benchmark_name:
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'verify_fibair'
-        working-directory: lib/recursion
+      - name: Set application and aggregation level log blowup
         run: |
-          python3 ../../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
+          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
+          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
+          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'fibonacci'
-        working-directory: benchmarks
+      - name: Set working directory
+        id: set-working-dir
         run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+          WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+            .benchmarks[] |
+            select(.name == $name) |
+            .working_directory
+          ' ./.github/workflows/benchmark-config.json)
+          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
+          echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
+      ##########################################################################
+      # Find working directory based on benchmark_name and run the benchmark   #
+      ##########################################################################
       - name: Run benchmark
-        if: inputs.benchmark_name == 'revm_transfer'
-        working-directory: benchmarks
+        working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
+          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'regex'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'base64_json'
-        working-directory: benchmarks
-        run: |
-          python3 ../ci/scripts/bench.py $BIN_NAME $CMD_ARGS
-
-      ######################################################
+      ##########################################################################
+      # Generate result .md files and flamegraphs, store them in S3            #
+      ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_PATH=".bench_metrics/${BIN_NAME}.json"
+          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
           current_sha=$(git rev-parse HEAD)
@@ -123,9 +182,9 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.json
+            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
-            prev_path="${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
 
             if [[ $count -gt 0 ]]; then
@@ -169,10 +228,15 @@ jobs:
             echo "" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
           echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
+          echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
+          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
+      # TODO[stephenh]: remove this collapse after old PR workflow phased out
       - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -198,45 +262,50 @@ jobs:
               }
             }
 
-      - name: Add comment to pull request
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs')
-            const newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `<!--${{ inputs.benchmark_name }}-->\n${newBenchmark}`
-            });
-
+      ##########################################################################
+      # Update S3 with individual results upon a push event                    #
+      ##########################################################################
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
-
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
 
+      ##########################################################################
+      # Update gh-pages with individual results                                #
+      ##########################################################################
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           ref: gh-pages
 
-      - name: set up git
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Set up git
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      - name: Update github pages with new bench results
+      - name: Set github pages path for dispatch
+        run: |
+          GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Set github pages path for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
-          git add benchmarks/${{ inputs.benchmark_name }}.md
-          git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
-          git push
+          GH_PAGES_PATH="benchmarks/individual"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Update PR github pages with new bench results
+        run: |
+          mkdir -p ${GH_PAGES_PATH}
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          git push --force

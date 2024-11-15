@@ -5,10 +5,17 @@ use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
     var_range::VariableRangeCheckerChip,
 };
+use ax_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+    prover::types::AirProofInput,
+    Chip,
+};
 use axvm_instructions::instruction::Instruction;
 use derive_more::From;
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
+use p3_matrix::Matrix;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
@@ -132,11 +139,11 @@ pub enum AxVmExecutor<F: PrimeField32> {
     /// Only for BN254 for now
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
     /// Only for BN254 for now
-    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
+    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 10, 12, 32>>>),
     /// Only for BLS12-381 for now
     EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 12, 30, 16>>>),
     /// Only for BLS12-381 for now
-    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 36, 16>>>),
+    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 30, 36, 16>>>),
     MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
     MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
@@ -155,4 +162,26 @@ pub enum AxVmChip<F: PrimeField32> {
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors
     Executor(AxVmExecutor<F>),
+}
+
+impl<F: PrimeField32> AxVmExecutor<F> {
+    /// Generates an AIR proof input of the chip with the given height.
+    pub fn generate_air_proof_input_with_height<SC: StarkGenericConfig>(
+        self,
+        height: usize,
+    ) -> AirProofInput<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let height = height.next_power_of_two();
+        let mut proof_input = self.generate_air_proof_input();
+        let main = proof_input.raw.common_main.as_mut().unwrap();
+        assert!(
+            height >= main.height(),
+            "Overridden height must be greater than or equal to the used height"
+        );
+        // Assumption: an all-0 row is a valid dummy row for all chips.
+        main.pad_to_height(height, F::ZERO);
+        proof_input
+    }
 }
