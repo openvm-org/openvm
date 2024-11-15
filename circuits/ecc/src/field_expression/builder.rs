@@ -229,8 +229,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
 
-        // TODO: turn back on once we also support this in ecc and everywhere
-        // builder.when_first_row().assert_one(is_setup);
+        builder.when_first_row().assert_one(is_setup);
 
         for flag in flags.iter() {
             builder.assert_bool(*flag);
