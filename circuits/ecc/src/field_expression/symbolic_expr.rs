@@ -1,12 +1,14 @@
 use std::{
     cmp::{max, min},
+    collections::HashMap,
+    convert::identity,
     ops::{Add, Div, Mul, Sub},
 };
 
 use ax_circuit_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse, OverflowInt,
 };
-use num_bigint_dig::{BigInt, BigUint};
+use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
@@ -19,6 +21,7 @@ use p3_util::log2_ceil_usize;
 pub enum SymbolicExpr {
     Input(usize),
     Var(usize),
+    Const(char, BigUint, usize), // (name, value, num_limbs)
     Add(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Sub(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
@@ -38,6 +41,7 @@ impl std::fmt::Display for SymbolicExpr {
         match self {
             SymbolicExpr::Input(i) => write!(f, "Input({})", i),
             SymbolicExpr::Var(i) => write!(f, "Var({})", i),
+            SymbolicExpr::Const(name, _, _) => write!(f, "{}", name),
             SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
             SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
             SymbolicExpr::Mul(lhs, rhs) => write!(f, "{} * {}", lhs, rhs),
@@ -188,6 +192,7 @@ impl SymbolicExpr {
                 // Input and variable are field elements so are in [0, p)
                 (prime.clone() - BigUint::one(), BigUint::zero())
             }
+            SymbolicExpr::Const(_, val, _) => (val.clone(), BigUint::zero()),
             SymbolicExpr::Add(lhs, rhs) => {
                 let (lhs_max_pos, lhs_max_neg) = lhs.max_abs(prime);
                 let (rhs_max_pos, rhs_max_neg) = rhs.max_abs(prime);
@@ -239,7 +244,9 @@ impl SymbolicExpr {
     pub fn constraint_limb_max_abs(&self, limb_bits: usize, num_limbs: usize) -> usize {
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
         match self {
-            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => canonical_limb_max_abs,
+            SymbolicExpr::Input(_) | SymbolicExpr::Var(_) | SymbolicExpr::Const(_, _, _) => {
+                canonical_limb_max_abs
+            }
             SymbolicExpr::Add(lhs, rhs) | SymbolicExpr::Sub(lhs, rhs) => {
                 lhs.constraint_limb_max_abs(limb_bits, num_limbs)
                     + rhs.constraint_limb_max_abs(limb_bits, num_limbs)
@@ -290,6 +297,7 @@ impl SymbolicExpr {
     pub fn expr_limbs(&self, num_limbs: usize) -> usize {
         match self {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) => num_limbs,
+            SymbolicExpr::Const(_, _, limbs) => *limbs,
             SymbolicExpr::Add(lhs, rhs) | SymbolicExpr::Sub(lhs, rhs) => {
                 max(lhs.expr_limbs(num_limbs), rhs.expr_limbs(num_limbs))
             }
@@ -348,6 +356,13 @@ impl SymbolicExpr {
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Const(_, val, _) => {
+                if val.is_zero() {
+                    BigInt::zero()
+                } else {
+                    BigInt::from_biguint(Sign::Plus, val.clone())
+                }
+            }
             SymbolicExpr::Add(lhs, rhs) => {
                 lhs.evaluate_bigint(inputs, variables, flags)
                     + rhs.evaluate_bigint(inputs, variables, flags)
@@ -376,48 +391,58 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<isize>],
         variables: &[OverflowInt<isize>],
+        constants: &HashMap<char, OverflowInt<isize>>,
         flags: &[bool],
     ) -> OverflowInt<isize> {
         match self {
             SymbolicExpr::IntAdd(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
-                left.limbs[0] += *s;
-                // TODO[jpw]: add some debug_assert!(*s < (1 << self.limb_bits)); since this is the only case it is used for
-                left.limb_max_abs += s.unsigned_abs();
-                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
-                left
+                let left = lhs.evaluate_overflow_isize(inputs, variables, constants, flags);
+                // left.limbs[0] += *s;
+                // // TODO[jpw]: add some debug_assert!(*s < (1 << self.limb_bits)); since this is the only case it is used for
+                // left.limb_max_abs += s.unsigned_abs();
+                // left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
+                left.int_add(*s, identity)
             }
             SymbolicExpr::IntMul(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_isize(inputs, variables, flags);
-                for limb in left.limbs.iter_mut() {
-                    *limb *= *s;
-                }
-                left.limb_max_abs *= s.unsigned_abs();
-                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
-                left
+                let left = lhs.evaluate_overflow_isize(inputs, variables, constants, flags);
+                // for limb in left.limbs.iter_mut() {
+                //     *limb *= *s;
+                // }
+                // left.limb_max_abs *= s.unsigned_abs();
+                // left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
+                left.int_mul(*s, identity)
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Const(name, _, _) => constants[name].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables, flags)
-                    + rhs.evaluate_overflow_isize(inputs, variables, flags)
+                lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
+                    + rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables, flags)
-                    - rhs.evaluate_overflow_isize(inputs, variables, flags)
+                lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
+                    - rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate_overflow_isize(inputs, variables, flags)
-                    * rhs.evaluate_overflow_isize(inputs, variables, flags)
+                lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
+                    * rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
             }
             SymbolicExpr::Select(flag_id, lhs, rhs) => {
                 if flags[*flag_id] {
-                    lhs.evaluate_overflow_isize(inputs, variables, flags)
+                    lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
                 } else {
-                    rhs.evaluate_overflow_isize(inputs, variables, flags)
+                    rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
                 }
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
+        }
+    }
+
+    fn isize_to_expr<AB: AirBuilder>(s: isize) -> AB::Expr {
+        if s >= 0 {
+            AB::Expr::from_canonical_usize(s as usize)
+        } else {
+            -AB::Expr::from_canonical_usize(s.unsigned_abs())
         }
     }
 
@@ -426,66 +451,48 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<AB::Expr>],
         variables: &[OverflowInt<AB::Expr>],
+        constants: &HashMap<char, OverflowInt<AB::Expr>>,
         flags: &[AB::Var],
     ) -> OverflowInt<AB::Expr> {
         match self {
             SymbolicExpr::IntAdd(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
-                let scalar = if *s >= 0 {
-                    AB::Expr::from_canonical_usize(*s as usize)
-                } else {
-                    -AB::Expr::from_canonical_usize(s.unsigned_abs())
-                };
-                left.limbs[0] += scalar.clone();
-                left.limb_max_abs += s.unsigned_abs();
-                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
-                left
+                let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
+                left.int_add(*s, Self::isize_to_expr::<AB>)
             }
             SymbolicExpr::IntMul(lhs, s) => {
-                let mut left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
-                let scalar = if *s >= 0 {
-                    AB::Expr::from_canonical_usize(*s as usize)
-                } else {
-                    -AB::Expr::from_canonical_usize(s.unsigned_abs())
-                };
-                for limb in left.limbs.iter_mut() {
-                    *limb *= scalar.clone();
-                }
-                left.limb_max_abs *= s.unsigned_abs();
-                left.max_overflow_bits = log2_ceil_usize(left.limb_max_abs);
-                left
+                let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
+                left.int_mul(*s, Self::isize_to_expr::<AB>)
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Const(name, _, _) => constants[name].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
-                    + rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
+                    + rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
             }
             SymbolicExpr::Sub(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
-                    - rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
+                    - rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
             }
             SymbolicExpr::Mul(lhs, rhs) => {
-                lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
-                    * rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags)
+                lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
+                    * rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
             }
             SymbolicExpr::Select(flag_id, lhs, rhs) => {
-                let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
-                let right = rhs.evaluate_overflow_expr::<AB>(inputs, variables, flags);
-                assert_eq!(left.limbs.len(), right.limbs.len());
+                let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
+                let right = rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
+                assert_eq!(left.num_limbs(), right.num_limbs());
+                assert_eq!(left.max_overflow_bits(), right.max_overflow_bits());
+                assert_eq!(left.limb_max_abs(), right.limb_max_abs());
                 let flag = flags[*flag_id];
                 let mut res = vec![];
-                for i in 0..left.limbs.len() {
+                for i in 0..left.num_limbs() {
                     res.push(
-                        left.limbs[i].clone() * flag.into()
-                            + right.limbs[i].clone() * (AB::Expr::ONE - flag.into()),
+                        left.limb(i).clone() * flag.into()
+                            + right.limb(i).clone() * (AB::Expr::ONE - flag.into()),
                     );
                 }
-                OverflowInt {
-                    limbs: res,
-                    limb_max_abs: left.limb_max_abs,
-                    max_overflow_bits: left.max_overflow_bits,
-                }
+                OverflowInt::from_computed_limbs(res, left.limb_max_abs(), left.max_overflow_bits())
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }
@@ -502,6 +509,7 @@ impl SymbolicExpr {
         match self {
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Const(_, val, _) => val.clone(),
             SymbolicExpr::Add(lhs, rhs) => {
                 (lhs.compute(inputs, variables, flags, prime)
                     + rhs.compute(inputs, variables, flags, prime))
