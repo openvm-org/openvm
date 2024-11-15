@@ -64,7 +64,7 @@ env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel"
+  FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   CMD_ARGS: ""
 
 jobs:
