@@ -133,10 +133,15 @@ fn test_mul_013_by_013() {
 #[test]
 fn test_mul_by_01234() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = EcLineMulBy01234Chip::new(
         adapter,
@@ -209,7 +214,7 @@ fn test_mul_by_01234() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -221,10 +226,15 @@ fn test_evaluate_line() {
         limb_bits: LIMB_BITS,
         num_limbs: NUM_LIMBS,
     };
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = EvaluateLineChip::new(
         adapter,
@@ -271,6 +281,6 @@ fn test_evaluate_line() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

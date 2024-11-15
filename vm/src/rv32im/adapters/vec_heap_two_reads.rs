@@ -2,7 +2,7 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
-    iter::{repeat, zip},
+    iter::zip,
     marker::PhantomData,
     sync::Arc,
 };

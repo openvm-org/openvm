@@ -135,10 +135,15 @@ fn test_mul_023_by_023() {
 #[ignore]
 fn test_mul_by_02345() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = EcLineMulBy02345Chip::new(
         adapter,
@@ -211,6 +216,6 @@ fn test_mul_by_02345() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
