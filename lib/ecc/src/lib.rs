@@ -2,7 +2,6 @@
 
 extern crate alloc;
 
-pub mod field;
 pub mod point;
 pub mod sw;
 

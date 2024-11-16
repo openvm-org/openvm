@@ -12,6 +12,11 @@ use num_bigint_dig::BigUint;
 
 /// Field traits
 pub mod field;
+/// Implementation of this library's traits on halo2curves types.
+/// Used for testing and also VM runtime execution.
+/// These should **only** be importable on a host machine.
+#[cfg(all(not(target_os = "zkvm"), feature = "halo2curves"))]
+mod halo2curves;
 
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
@@ -28,6 +33,7 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
+// TODO[jpw]: split this into CustomIntrinsic (for MOD_IDX) + IntegralDomain
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
 ///

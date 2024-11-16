@@ -40,10 +40,10 @@ impl<F> Complex<F> {
 
 impl<F: IntMod> Complex<F> {
     // Zero element (i.e. additive identity)
-    pub const ZERO: Self = Self::new(F::ZERO, F::ZERO);
+    const ZERO: Self = Self::new(F::ZERO, F::ZERO);
 
     // One element (i.e. multiplicative identity)
-    pub const ONE: Self = Self::new(F::ONE, F::ZERO);
+    const ONE: Self = Self::new(F::ONE, F::ZERO);
 
     /// Set this complex number to be its conjugate
     pub fn conjugate_assign(&mut self) {
@@ -453,17 +453,8 @@ impl<F: Field + IntMod> Field for Complex<F> {
     type SelfRef<'a>
         = &'a Self
     where
-        F: 'a;
+        Self: 'a;
 
-    fn zero() -> Self {
-        Self::ZERO
-    }
-
-    fn one() -> Self {
-        Self::ONE
-    }
-
-    fn invert(&self) -> Option<Self> {
-        Some(Self::ONE.div_unsafe(self))
-    }
+    const ZERO: Self = Self::ZERO;
+    const ONE: Self = Self::ONE;
 }

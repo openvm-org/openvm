@@ -15,5 +15,5 @@ halo2curves-axiom = { workspace = true, optional = true }
 [dev-dependencies]
 
 [features]
-default = []
+default = ["halo2curves"]
 halo2curves = ["dep:halo2curves-axiom"]
