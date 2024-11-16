@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
-    var_range::VariableRangeCheckerChip,
 };
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -156,8 +155,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    // Lookup tables that are not executors:
-    RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors

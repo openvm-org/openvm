@@ -115,11 +115,12 @@ fn test_1() {
 
     let run_leaf_verifier =
         |verifier_input: LeafVmVerifierInput<SC>| -> Result<Vec<F>, ExecutionError> {
-            let runtime_pvs = leaf_vm.execute(
+            let exe_result = leaf_vm.execute(
                 axiom_vm_pk.leaf_committed_exe.exe.clone(),
                 verifier_input.write_to_stream(),
             )?;
-            let runtime_pvs: Vec<_> = runtime_pvs[..VmVerifierPvs::<u8>::width()]
+            let runtime_pvs: Vec<_> = exe_result
+                .public_values
                 .iter()
                 .map(|v| v.unwrap())
                 .collect();

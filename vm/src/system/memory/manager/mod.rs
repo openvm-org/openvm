@@ -468,6 +468,11 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    /// Return the number of AIRs in the memory controller.
+    pub fn num_airs(&self) -> usize {
+        self.air_names().len()
+    }
+
     pub fn air_names(&self) -> Vec<String> {
         let mut air_names = vec!["Boundary".to_string()];
         if self.continuation_enabled() {

@@ -253,9 +253,9 @@ fn test_vm_public_values() {
             engine.config.pcs(),
         ));
         let vm = SingleSegmentVmExecutor::new(vm_config);
-        let pvs = vm.execute(program, vec![]).unwrap();
+        let exe_result = vm.execute(program, vec![]).unwrap();
         assert_eq!(
-            pvs,
+            exe_result.public_values,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
         let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();

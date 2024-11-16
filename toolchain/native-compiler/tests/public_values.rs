@@ -40,9 +40,13 @@ fn test_compiler_public_values() {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::BranchEqual),
     );
-    let pvs = executor.execute(program, vec![]).unwrap();
+    let exe_result = executor.execute(program, vec![]).unwrap();
     assert_eq!(
-        pvs.into_iter().flatten().collect::<Vec<_>>(),
+        exe_result
+            .public_values
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
         vec![public_value_0, public_value_1]
     );
 }
