@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{
+use ax_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,

@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
 use crate::system::memory::MemoryAddress;
@@ -71,7 +71,7 @@ impl<T: AbstractField> MemoryBusInteraction<T> {
             .chain(iter::once(self.address.pointer))
             .chain(self.data)
             .chain(iter::once(self.timestamp))
-            .chain(iter::once(AB::Expr::one()));
+            .chain(iter::once(AB::Expr::ONE));
 
         builder.push_interaction(self.bus_index, fields, count, self.interaction_type);
     }

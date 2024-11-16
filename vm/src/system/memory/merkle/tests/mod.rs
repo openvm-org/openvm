@@ -4,8 +4,8 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
 };
 
-use afs_stark_backend::interaction::InteractionType;
-use ax_sdk::{
+use ax_stark_backend::interaction::InteractionType;
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -15,8 +15,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::MEMORY_MERKLE_BUS,
+    system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleBus, MemoryMerkleChip,
@@ -24,7 +25,6 @@ use crate::system::{
         tree::MemoryNode,
         Equipartition,
     },
-    vm::chip_set::MEMORY_MERKLE_BUS,
 };
 
 mod util;
@@ -91,9 +91,9 @@ fn test<const CHUNK: usize>(
                            address_label: usize,
                            hash: [BabyBear; CHUNK]| {
         let expand_direction = if is_compress {
-            BabyBear::neg_one()
+            BabyBear::NEG_ONE
         } else {
-            BabyBear::one()
+            BabyBear::ONE
         };
         dummy_interaction_trace_rows.push(match interaction_type {
             InteractionType::Send => expand_direction,
@@ -111,7 +111,7 @@ fn test<const CHUNK: usize>(
     for (address_space, address_label) in touched_labels {
         let initial_values = *initial_memory
             .get(&(address_space, address_label))
-            .unwrap_or(&[BabyBear::zero(); CHUNK]);
+            .unwrap_or(&[BabyBear::ZERO; CHUNK]);
         let as_label = address_space.as_canonical_u32() as usize - as_offset;
         interaction(
             InteractionType::Send,
@@ -135,7 +135,7 @@ fn test<const CHUNK: usize>(
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
         .is_power_of_two()
     {
-        dummy_interaction_trace_rows.push(BabyBear::zero());
+        dummy_interaction_trace_rows.push(BabyBear::ZERO);
     }
     let dummy_interaction_trace = RowMajorMatrix::new(
         dummy_interaction_trace_rows,
@@ -285,9 +285,9 @@ fn expand_test_negative() {
     let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
     for row in trace.rows_mut() {
         let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
-        if row.expand_direction == BabyBear::neg_one() {
-            row.left_direction_different = BabyBear::zero();
-            row.right_direction_different = BabyBear::zero();
+        if row.expand_direction == BabyBear::NEG_ONE {
+            row.left_direction_different = BabyBear::ZERO;
+            row.right_direction_different = BabyBear::ZERO;
         }
     }
 

@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 
 #[derive(Debug, AlignedBorrow)]
 #[repr(C)]
@@ -27,9 +27,11 @@ pub struct MemoryMerkleCols<T, const CHUNK: usize> {
     pub right_direction_different: T,
 }
 
-#[derive(Debug, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct MemoryMerklePvs<T, const CHUNK: usize> {
+    /// The memory state root before the execution of this segment.
     pub initial_root: [T; CHUNK],
+    /// The memory state root after the execution of this segment.
     pub final_root: [T; CHUNK],
 }

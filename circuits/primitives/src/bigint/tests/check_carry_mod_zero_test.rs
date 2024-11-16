@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -78,7 +78,6 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryModToZeroSubAir,
     pub modulus: BigUint,
-    pub field_element_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
@@ -145,13 +144,13 @@ impl TestCarryAir<N> {
         let expr =
             x_overflow.clone() * x_overflow.clone() + y_overflow.clone() - p_overflow * q_overflow;
         let carries = expr.calculate_carries(self.limb_bits);
-        let mut carries_f = vec![F::zero(); carries.len()];
+        let mut carries_f = F::zero_vec(carries.len());
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for (i, &carry) in carries.iter().enumerate() {
             range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
-                * if carry >= 0 { F::one() } else { F::neg_one() };
+                * if carry >= 0 { F::ONE } else { F::NEG_ONE };
         }
 
         TestCarryCols {
@@ -167,7 +166,7 @@ impl TestCarryAir<N> {
                 .collect(),
             quotient: quotient_f,
             carries: carries_f,
-            is_valid: F::one(),
+            is_valid: F::ONE,
         }
     }
 }
@@ -178,7 +177,6 @@ const N: usize = 16;
 fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
     let limb_bits = 8;
     let num_limbs = N;
-    let field_element_bits = 30;
 
     let range_bus = 1;
     let range_decomp = 16;
@@ -186,17 +184,11 @@ fn test_x_square_plus_y_mod(x: BigUint, y: BigUint, prime: BigUint) {
         range_bus,
         range_decomp,
     )));
-    let check_carry_sub_air = CheckCarryModToZeroSubAir::new(
-        prime.clone(),
-        limb_bits,
-        range_bus,
-        range_decomp,
-        field_element_bits,
-    );
+    let check_carry_sub_air =
+        CheckCarryModToZeroSubAir::new(prime.clone(), limb_bits, range_bus, range_decomp);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
         modulus: prime,
-        field_element_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,

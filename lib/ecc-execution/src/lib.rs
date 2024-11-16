@@ -1,4 +1,5 @@
-pub mod common;
+pub use axvm_ecc;
+
 pub mod curves;
 pub mod verifier;
 

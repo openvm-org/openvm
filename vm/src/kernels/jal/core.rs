@@ -1,17 +1,16 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode};
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode, UsizeOpcode,
+};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{
-    arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    rv32im::adapters::JumpUiProcessedInstruction,
+use crate::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -40,7 +39,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 1]; 0]>,
     I::Writes: From<[[AB::Expr; 1]; 1]>,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -54,7 +53,7 @@ where
             to_pc: Some(from_pc.into() + cols.imm.into()),
             reads: [].into(),
             writes: [[from_pc.into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)]].into(),
-            instruction: JumpUiProcessedInstruction {
+            instruction: ImmInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: AB::Expr::from_canonical_usize(NativeJalOpcode::JAL as usize + self.offset),
                 immediate: cols.imm.into(),
@@ -121,7 +120,7 @@ where
         let JalRecord { imm } = record;
         let row_slice: &mut JalCoreCols<_> = row_slice.borrow_mut();
         row_slice.imm = imm;
-        row_slice.is_valid = F::one();
+        row_slice.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

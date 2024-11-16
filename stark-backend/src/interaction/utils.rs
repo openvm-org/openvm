@@ -50,7 +50,7 @@ where
     F: Field,
     EF: ExtensionField<F>,
 {
-    let mut rlc = EF::zero();
+    let mut rlc = EF::ZERO;
     for (columns, beta) in fields.iter().zip(betas) {
         rlc += beta * columns.apply::<F, F>(preprocessed_row, main_row)
     }

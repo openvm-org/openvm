@@ -1,17 +1,22 @@
 //! This crate is intended for use on host machine. This includes usage within procedural macros.
 
+#![allow(non_camel_case_types)]
+
 use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod config;
 mod curves;
+pub mod exe;
 pub mod instruction;
+mod phantom;
 pub mod program;
 /// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
 pub mod riscv;
 pub mod utils;
 
 pub use curves::*;
+pub use phantom::*;
 
 pub trait UsizeOpcode {
     fn default_offset() -> usize;
@@ -25,39 +30,29 @@ pub trait UsizeOpcode {
     }
 }
 
-pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> usize {
-    Opcode::default_offset() + opcode.as_usize()
-}
+// =================================================================================================
+// System opcodes
+// =================================================================================================
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
 #[opcode_offset = 0]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CoreOpcode {
-    FAIL,
-    PRINTF,
-
-    // TODO: move these to a separate class, PhantomOpcode or something
-    /// Phantom instruction to prepare the next input vector for hinting.
-    HINT_INPUT,
-    /// Phantom instruction to prepare the little-endian bit decomposition of a variable for hinting.
-    HINT_BITS,
-    /// Phantom instruction to prepare the little-endian byte decomposition of a variable for hinting.
-    HINT_BYTES,
-    /// Phantom instruction to start tracing
-    CT_START,
-    /// Phantom instruction to end tracing
-    CT_END,
+pub enum SystemOpcode {
+    TERMINATE,
+    PHANTOM,
 }
+
+// =================================================================================================
+// Native kernel opcodes
+// =================================================================================================
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x010]
+#[opcode_offset = 0x100]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
@@ -67,48 +62,15 @@ pub enum NativeLoadStoreOpcode {
     SHINTW,
 }
 
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x20] // these offsets gone mad tbh
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum TerminateOpcode {
-    TERMINATE,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x21]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum NopOpcode {
-    NOP,
-}
-
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
 
-impl UsizeOpcode for NativeBranchEqualOpcode {
-    fn default_offset() -> usize {
-        0x030
-    }
-
-    fn from_usize(value: usize) -> Self {
-        Self(BranchEqualOpcode::from_usize(value))
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0.as_usize()
-    }
-}
-
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x040]
+#[opcode_offset = 0x115]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum NativeJalOpcode {
     JAL,
 }
@@ -116,9 +78,8 @@ pub enum NativeJalOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x080]
+#[opcode_offset = 0x120]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum PublishOpcode {
     PUBLISH,
 }
@@ -126,9 +87,17 @@ pub enum PublishOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x100]
+#[opcode_offset = 0x125]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
+pub enum CastfOpcode {
+    CASTF,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x130]
+#[repr(usize)]
 pub enum FieldArithmeticOpcode {
     ADD,
     SUB,
@@ -139,9 +108,8 @@ pub enum FieldArithmeticOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x110]
+#[opcode_offset = 0x140]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum FieldExtensionOpcode {
     FE4ADD,
     FE4SUB,
@@ -152,111 +120,41 @@ pub enum FieldExtensionOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x120]
+#[opcode_offset = 0x150]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum Poseidon2Opcode {
     PERM_POS2,
     COMP_POS2,
 }
+
+/// Opcodes for FRI opening proofs.
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x130]
+#[opcode_offset = 0x160]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Keccak256Opcode {
-    KECCAK256,
+pub enum FriOpcode {
+    /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
+    /// for a single matrix.
+    FRI_MAT_OPENING,
 }
 
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x140]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum ModularArithmeticOpcode {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x150]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum U256Opcode {
-    // maybe later we will make it uint and specify the parameters in the config
-    ADD,
-    SUB,
-    LT,
-    EQ,
-    XOR,
-    AND,
-    OR,
-    SLT,
-
-    SLL,
-    SRL,
-    SRA,
-
-    MUL,
-}
-
-impl U256Opcode {
-    // Excludes multiplication
-    pub fn arithmetic_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (U256Opcode::ADD as usize..=U256Opcode::SLT as usize).map(U256Opcode::from_usize)
-    }
-
-    pub fn shift_opcodes() -> impl Iterator<Item = U256Opcode> {
-        (U256Opcode::SLL as usize..=U256Opcode::SRA as usize).map(U256Opcode::from_usize)
-    }
-}
+// =================================================================================================
+// RV32IM support opcodes.
+// Enum types that do not start with Rv32 can be used for generic big integers, but the default
+// offset is reserved for RV32IM.
+//
+// Create a new wrapper struct U256BaseAluOpcode(pub BaseAluOpcode) with the UsizeOpcode macro to
+// specify a different offset.
+// =================================================================================================
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x170]
+#[opcode_offset = 0x200]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum CastfOpcode {
-    CASTF,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x180]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum EccOpcode {
-    EC_ADD_NE,
-    EC_DOUBLE,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x198]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum Fp12Opcode {
-    ADD,
-    SUB,
-    MUL,
-}
-
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
-)]
-#[opcode_offset = 0x300]
-#[repr(usize)]
-#[allow(non_camel_case_types)]
-pub enum AluOpcode {
+pub enum BaseAluOpcode {
     ADD,
     SUB,
     XOR,
@@ -267,9 +165,8 @@ pub enum AluOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x305]
+#[opcode_offset = 0x205]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum ShiftOpcode {
     SLL,
     SRL,
@@ -279,9 +176,8 @@ pub enum ShiftOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x310]
+#[opcode_offset = 0x208]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum LessThanOpcode {
     SLT,
     SLTU,
@@ -290,9 +186,8 @@ pub enum LessThanOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x320]
+#[opcode_offset = 0x210]
 #[repr(usize)]
-#[allow(non_camel_case_types)]
 pub enum Rv32LoadStoreOpcode {
     LOADW,
     /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
@@ -301,7 +196,6 @@ pub enum Rv32LoadStoreOpcode {
     STOREW,
     STOREH,
     STOREB,
-    HINT_STOREW,
     /// The following are signed extend opcodes
     LOADB,
     LOADH,
@@ -310,7 +204,7 @@ pub enum Rv32LoadStoreOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x330]
+#[opcode_offset = 0x220]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum BranchEqualOpcode {
@@ -321,7 +215,7 @@ pub enum BranchEqualOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x335]
+#[opcode_offset = 0x225]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum BranchLessThanOpcode {
@@ -334,7 +228,7 @@ pub enum BranchLessThanOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x340]
+#[opcode_offset = 0x230]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Rv32JalLuiOpcode {
@@ -345,7 +239,7 @@ pub enum Rv32JalLuiOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x345]
+#[opcode_offset = 0x235]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Rv32JalrOpcode {
@@ -355,7 +249,7 @@ pub enum Rv32JalrOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x350]
+#[opcode_offset = 0x240]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum Rv32AuipcOpcode {
@@ -365,7 +259,7 @@ pub enum Rv32AuipcOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x360]
+#[opcode_offset = 0x250]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum MulOpcode {
@@ -375,7 +269,7 @@ pub enum MulOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x365]
+#[opcode_offset = 0x251]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum MulHOpcode {
@@ -387,7 +281,7 @@ pub enum MulHOpcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x370]
+#[opcode_offset = 0x254]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum DivRemOpcode {
@@ -397,6 +291,60 @@ pub enum DivRemOpcode {
     REMU,
 }
 
+// =================================================================================================
+// Intrinsics opcodes
+// =================================================================================================
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x300]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32HintStoreOpcode {
+    HINT_STOREW,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x310]
+#[repr(usize)]
+pub enum Rv32KeccakOpcode {
+    KECCAK256,
+}
+
+// =================================================================================================
+// Intrinsics: 256-bit Integers
+// =================================================================================================
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x400]
+pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x405]
+pub struct Rv32Shift256Opcode(pub ShiftOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x408]
+pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x420]
+pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x425]
+pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x450]
+pub struct Rv32Mul256Opcode(pub MulOpcode);
+
+// =================================================================================================
+// Intrinsics: Prime Field Arithmetic
+// =================================================================================================
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
@@ -408,7 +356,66 @@ pub enum Rv32ModularArithmeticOpcode {
     SUB,
     MUL,
     DIV,
+    IS_EQ,
 }
+
+// to be deleted and replaced by Rv32SwOpcode
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x600]
+#[repr(usize)]
+pub enum Rv32WeierstrassOpcode {
+    EC_ADD_NE,
+    EC_DOUBLE,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x700]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Fp12Opcode {
+    ADD,
+    SUB,
+    MUL,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x710]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Fp2Opcode {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x720]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PairingOpcode {
+    MILLER_DOUBLE_STEP,
+    MILLER_DOUBLE_AND_ADD_STEP,
+    EVALUATE_LINE,
+    MUL_013_BY_013,
+    MUL_BY_013,
+    MUL_BY_01234,
+    MUL_023_BY_023,
+    MUL_BY_023,
+    MUL_BY_02345,
+}
+
+// =================================================================================================
+// For internal dev use only
+// =================================================================================================
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
@@ -417,5 +424,5 @@ pub enum Rv32ModularArithmeticOpcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum UnimplementedOpcode {
-    KECCAK256_RV32,
+    REPLACE_ME,
 }

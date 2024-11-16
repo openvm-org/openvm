@@ -4,8 +4,8 @@ use std::{
     fmt::Debug,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -20,7 +20,7 @@ use crate::{
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
 // constraints and thus cannot cause a failure.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TestAdapterChip<F> {
     /// List of the return values of `preprocess` this chip should provide on each sequential call.
     pub prank_reads: VecDeque<Vec<F>>,
@@ -158,9 +158,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for TestAdapterAir {
                 cols.operands.to_vec(),
                 ExecutionState {
                     pc: cols.from_pc.into(),
-                    timestamp: AB::Expr::one(),
+                    timestamp: AB::Expr::ONE,
                 },
-                AB::Expr::zero(),
+                AB::Expr::ZERO,
                 (4, ctx.to_pc),
             )
             .eval(builder, processed_instruction.is_valid);

@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 use super::{utils::range_check, OverflowInt};
@@ -12,9 +12,6 @@ pub struct CheckCarryToZeroCols<T> {
 pub struct CheckCarryToZeroSubAir {
     // The number of bits for each limb (not overflowed). Example: 10.
     pub limb_bits: usize,
-
-    // This is the number of bits a field element, so max overflow bits must less than this.
-    pub field_element_bits: usize,
 
     pub range_checker_bus: usize,
     // The range checker decomp bits.
@@ -31,15 +28,9 @@ pub fn get_carry_max_abs_and_bits(max_overflow_bits: usize, limb_bits: usize) ->
 }
 
 impl CheckCarryToZeroSubAir {
-    pub fn new(
-        limb_bits: usize,
-        range_checker_bus: usize,
-        decomp: usize,
-        field_element_bits: usize,
-    ) -> Self {
+    pub fn new(limb_bits: usize, range_checker_bus: usize, decomp: usize) -> Self {
         Self {
             limb_bits,
-            field_element_bits,
             range_checker_bus,
             decomp,
         }
@@ -49,8 +40,14 @@ impl CheckCarryToZeroSubAir {
 impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
     /// `(expr, cols, is_valid)`
     type AirContext<'a>
-    = (OverflowInt<AB::Expr>, CheckCarryToZeroCols<AB::Var>, AB::Var) where
-        AB::Var:'a, AB::Expr:'a,
+        = (
+        OverflowInt<AB::Expr>,
+        CheckCarryToZeroCols<AB::Var>,
+        AB::Var,
+    )
+    where
+        AB::Var: 'a,
+        AB::Expr: 'a,
         AB: 'a;
 
     fn eval<'a>(
@@ -66,7 +63,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         AB::Expr: 'a,
     {
         assert_eq!(expr.limbs.len(), cols.carries.len());
-        assert!(expr.max_overflow_bits <= self.field_element_bits);
         builder.assert_bool(is_valid);
         let (carry_min_value_abs, carry_abs_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
@@ -83,7 +79,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         }
 
         // 2. Constrain the carries and expr.
-        let mut previous_carry = AB::Expr::zero();
+        let mut previous_carry = AB::Expr::ZERO;
         for (i, limb) in expr.limbs.iter().enumerate() {
             builder.assert_eq(
                 limb.clone() + previous_carry.clone(),
@@ -92,6 +88,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
             previous_carry = cols.carries[i].into();
         }
         // The last (highest) carry should be zero.
-        builder.assert_eq(previous_carry, AB::Expr::zero());
+        builder.assert_eq(previous_carry, AB::Expr::ZERO);
     }
 }

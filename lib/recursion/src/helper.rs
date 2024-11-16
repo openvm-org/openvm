@@ -1,4 +1,4 @@
-use afs_compiler::prelude::*;
+use axvm_native_compiler::prelude::*;
 use itertools::Itertools;
 
 use crate::vars::{MultiStarkVerificationAdviceVariable, StarkProofVariable};

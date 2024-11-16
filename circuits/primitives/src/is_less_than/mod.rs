@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
 use p3_field::{AbstractField, Field};
 
@@ -63,7 +63,7 @@ impl<T> IsLessThanIo<T> {
 ///     deg(count) + max(1, deg(x), deg(y))
 ///
 /// N.B.: AssertLtSubAir could be implemented by directly passing through
-/// to IsLtSubAir with `out = AB::Expr::one()`. The only additional
+/// to IsLtSubAir with `out = AB::Expr::ONE`. The only additional
 /// constraint in this air is `assert_bool(io.out)`. However since both Airs
 /// are fundamental and the constraints are simple, we opt to keep the two
 /// versions separate.
@@ -125,7 +125,7 @@ impl IsLtSubAir {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
@@ -160,7 +160,12 @@ impl IsLtSubAir {
 }
 
 impl<AB: InteractionBuilder> SubAir<AB> for IsLtSubAir {
-    type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     // constrain that out == (x < y) when count != 0
     // warning: send for range check must be included for the constraints to be sound
@@ -186,7 +191,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for IsLtSubAir {
 pub struct IsLtWhenTransitionAir(pub IsLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for IsLtWhenTransitionAir {
-    type AirContext<'a> = (IsLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.

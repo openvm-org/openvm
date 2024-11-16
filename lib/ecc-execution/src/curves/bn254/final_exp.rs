@@ -1,15 +1,16 @@
-use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, Gt},
-    ff::Field,
-    pairing::MillerLoopResult,
+use axvm_ecc::{
+    curve::bn254::{Fq, Fq12, Fq2},
+    field::{ExpBigInt, FieldExtension},
+    pairing::{FinalExp, MultiMillerLoop},
+    point::AffinePoint,
 };
+use halo2curves_axiom::ff::Field;
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::common::{EcPoint, ExpBigInt, FieldExtension, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
-    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
         let (c, u) = self.final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
@@ -34,11 +35,6 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/sw_bn254/hints.go#L23
     // returns c (residueWitness) and u (cubicNonResiduePower)
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
-        debug_assert_eq!(
-            Gt(f).final_exponentiation(),
-            Gt(Fq12::one()),
-            "Trying to call final_exp_hint on {f:?} which does not final exponentiate to 1."
-        );
         // Residue witness
         let mut c;
         // Cubic nonresidue power
@@ -47,11 +43,11 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         // get the 27th root of unity
         let u0 = U27_COEFF_0.to_u64_digits().1;
         let u1 = U27_COEFF_1.to_u64_digits().1;
-        let u_coeffs = Fq2::from_coeffs(&[
+        let u_coeffs = Fq2::from_coeffs([
             Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
             Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
         ]);
-        let unity_root_27 = Fq12::from_coeffs(&[
+        let unity_root_27 = Fq12::from_coeffs([
             Fq2::ZERO,
             Fq2::ZERO,
             u_coeffs,

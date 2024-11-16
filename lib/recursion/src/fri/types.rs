@@ -1,4 +1,4 @@
-use afs_compiler::prelude::*;
+use axvm_native_compiler::prelude::*;
 
 use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable};
 
@@ -40,6 +40,7 @@ pub struct FriProofVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct FriQueryProofVariable<C: Config> {
+    pub input_proof: Array<C, BatchOpeningVariable<C>>,
     pub commit_phase_openings: Array<C, FriCommitPhaseProofStepVariable<C>>,
 }
 

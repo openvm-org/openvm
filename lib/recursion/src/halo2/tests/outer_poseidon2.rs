@@ -1,5 +1,5 @@
-use afs_compiler::ir::{Builder, Felt, Var, Witness};
-use ax_sdk::config::baby_bear_poseidon2_outer::outer_perm;
+use ax_stark_sdk::config::baby_bear_poseidon2_outer::outer_perm;
+use axvm_native_compiler::ir::{Builder, Felt, Var, Witness};
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::AbstractField;
@@ -7,7 +7,7 @@ use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 
 use crate::{
     config::outer::{OuterCompress, OuterConfig, OuterHash},
-    halo2::Halo2Prover,
+    halo2::{DslOperations, Halo2Prover},
     outer_poseidon2::Poseidon2CircuitBuilder,
     vars::OuterDigestVariable,
 };
@@ -33,7 +33,14 @@ fn test_p2_permute_mut() {
     builder.assert_var_eq(b, output[1]);
     builder.assert_var_eq(c, output[2]);
 
-    Halo2Prover::mock(10, builder.operations, Witness::default());
+    Halo2Prover::mock(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -63,7 +70,14 @@ fn test_p2_hash() {
     let result = builder.p2_hash(&[a, b, c, d, e, f, g]);
     builder.assert_var_eq(result[0], output[0]);
 
-    Halo2Prover::mock(10, builder.operations, Witness::default());
+    Halo2Prover::mock(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }
 
 #[test]
@@ -71,8 +85,8 @@ fn test_p2_compress() {
     let perm = outer_perm();
     let compressor = OuterCompress::new(perm.clone());
 
-    let a: [Bn254Fr; 1] = [Bn254Fr::two()];
-    let b: [Bn254Fr; 1] = [Bn254Fr::two()];
+    let a: [Bn254Fr; 1] = [Bn254Fr::TWO];
+    let b: [Bn254Fr; 1] = [Bn254Fr::TWO];
     let gt = compressor.compress([a, b]);
 
     let mut builder = Builder::<OuterConfig>::default();
@@ -81,5 +95,12 @@ fn test_p2_compress() {
     let result = builder.p2_compress([a, b]);
     builder.assert_var_eq(result[0], gt[0]);
 
-    Halo2Prover::mock(10, builder.operations, Witness::default());
+    Halo2Prover::mock(
+        10,
+        DslOperations {
+            operations: builder.operations,
+            num_public_values: 0,
+        },
+        Witness::default(),
+    );
 }

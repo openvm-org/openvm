@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use afs_stark_backend::prover::types::AirProofInput;
+use ax_stark_backend::prover::types::AirProofInput;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use p3_matrix::Matrix;

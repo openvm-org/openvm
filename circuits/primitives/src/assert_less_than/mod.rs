@@ -1,5 +1,5 @@
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use derive_new::new;
 use p3_air::AirBuilder;
 use p3_field::{AbstractField, Field};
@@ -119,7 +119,7 @@ impl AssertLtSubAir {
         assert_eq!(lower_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
-        let intermed_val = io.y - io.x - AB::Expr::one();
+        let intermed_val = io.y - io.x - AB::Expr::ONE;
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
@@ -127,7 +127,7 @@ impl AssertLtSubAir {
         let lower = lower_decomp
             .iter()
             .enumerate()
-            .fold(AB::Expr::zero(), |acc, (i, &val)| {
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
             });
 
@@ -161,7 +161,12 @@ impl AssertLtSubAir {
 }
 
 impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
-    type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     // constrain that x < y
     // warning: send for range check must be included for the constraints to be sound
@@ -187,7 +192,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
 pub struct AssertLtWhenTransitionAir(pub AssertLtSubAir);
 
 impl<AB: InteractionBuilder> SubAir<AB> for AssertLtWhenTransitionAir {
-    type AirContext<'a> = (AssertLessThanIo<AB::Expr>, &'a [AB::Var]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (AssertLessThanIo<AB::Expr>, &'a [AB::Var])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Imposes the non-interaction constraints on all except the last row. This is
     /// intended for use when the comparators `x, y` are on adjacent rows.

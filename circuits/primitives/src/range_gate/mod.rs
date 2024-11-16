@@ -8,8 +8,8 @@ use std::{
     sync::atomic::AtomicU32,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -64,10 +64,10 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
 
         builder
             .when_first_row()
-            .assert_eq(local.counter, AB::Expr::zero());
+            .assert_eq(local.counter, AB::Expr::ZERO);
         builder
             .when_transition()
-            .assert_eq(local.counter + AB::Expr::one(), next.counter);
+            .assert_eq(local.counter + AB::Expr::ONE, next.counter);
         // The trace height is not part of the vkey, so we must enforce it here.
         builder.when_last_row().assert_eq(
             local.counter,

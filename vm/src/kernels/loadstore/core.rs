@@ -1,11 +1,11 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{instruction::Instruction, NativeLoadStoreOpcode};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -14,11 +14,11 @@ use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result, Streams,
         VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
-    kernels::adapters::loadstore_native_adapter::NativeLoadStoreProcessedInstruction,
-    system::{program::ExecutionError, vm::Streams},
+    kernels::adapters::loadstore_native_adapter::NativeLoadStoreInstruction,
+    system::program::ExecutionError,
 };
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -65,7 +65,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<([AB::Expr; 2], AB::Expr)>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
-    I::ProcessedInstruction: From<NativeLoadStoreProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<NativeLoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -81,14 +81,14 @@ where
             cols.is_storew2,
             cols.is_shintw,
         ];
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
         builder.assert_bool(is_valid.clone());
 
         let expected_opcode = flags.iter().zip(NativeLoadStoreOpcode::iter()).fold(
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_usize(opcode.as_usize())
             },
@@ -98,7 +98,7 @@ where
             to_pc: None,
             reads: (cols.pointer_reads.map(Into::into), cols.data_read.into()).into(),
             writes: cols.data_write.map(Into::into).into(),
-            instruction: NativeLoadStoreProcessedInstruction {
+            instruction: NativeLoadStoreInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 is_loadw: cols.is_loadw.into(),
@@ -112,18 +112,21 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct KernelLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
     pub air: KernelLoadStoreCoreAir<NUM_CELLS>,
-    pub streams: Arc<Mutex<Streams<F>>>,
+    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
 impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
-    pub fn new(streams: Arc<Mutex<Streams<F>>>, offset: usize) -> Self {
+    pub fn new(offset: usize) -> Self {
         Self {
             air: KernelLoadStoreCoreAir::<NUM_CELLS> { offset },
-            streams,
+            streams: OnceLock::new(),
         }
+    }
+    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.streams.set(streams).unwrap();
     }
 }
 
@@ -147,7 +150,7 @@ where
         let (pointer_reads, data_read) = reads.into();
 
         let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
-            let mut streams = self.streams.lock();
+            let mut streams = self.streams.get().unwrap().lock();
             if streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds(from_pc));
             }

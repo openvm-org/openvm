@@ -1,4 +1,4 @@
-use afs_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
+use axvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
 use p3_field::{AbstractField, Field};
 
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
         CanSampleVariable, ChallengerVariable, FeltChallenger,
     },
     digest::DigestVariable,
-    outer_poseidon2::{Poseidon2CircuitBuilder, SPONGE_SIZE},
+    outer_poseidon2::{Poseidon2CircuitBuilder, RATE, SPONGE_SIZE},
     utils::{reduce_32, split_32},
     vars::OuterDigestVariable,
 };
@@ -25,9 +25,9 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
         assert!(builder.flags.static_only);
         MultiField32ChallengerVariable::<C> {
             sponge_state: [
-                builder.eval(C::N::zero()),
-                builder.eval(C::N::zero()),
-                builder.eval(C::N::zero()),
+                builder.eval(C::N::ZERO),
+                builder.eval(C::N::ZERO),
+                builder.eval(C::N::ZERO),
             ],
             input_buffer: vec![],
             output_buffer: vec![],
@@ -36,7 +36,7 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
     }
 
     pub fn duplexing(&mut self, builder: &mut Builder<C>) {
-        assert!(self.input_buffer.len() <= self.num_f_elms * SPONGE_SIZE);
+        assert!(self.input_buffer.len() <= self.num_f_elms * RATE);
 
         for (i, f_chunk) in self.input_buffer.chunks(self.num_f_elms).enumerate() {
             self.sponge_state[i] = reduce_32(builder, f_chunk);
@@ -58,7 +58,7 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
         self.output_buffer.clear();
 
         self.input_buffer.push(value);
-        if self.input_buffer.len() == self.num_f_elms * SPONGE_SIZE {
+        if self.input_buffer.len() == self.num_f_elms * RATE {
             self.duplexing(builder);
         }
     }

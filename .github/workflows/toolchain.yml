@@ -4,10 +4,12 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
     paths:
       - "vm/**"
       - "toolchain/riscv/**"
+      - "toolchain/instructions/**"
+      - "toolchain/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -31,15 +33,19 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Build a test fibonacci ELF
-        working-directory: toolchain/riscv/examples/fibonacci/program
+      - name: Run axvm-instructions tests
+        working-directory: toolchain/instructions
         run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
-          cargo +nightly build --release
-          # TODO: aarch and linux builds have different ELFs
-          # diff target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program ../../../transpiler/data/rv32im-fibonacci-program-elf-release
+          cargo nextest run
 
       - name: Run transpiler tests
         working-directory: toolchain/riscv/transpiler
         run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          cargo nextest run --cargo-profile=fast
+
+      - name: Run toolchain tests
+        working-directory: toolchain/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo nextest run --cargo-profile=fast

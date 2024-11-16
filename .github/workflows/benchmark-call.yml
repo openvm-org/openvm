@@ -8,16 +8,31 @@ on:
         required: true
         description: The name of the benchmark to run
         options:
-          - vm_verify_fibair
-          - halo2_static_verify_fibair
-          - tiny_e2e
-          - alu256_e2e
-          - small_e2e
+          - verify_fibair
+          - fibonacci
+          - revm_transfer
+          - regex
+          - base64_json
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
         default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
+      app_log_blowup:
+        type: number
+        required: false
+        description: Application level log blowup
+        default: 2
+      agg_log_blowup:
+        type: number
+        required: false
+        description: Aggregation level log blowup
+        default: 2
   workflow_call:
     inputs:
       benchmark_name:
@@ -27,76 +42,139 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-arm64)
-        default: 64cpu-linux-arm64	
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
+        default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
+      app_log_blowup:
+        type: number
+        required: false
+        description: Application level log blowup
+        default: 2
+      agg_log_blowup:
+        type: number
+        required: false
+        description: Aggregation level log blowup
+        default: 2
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,mimalloc"
+  FEATURE_FLAGS: "bench-metrics,parallel"
   CMD_ARGS: ""
 
 jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
-    runs-on: [runs-on,"runner=${{ inputs.instance_type }}",image=arm64-rust-dev-32gb]
+    runs-on:
+      - runs-on
+      - runner=${{ inputs.instance_type }}
+      - run-id=${{ github.run_id }}
+      - tag=bench-${{ inputs.benchmark_name }}
     steps:
+      ##########################################################################
+      # Environment setup                                                      #
+      ##########################################################################
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
+
+      - name: Feature flags
+        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          echo "Adding aggregation feature flag"
+          echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
 
       - name: Setup halo2
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
           if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
             echo "Adding static-verifier feature flag"
-            CMD_ARGS="--features static-verifier"
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
             bash trusted_setup_s3.sh
           fi
 
-      ######################################################
-      # Run a different benchmark based on benchmark_name:
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'vm_verify_fibair'
-        working-directory: lib/recursion
+      - name: Set BIN_NAME and CMD_ARGS
         run: |
-          BIN_NAME="verify_fibair"
-          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          CMD_ARGS="--features ${FEATURE_FLAGS}"
+          echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
+          echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'tiny_e2e'
-        working-directory: lib/recursion
+      - name: Set application and aggregation level log blowup
         run: |
-          BIN_NAME="tiny_e2e"
-          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
+          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
+          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
+          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
 
-      - name: Run benchmark
-        if: inputs.benchmark_name == 'alu256_e2e'
-        working-directory: lib/recursion
+      - name: Set working directory
+        id: set-working-dir
         run: |
-          BIN_NAME="alu256_e2e"
-          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+            .benchmarks[] |
+            select(.name == $name) |
+            .working_directory
+          ' ./.github/workflows/benchmark-config.json)
+          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
+          echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
+      ##########################################################################
+      # Find working directory based on benchmark_name and run the benchmark   #
+      ##########################################################################
       - name: Run benchmark
-        if: inputs.benchmark_name == 'small_e2e'
-        working-directory: lib/recursion
+        working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          BIN_NAME="small_e2e"
-          python3 ../../sdk/scripts/bench.py $BIN_NAME $CMD_ARGS
-          echo "BIN_NAME=${BIN_NAME}" >> $GITHUB_ENV
+          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
-      ######################################################
+      ##########################################################################
+      # Generate result .md files and flamegraphs, store them in S3            #
+      ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_PATH=".bench_metrics/${BIN_NAME}.json"
+          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
           current_sha=$(git rev-parse HEAD)
@@ -104,22 +182,20 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.json
+            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
-            prev_path="${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
             count=`s5cmd ls $prev_path | wc -l`
 
             if [[ $count -gt 0 ]]; then
               s5cmd cp $prev_path prev.json
-              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             else
               echo "No previous benchmark on main branch found"
-              python3 sdk/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json sdk/scripts/metric_unify/aggregation.json > results.md
+              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
             fi
           else
             echo "No benchmark metrics found at ${METRIC_PATH}"
-            # Old fallback until we switch all benchmarks to new metrics format:
-            cp benchmark/tmp/_result.md results.md
           fi
 
       - name: Install inferno-flamegraph
@@ -128,7 +204,7 @@ jobs:
       - name: Generate flamegraphs
         run: |
           if [[ -f $METRIC_PATH ]]; then
-            python3 sdk/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
@@ -139,17 +215,28 @@ jobs:
           RESULT_PATH=results.md
           echo "" >> $RESULT_PATH
           if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+            echo "<details>" >> $RESULT_PATH
+            echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
+            echo "" >> $RESULT_PATH
             for file in .bench_metrics/flamegraphs/*.svg; do
               filename=$(basename "$file")
-              flamegraph_url=https://axiom-public-data-staging-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+              flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
               echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
             done
+            echo "" >> $RESULT_PATH
+            echo "</details>" >> $RESULT_PATH
+            echo "" >> $RESULT_PATH
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "AWS Instance Type: [${{ inputs.instance_type }}](https://instances.vantage.sh/aws/ec2/${{ inputs.instance_type }})" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
+          echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
+          echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${{ inputs.benchmark_name }}.md"
+          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
+      # TODO[stephenh]: remove this collapse after old PR workflow phased out
       - name: Collapse previous comment (if exists)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -161,7 +248,7 @@ jobs:
               issue_number: context.issue.number
             });
             for (const comment of comments.data) {
-              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("${{ inputs.benchmark_name }}")) {
+              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--${{ inputs.benchmark_name }}-->")) {
                 console.log("collapse comment ", comment.id);
                 const resp = await github.graphql(`
                   mutation {
@@ -175,46 +262,50 @@ jobs:
               }
             }
 
-      - name: Add comment to pull request
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs')
-            const newBenchmark = fs.readFileSync('./results.md', { encoding: 'utf8', flag: 'r' })
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `${{ inputs.benchmark_name }}\n\n${newBenchmark}`
-            });
-
+      ##########################################################################
+      # Update S3 with individual results upon a push event                    #
+      ##########################################################################
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${{ inputs.benchmark_name }}.md" "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md"
-
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
           if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${{ inputs.benchmark_name }}.json"
+            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
-    
+
+      ##########################################################################
+      # Update gh-pages with individual results                                #
+      ##########################################################################
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           ref: gh-pages
 
-      - name: set up git
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Set up git
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      - name: Update github pages with new bench results
+      - name: Set github pages path for dispatch
+        run: |
+          GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Set github pages path for PR
+        if: github.event_name == 'pull_request'
+        run: |
+          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+
+      - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/main-${{ inputs.benchmark_name }}.md" benchmarks/${{ inputs.benchmark_name }}.md
-          git add benchmarks/${{ inputs.benchmark_name }}.md
-          git commit --allow-empty -m "Update benchmark result for ${{ inputs.benchmark_name }}"
-          git push
+          GH_PAGES_PATH="benchmarks/individual"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
 
+      - name: Update PR github pages with new bench results
+        run: |
+          mkdir -p ${GH_PAGES_PATH}
+          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          git push --force

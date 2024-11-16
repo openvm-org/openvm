@@ -1,9 +1,9 @@
 use std::borrow::BorrowMut;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     prover::USE_DEBUG_BUILDER, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -146,7 +146,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
         .split_at_mut(NativeAdapterCols::<BabyBear, 2, 1>::width())
         .1
         .borrow_mut();
-    cols.b = BabyBear::zero();
+    cols.b = BabyBear::ZERO;
 
     USE_DEBUG_BUILDER.with(|debug| {
         *debug.lock().unwrap() = false;
@@ -172,7 +172,7 @@ fn new_field_arithmetic_air_test_panic() {
         FieldArithmeticCoreChip::new(0),
         tester.memory_controller(),
     );
-    tester.write_cell(1, 0, BabyBear::zero());
+    tester.write_cell(1, 0, BabyBear::ZERO);
     // should panic
     tester.execute(
         &mut chip,

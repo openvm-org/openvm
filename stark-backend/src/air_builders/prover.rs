@@ -14,7 +14,7 @@ use super::{
     PartitionedAirBuilder, ViewPair,
 };
 use crate::{
-    interaction::{Interaction, InteractionBuilder, InteractionType, SymbolicInteraction},
+    interaction::{Interaction, InteractionBuilder, InteractionType},
     rap::PermutationAirBuilderWithExposedValues,
 };
 
@@ -27,13 +27,11 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub is_first_row: PackedVal<SC>,
     pub is_last_row: PackedVal<SC>,
     pub is_transition: PackedVal<SC>,
-    pub alpha: SC::Challenge,
+    pub alpha_powers: &'a [SC::Challenge],
     pub accumulator: PackedChallenge<SC>,
+    pub constraint_index: usize,
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
-
-    /// Symbolic interactions, gotten from vkey. Needed for multiplicity in next row calculation.
-    pub symbolic_interactions: &'a [SymbolicInteraction<Val<SC>>],
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
     /// Number of interactions to bundle in permutation trace
     pub interaction_chunk_size: usize,
@@ -76,12 +74,13 @@ where
 
     fn assert_zero<I: Into<Self::Expr>>(&mut self, x: I) {
         let x: PackedVal<SC> = x.into();
-        self.accumulator *= PackedChallenge::<SC>::from_f(self.alpha);
-        self.accumulator += x;
+        let alpha_power = self.alpha_powers[self.constraint_index];
+        self.accumulator += PackedChallenge::<SC>::from_f(alpha_power) * x;
+        self.constraint_index += 1;
     }
 }
 
-impl<'a, SC> PairBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> PairBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -90,7 +89,7 @@ where
     }
 }
 
-impl<'a, SC> ExtensionBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> ExtensionBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -103,12 +102,13 @@ where
         I: Into<Self::ExprEF>,
     {
         let x: PackedChallenge<SC> = x.into();
-        self.accumulator *= PackedChallenge::<SC>::from_f(self.alpha);
-        self.accumulator += x;
+        let alpha_power = self.alpha_powers[self.constraint_index];
+        self.accumulator += PackedChallenge::<SC>::from_f(alpha_power) * x;
+        self.constraint_index += 1;
     }
 }
 
-impl<'a, SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'a, SC> {
+impl<SC: StarkGenericConfig> AirBuilderWithPublicValues for ProverConstraintFolder<'_, SC> {
     type PublicVar = Self::F;
 
     fn public_values(&self) -> &[Self::F] {
@@ -140,7 +140,7 @@ where
     }
 }
 
-impl<'a, SC> PermutationAirBuilderWithExposedValues for ProverConstraintFolder<'a, SC>
+impl<SC> PermutationAirBuilderWithExposedValues for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -151,7 +151,7 @@ where
     }
 }
 
-impl<'a, SC> PartitionedAirBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> PartitionedAirBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -168,7 +168,7 @@ where
     }
 }
 
-impl<'a, SC> InteractionBuilder for ProverConstraintFolder<'a, SC>
+impl<SC> InteractionBuilder for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {
@@ -197,20 +197,14 @@ where
         &self.interactions
     }
 
-    fn finalize_interactions(&mut self) {
-        assert_eq!(
-            self.symbolic_interactions.len(),
-            self.interactions.len(),
-            "Interaction count does not match vkey"
-        );
-    }
+    fn finalize_interactions(&mut self) {}
 
     fn interaction_chunk_size(&self) -> usize {
         self.interaction_chunk_size
     }
 }
 
-impl<'a, SC> SymbolicEvaluator<Val<SC>, PackedVal<SC>> for ProverConstraintFolder<'a, SC>
+impl<SC> SymbolicEvaluator<Val<SC>, PackedVal<SC>> for ProverConstraintFolder<'_, SC>
 where
     SC: StarkGenericConfig,
 {

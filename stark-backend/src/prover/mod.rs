@@ -80,7 +80,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         proof_input: ProofInput<SC>,
     ) -> Proof<SC>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -168,6 +167,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .map(|&degree| pcs.natural_domain_for_degree(degree))
             .collect();
 
+        // TODO[zach]: Use trait for this.
         let (cumulative_sum_per_air, perm_trace_per_air) =
             generate_permutation_traces_and_cumulative_sums(
                 &mpk,
@@ -262,7 +262,6 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
     public_values_per_air: Vec<Vec<Val<SC>>>,
 ) -> Proof<SC>
 where
-    SC::Pcs: Sync,
     Domain<SC>: Send + Sync,
     PcsProverData<SC>: Send + Sync,
     Com<SC>: Send + Sync,
@@ -413,6 +412,7 @@ fn commit_perm_traces<SC: StarkGenericConfig>(
     }
 }
 
+#[allow(dead_code)]
 fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     raps: &[Arc<dyn AnyRap<SC>>],
     mpk: &MultiStarkProvingKeyView<SC>,
@@ -438,6 +438,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                         .preprocessed_data
                         .as_ref()
                         .map(|data| data.trace.as_view());
+                    tracing::debug!("Checking constraints for {}", rap.name());
                     check_constraints(
                         rap.as_ref(),
                         &preprocessed_trace,

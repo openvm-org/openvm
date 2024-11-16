@@ -1,15 +1,21 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{cmp::min, collections::BTreeMap};
+use std::{
+    cmp::min,
+    collections::{BTreeMap, HashMap},
+};
 
 use axvm_platform::WORD_SIZE;
-use color_eyre::eyre::{self, bail, ContextCompat};
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
     endian::LittleEndian,
     file::Class,
     ElfBytes,
 };
+use eyre::{self, bail, ContextCompat};
+use num_bigint_dig::BigUint;
+
+pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 
 /// RISC-V 32IM ELF (Executable and Linkable Format) File.
 ///
@@ -21,8 +27,7 @@ use elf::{
 ///
 /// This format is commonly used in embedded systems and is supported by many compilers.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct Elf {
+pub struct Elf {
     /// The instructions of the program encoded as 32-bits.
     pub(crate) instructions: Vec<u32>,
     /// The start address of the program.
@@ -31,6 +36,11 @@ pub(crate) struct Elf {
     pub(crate) pc_base: u32,
     /// The initial memory image, useful for global constants.
     pub(crate) memory_image: BTreeMap<u32, u32>,
+    /// The upper bound of the number of public values the program would publish.
+    /// TODO: read from project config.
+    pub(crate) max_num_public_values: usize,
+    /// Field arithmetic configuration.
+    pub(crate) supported_moduli: Vec<String>,
 }
 
 impl Elf {
@@ -40,12 +50,15 @@ impl Elf {
         pc_start: u32,
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
+        supported_moduli: Vec<String>,
     ) -> Self {
         Self {
             instructions,
             pc_start,
             pc_base,
             memory_image,
+            max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            supported_moduli,
         }
     }
 
@@ -57,8 +70,7 @@ impl Elf {
     /// This function may return an error if the ELF is not valid.
     ///
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
-    #[allow(dead_code)]
-    pub(crate) fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
+    pub fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
         let mut image: BTreeMap<u32, u32> = BTreeMap::new();
 
         // Parse the ELF file assuming that it is little-endian..
@@ -158,6 +170,54 @@ impl Elf {
             }
         }
 
-        Ok(Elf::new(instructions, entry, base_address, image))
+        // Get the prime moduli from the .axiom section.
+        let axiom_section_header = elf
+            .section_header_by_name(".axiom")
+            .expect("section table should be parsable");
+        let mut supported_moduli = HashMap::new();
+        if let Some(shdr) = axiom_section_header {
+            let data = elf.section_data(&shdr).unwrap();
+            let ptr = std::cell::Cell::new(0);
+            let next = || {
+                let result = *data
+                    .0
+                    .get(ptr.get())
+                    .expect("unexpected end of .axiom section");
+                ptr.set(ptr.get() + 1);
+                result
+            };
+            let next_u32 = || u32::from_le_bytes(std::array::from_fn(|_| next()));
+
+            while ptr.get() < data.0.len() {
+                match next() {
+                    1 => {
+                        let mod_idx = next() as u32;
+                        eprintln!("discovered modulus #{mod_idx}");
+                        supported_moduli.insert(mod_idx, {
+                            let cnt_bytes = next_u32() as usize;
+                            BigUint::from_bytes_le(
+                                &(0..cnt_bytes).map(|_| next()).collect::<Vec<_>>(),
+                            )
+                            .to_str_radix(10)
+                        });
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
+            }
+        } else {
+            eprintln!("no .axiom section found");
+        }
+
+        Ok(Elf::new(
+            instructions,
+            entry,
+            base_address,
+            image,
+            (0..supported_moduli.len())
+                .map(|x| supported_moduli[&(x as u32)].clone())
+                .collect(),
+        ))
     }
 }

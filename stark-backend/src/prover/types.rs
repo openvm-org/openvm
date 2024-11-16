@@ -16,11 +16,12 @@ use crate::{
 };
 
 /// All commitments to a multi-matrix STARK that are not preprocessed.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct Commitments<SC: StarkGenericConfig> {
     /// Multiple commitments for the main trace.
     /// For each RAP, each part of a partitioned matrix trace matrix
@@ -38,8 +39,9 @@ pub struct Commitments<SC: StarkGenericConfig> {
 /// multiple commitments, where each commitment is multi-matrix.
 ///
 /// Includes the quotient commitments and FRI opening proofs for the constraints as well.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct Proof<SC: StarkGenericConfig> {
     /// The PCS commitments
     pub commitments: Commitments<SC>,
@@ -49,8 +51,9 @@ pub struct Proof<SC: StarkGenericConfig> {
     pub per_air: Vec<AirProofData<SC>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
+#[derivative(Clone(bound = "SC::Challenge: Clone"))]
 pub struct AirProofData<SC: StarkGenericConfig> {
     pub air_id: usize,
     /// height of trace matrix.
@@ -76,7 +79,11 @@ impl<SC: StarkGenericConfig> ProofInput<SC> {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Serialize, Deserialize, Derivative)]
+#[serde(bound(
+    serialize = "ProverTraceData<SC>: Serialize",
+    deserialize = "ProverTraceData<SC>: Deserialize<'de>"
+))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct CommittedTraceData<SC: StarkGenericConfig> {
     pub raw_data: Arc<RowMajorMatrix<Val<SC>>>,

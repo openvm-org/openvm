@@ -1,40 +1,52 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+use ax_stark_backend::{
+    config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
     prover::{
         helper::AirProofInputTestHelper,
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{program::Program, TerminateOpcode, UsizeOpcode};
+use axvm_instructions::{exe::AxVmExe, program::Program, SystemOpcode, UsizeOpcode};
+use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
-/// A program with a committed cached trace.
-pub struct CommittedProgram<SC: StarkGenericConfig> {
-    pub committed_trace_data: CommittedTraceData<SC>,
-    pub program: Program<Val<SC>>,
+#[derive(Serialize, Deserialize, Derivative)]
+#[serde(bound(
+    serialize = "AxVmExe<Val<SC>>: Serialize, CommittedTraceData<SC>: Serialize",
+    deserialize = "AxVmExe<Val<SC>>: Deserialize<'de>, CommittedTraceData<SC>: Deserialize<'de>"
+))]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+pub struct AxVmCommittedExe<SC: StarkGenericConfig> {
+    /// Raw executable.
+    pub exe: AxVmExe<Val<SC>>,
+    /// Committed program trace.
+    pub committed_program: CommittedTraceData<SC>,
 }
 
-impl<SC: StarkGenericConfig> CommittedProgram<SC>
+impl<SC: StarkGenericConfig> AxVmCommittedExe<SC>
 where
     Val<SC>: PrimeField64,
 {
-    pub fn commit(program: &Program<Val<SC>>, pcs: &SC::Pcs) -> CommittedProgram<SC> {
-        let cached_trace = generate_cached_trace(program);
-        CommittedProgram {
-            committed_trace_data: CommittedTraceData {
+    pub fn commit(exe: AxVmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
+        let cached_trace = generate_cached_trace(&exe.program);
+        Self {
+            committed_program: CommittedTraceData {
                 raw_data: Arc::new(cached_trace.clone()),
                 prover_data: TraceCommitter::new(pcs).commit(vec![cached_trace]),
             },
-            program: program.clone(),
+            exe,
         }
+    }
+    pub fn get_program_commit(&self) -> Com<SC> {
+        self.committed_program.prover_data.commit.clone()
     }
 }
 
@@ -73,7 +85,7 @@ impl<F: PrimeField64> ProgramChip<F> {
     }
 }
 
-fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
+pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
     let mut instructions = program
         .instructions_and_debug_infos
@@ -90,7 +102,7 @@ fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatri
         ));
     }
 
-    let mut rows = vec![F::zero(); instructions.len() * width];
+    let mut rows = F::zero_vec(instructions.len() * width);
     rows.par_chunks_mut(width)
         .zip(instructions)
         .for_each(|(row, (pc, instruction))| {
@@ -113,7 +125,7 @@ fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatri
 
 pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
     Instruction::from_usize(
-        TerminateOpcode::TERMINATE.with_default_offset(),
+        SystemOpcode::TERMINATE.with_default_offset(),
         [0, 0, EXIT_CODE_FAIL],
     )
 }

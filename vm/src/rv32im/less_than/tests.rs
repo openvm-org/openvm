@@ -1,10 +1,12 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -13,74 +15,41 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
 
 use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
 use crate::{
     arch::{
         instructions::LessThanOpcode,
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         less_than::LessThanCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
-    utils::{generate_long_number, generate_rv32_is_type_immediate, i32_to_f},
+    utils::{
+        generate_long_number, generate_rv32_is_type_immediate, i32_to_f,
+        rv32_rand_write_register_or_imm,
+    },
 };
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_lt_rand_write_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    opcode: LessThanOpcode,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    c_imm: Option<usize>,
-    rng: &mut StdRng,
-) {
-    let is_imm = c_imm.is_some();
-
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 4));
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-    }
-
-    let (cmp, _, _, _) = run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-    tester.execute(
-        chip,
-        Instruction::from_usize(
-            opcode as usize,
-            [rd, rs1, rs2, 1, if is_imm { 0 } else { 1 }],
-        ),
-    );
-    let mut a = [0; RV32_REGISTER_NUM_LIMBS];
-    a[0] = cmp as u32;
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32LessThanChip::<F>::new(
         Rv32BaseAluAdapterChip::new(
@@ -88,7 +57,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             tester.program_bus(),
             tester.memory_controller(),
         ),
-        LessThanCoreChip::new(xor_lookup_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -103,30 +72,30 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
             (Some(imm), c)
         };
-        run_rv32_lt_rand_write_execute(&mut tester, &mut chip, opcode, b, c, c_imm, &mut rng);
+
+        let (instruction, rd) =
+            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        tester.execute(&mut chip, instruction);
+
+        let (cmp, _, _, _) =
+            run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+        let mut a = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
+        a[0] = F::from_bool(cmp);
+        assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd));
     }
 
     // Test special case where b = c
-    run_rv32_lt_rand_write_execute(
-        &mut tester,
-        &mut chip,
-        opcode,
-        [101, 128, 202, 255],
-        [101, 128, 202, 255],
-        None,
-        &mut rng,
-    );
-    run_rv32_lt_rand_write_execute(
-        &mut tester,
-        &mut chip,
-        opcode,
-        [36, 0, 0, 0],
-        [36, 0, 0, 0],
-        Some(36),
-        &mut rng,
-    );
+    let b = [101, 128, 202, 255];
+    let (instruction, _) =
+        rv32_rand_write_register_or_imm(&mut tester, b, b, None, opcode as usize, &mut rng);
+    tester.execute(&mut chip, instruction);
 
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let b = [36, 0, 0, 0];
+    let (instruction, _) =
+        rv32_rand_write_register_or_imm(&mut tester, b, b, Some(36), opcode as usize, &mut rng);
+    tester.execute(&mut chip, instruction);
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -140,13 +109,13 @@ fn rv32_sltu_rand_test() {
     run_rv32_lt_rand_test(LessThanOpcode::SLTU, 100);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32LessThanTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, LessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
@@ -168,7 +137,11 @@ fn run_rv32_lt_negative_test(
     prank_vals: LessThanPrankValues<RV32_REGISTER_NUM_LIMBS>,
     interaction_error: bool,
 ) {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut chip = Rv32LessThanTestChip::<F>::new(
         TestAdapterChip::new(
@@ -176,7 +149,7 @@ fn run_rv32_lt_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        LessThanCoreChip::new(xor_lookup_chip.clone(), 0),
+        LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -190,7 +163,7 @@ fn run_rv32_lt_negative_test(
     let (_, _, b_sign, c_sign) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
 
-    let xor_res = if prank_vals != LessThanPrankValues::default() {
+    if prank_vals != LessThanPrankValues::default() {
         debug_assert!(prank_vals.diff_val.is_some());
         let b_msb = prank_vals.b_msb.unwrap_or(
             b[RV32_REGISTER_NUM_LIMBS - 1] as i32 - if b_sign { 1 << RV32_CELL_BITS } else { 0 },
@@ -198,25 +171,25 @@ fn run_rv32_lt_negative_test(
         let c_msb = prank_vals.c_msb.unwrap_or(
             c[RV32_REGISTER_NUM_LIMBS - 1] as i32 - if c_sign { 1 << RV32_CELL_BITS } else { 0 },
         );
-        let xor_offset = if opcode == LessThanOpcode::SLT {
+        let sign_offset = if opcode == LessThanOpcode::SLT {
             1 << (RV32_CELL_BITS - 1)
         } else {
             0
         };
+
+        bitwise_chip.clear();
+        bitwise_chip.request_range(
+            (b_msb + sign_offset) as u8 as u32,
+            (c_msb + sign_offset) as u8 as u32,
+        );
+
         let diff_val = prank_vals
             .diff_val
             .unwrap()
             .clamp(0, (1 << RV32_CELL_BITS) - 1);
-        xor_lookup_chip.clear();
         if diff_val > 0 {
-            xor_lookup_chip.request(diff_val - 1, diff_val - 1);
+            bitwise_chip.request_range(diff_val - 1, 0);
         }
-        Some(xor_lookup_chip.request(
-            (b_msb + xor_offset) as u8 as u32,
-            (c_msb + xor_offset) as u8 as u32,
-        ))
-    } else {
-        None
     };
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -229,9 +202,6 @@ fn run_rv32_lt_negative_test(
         }
         if let Some(c_msb) = prank_vals.c_msb {
             cols.c_msb_f = i32_to_f(c_msb);
-        }
-        if let Some(xor_res) = xor_res {
-            cols.xor_res = F::from_canonical_u32(xor_res);
         }
         if let Some(diff_marker) = prank_vals.diff_marker {
             cols.diff_marker = diff_marker.map(F::from_canonical_u32);
@@ -248,7 +218,7 @@ fn run_rv32_lt_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum
@@ -289,7 +259,7 @@ fn rv32_lt_fake_diff_val_negative_test() {
     let b = [145, 34, 25, 205];
     let c = [73, 35, 25, 205];
     let prank_vals = LessThanPrankValues {
-        diff_val: Some(F::neg_one().as_canonical_u32()),
+        diff_val: Some(F::NEG_ONE.as_canonical_u32()),
         ..Default::default()
     };
     run_rv32_lt_negative_test(LessThanOpcode::SLT, b, c, false, prank_vals, true);

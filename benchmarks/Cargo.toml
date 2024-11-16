@@ -1,0 +1,46 @@
+[package]
+name = "axvm-benchmarks"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+axiom-vm.workspace = true
+axvm-circuit = { workspace = true }
+axvm-transpiler.workspace = true
+axvm-build.workspace = true
+axvm-native-compiler.workspace = true
+axvm-recursion = { workspace = true, features = ["test-utils"] }
+ax-stark-sdk.workspace = true
+clap = { version = "4.5.9", features = ["derive", "env"] }
+p3-field.workspace = true
+eyre.workspace = true
+tempfile.workspace = true
+metrics.workspace = true
+tracing.workspace = true
+hex.workspace = true
+tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pprof = { version = "0.13", features = [
+    "criterion",
+    "flamegraph",
+    "frame-pointer",
+] }
+
+[features]
+default = ["parallel", "mimalloc", "bench-metrics"]
+bench-metrics = ["axvm-recursion/bench-metrics"]
+aggregation = []
+static-verifier = ["axvm-recursion/static-verifier"]
+parallel = ["axvm-recursion/parallel"]
+mimalloc = ["axvm-circuit/mimalloc"]
+jemalloc = ["axvm-circuit/jemalloc"]
+jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
+
+[[bench]]
+name = "fibonacci_execute"
+harness = false

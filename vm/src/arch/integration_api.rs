@@ -1,8 +1,7 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
+use ax_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
@@ -17,8 +16,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
-use super::{ExecutionState, InstructionExecutor, Result};
+use super::{ExecutionState, InstructionExecutor, MinimalInstruction, Result};
 use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
+
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
     /// The memory read data that should be exposed for downstream use
@@ -26,8 +26,9 @@ pub trait VmAdapterInterface<T> {
     /// The memory write data that are expected to be provided by the integrator
     type Writes;
     /// The parts of the instruction that should be exposed to the integrator.
-    /// May include the `to_pc`.
-    /// Typically this should not include address spaces.
+    /// This will typically include `is_valid`, which indicates whether the trace row
+    /// is being used and `opcode` to indicate which opcode is being executed if the
+    /// VmChip supports multiple opcodes.
     type ProcessedInstruction;
 }
 
@@ -46,8 +47,8 @@ pub trait VmAdapterChip<F> {
     /// Given instruction, perform memory reads and return only the read data that the integrator needs to use.
     /// This is called at the start of instruction execution.
     ///
-    /// The implementor may choose to store data in this struct, for example in an [Option], which will later be taken
-    /// when `postprocess` is called.
+    /// The implementor may choose to store data in the `Self::ReadRecord` struct, for example in
+    /// an [Option], which will later be sent to the `postprocess` method.
     #[allow(clippy::type_complexity)]
     fn preprocess(
         &mut self,
@@ -58,8 +59,8 @@ pub trait VmAdapterChip<F> {
         Self::ReadRecord,
     )>;
 
-    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)` of the full
-    /// adapter record for this instruction. This **must** be called after `preprocess`.
+    /// Given instruction and the data to write, perform memory writes and return the `(record, timestamp_delta)`
+    /// of the full adapter record for this instruction. This is guaranteed to be called after `preprocess`.
     fn postprocess(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -69,8 +70,10 @@ pub trait VmAdapterChip<F> {
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.
     fn generate_trace_row(
         &self,
         row_slice: &mut [F],
@@ -117,8 +120,10 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
 
     fn get_opcode_name(&self, opcode: usize) -> String;
 
-    /// Should mutate `row_slice` to populate with values corresponding to `record`.
+    /// Populates `row_slice` with values corresponding to `record`.
     /// The provided `row_slice` will have length equal to `self.air().width()`.
+    /// This function will be called for each row in the trace which is being used, and all other
+    /// rows in the trace will be filled with zeroes.
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
 
     /// Returns a list of public values to publish.
@@ -167,7 +172,6 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-#[derive(Clone)]
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
     pub adapter: A,
     pub core: C,
@@ -266,7 +270,7 @@ where
         let core_width = self.core.air().width();
         let adapter_width = self.adapter.air().width();
         let width = core_width + adapter_width;
-        let mut values = vec![Val::<SC>::zero(); height * width];
+        let mut values = Val::<SC>::zero_vec(height * width);
 
         let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
         // This zip only goes through records.
@@ -365,19 +369,10 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct MinimalInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-}
-
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
 ///
-#[derive(Clone)]
 pub struct BasicAdapterInterface<
     T,
     PI,
@@ -402,28 +397,68 @@ impl<
     type ProcessedInstruction = PI;
 }
 
-#[derive(Clone)]
 pub struct VecHeapAdapterInterface<
     T,
-    const R: usize,
     const NUM_READS: usize,
-    const NUM_WRITES: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 >(PhantomData<T>);
 
 impl<
         T,
-        const R: usize,
         const NUM_READS: usize,
-        const NUM_WRITES: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterInterface<T>
-    for VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
+    for VecHeapAdapterInterface<
+        T,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
-    type Reads = [[[T; READ_SIZE]; NUM_READS]; R];
-    type Writes = [[T; WRITE_SIZE]; NUM_WRITES];
+    type Reads = [[[T; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type Writes = [[T; WRITE_SIZE]; BLOCKS_PER_WRITE];
+    type ProcessedInstruction = MinimalInstruction<T>;
+}
+
+pub struct VecHeapTwoReadsAdapterInterface<
+    T,
+    const BLOCKS_PER_READ1: usize,
+    const BLOCKS_PER_READ2: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(PhantomData<T>);
+
+impl<
+        T,
+        const BLOCKS_PER_READ1: usize,
+        const BLOCKS_PER_READ2: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > VmAdapterInterface<T>
+    for VecHeapTwoReadsAdapterInterface<
+        T,
+        BLOCKS_PER_READ1,
+        BLOCKS_PER_READ2,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
+{
+    type Reads = (
+        [[T; READ_SIZE]; BLOCKS_PER_READ1],
+        [[T; READ_SIZE]; BLOCKS_PER_READ2],
+    );
+    type Writes = [[T; WRITE_SIZE]; BLOCKS_PER_WRITE];
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
@@ -468,23 +503,37 @@ mod conversions {
     // AdapterAirContext: VecHeapAdapterInterface -> DynInterface
     impl<
             T,
-            const R: usize,
             const NUM_READS: usize,
-            const NUM_WRITES: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
         >
         From<
             AdapterAirContext<
                 T,
-                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<
+                    T,
+                    NUM_READS,
+                    BLOCKS_PER_READ,
+                    BLOCKS_PER_WRITE,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
             >,
         > for AdapterAirContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterAirContext<
                 T,
-                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<
+                    T,
+                    NUM_READS,
+                    BLOCKS_PER_READ,
+                    BLOCKS_PER_WRITE,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
             >,
         ) -> Self {
             AdapterAirContext {
@@ -499,23 +548,37 @@ mod conversions {
     // AdapterRuntimeContext: VecHeapAdapterInterface -> DynInterface
     impl<
             T,
-            const R: usize,
             const NUM_READS: usize,
-            const NUM_WRITES: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
         >
         From<
             AdapterRuntimeContext<
                 T,
-                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<
+                    T,
+                    NUM_READS,
+                    BLOCKS_PER_READ,
+                    BLOCKS_PER_WRITE,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
             >,
         > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
     {
         fn from(
             ctx: AdapterRuntimeContext<
                 T,
-                VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+                VecHeapAdapterInterface<
+                    T,
+                    NUM_READS,
+                    BLOCKS_PER_READ,
+                    BLOCKS_PER_WRITE,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
             >,
         ) -> Self {
             AdapterRuntimeContext {
@@ -528,15 +591,22 @@ mod conversions {
     // AdapterAirContext: DynInterface -> VecHeapAdapterInterface
     impl<
             T,
-            const R: usize,
             const NUM_READS: usize,
-            const NUM_WRITES: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
         > From<AdapterAirContext<T, DynAdapterInterface<T>>>
         for AdapterAirContext<
             T,
-            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            VecHeapAdapterInterface<
+                T,
+                NUM_READS,
+                BLOCKS_PER_READ,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
         >
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
@@ -552,21 +622,213 @@ mod conversions {
     // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
     impl<
             T,
-            const R: usize,
             const NUM_READS: usize,
-            const NUM_WRITES: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
             const READ_SIZE: usize,
             const WRITE_SIZE: usize,
         > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
         for AdapterRuntimeContext<
             T,
-            VecHeapAdapterInterface<T, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
+            VecHeapAdapterInterface<
+                T,
+                NUM_READS,
+                BLOCKS_PER_READ,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
         >
     {
         fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterRuntimeContext {
                 to_pc: ctx.to_pc,
                 writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterAirContext: DynInterface -> VecHeapTwoReadsAdapterInterface
+    impl<
+            T: Clone,
+            const BLOCKS_PER_READ1: usize,
+            const BLOCKS_PER_READ2: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            VecHeapTwoReadsAdapterInterface<
+                T,
+                BLOCKS_PER_READ1,
+                BLOCKS_PER_READ2,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            const BLOCKS_PER_READ1: usize,
+            const BLOCKS_PER_READ2: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
+        for AdapterRuntimeContext<
+            T,
+            VecHeapTwoReadsAdapterInterface<
+                T,
+                BLOCKS_PER_READ1,
+                BLOCKS_PER_READ2,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes: ctx.writes.into(),
+            }
+        }
+    }
+
+    // AdapterRuntimeContext: BasicInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            PI,
+            const BASIC_NUM_READS: usize,
+            const BASIC_NUM_WRITES: usize,
+            const NUM_READS: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<
+                    T,
+                    PI,
+                    BASIC_NUM_READS,
+                    BASIC_NUM_WRITES,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
+            >,
+        >
+        for AdapterRuntimeContext<
+            T,
+            VecHeapAdapterInterface<
+                T,
+                NUM_READS,
+                BLOCKS_PER_READ,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(
+            ctx: AdapterRuntimeContext<
+                T,
+                BasicAdapterInterface<
+                    T,
+                    PI,
+                    BASIC_NUM_READS,
+                    BASIC_NUM_WRITES,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
+            >,
+        ) -> Self {
+            assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
+            let mut writes_it = ctx.writes.into_iter();
+            let writes = from_fn(|_| writes_it.next().unwrap());
+            AdapterRuntimeContext {
+                to_pc: ctx.to_pc,
+                writes,
+            }
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> VecHeapAdapterInterface
+    impl<
+            T,
+            PI: Into<MinimalInstruction<T>>,
+            const BASIC_NUM_READS: usize,
+            const BASIC_NUM_WRITES: usize,
+            const NUM_READS: usize,
+            const BLOCKS_PER_READ: usize,
+            const BLOCKS_PER_WRITE: usize,
+            const READ_SIZE: usize,
+            const WRITE_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<
+                    T,
+                    PI,
+                    BASIC_NUM_READS,
+                    BASIC_NUM_WRITES,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
+            >,
+        >
+        for AdapterAirContext<
+            T,
+            VecHeapAdapterInterface<
+                T,
+                NUM_READS,
+                BLOCKS_PER_READ,
+                BLOCKS_PER_WRITE,
+                READ_SIZE,
+                WRITE_SIZE,
+            >,
+        >
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<
+                    T,
+                    PI,
+                    BASIC_NUM_READS,
+                    BASIC_NUM_WRITES,
+                    READ_SIZE,
+                    WRITE_SIZE,
+                >,
+            >,
+        ) -> Self {
+            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            let mut reads_it = ctx.reads.into_iter();
+            let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+            assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
+            let mut writes_it = ctx.writes.into_iter();
+            let writes = from_fn(|_| writes_it.next().unwrap());
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads,
+                writes,
+                instruction: ctx.instruction.into(),
             }
         }
     }
@@ -782,19 +1044,34 @@ mod conversions {
         }
     }
 
-    impl<T> From<MinimalInstruction<T>> for DynArray<T> {
-        fn from(m: MinimalInstruction<T>) -> Self {
-            Self(vec![m.is_valid, m.opcode])
+    impl<T, const N: usize, const M1: usize, const M2: usize> From<([[T; N]; M1], [[T; N]; M2])>
+        for DynArray<T>
+    {
+        fn from(v: ([[T; N]; M1], [[T; N]; M2])) -> Self {
+            let vec =
+                v.0.into_iter()
+                    .flatten()
+                    .chain(v.1.into_iter().flatten())
+                    .collect();
+            Self(vec)
         }
     }
 
-    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
-        fn from(m: DynArray<T>) -> Self {
-            let mut m = m.0.into_iter();
-            MinimalInstruction {
-                is_valid: m.next().unwrap(),
-                opcode: m.next().unwrap(),
-            }
+    impl<T, const N: usize, const M1: usize, const M2: usize> From<DynArray<T>>
+        for ([[T; N]; M1], [[T; N]; M2])
+    {
+        fn from(v: DynArray<T>) -> Self {
+            assert_eq!(
+                v.0.len(),
+                N * (M1 + M2),
+                "Incorrect vector length {}",
+                v.0.len()
+            );
+            let mut it = v.0.into_iter();
+            (
+                from_fn(|_| from_fn(|_| it.next().unwrap())),
+                from_fn(|_| from_fn(|_| it.next().unwrap())),
+            )
         }
     }
 

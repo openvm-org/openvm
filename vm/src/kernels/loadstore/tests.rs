@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
@@ -15,12 +15,12 @@ use crate::{
             UsizeOpcode,
         },
         testing::VmChipTestBuilder,
+        Streams,
     },
     kernels::{
         adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip,
         loadstore::KernelLoadStoreCoreChip,
     },
-    system::vm::Streams,
 };
 
 type F = BabyBear;
@@ -43,12 +43,7 @@ struct TestData {
     is_hint: bool,
 }
 
-fn setup() -> (
-    StdRng,
-    VmChipTestBuilder<F>,
-    KernelLoadStoreChip<F, 1>,
-    NativeLoadStoreAdapterChip<F, 1>,
-) {
+fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelLoadStoreChip<F, 1>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
 
@@ -58,12 +53,10 @@ fn setup() -> (
         tester.memory_controller(),
         NativeLoadStoreOpcode::default_offset(),
     );
-    let inner = KernelLoadStoreCoreChip::new(
-        Arc::new(Mutex::new(Streams::default())),
-        NativeLoadStoreOpcode::default_offset(),
-    );
-    let chip = KernelLoadStoreChip::<F, 1>::new(adapter.clone(), inner, tester.memory_controller());
-    (rng, tester, chip, adapter)
+    let mut inner = KernelLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset());
+    inner.set_streams(Arc::new(Mutex::new(Streams::default())));
+    let chip = KernelLoadStoreChip::<F, 1>::new(adapter, inner, tester.memory_controller());
+    (rng, tester, chip)
 }
 
 fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOpcode) -> TestData {
@@ -80,7 +73,7 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
     let b = rng.gen_range(0..1 << 20);
     let c = rng.gen_range(0..1 << 20);
     let d = if is_immediate {
-        F::zero()
+        F::ZERO
     } else {
         F::from_canonical_u32(rng.gen_range(1..4))
     };
@@ -115,13 +108,13 @@ fn gen_test_data(rng: &mut StdRng, is_immediate: bool, opcode: NativeLoadStoreOp
 }
 
 fn get_data_pointer(data: &TestData) -> F {
-    if data.d != F::zero() {
+    if data.d != F::ZERO {
         data.cd_val
             + data.b
             + if data.is_extended {
                 data.g * data.fd_val
             } else {
-                F::zero()
+                F::ZERO
             }
     } else {
         data.c
@@ -129,7 +122,7 @@ fn get_data_pointer(data: &TestData) -> F {
             + if data.is_extended {
                 data.g * data.f
             } else {
-                F::zero()
+                F::ZERO
             }
     }
 }
@@ -139,7 +132,7 @@ fn set_values(
     chip: &mut KernelLoadStoreChip<F, 1>,
     data: &TestData,
 ) {
-    if data.d != F::zero() {
+    if data.d != F::ZERO {
         tester.write(
             data.d.as_canonical_u32() as usize,
             data.a.as_canonical_u32() as usize,
@@ -168,6 +161,8 @@ fn set_values(
         for _ in 0..data.e.as_canonical_u32() {
             chip.core
                 .streams
+                .get()
+                .unwrap()
                 .lock()
                 .hint_stream
                 .push_back(data.data_val);
@@ -192,7 +187,7 @@ fn check_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
 
     let correct_data_val = if data.is_load || data.is_hint {
         data.data_val
-    } else if data.d != F::zero() {
+    } else if data.d != F::ZERO {
         data.ad_val
     } else {
         data.a
@@ -226,7 +221,7 @@ fn set_and_execute(
 
 #[test]
 fn rand_native_loadstore_test() {
-    let (mut rng, mut tester, mut chip, _) = setup();
+    let (mut rng, mut tester, mut chip) = setup();
     for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW2);

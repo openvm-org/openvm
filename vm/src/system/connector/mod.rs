@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     prover::types::AirProofInput,
@@ -18,7 +18,7 @@ use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
-    arch::{instructions::TerminateOpcode::TERMINATE, ExecutionBus, ExecutionState},
+    arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},
     system::program::ProgramBus,
 };
 
@@ -29,18 +29,24 @@ mod tests;
 /// But we will use this value when generating the proof.
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
 }
 
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
+    /// The initial PC of this segment.
     pub initial_pc: F,
+    /// The final PC of this segment.
     pub final_pc: F,
+    /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
+    /// `is_terminate` is 1.
     pub exit_code: F,
+    /// Whether the whole program is terminated. 0 means not terminated. 1 means terminated.
+    /// Only the last segment of an execution can have `is_terminate` = 1.
     pub is_terminate: F,
 }
 
@@ -56,7 +62,7 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        Some(RowMajorMatrix::new_col(vec![F::zero(), F::one()]))
+        Some(RowMajorMatrix::new_col(vec![F::ZERO, F::ONE]))
     }
 }
 
@@ -113,7 +119,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 
         self.execution_bus.execute(
             builder,
-            AB::Expr::one() - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
+            AB::Expr::ONE - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
             ExecutionState::new(end.pc, end.timestamp),
             ExecutionState::new(begin.pc, begin.timestamp),
         );
@@ -121,8 +127,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             builder,
             end.pc,
             AB::Expr::from_canonical_usize(TERMINATE.with_default_offset()),
-            [AB::Expr::zero(), AB::Expr::zero(), end.exit_code.into()],
-            (AB::Expr::one() - prep_local[0]) * end.is_terminate,
+            [AB::Expr::ZERO, AB::Expr::ZERO, end.exit_code.into()],
+            (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
         );
     }
 }
@@ -171,7 +177,7 @@ where
     Val<SC>: PrimeField32,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
@@ -184,7 +190,7 @@ where
             self.trace_width(),
         );
 
-        let mut public_values = vec![Val::<SC>::zero(); VmConnectorPvs::<Val<SC>>::width()];
+        let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
             initial_pc: initial_state.pc,
             final_pc: final_state.pc,

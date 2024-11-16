@@ -4,8 +4,8 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_air::BaseAir;
@@ -84,13 +84,13 @@ where
         // - The inner product of the `flags` and `results[:,j]` equals `io.z[j]` for each `j`.
         // - If `is_div` is true, then `aux.divisor_inv` correctly represents the inverse of `io.y`.
 
-        let mut is_valid = AB::Expr::zero();
-        let mut expected_opcode = AB::Expr::zero();
+        let mut is_valid = AB::Expr::ZERO;
+        let mut expected_opcode = AB::Expr::ZERO;
         let mut expected_result = [
-            AB::Expr::zero(),
-            AB::Expr::zero(),
-            AB::Expr::zero(),
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
         ];
         for (flag, opcode, result) in izip!(flags, opcodes, results) {
             builder.assert_bool(flag);
@@ -212,7 +212,7 @@ where
         cols.divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
             FieldExtension::invert(z)
         } else {
-            [F::zero(); EXT_DEG]
+            [F::ZERO; EXT_DEG]
         };
     }
 
@@ -287,8 +287,8 @@ impl FieldExtension {
 
         let beta = F::from_canonical_usize(BETA);
 
-        let mut b0 = a0 * a0 - beta * (F::two() * a1 * a3 - a2 * a2);
-        let mut b2 = F::two() * a0 * a2 - a1 * a1 - beta * a3 * a3;
+        let mut b0 = a0 * a0 - beta * (F::TWO * a1 * a3 - a2 * a2);
+        let mut b2 = F::TWO * a0 * a2 - a1 * a1 - beta * a3 * a3;
 
         let c = b0 * b0 - beta * b2 * b2;
         let inv_c = c.inverse();

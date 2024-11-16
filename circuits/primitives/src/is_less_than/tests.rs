@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use derive_new::new;
@@ -54,12 +54,11 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
         let (io, lower_decomp) = local.split_at(3);
         let [x, y, out] = [io[0], io[1], io[2]];
 
-        let io = IsLessThanIo::new(x, y, out, AB::F::one());
+        let io = IsLessThanIo::new(x, y, out, AB::F::ONE);
         self.0.eval(builder, (io, lower_decomp));
     }
 }
 
-#[derive(Clone)]
 pub struct IsLessThanChip {
     pub air: IsLtTestAir,
     pub range_checker: Arc<VariableRangeCheckerChip>,
@@ -80,7 +79,7 @@ impl IsLessThanChip {
         assert!(self.pairs.len().is_power_of_two());
         let width: usize = BaseAir::<F>::width(&self.air);
 
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

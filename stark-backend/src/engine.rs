@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
-use p3_maybe_rayon::prelude::*;
 use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
@@ -58,7 +57,6 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         public_values: Vec<Vec<Val<SC>>>,
     ) -> Result<VerificationData<SC>, VerificationError>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -75,7 +73,6 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         air_proof_inputs: Vec<AirProofInput<SC>>,
     ) -> Result<VerificationData<SC>, VerificationError>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -128,7 +125,6 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         proof_input: ProofInput<SC>,
     ) -> Result<(), VerificationError>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -141,7 +137,6 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
     fn prove(&self, pk: &MultiStarkProvingKey<SC>, proof_input: ProofInput<SC>) -> Proof<SC>
     where
-        SC::Pcs: Sync,
         Domain<SC>: Send + Sync,
         PcsProverData<SC>: Send + Sync,
         Com<SC>: Send + Sync,
@@ -153,7 +148,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
 
         let air_proof_inputs = proof_input
             .per_air
-            .into_par_iter()
+            .into_iter()
             .map(|(air_id, mut air_proof_input)| {
                 // Commit cached traces if they are not provided
                 if air_proof_input.cached_mains_pdata.is_empty()
@@ -162,7 +157,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
                     air_proof_input.cached_mains_pdata = air_proof_input
                         .raw
                         .cached_mains
-                        .par_iter()
+                        .iter()
                         .map(|trace| committer.commit(vec![trace.as_ref().clone()]))
                         .collect();
                 } else {

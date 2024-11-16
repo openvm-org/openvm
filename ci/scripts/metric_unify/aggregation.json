@@ -1,0 +1,31 @@
+{
+  "aggregations": [
+    {
+      "group_by": ["group"],
+      "name": "total_proof_time_ms",
+      "metrics": [
+        "stark_prove_excluding_trace_time_ms",
+        "execute_and_trace_gen_time_ms"
+      ],
+      "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "total_cells_used",
+      "metrics": ["total_cells_used"],
+      "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "total_cycles",
+      "metrics": ["total_cycles"],
+      "operation": "sum"
+    },
+    {
+      "group_by": ["group"],
+      "name": "fri.log_blowup",
+      "metrics": ["fri.log_blowup"],
+      "operation": "unique"
+    }
+  ]
+}

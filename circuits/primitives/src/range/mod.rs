@@ -4,10 +4,13 @@
 // Adapted from Valida
 
 use core::mem::{size_of, transmute};
-use std::{borrow::Borrow, sync::atomic::AtomicU32};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::atomic::AtomicU32,
+};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -113,14 +116,13 @@ impl RangeCheckerChip {
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![[F::zero(); NUM_RANGE_COLS]; self.air.range_max() as usize];
-        for (n, row) in rows.iter_mut().enumerate() {
-            let cols: &mut RangeCols<F> = unsafe { transmute(row) };
-
+        let mut rows = F::zero_vec(self.air.range_max() as usize * NUM_RANGE_COLS);
+        for (n, row) in rows.chunks_exact_mut(NUM_RANGE_COLS).enumerate() {
+            let cols: &mut RangeCols<F> = (*row).borrow_mut();
             cols.mult =
                 F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
         }
-        RowMajorMatrix::new(rows.concat(), NUM_RANGE_COLS)
+        RowMajorMatrix::new(rows, NUM_RANGE_COLS)
     }
 }
 

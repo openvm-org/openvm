@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use derivative::Derivative;
 use itertools::Itertools;
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_uni_stark::{Domain, StarkGenericConfig};
@@ -145,14 +146,15 @@ fn collect_trace_openings<Challenge: Debug>(
 }
 
 /// PCS opening proof with opened values for multi-matrix AIR.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
+#[derivative(Clone(bound = "SC::Challenge: Clone"))]
 pub struct OpeningProof<SC: StarkGenericConfig> {
     pub proof: PcsProof<SC>,
     pub values: OpenedValues<SC::Challenge>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OpenedValues<Challenge> {
     /// For each preprocessed trace commitment, the opened values
     pub preprocessed: Vec<AdjacentOpenedValues<Challenge>>,
@@ -166,7 +168,7 @@ pub struct OpenedValues<Challenge> {
     pub quotient: Vec<Vec<Vec<Challenge>>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AdjacentOpenedValues<Challenge> {
     pub local: Vec<Challenge>,
     pub next: Vec<Challenge>,

@@ -8,7 +8,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::StarkGenericConfig,
     interaction::InteractionBuilder,
     p3_uni_stark::Val,
@@ -95,7 +95,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RangeTupleCheckerChip<const N: usize> {
     pub air: RangeTupleCheckerAir<N>,
     count: Vec<Arc<AtomicU32>>,

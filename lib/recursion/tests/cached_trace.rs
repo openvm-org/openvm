@@ -1,13 +1,13 @@
-// use afs_compiler::util::execute_program;
-// use afs_recursion::testing_utils::inner::build_verification_program;
-// use afs_stark_backend::{
+// use axvm_native_compiler::util::execute_program;
+// use axvm_recursion::testing_utils::inner::build_verification_program;
+// use ax_stark_backend::{
 //     air_builders::PartitionedAirBuilder,
 //     engine::VerificationData,
 //     prover::trace::TraceCommitmentBuilder,
 //     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 //     verifier::VerificationError,
 // };
-// use ax_sdk::{
+// use ax_stark_sdk::{
 //     config::baby_bear_poseidon2::default_engine,
 //     engine::{StarkEngine, VerificationDataWithFriParams},
 //     utils::generate_random_matrix,
@@ -45,7 +45,7 @@
 //         let x = builder.common_main().row_slice(0)[0];
 //         let ys = builder.cached_mains()[0].row_slice(0);
 //
-//         let mut y_sum = AB::Expr::zero();
+//         let mut y_sum = AB::Expr::ZERO;
 //         for &y in &*ys {
 //             y_sum = y_sum + y;
 //         }
@@ -110,7 +110,7 @@
 //     let ys = generate_random_matrix::<Val>(rng, n, 5);
 //     let x: Vec<Val> = ys
 //         .iter()
-//         .map(|row| row.iter().fold(Val::zero(), |sum, x| sum + *x))
+//         .map(|row| row.iter().fold(Val::ZERO, |sum, x| sum + *x))
 //         .collect();
 //     prove_and_verify_sum_air(x, ys).expect("Verification failed");
 // }

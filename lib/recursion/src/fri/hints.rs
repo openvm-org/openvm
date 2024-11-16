@@ -1,15 +1,15 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, DIGEST_SIZE},
 };
 
-use super::types::{BatchOpeningVariable, TwoAdicPcsProofVariable};
+use super::types::BatchOpeningVariable;
 use crate::{
     digest::DigestVariable,
     fri::types::{FriCommitPhaseProofStepVariable, FriProofVariable, FriQueryProofVariable},
     hints::{
         Hintable, InnerBatchOpening, InnerChallenge, InnerCommitPhaseStep, InnerDigest,
-        InnerFriProof, InnerPcsProof, InnerQueryProof, InnerVal, VecAutoHintable,
+        InnerFriProof, InnerQueryProof, InnerVal, VecAutoHintable,
     },
     types::InnerConfig,
 };
@@ -59,8 +59,10 @@ impl Hintable<C> for InnerQueryProof {
     type HintVariable = FriQueryProofVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
+        let input_proof = Vec::<InnerBatchOpening>::read(builder);
         let commit_phase_openings = Vec::<InnerCommitPhaseStep>::read(builder);
         Self::HintVariable {
+            input_proof,
             commit_phase_openings,
         }
     }
@@ -68,6 +70,7 @@ impl Hintable<C> for InnerQueryProof {
     fn write(&self) -> Vec<Vec<<C as Config>::F>> {
         let mut stream = Vec::new();
 
+        stream.extend(self.input_proof.write());
         stream.extend(Vec::<InnerCommitPhaseStep>::write(
             &self.commit_phase_openings,
         ));
@@ -134,23 +137,3 @@ impl Hintable<C> for InnerBatchOpening {
 
 impl VecAutoHintable for InnerBatchOpening {}
 impl VecAutoHintable for Vec<InnerBatchOpening> {}
-
-impl Hintable<C> for InnerPcsProof {
-    type HintVariable = TwoAdicPcsProofVariable<C>;
-
-    fn read(builder: &mut Builder<C>) -> Self::HintVariable {
-        let fri_proof = InnerFriProof::read(builder);
-        let query_openings = Vec::<Vec<InnerBatchOpening>>::read(builder);
-        Self::HintVariable {
-            fri_proof,
-            query_openings,
-        }
-    }
-
-    fn write(&self) -> Vec<Vec<<C as Config>::F>> {
-        let mut stream = Vec::new();
-        stream.extend(self.fri_proof.write());
-        stream.extend(self.query_openings.write());
-        stream
-    }
-}

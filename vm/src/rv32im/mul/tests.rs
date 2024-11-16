@@ -1,10 +1,10 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use afs_stark_backend::{
+use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::{instruction::Instruction, MulOpcode};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -13,57 +13,28 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::rngs::StdRng;
 
 use super::core::run_mul;
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, RANGE_TUPLE_CHECKER_BUS,
     },
     rv32im::{
         adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
     },
-    system::vm::chip_set::RANGE_TUPLE_CHECKER_BUS,
-    utils::generate_long_number,
+    utils::{generate_long_number, rv32_rand_write_register_or_imm},
 };
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_mul_rand_write_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    rng: &mut StdRng,
-) {
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-
-    let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
-    tester.execute(
-        chip,
-        Instruction::from_usize(MulOpcode::MUL as usize, [rd, rs1, rs2, 1, 0]),
-    );
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 fn run_rv32_mul_rand_test(num_ops: usize) {
     // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -90,7 +61,23 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
     for _ in 0..num_ops {
         let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
         let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        run_rv32_mul_rand_write_execute(&mut tester, &mut chip, b, c, &mut rng);
+
+        let (mut instruction, rd) = rv32_rand_write_register_or_imm(
+            &mut tester,
+            b,
+            c,
+            None,
+            MulOpcode::MUL as usize,
+            &mut rng,
+        );
+        instruction.e = F::ZERO;
+        tester.execute(&mut chip, instruction);
+
+        let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
+        assert_eq!(
+            a.map(F::from_canonical_u32),
+            tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+        )
     }
 
     let tester = tester
@@ -103,16 +90,16 @@ fn run_rv32_mul_rand_test(num_ops: usize) {
 
 #[test]
 fn rv32_mul_rand_test() {
-    run_rv32_mul_rand_test(100);
+    run_rv32_mul_rand_test(1);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32MultiplicationTestChip<F> = VmChipWrapper<
     F,

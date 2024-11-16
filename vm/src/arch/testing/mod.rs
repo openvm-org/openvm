@@ -1,12 +1,16 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use afs_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use afs_stark_backend::{
-    config::Val, engine::VerificationData, prover::types::AirProofInput,
-    verifier::VerificationError, Chip,
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_stark_backend::{
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    engine::VerificationData,
+    prover::types::AirProofInput,
+    verifier::VerificationError,
+    Chip,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
+        baby_bear_blake3::{self, BabyBearBlake3Config},
         baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
         setup_tracing_with_log_level,
     },
@@ -25,14 +29,13 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::ExecutionState,
+    arch::{
+        ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS,
+        READ_INSTRUCTION_BUS,
+    },
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
-        vm::{
-            chip_set::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
-            config::MemoryConfig,
-        },
     },
 };
 pub mod execution;
@@ -45,12 +48,9 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{memory::MemoryControllerRef, vm::config::PersistenceType},
-};
+use crate::{intrinsics::hashes::poseidon2::Poseidon2Chip, system::memory::MemoryControllerRef};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub execution: ExecutionTester<F>,
@@ -190,8 +190,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 }
 
+// Use Blake3 as hash for faster tests.
+type TestSC = BabyBearBlake3Config;
+
 impl VmChipTestBuilder<BabyBear> {
-    pub fn build(self) -> VmChipTester {
+    pub fn build(self) -> VmChipTester<TestSC> {
         self.memory
             .controller
             .borrow_mut()
@@ -207,7 +210,7 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 29, 29, 17, PersistenceType::Volatile);
+        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64, None);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -228,20 +231,31 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     }
 }
 
-// TODO[jpw]: generic Config
-type SC = BabyBearPoseidon2Config;
-
-#[derive(Default)]
-pub struct VmChipTester {
+pub struct VmChipTester<SC: StarkGenericConfig> {
     pub memory: Option<MemoryTester<Val<SC>>>,
     pub air_proof_inputs: Vec<AirProofInput<SC>>,
 }
 
-impl VmChipTester {
+impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
+    fn default() -> Self {
+        Self {
+            memory: None,
+            air_proof_inputs: vec![],
+        }
+    }
+}
+
+impl<SC: StarkGenericConfig> VmChipTester<SC>
+where
+    Val<SC>: PrimeField32,
+{
     pub fn load<C: Chip<SC>>(mut self, chip: C) -> Self {
         if chip.current_trace_height() > 0 {
             let air_proof_input = chip.generate_air_proof_input();
-            dbg!(air_proof_input.air.name());
+            tracing::debug!(
+                "Generated air proof input for {}",
+                air_proof_input.air.name()
+            );
             self.air_proof_inputs.push(air_proof_input);
         }
 
@@ -293,7 +307,7 @@ impl VmChipTester {
 
     pub fn load_and_prank_trace<C: Chip<SC>, P>(mut self, chip: C, modify_trace: P) -> Self
     where
-        P: Fn(&mut DenseMatrix<BabyBear>),
+        P: Fn(&mut DenseMatrix<Val<SC>>),
     {
         let mut air_proof_input = chip.generate_air_proof_input();
         let trace = air_proof_input.raw.common_main.as_mut().unwrap();
@@ -302,7 +316,28 @@ impl VmChipTester {
         self
     }
 
-    pub fn simple_test(&self) -> Result<VerificationData<SC>, VerificationError> {
+    /// Given a function to produce an engine from the max trace height,
+    /// runs a simple test on that engine
+    pub fn test<E: StarkEngine<SC>, P: Fn() -> E>(
+        &self, // do no take ownership so it's easier to prank
+        engine_provider: P,
+    ) -> Result<VerificationData<SC>, VerificationError>
+    where
+        Domain<SC>: Send + Sync,
+        PcsProverData<SC>: Send + Sync,
+        Com<SC>: Send + Sync,
+        SC::Challenge: Send + Sync,
+        PcsProof<SC>: Send + Sync,
+    {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        engine_provider().run_test_impl(self.air_proof_inputs.clone())
+    }
+}
+
+impl VmChipTester<BabyBearPoseidon2Config> {
+    pub fn simple_test(
+        &self,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
         self.test(baby_bear_poseidon2::default_engine)
     }
 
@@ -314,27 +349,19 @@ impl VmChipTester {
         let result = self.simple_test();
         assert_eq!(result.err(), Some(expected_error), "{}", msg);
     }
+}
 
-    fn max_trace_height(&self) -> usize {
-        self.air_proof_inputs
-            .iter()
-            .flat_map(|air_proof_input| {
-                air_proof_input
-                    .raw
-                    .common_main
-                    .as_ref()
-                    .map(|trace| trace.height())
-            })
-            .max()
-            .unwrap()
+impl VmChipTester<BabyBearBlake3Config> {
+    pub fn simple_test(&self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
+        self.test(baby_bear_blake3::default_engine)
     }
-    /// Given a function to produce an engine from the max trace height,
-    /// runs a simple test on that engine
-    pub fn test<E: StarkEngine<SC>, P: Fn(usize) -> E>(
-        &self, // do no take ownership so it's easier to prank
-        engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerificationError> {
-        assert!(self.memory.is_none(), "Memory must be finalized");
-        engine_provider(self.max_trace_height()).run_test_impl(self.air_proof_inputs.clone())
+
+    pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
+        let msg = format!(
+            "Expected verification to fail with {:?}, but it didn't",
+            &expected_error
+        );
+        let result = self.simple_test();
+        assert_eq!(result.err(), Some(expected_error), "{}", msg);
     }
 }

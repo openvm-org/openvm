@@ -1,13 +1,17 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
-    sync::atomic::AtomicU32,
+    sync::{atomic::AtomicU32, Arc},
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
+    config::StarkGenericConfig,
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    p3_uni_stark::Val,
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
 };
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
@@ -22,7 +26,7 @@ pub use bus::*;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T> {
-    pub mult_add: T,
+    pub mult_range: T,
     pub mult_xor: T,
 }
 
@@ -31,19 +35,12 @@ pub struct BitwiseOperationLookupCols<T> {
 pub struct BitwiseOperationLookupPreprocessedCols<T> {
     pub x: T,
     pub y: T,
-    pub z_add: T,
     pub z_xor: T,
 }
 
 pub const NUM_BITWISE_OP_LOOKUP_COLS: usize = size_of::<BitwiseOperationLookupCols<u8>>();
 pub const NUM_BITWISE_OP_LOOKUP_PREPROCESSED_COLS: usize =
     size_of::<BitwiseOperationLookupPreprocessedCols<u8>>();
-
-#[derive(Copy, Clone, PartialEq)]
-pub enum BitwiseOperationLookupOpcode {
-    ADD = 0,
-    XOR = 1,
-}
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
@@ -70,7 +67,6 @@ impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<N
                     [
                         F::from_canonical_u32(x),
                         F::from_canonical_u32(y),
-                        F::from_canonical_u32((x + y) % (1 << NUM_BITS)),
                         F::from_canonical_u32(x ^ y),
                     ]
                 })
@@ -96,43 +92,33 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
         let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
-            .receive(
-                prep_local.x,
-                prep_local.y,
-                prep_local.z_add,
-                AB::Expr::from_canonical_u8(BitwiseOperationLookupOpcode::ADD as u8),
-            )
-            .eval(builder, local.mult_add);
+            .receive(prep_local.x, prep_local.y, AB::F::ZERO, AB::F::ZERO)
+            .eval(builder, local.mult_range);
         self.bus
-            .receive(
-                prep_local.x,
-                prep_local.y,
-                prep_local.z_xor,
-                AB::Expr::from_canonical_u8(BitwiseOperationLookupOpcode::XOR as u8),
-            )
+            .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::ONE)
             .eval(builder, local.mult_xor);
     }
 }
 
 // Lookup chip for operations on size NUM_BITS integers. Currently has pre-processed columns
-// for (x + y) % 2^NUM_BITS and x ^ y. Interactions are of form [x, y, z, op], where x and y
-// are integers, op is an opcode (see BitwiseOperationLookupOpcode in air.rs), and z is x op y.
+// for x ^ y and range check. Interactions are of form [x, y, z] where z is either x ^ y for
+// XOR or 0 for range check.
 
 #[derive(Debug)]
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
-    count_add: Vec<AtomicU32>,
+    count_range: Vec<AtomicU32>,
     count_xor: Vec<AtomicU32>,
 }
 
 impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     pub fn new(bus: BitwiseOperationLookupBus) -> Self {
         let num_rows = (1 << NUM_BITS) * (1 << NUM_BITS);
-        let count_add = (0..num_rows).map(|_| AtomicU32::new(0)).collect();
+        let count_range = (0..num_rows).map(|_| AtomicU32::new(0)).collect();
         let count_xor = (0..num_rows).map(|_| AtomicU32::new(0)).collect();
         Self {
             air: BitwiseOperationLookupAir::new(bus),
-            count_add,
+            count_range,
             count_xor,
         }
     }
@@ -145,37 +131,69 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
         NUM_BITWISE_OP_LOOKUP_COLS
     }
 
-    pub fn add_count(&self, x: u32, y: u32, op: BitwiseOperationLookupOpcode) {
-        let idx = (x as usize) * (1 << NUM_BITS) + (y as usize);
-        assert!(
-            idx < self.count_add.len(),
-            "range exceeded: {} >= {}",
-            idx,
-            self.count_add.len()
-        );
-        let val_atomic = match op {
-            BitwiseOperationLookupOpcode::ADD => &self.count_add[idx],
-            BitwiseOperationLookupOpcode::XOR => &self.count_xor[idx],
-        };
-        val_atomic.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    pub fn request_range(&self, x: u32, y: u32) {
+        let upper_bound = 1 << NUM_BITS;
+        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
+        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        self.count_range[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn request_xor(&self, x: u32, y: u32) -> u32 {
+        let upper_bound = 1 << NUM_BITS;
+        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
+        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        self.count_xor[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        x ^ y
     }
 
     pub fn clear(&self) {
-        for i in 0..self.count_add.len() {
-            self.count_add[i].store(0, std::sync::atomic::Ordering::Relaxed);
+        for i in 0..self.count_range.len() {
+            self.count_range[i].store(0, std::sync::atomic::Ordering::Relaxed);
             self.count_xor[i].store(0, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = vec![F::zero(); self.count_add.len() * NUM_BITWISE_OP_LOOKUP_COLS];
+        let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
-            cols.mult_add =
-                F::from_canonical_u32(self.count_add[n].load(std::sync::atomic::Ordering::SeqCst));
+            cols.mult_range = F::from_canonical_u32(
+                self.count_range[n].load(std::sync::atomic::Ordering::SeqCst),
+            );
             cols.mult_xor =
                 F::from_canonical_u32(self.count_xor[n].load(std::sync::atomic::Ordering::SeqCst));
         }
         RowMajorMatrix::new(rows, NUM_BITWISE_OP_LOOKUP_COLS)
+    }
+
+    fn idx(x: u32, y: u32) -> usize {
+        (x * (1 << NUM_BITS) + y) as usize
+    }
+}
+
+impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
+    for BitwiseOperationLookupChip<NUM_BITS>
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let trace = self.generate_trace::<Val<SC>>();
+        AirProofInput::simple_no_pis(Arc::new(self.air), trace)
+    }
+}
+
+impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_BITS> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        1 << (2 * NUM_BITS)
+    }
+
+    fn trace_width(&self) -> usize {
+        NUM_BITWISE_OP_LOOKUP_COLS
     }
 }

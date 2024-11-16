@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::{InteractionBuilder, InteractionType};
+use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
 use p3_field::AbstractField;
 
 /// Represents a bus for `(x, y, x ^ y)` identified by a unique bus index (`usize`).

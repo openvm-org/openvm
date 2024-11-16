@@ -1,12 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -47,7 +47,7 @@ impl<AB: AirBuilder> Air<AB> for IsEqTestAir {
             local.x.into(),
             local.y.into(),
             local.out.into(),
-            AB::Expr::one(),
+            AB::Expr::ONE,
         );
 
         self.0.eval(builder, (io, local.inv));
@@ -63,7 +63,7 @@ impl<F: Field> IsEqualChip<F> {
         let air = IsEqSubAir;
         assert!(self.pairs.len().is_power_of_two());
         let width = IsEqualCols::<F>::width();
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
@@ -111,10 +111,10 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     };
 
     let mut trace = chip.generate_trace();
-    trace.values[2] = if trace.values[2] == AbstractField::one() {
-        AbstractField::zero()
+    trace.values[2] = if trace.values[2] == AbstractField::ONE {
+        AbstractField::ZERO
     } else {
-        AbstractField::one()
+        AbstractField::ONE
     };
 
     disable_debug_builder();

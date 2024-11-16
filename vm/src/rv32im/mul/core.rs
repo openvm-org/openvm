@@ -4,9 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -66,16 +66,15 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
-        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
             let expected_limb = if i == 0 {
-                AB::Expr::zero()
+                AB::Expr::ZERO
             } else {
                 carry[i - 1].clone()
-            } + (0..=i)
-                .fold(AB::Expr::zero(), |acc, k| acc + (b[k] * c[i - k]));
+            } + (0..=i).fold(AB::Expr::ZERO, |acc, k| acc + (b[k] * c[i - k]));
             carry[i] = AB::Expr::from(carry_divide) * (expected_limb - a[i]);
         }
 
@@ -111,7 +110,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_
     pub fn new(range_tuple_chip: Arc<RangeTupleCheckerChip<2>>, offset: usize) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
-        // (with LIMB_BITS bits). XorLookup is used to sign check bytes.
+        // (with LIMB_BITS bits).
         debug_assert!(
             range_tuple_chip.sizes()[0] == 1 << LIMB_BITS,
             "First element of RangeTupleChecker must have size {}",
@@ -191,7 +190,7 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;
-        row_slice.is_valid = F::one();
+        row_slice.is_valid = F::ONE;
     }
 
     fn air(&self) -> &Self::Air {

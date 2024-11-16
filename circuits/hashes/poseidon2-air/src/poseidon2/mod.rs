@@ -7,11 +7,13 @@ pub mod trace;
 pub mod tests;
 
 use lazy_static::lazy_static;
-use p3_baby_bear::{BabyBear, POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY};
+use p3_baby_bear::{BabyBear, BabyBearDiffusionMatrixParameters};
 use p3_field::{AbstractField, PrimeField32};
+use p3_monty_31::DiffusionMatrixParameters;
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};
 
+#[derive(Clone)]
 pub struct Poseidon2Config<const WIDTH: usize, F: Clone> {
     pub external_constants: Vec<[F; WIDTH]>,
     pub internal_constants: Vec<F>,
@@ -20,6 +22,14 @@ pub struct Poseidon2Config<const WIDTH: usize, F: Clone> {
     pub reduction_factor: F,
 }
 
+impl<const WIDTH: usize, F: Clone> Poseidon2Config<WIDTH, F> {
+    pub fn rounds_f(&self) -> usize {
+        self.external_constants.len()
+    }
+    pub fn rounds_p(&self) -> usize {
+        self.internal_constants.len()
+    }
+}
 /// MDSMat4 from Plonky3
 /// [ 2 3 1 1 ]
 /// [ 1 2 3 1 ]
@@ -42,7 +52,7 @@ impl Poseidon2Config<16, BabyBear> {
             internal_constants: HL_BABYBEAR_INT_CONST_16.to_vec(),
             ext_mds_matrix: HL_MDS_MAT_4,
             int_diag_m1_matrix: *HL_BABYBEAR_INT_DIAG_16,
-            reduction_factor: BabyBear::one(),
+            reduction_factor: BabyBear::ONE,
         }
     }
 }
@@ -75,7 +85,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             internal_constants: internal_round_constants_f,
             ext_mds_matrix: HL_MDS_MAT_4,
             int_diag_m1_matrix: horizen_int_diag_f,
-            reduction_factor: F::one(),
+            reduction_factor: F::ONE,
         }
     }
 
@@ -97,7 +107,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
             .collect();
 
-        let p3_int_diag_f: [F; 16] = POSEIDON2_INTERNAL_MATRIX_DIAG_16_BABYBEAR_MONTY
+        let p3_int_diag_f = BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
 
         Self {

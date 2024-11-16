@@ -1,7 +1,7 @@
 use crate::{
     arch::{VmAirWrapper, VmChipWrapper},
     kernels::adapters::branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterChip},
-    rv32im::branch_eq::{BranchEqualCoreAir, BranchEqualCoreChip},
+    rv32im::{BranchEqualCoreAir, BranchEqualCoreChip},
 };
 
 pub type KernelBranchEqAir = VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>>;

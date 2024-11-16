@@ -1,4 +1,4 @@
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::Field;
 
 use super::columns::Poseidon2IoCols;
@@ -12,6 +12,6 @@ impl<const WIDTH: usize, F: Field> Poseidon2Air<WIDTH, F> {
         io: Poseidon2IoCols<WIDTH, AB::Var>,
     ) {
         let fields = io.input.into_iter().chain(io.output);
-        builder.push_receive(self.bus_index, fields, F::one());
+        builder.push_receive(self.bus_index, fields, F::ONE);
     }
 }

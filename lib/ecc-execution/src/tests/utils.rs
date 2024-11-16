@@ -1,8 +1,10 @@
-use halo2curves_axiom::ff::Field;
+use axvm_ecc::{
+    field::{Field, FieldExtension},
+    point::{AffineCoords, AffinePoint},
+};
+use group::ScalarMul;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
-
-use crate::common::{AffineCoords, EcPoint, FieldExtension, ScalarMul};
 
 /// Generates a set of random G1 and G2 points from a random seed and outputs the vectors of P and Q points as well as
 /// the corresponding P and Q EcPoint structs.
@@ -10,7 +12,12 @@ use crate::common::{AffineCoords, EcPoint, FieldExtension, ScalarMul};
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points<A1, A2, Fp, Fp2>(
     rand_seeds: &[u64],
-) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
+) -> (
+    Vec<A1>,
+    Vec<A2>,
+    Vec<AffinePoint<Fp>>,
+    Vec<AffinePoint<Fp2>>,
+)
 where
     A1: AffineCoords<Fp>,
     A2: AffineCoords<Fp2>,
@@ -30,8 +37,8 @@ where
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x(), y: P.y() },
+                AffinePoint { x: Q.x(), y: Q.y() },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();
@@ -47,7 +54,12 @@ where
 pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize>(
     a: &[Fr; N],
     b: &[Fr; N],
-) -> (Vec<A1>, Vec<A2>, Vec<EcPoint<Fp>>, Vec<EcPoint<Fp2>>)
+) -> (
+    Vec<A1>,
+    Vec<A2>,
+    Vec<AffinePoint<Fp>>,
+    Vec<AffinePoint<Fp2>>,
+)
 where
     A1: AffineCoords<Fp> + ScalarMul<Fr>,
     A2: AffineCoords<Fp2> + ScalarMul<Fr>,
@@ -59,19 +71,19 @@ where
     let mut P_vec = vec![];
     let mut Q_vec = vec![];
     for i in 0..N {
-        let mut p = A1::generator().scalar_mul(a[i]);
+        let mut p = A1::generator() * a[i].clone();
         if i % 2 == 1 {
             p = p.neg();
         }
-        let q = A2::generator().scalar_mul(b[i]);
+        let q = A2::generator() * b[i].clone();
         P_vec.push(p);
         Q_vec.push(q);
     }
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                EcPoint { x: P.x(), y: P.y() },
-                EcPoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x(), y: P.y() },
+                AffinePoint { x: Q.x(), y: Q.y() },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();

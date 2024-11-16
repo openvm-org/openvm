@@ -1,0 +1,27 @@
+[package]
+name = "axvm-toolchain-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Tests for the axVM toolchain starting from Rust"
+
+[dependencies]
+axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-transpiler.workspace = true
+axvm-build.workspace = true
+ax-ecc-execution.workspace = true
+ax-stark-sdk.workspace = true
+p3-baby-bear.workspace = true
+eyre.workspace = true
+test-case.workspace = true
+tempfile.workspace = true
+serde = { workspace = true, features = ["alloc"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["axvm-circuit/parallel"]

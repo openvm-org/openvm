@@ -7,16 +7,20 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-afs-compiler = { workspace = true, features = ["sdk"] }
-afs-derive = { workspace = true }
-afs-recursion = { workspace = true }
-ax-sdk = { workspace = true }
+axvm-native-compiler = { workspace = true }
+axvm-recursion = { workspace = true }
+ax-poseidon2-air = { workspace = true }
+ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
-stark-vm = { workspace = true, features = ["sdk"] }
+axvm-circuit = { workspace = true }
 
+derivative = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+static_assertions.workspace = true
+async-trait.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["stark-vm/parallel"]
+parallel = ["axvm-circuit/parallel"]
+test-utils = ["axvm-circuit/test-utils"]

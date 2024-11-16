@@ -67,8 +67,8 @@ where
     // To optimize memory and parallelism, we split the trace rows into chunks
     // based on the number of cpu threads available, and then do all
     // computations necessary for that chunk within a single thread.
-    let perm_width = (num_interactions + interaction_chunk_size - 1) / interaction_chunk_size + 1;
-    let mut perm_values = vec![EF::zero(); height * perm_width];
+    let perm_width = num_interactions.div_ceil(interaction_chunk_size) + 1;
+    let mut perm_values = EF::zero_vec(height * perm_width);
     debug_assert!(
         partitioned_main.iter().all(|m| m.height() == height),
         "All main trace parts must have same height"
@@ -79,7 +79,7 @@ where
     #[cfg(not(feature = "parallel"))]
     let num_threads = 1;
 
-    let height_chunk_size = (height + num_threads - 1) / num_threads;
+    let height_chunk_size = height.div_ceil(num_threads);
     perm_values
         .par_chunks_mut(height_chunk_size * perm_width)
         .enumerate()
@@ -88,7 +88,7 @@ where
             let num_rows = perm_values.len() / perm_width;
             // the interaction chunking requires more memory because we must
             // allocate separate memory for the denominators and reciprocals
-            let mut denoms = vec![EF::zero(); num_rows * num_interactions];
+            let mut denoms = EF::zero_vec(num_rows * num_interactions);
             let row_offset = chunk_idx * height_chunk_size;
             // compute the denominators to be inverted:
             for (n, denom_row) in denoms.chunks_exact_mut(num_interactions).enumerate() {
@@ -134,7 +134,7 @@ where
                         local_index: row_offset + n,
                     };
 
-                    let mut row_sum = EF::zero();
+                    let mut row_sum = EF::ZERO;
                     for (perm_val, reciprocal_chunk, interaction_chunk) in izip!(
                         perm_row.iter_mut(),
                         reciprocal_chunk.chunks(interaction_chunk_size),
@@ -158,8 +158,8 @@ where
 
     // At this point, the trace matrix is complete except that the last column
     // has the row sum but not the partial sum
-    tracing::info_span!("compute logup partial sums").in_scope(|| {
-        let mut phi = EF::zero();
+    tracing::trace_span!("compute logup partial sums").in_scope(|| {
+        let mut phi = EF::ZERO;
         for perm_chunk in perm_values.chunks_exact_mut(perm_width) {
             phi += *perm_chunk.last().unwrap();
             *perm_chunk.last_mut().unwrap() = phi;
@@ -177,7 +177,7 @@ pub(super) struct Evaluator<'a, F: Field> {
     pub local_index: usize,
 }
 
-impl<'a, F: Field> SymbolicEvaluator<F, F> for Evaluator<'a, F> {
+impl<F: Field> SymbolicEvaluator<F, F> for Evaluator<'_, F> {
     fn eval_var(&self, symbolic_var: SymbolicVariable<F>) -> F {
         let n = self.local_index;
         let height = self.height;

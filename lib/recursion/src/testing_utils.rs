@@ -1,36 +1,36 @@
-use afs_compiler::conversion::CompilerOptions;
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::{Com, PcsProof, PcsProverData},
     engine::VerificationData,
     verifier::VerificationError,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
+use axvm_circuit::{
+    arch::{instructions::program::Program, VmConfig},
+    utils::execute_and_prove_program,
+};
+use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
-use stark_vm::{
-    arch::instructions::program::Program,
-    system::{program::util::execute_and_prove_program, vm::config::VmConfig},
-};
+use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::hints::InnerVal;
 
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
-    use afs_compiler::conversion::CompilerOptions;
-    use ax_sdk::{
+    use ax_stark_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
             FriParameters,
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use stark_vm::system::vm::config::VmConfig;
+    use axvm_circuit::arch::VmConfig;
+    use axvm_native_compiler::conversion::CompilerOptions;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};
@@ -80,7 +80,7 @@ pub mod inner {
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
-            VmConfig::aggregation(7),
+            VmConfig::aggregation(4, 7),
             &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
@@ -98,10 +98,9 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
     compiler_options: CompilerOptions,
     vm_config: VmConfig,
     engine: &E,
-) -> Result<(VerificationDataWithFriParams<AggSC>, Vec<Vec<Val<AggSC>>>), VerificationError>
+) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
 where
     Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
-    AggSC::Pcs: Sync,
     Domain<AggSC>: Send + Sync,
     PcsProverData<AggSC>: Send + Sync,
     Com<AggSC>: Send + Sync,

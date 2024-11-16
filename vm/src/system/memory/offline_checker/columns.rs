@@ -3,8 +3,8 @@
 
 use std::{array, borrow::Borrow, iter};
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::is_less_than::LessThanAuxCols;
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::is_less_than::LessThanAuxCols;
 use p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
@@ -47,8 +47,8 @@ impl<T> MemoryBaseAuxCols<T> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
-    pub(super) base: MemoryBaseAuxCols<T>,
-    pub(super) prev_data: [T; N],
+    pub base: MemoryBaseAuxCols<T>,
+    pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
@@ -100,10 +100,14 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryWriteAuxCols::<F, N>::width();
-        MemoryWriteAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryWriteAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 
+/// The auxiliary columns for a memory read operation with block size `N`.
+/// These columns should be automatically managed by the memory controller.
+/// To fully constrain a memory read, in addition to these columns,
+/// the address space, pointer, and data must be provided.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryReadAuxCols<T, const N: usize> {
@@ -144,7 +148,7 @@ impl<const N: usize, T> MemoryReadAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, N>::width();
-        MemoryReadAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryReadAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 
@@ -174,9 +178,9 @@ impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
-        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         let width = MemoryReadAuxCols::<F, N>::width();
-        let data = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let data = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         MemoryHeapReadAuxCols { address, data }
     }
 }
@@ -211,9 +215,9 @@ impl<const N: usize, T: Clone> MemoryHeapWriteAuxCols<T, N> {
 impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
-        let address = MemoryReadAuxCols::from_slice(&vec![F::zero(); width]);
+        let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
         let width = MemoryWriteAuxCols::<F, N>::width();
-        let data = MemoryWriteAuxCols::from_slice(&vec![F::zero(); width]);
+        let data = MemoryWriteAuxCols::from_slice(&F::zero_vec(width));
         MemoryHeapWriteAuxCols { address, data }
     }
 }
@@ -276,7 +280,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
 impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
     pub fn disabled() -> Self {
         let width = MemoryReadOrImmediateAuxCols::<F>::width();
-        MemoryReadOrImmediateAuxCols::from_slice(&vec![F::zero(); width])
+        MemoryReadOrImmediateAuxCols::from_slice(&F::zero_vec(width))
     }
 }
 

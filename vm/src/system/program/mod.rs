@@ -1,13 +1,13 @@
 use std::{error::Error, fmt::Display};
 
-use afs_stark_backend::ChipUsageGetter;
+use ax_stark_backend::ChipUsageGetter;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use p3_field::PrimeField64;
+use p3_field::{Field, PrimeField64};
 
-use crate::system::{program::trace::padding_instruction, vm::chip_set::READ_INSTRUCTION_BUS};
+use crate::{arch::READ_INSTRUCTION_BUS, system::program::trace::padding_instruction};
 
 #[cfg(test)]
 pub mod tests;
@@ -30,6 +30,8 @@ pub enum ExecutionError {
     PcNotFound(u32, u32, u32, usize),
     /// pc, step, pc_base, program_len
     PcOutOfBounds(u32, u32, u32, usize),
+    /// pc, phantom_repr
+    InvalidPhantomInstruction(u32, u16),
     DisabledOperation(u32, usize),
     HintOutOfBounds(u32),
     EndOfInputStream(u32),
@@ -50,6 +52,11 @@ impl Display for ExecutionError {
                 f,
                 "pc = {} out of bounds for program of length {}, with pc_base = {} and step = {}",
                 pc, program_len, pc_base, step
+            ),
+            ExecutionError::InvalidPhantomInstruction(pc, phantom_repr) => write!(
+                f,
+                "at pc = {}, invalid phantom instruction {:?}",
+                pc, phantom_repr
             ),
             ExecutionError::DisabledOperation(pc, op) => {
                 write!(f, "at pc = {}, opcode {:?} was not enabled", pc, op)
@@ -82,7 +89,7 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 #[derive(Debug)]
-pub struct ProgramChip<F> {
+pub struct ProgramChip<F: Field> {
     pub air: ProgramAir,
     pub program: Program<F>,
     pub true_program_length: usize,

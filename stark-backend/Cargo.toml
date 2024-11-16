@@ -1,9 +1,9 @@
 [package]
-name = "afs-stark-backend"
+name = "ax-stark-backend"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "AFS proof system middleware built on top of Plonky3 backend."
+description = "Multi-matrix STARK backend with logup built on top of Plonky3."
 
 [dependencies]
 p3-air = { workspace = true }
@@ -23,9 +23,11 @@ serde = { workspace = true, default-features = false, features = [
     "alloc",
     "rc",
 ] }
-derivative = "2.2.0"
+derivative = { workspace = true }
 metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
+thiserror.workspace = true
+async-trait.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 tikv-jemallocator = { version = "0.6", optional = true }
@@ -33,8 +35,8 @@ tikv-jemallocator = { version = "0.6", optional = true }
 mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
-afs-derive = { path = "../derive" }
-ax-sdk = { path = "../sdk" }
+ax-circuit-derive = { workspace = true }
+ax-stark-sdk = { workspace = true }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

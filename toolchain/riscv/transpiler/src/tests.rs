@@ -1,30 +1,34 @@
-use std::{fs::read, path::PathBuf};
-
-use ax_sdk::config::setup_tracing;
-use axvm_instructions::program::Program;
-use axvm_platform::memory::MEM_SIZE;
-use color_eyre::eyre::Result;
-use p3_baby_bear::BabyBear;
-use stark_vm::{
-    sdk::air_test,
-    system::vm::{config::VmConfig, VirtualMachine},
+use std::{
+    fs::read,
+    path::{Path, PathBuf},
 };
+
+use axvm_circuit::{
+    arch::{VmConfig, VmExecutor},
+    intrinsics::modular::SECP256K1_COORD_PRIME,
+    utils::air_test,
+};
+use axvm_platform::memory::MEM_SIZE;
+use eyre::Result;
+use p3_baby_bear::BabyBear;
 use test_case::test_case;
 
 use crate::{elf::Elf, rrs::transpile, AxVmExe};
 
 type F = BabyBear;
 
-fn setup_vm_from_elf(elf_path: &str, config: VmConfig) -> Result<(VirtualMachine<F>, Program<F>)> {
+fn setup_executor_from_elf(
+    elf_path: impl AsRef<Path>,
+    config: VmConfig,
+) -> Result<(VmExecutor<F>, AxVmExe<F>)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    dbg!(&elf.instructions);
-    let exe = AxVmExe::<F>::from_elf(elf);
-    let vm = VirtualMachine::new(config).with_initial_memory(exe.memory_image);
-    Ok((vm, exe.program))
+    let executor = VmExecutor::new(config);
+    Ok((executor, elf.into()))
 }
 
+// An "eyeball test" only: prints the decoded ELF for eyeball inspection
 #[test]
 fn test_decode_elf() -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -50,39 +54,31 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test_case("data/rv32im-fibonacci-program-elf-release")]
 #[test_case("data/rv32im-exp-from-as")]
 #[test_case("data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
-    setup_tracing();
     let config = VmConfig::rv32im();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(program)?;
-    Ok(())
-}
-
-#[test_case("data/rv32im-fibonacci-program-elf-release")]
-fn test_rv32i_prove(elf_path: &str) -> Result<()> {
-    let config = VmConfig::rv32i();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    air_test(vm, program);
+    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
-    setup_tracing();
-    let config = VmConfig::rv32im().add_canonical_modulus();
-    let (vm, program) = setup_vm_from_elf(elf_path, config)?;
-    vm.execute(program)?;
+    let config = VmConfig::rv32im()
+        .add_canonical_modulus()
+        .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()])
+        .add_int256_alu()
+        .add_int256_m();
+    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
 #[test]
-fn test_terminate_runtime() -> Result<()> {
-    setup_tracing();
+fn test_terminate_prove() -> Result<()> {
     let config = VmConfig::rv32i();
-    let (vm, program) = setup_vm_from_elf("data/rv32im-terminate-from-as", config)?;
-    air_test(vm, program);
+    let (_, exe) = setup_executor_from_elf("data/rv32im-terminate-from-as", config.clone())?;
+    air_test(config, exe);
     Ok(())
 }

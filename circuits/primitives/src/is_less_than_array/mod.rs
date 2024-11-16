@@ -1,5 +1,5 @@
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::{AbstractField, PrimeField32};
@@ -118,7 +118,7 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
         lt_decomp: &[AB::Var],
     ) {
         assert_eq!(diff_marker.len(), NUM);
-        let mut prefix_sum = AB::Expr::zero();
+        let mut prefix_sum = AB::Expr::ZERO;
         for (x, y, &marker) in izip!(io.x, io.y, diff_marker) {
             let diff = y - x;
             prefix_sum += marker.into();
@@ -148,7 +148,12 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
 }
 
 impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArraySubAir<NUM> {
-    type AirContext<'a> = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>)
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     fn eval<'a>(
         &'a self,
@@ -171,7 +176,12 @@ impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArraySubAir<NU
 pub struct IsLtArrayWhenTransitionAir<const NUM: usize>(pub IsLtArraySubAir<NUM>);
 
 impl<AB: InteractionBuilder, const NUM: usize> SubAir<AB> for IsLtArrayWhenTransitionAir<NUM> {
-    type AirContext<'a> = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsLtArrayIo<AB::Expr, NUM>, IsLtArrayAuxColsRef<'a, AB::Var>)
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     fn eval<'a>(
         &'a self,
@@ -209,14 +219,14 @@ impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArraySub
     ) {
         tracing::trace!("IsLtArraySubAir::generate_subrow x={:?}, y={:?}", x, y);
         let mut is_eq = true;
-        *aux.diff_val = F::zero();
+        *aux.diff_val = F::ZERO;
         for (x_i, y_i, diff_marker) in izip!(x, y, aux.diff_marker.iter_mut()) {
             if x_i != y_i && is_eq {
                 is_eq = false;
-                *diff_marker = F::one();
+                *diff_marker = F::ONE;
                 *aux.diff_val = *y_i - *x_i;
             } else {
-                *diff_marker = F::zero();
+                *diff_marker = F::ZERO;
             }
         }
         // diff_val can be "negative" but shifted_diff is in [0, 2^{max_bits+1})

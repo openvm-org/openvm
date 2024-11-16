@@ -4,8 +4,8 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -38,7 +38,7 @@ pub struct VectorWriteRecord<F: Field, const WRITE_SIZE: usize> {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ConvertAdapterChip<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> {
     pub air: ConvertAdapterAir<READ_SIZE, WRITE_SIZE>,
     _marker: PhantomData<F>,
@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                 [
                     cols.a_pointer.into(),
                     cols.b_pointer.into(),
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     cols.a_as.into(),
                     cols.b_as.into(),
                 ],

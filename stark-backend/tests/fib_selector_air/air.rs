@@ -1,10 +1,10 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use ax_sdk::dummy_airs::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
+use ax_stark_sdk::dummy_airs::fib_air::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -78,7 +78,7 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder + InteractionBuilder> Air<AB>
             .assert_eq(local.right, next.left);
         builder
             .when_transition()
-            .when_ne(preprocessed_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::ONE)
             .assert_eq(local.left, next.left);
 
         // b' <- sel*(a + b) + (1 - sel)*b
@@ -88,7 +88,7 @@ impl<AB: AirBuilderWithPublicValues + PairBuilder + InteractionBuilder> Air<AB>
             .assert_eq(local.left + local.right, next.right);
         builder
             .when_transition()
-            .when_ne(preprocessed_local.sel, AB::Expr::one())
+            .when_ne(preprocessed_local.sel, AB::Expr::ONE)
             .assert_eq(local.right, next.right);
 
         builder.when_last_row().assert_eq(local.right, x);

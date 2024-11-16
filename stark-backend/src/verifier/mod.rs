@@ -59,9 +59,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         // Check cumulative sum
         let sum: SC::Challenge = cumulative_sums
             .into_iter()
-            .map(|c| c.unwrap_or(SC::Challenge::zero()))
+            .map(|c| c.unwrap_or(SC::Challenge::ZERO))
             .sum();
-        if sum != SC::Challenge::zero() {
+        if sum != SC::Challenge::ZERO {
             return Err(VerificationError::NonZeroCumulativeSum);
         }
         Ok(())

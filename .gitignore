@@ -10,8 +10,11 @@ Cargo.lock
 .DS_Store
 **/root
 **/leaf
-!axiom-vm/src/verifier/leaf
 **/internal
+
+!axiom-vm/src/verifier/leaf
+!axiom-vm/src/verifier/internal
+!axiom-vm/src/verifier/root
 
 .cache/
 rustc-*
@@ -28,3 +31,4 @@ rustc-*
 
 # Bench metrics
 .bench_metrics/
+__pycache__/

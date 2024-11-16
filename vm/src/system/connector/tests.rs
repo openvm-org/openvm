@@ -3,11 +3,11 @@ use std::{
     sync::Arc,
 };
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, prover::types::AirProofInput,
     utils::disable_debug_builder,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -15,15 +15,15 @@ use ax_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, TerminateOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, UsizeOpcode,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::VmConnectorPvs;
-use crate::system::{
-    program::trace::CommittedProgram,
-    vm::{chip_set::CONNECTOR_AIR_ID, config::VmConfig, SingleSegmentVM},
+use crate::{
+    arch::{SingleSegmentVmExecutor, VmConfig, CONNECTOR_AIR_ID},
+    system::program::trace::AxVmCommittedExe,
 };
 
 type F = BabyBear;
@@ -32,7 +32,7 @@ fn test_vm_connector_happy_path() {
     let exit_code = 1789;
     test_impl(true, exit_code, |air_proof_input| {
         let pvs: &VmConnectorPvs<F> = air_proof_input.raw.public_values.as_slice().borrow();
-        assert_eq!(pvs.is_terminate, F::one());
+        assert_eq!(pvs.is_terminate, F::ONE);
         assert_eq!(pvs.exit_code, F::from_canonical_u32(exit_code));
     });
 }
@@ -59,7 +59,7 @@ fn test_vm_connector_wrong_is_terminate() {
             .public_values
             .as_mut_slice()
             .borrow_mut();
-        pvs.is_terminate = F::zero();
+        pvs.is_terminate = F::ZERO;
     });
 }
 
@@ -68,7 +68,7 @@ fn test_impl(
     exit_code: u32,
     f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
 ) {
-    let vm_config = VmConfig::core();
+    let vm_config = VmConfig::default();
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let pk = vm_config.generate_pk(engine.keygen_builder());
@@ -84,9 +84,12 @@ fn test_impl(
         )];
 
         let program = Program::from_instructions(&instructions);
-        let committed_program = Arc::new(CommittedProgram::commit(&program, engine.config.pcs()));
-        let vm = SingleSegmentVM::new(vm_config);
-        let mut proof_input = vm.execute_and_generate(committed_program, vec![]).unwrap();
+        let committed_exe = Arc::new(AxVmCommittedExe::commit(
+            program.into(),
+            engine.config.pcs(),
+        ));
+        let vm = SingleSegmentVmExecutor::new(vm_config);
+        let mut proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
         let connector_air_input = proof_input
             .per_air
             .iter_mut()

@@ -1,23 +1,23 @@
-use afs_primitives::{
+use ax_circuit_primitives::{
     assert_less_than::{AssertLessThanIo, AssertLtSubAir},
     is_zero::{IsZeroIo, IsZeroSubAir},
     utils::not,
     var_range::VariableRangeCheckerBus,
     SubAir,
 };
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
 use super::bus::MemoryBus;
-use crate::system::{
-    memory::{
+use crate::{
+    arch::RANGE_CHECKER_BUS,
+    system::memory::{
         offline_checker::columns::{
             MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
         },
-        MemoryAddress, MemoryDataIoCols,
+        MemoryAddress,
     },
-    vm::chip_set::RANGE_CHECKER_BUS,
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
@@ -59,21 +59,6 @@ impl MemoryBridge {
         }
     }
 
-    #[must_use]
-    pub fn read_from_cols<'a, T, V, const N: usize>(
-        &self,
-        io: MemoryDataIoCols<impl Into<T>, N>,
-        timestamp: impl Into<T>,
-        aux: &'a MemoryReadAuxCols<V, N>,
-    ) -> MemoryReadOperation<'a, T, V, N> {
-        self.read(
-            MemoryAddress::new(io.address_space, io.pointer),
-            io.data,
-            timestamp.into(),
-            aux,
-        )
-    }
-
     /// Prepare a logical memory read or immediate operation.
     #[must_use]
     pub fn read_or_immediate<'a, T, V>(
@@ -109,21 +94,6 @@ impl MemoryBridge {
             aux,
         }
     }
-
-    #[must_use]
-    pub fn write_from_cols<'a, T, V, const N: usize>(
-        &self,
-        io: MemoryDataIoCols<impl Into<T>, N>,
-        timestamp: impl Into<T>,
-        aux: &'a MemoryWriteAuxCols<V, N>,
-    ) -> MemoryWriteOperation<'a, T, V, N> {
-        self.write(
-            MemoryAddress::new(io.address_space, io.pointer),
-            io.data,
-            timestamp.into(),
-            aux,
-        )
-    }
 }
 
 /// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`.
@@ -145,7 +115,7 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<'a, F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'a, F, V, N> {
+impl<F: AbstractField, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_, F, V, N> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -199,7 +169,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<'a, F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'a, F, V> {
+impl<F: AbstractField, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -259,7 +229,7 @@ pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to [MemoryOfflineChecker::eval_bulk_access]
-impl<'a, T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'a, T, V, N> {
+impl<T: AbstractField, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_, T, V, N> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where

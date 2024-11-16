@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_air::BaseAir;
@@ -76,9 +76,9 @@ where
         // - The inner product of the `flags` and `results` equals `io.z`.
         // - If `is_div` is true, then `aux.divisor_inv` correctly represents the multiplicative inverse of `io.y`.
 
-        let mut is_valid = AB::Expr::zero();
-        let mut expected_opcode = AB::Expr::zero();
-        let mut expected_result = AB::Expr::zero();
+        let mut is_valid = AB::Expr::ZERO;
+        let mut expected_opcode = AB::Expr::ZERO;
+        let mut expected_result = AB::Expr::ZERO;
         for (flag, opcode, result) in izip!(flags, opcodes, results) {
             builder.assert_bool(flag);
 
@@ -183,7 +183,7 @@ where
         row_slice.divisor_inv = if opcode == FieldArithmeticOpcode::DIV {
             c.inverse()
         } else {
-            F::zero()
+            F::ZERO
         };
     }
 

@@ -1,30 +1,40 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+authors = ["Intrinsic Technologies"]
+homepage = "https://axiom.xyz"
+repository = "https://github.com/axiom-crypto/"
+
 [workspace]
 members = [
-    "derive",
+    "stark-backend",
+    "stark-sdk",
     "circuits/ecc",
     "circuits/hashes/poseidon2-air",
     "circuits/primitives",
-    "lib/ecc",
-    "lib/ecc-execution",
-    "lib/recursion",
-    "sdk",
-    "stark-backend",
+    "circuits/derive",
+    "vm",
     "toolchain/instructions",
     "toolchain/instructions/derive",
-    "toolchain/compiler",
-    "toolchain/riscv/zkvm/lib",
-    "toolchain/riscv/zkvm/platform",
+    "toolchain/native-compiler",
+    "toolchain/native-compiler/derive",
     "toolchain/riscv/transpiler",
-    "vm", "axiom-vm",
+    "toolchain/riscv/platform",
+    "toolchain/riscv/axvm",
+    "toolchain/riscv/macros",
+    "toolchain/build",
+    "toolchain/tests",
+    "cargo-axiom",
+    "lib/algebra",
+    "lib/ecc",
+    "lib/ecc-constants",
+    "lib/ecc-execution",
+    "lib/recursion",
+    "axiom-vm",
+    "benchmarks",
 ]
 resolver = "2"
-
-[workspace.package]
-version = "0.1.0"
-authors = ["Intrinsic Technologies"]
-edition = "2021"
-homepage = "https://axiom.xyz"
-repository = "https://github.com/axiom-crypto/"
 
 # Fastest runtime configuration
 [profile.release]
@@ -62,45 +72,57 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-axvm = { path = "toolchain/riscv/zkvm/lib", default-features = false }
+# Axiom
+axiom-vm = { path = "axiom-vm", default-features = false }
+cargo-axiom = { path = "cargo-axiom", default-features = false }
+axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
-axvm-platform = { path = "toolchain/riscv/zkvm/platform", default-features = false }
-afs-stark-backend = { path = "stark-backend", default-features = false }
-afs-compiler = { path = "toolchain/compiler", default-features = false }
-stark-vm = { path = "vm", default-features = false }
-afs-primitives = { path = "circuits/primitives", default-features = false }
+axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
+axvm-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
+axvm-build = { path = "toolchain/build", default-features = false }
+axvm-algebra = { path = "lib/algebra", default-features = false }
+axvm-ecc = { path = "lib/ecc", default-features = false }
+axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
+axvm-recursion = { path = "lib/recursion", default-features = false }
+axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
+axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
+axvm-moduli-setup = { path = "toolchain/riscv/macros/moduli-setup", default-features = false }
+axvm-sw-setup = { path = "toolchain/riscv/macros/sw-setup", default-features = false }
+axvm-circuit = { path = "vm", default-features = false }
+axvm-circuit-derive = { path = "vm/derive", default-features = false }
+ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
+ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
-ax-ecc-lib = { path = "lib/ecc", default-features = false }
-afs-derive = { path = "derive", default-features = false }
-afs-recursion = { path = "lib/recursion", default-features = false }
-ax-sdk = { path = "sdk", default-features = false }
-afs-transpiler = { path = "toolchain/riscv/transpiler", default-features = false }
-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
-
-p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
+ax-circuit-derive = { path = "circuits/derive", default-features = false }
+ax-stark-backend = { path = "stark-backend", default-features = false }
+ax-stark-sdk = { path = "stark-sdk", default-features = false }
+# Plonky3
+p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-commit = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
 p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
     "nightly-features",
-], rev = "95e56fa" }
-p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
-p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "95e56fa" }
+], rev = "bdf3e65" }
+p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
+p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "bdf3e65" }
 
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
     "loader_halo2",
@@ -108,35 +130,50 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", b
     "display",
 ] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
+# for testing only:
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
 
-itertools = "0.13.0"
+itertools = { version = "0.13.0", default-features = false }
 rayon = "1.10"
 parking_lot = "0.12.2"
 tracing = "0.1.40"
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 serde_json = "1.0.117"
 toml = "0.8.14"
-bincode = "1.3.3"
 lazy_static = "1.5.0"
 once_cell = "1.19.0"
 derive-new = "0.6.0"
+derive_more = "1.0.0"
+derivative = "2.2.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
+enum-utils = "0.1.1"
 backtrace = "0.3.71"
-rand = "0.8.5"
-k256 = "0.13.3"
-elliptic-curve = "0.13.8"
-num-bigint-dig = "0.8.4"
-num-bigint = "0.4.6"
-num-integer = "0.1.46"
-num-traits = "0.2.19"
-hex-literal = "0.4.1"
+rand = { version = "0.8.5", default-features = false }
+hex-literal = { version = "0.4.1", default-features = false }
+hex = { version = "0.4.3", default-features = false }
 metrics = "0.23.0"
 cfg-if = "1.0.0"
 inferno = "0.11.21"
 test-case = "3.3.1"
 test-log = "0.2.16"
 enum_dispatch = "0.3.13"
+eyre = "0.6.12"
+tempfile = "3.13.0"
+thiserror = "1.0.65"
+rustc-hash = "2.0.0"
+static_assertions = "1.1.0"
+async-trait = "0.1.83"
+
+# cryptography, default-features = false for no_std
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+k256 = { version = "0.13.3", default-features = false }
+elliptic-curve = { version = "0.13.8", default-features = false }
+num-bigint-dig = { version = "0.8.4", default-features = false }
+num-bigint = { version = "0.4.6", default-features = false }
+num-integer = { version = "0.1.46", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
+ff = { version = "0.13.0", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

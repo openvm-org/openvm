@@ -1,0 +1,26 @@
+[workspace]
+[package]
+name = "axvm-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../riscv/axvm" }
+axvm-platform = { path = "../../riscv/platform" }
+axvm-ecc = { path = "../../../lib/ecc", default-features = false }
+axvm-algebra = { path = "../../../lib/algebra" }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex-literal = { version = "0.4.1", default-features = false }
+
+[features]
+default = []
+std = ["axvm/std", "axvm-ecc/std"]
+
+[profile.release]
+panic = "abort"
+lto = "fat"     # decrease binary size
+# strip = "symbols"

@@ -1,4 +1,4 @@
-use afs_derive::AlignedBorrow;
+use ax_circuit_derive::AlignedBorrow;
 use itertools::izip;
 use p3_air::AirBuilder;
 use p3_field::Field;
@@ -33,7 +33,12 @@ pub struct IsEqArraySubAir<const NUM: usize>;
 
 impl<AB: AirBuilder, const NUM: usize> SubAir<AB> for IsEqArraySubAir<NUM> {
     /// `(io, diff_inv_marker)`
-    type AirContext<'a> = (IsEqArrayIo<AB::Expr, NUM>, [AB::Var; NUM]) where AB::Expr: 'a, AB::Var: 'a, AB: 'a;
+    type AirContext<'a>
+        = (IsEqArrayIo<AB::Expr, NUM>, [AB::Var; NUM])
+    where
+        AB::Expr: 'a,
+        AB::Var: 'a,
+        AB: 'a;
 
     /// Constrain that out == (x == y) when condition != 0
     fn eval<'a>(
@@ -75,7 +80,7 @@ impl<F: Field, const NUM: usize> TraceSubRowGenerator<F> for IsEqArraySubAir<NUM
                 is_eq = false;
                 *diff_inv_marker_i = (*x_i - *y_i).inverse();
             } else {
-                *diff_inv_marker_i = F::zero();
+                *diff_inv_marker_i = F::ZERO;
             }
         }
         *out = F::from_bool(is_eq);

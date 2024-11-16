@@ -1,24 +1,24 @@
 use std::marker::PhantomData;
 
-use afs_compiler::{
-    conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
-    prelude::RVar,
-};
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
     },
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
-use ax_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use axvm_circuit::arch::instructions::program::Program;
+use axvm_native_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
+    prelude::RVar,
+};
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
 use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use stark_vm::arch::instructions::program::Program;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -37,6 +37,7 @@ use crate::{
     view::get_advice_per_air,
 };
 
+#[cfg(feature = "static-verifier")]
 pub mod outer;
 
 #[derive(Debug, Clone, Copy)]
@@ -66,12 +67,16 @@ impl VerifierProgram<InnerConfig> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");
+        builder.cycle_tracker_start("ReadingProofFromInput");
         let input: StarkProofVariable<_> = builder.uninit();
         Proof::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+        builder.cycle_tracker_end("ReadingProofFromInput");
 
+        builder.cycle_tracker_start("InitializePcsConst");
         let pcs = TwoAdicFriPcsVariable {
             config: const_fri_config(&mut builder, fri_params),
         };
+        builder.cycle_tracker_end("InitializePcsConst");
         StarkVerifier::verify::<DuplexChallengerVariable<_>>(
             &mut builder,
             &pcs,
@@ -95,7 +100,7 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -107,7 +112,7 @@ where
         Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
     }
 
-    /// Reference: [afs_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
+    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -550,15 +555,14 @@ where
         pcs.verify(builder, rounds, opening.proof.clone(), challenger);
         builder.cycle_tracker_end("stage-d-verify-pcs");
 
-        // TODO[sp1] CONSTRAIN: that the preprocessed chips get called with verify_constraints.
         builder.cycle_tracker_start("stage-e-verify-constraints");
 
         // TODO[zach]: make per phase; for now just 1 phase so OK
-        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::zero());
-        let preprocessed_idx: Usize<_> = builder.eval(C::N::zero());
-        let cached_main_commit_idx: Usize<_> = builder.eval(C::N::zero());
-        let common_main_matrix_idx: Usize<_> = builder.eval(C::N::zero());
-        let air_idx: Usize<_> = builder.eval(C::N::zero());
+        let after_challenge_idx: Usize<C::N> = builder.eval(C::N::ZERO);
+        let preprocessed_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let cached_main_commit_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let common_main_matrix_idx: Usize<_> = builder.eval(C::N::ZERO);
+        let air_idx: Usize<_> = builder.eval(C::N::ZERO);
         let common_main_openings = builder.get(&opening.values.main, num_cached_mains);
 
         // Convert challenges into a fixed-shape array.
@@ -569,7 +573,7 @@ where
             .map(|(phase, &num_challenges_to_sample)| {
                 (0..num_challenges_to_sample)
                     .map(|i| {
-                        let challenge: Ext<_, _> = builder.constant(C::EF::zero());
+                        let challenge: Ext<_, _> = builder.constant(C::EF::ZERO);
                         builder
                             .if_eq(
                                 m_advice_var.num_challenges_to_sample_mask[phase][i].clone(),
@@ -676,7 +680,7 @@ where
         builder.cycle_tracker_end("stage-e-verify-constraints");
     }
 
-    /// Reference: [afs_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    /// Reference: [ax_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints(
@@ -850,7 +854,7 @@ where
             is_last_row: selectors.is_last_row,
             is_transition: selectors.is_transition,
             alpha,
-            accumulator: SymbolicExt::zero(),
+            accumulator: SymbolicExt::ZERO,
             public_values,
             exposed_values_after_challenge, // FIXME
             _marker: PhantomData,
@@ -907,7 +911,7 @@ fn assert_cumulative_sums<C: Config>(
     air_proofs: &Array<C, AirProofDataVariable<C>>,
     num_challenges_to_sample: &Array<C, Usize<C::N>>,
 ) {
-    let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::zero());
+    let cumulative_sum: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
     // Currently only support 0 or 1 phase is supported.
     let num_phase = num_challenges_to_sample.len();
     builder.if_eq(num_phase, RVar::one()).then(|builder| {
@@ -930,5 +934,5 @@ fn assert_cumulative_sums<C: Config>(
         });
     });
 
-    builder.assert_ext_eq(cumulative_sum, C::EF::zero().cons());
+    builder.assert_ext_eq(cumulative_sum, C::EF::ZERO.cons());
 }

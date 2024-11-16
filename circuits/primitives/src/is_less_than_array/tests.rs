@@ -3,13 +3,13 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use p3_air::{Air, BaseAir};
@@ -59,7 +59,7 @@ impl<AB: InteractionBuilder, const NUM: usize, const AUX_LEN: usize> Air<AB>
             x: local.x.map(Into::into),
             y: local.y.map(Into::into),
             out: local.out.into(),
-            count: AB::Expr::one(),
+            count: AB::Expr::ONE,
         };
         self.0.eval(builder, (io, (&local.aux).into()));
     }
@@ -91,7 +91,7 @@ impl<const NUM: usize, const AUX_LEN: usize> IsLtArrayChip<NUM, AUX_LEN> {
     pub fn generate_trace<F: PrimeField32>(self) -> RowMajorMatrix<F> {
         assert!(self.pairs.len().is_power_of_two());
         let width = BaseAir::<F>::width(&self.air);
-        let mut rows = vec![F::zero(); width * self.pairs.len()];
+        let mut rows = F::zero_vec(width * self.pairs.len());
         rows.par_chunks_mut(width)
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {

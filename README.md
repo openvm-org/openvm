@@ -11,20 +11,19 @@ For a guide on plonky3, see [Getting Started](https://hackmd.io/@axiom/HJks1ZLGR
 To run benchmarks, install python3 and run:
 
 ```bash
-python sdk/scripts/bench.py <name>
+python ci/scripts/bench.py <name>
 ```
 
 where `<name>` is a benchmark implemented as a rust binary (located in `src/bin` in a crate). Current benchmark options are:
 
 - `verify_fibair`
-- `tiny_e2e`
-- `alu256_e2e`
-- `small_e2e`
-  in the `recursion` crate.
+- `fibonacci`
+- `regex`
+  in the `benchmarks` crate.
   The benchmark outputs a JSON of metrics. You can process this into markdown with:
 
 ```bash
-python sdk/scripts/metric_unify/main.py <path to json>
+python ci/scripts/metric_unify/main.py <path to json>
 ```
 
 Currently the processing is done automatically at the end of `bench.py`. The script automatically detects if you have a previously saved metric file for the same benchmark and includes the diff report in the output.
@@ -40,7 +39,7 @@ cargo install inferno
 Then run
 
 ```bash
-python sdk/scripts/metric_unify/flamegraph.py <path to json>
+python ci/scripts/metric_unify/flamegraph.py <path to json>
 ```
 
 The flamegraphs will be written to `*.svg` files in `.bench_metrics/flamegraphs` with respect to the repo root.

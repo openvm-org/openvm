@@ -1,0 +1,52 @@
+[package]
+name = "ax-stark-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "SDK for production and testing usage of STARKs."
+
+[dependencies]
+p3-air = { workspace = true }
+p3-challenger = { workspace = true }
+p3-commit = { workspace = true }
+p3-field = { workspace = true }
+p3-matrix = { workspace = true }
+p3-uni-stark = { workspace = true }
+p3-util = { workspace = true }
+p3-dft = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-fri = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-bn254-fr = { workspace = true }
+p3-goldilocks = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-poseidon = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-blake3 = { workspace = true }
+p3-keccak = { workspace = true }
+zkhash = { workspace = true }
+itertools.workspace = true
+tracing.workspace = true
+
+ax-stark-backend = { workspace = true }
+ax-circuit-derive = { workspace = true }
+
+serde = { workspace = true, features = ["alloc"] }
+rand.workspace = true
+metrics.workspace = true
+serde_json.workspace = true
+static_assertions.workspace = true
+toml = "0.8.14"
+derive_more = "0.99.18"
+ff = { workspace = true, features = ["derive", "derive_bits"] }
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
+metrics-tracing-context = "0.16.0"
+metrics-util = "0.17.0"
+
+[dev-dependencies]
+axvm-instructions.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["ax-stark-backend/parallel"]

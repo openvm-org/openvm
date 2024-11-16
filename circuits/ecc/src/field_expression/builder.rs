@@ -1,6 +1,6 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
         check_carry_to_zero::get_carry_max_abs_and_bits,
@@ -10,7 +10,7 @@ use afs_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -20,6 +20,19 @@ use p3_air::{AirBuilder, BaseAir};
 use p3_field::{Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
+
+#[derive(Clone)]
+pub struct ExprBuilderConfig {
+    pub modulus: BigUint,
+    pub num_limbs: usize,
+    pub limb_bits: usize,
+}
+
+impl ExprBuilderConfig {
+    pub fn check_valid(&self) {
+        assert!(self.modulus.bits() <= self.num_limbs * self.limb_bits);
+    }
+}
 
 #[derive(Clone)]
 pub struct ExprBuilder {
@@ -56,20 +69,15 @@ pub struct ExprBuilder {
 }
 
 impl ExprBuilder {
-    pub fn new(
-        prime: BigUint,
-        limb_bits: usize,
-        num_limbs: usize,
-        range_checker_bits: usize,
-    ) -> Self {
-        let prime_bigint = BigInt::from_biguint(Sign::Plus, prime.clone());
+    pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
+        let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         Self {
-            prime,
+            prime: config.modulus,
             prime_bigint,
             num_input: 0,
             num_flags: 0,
-            limb_bits,
-            num_limbs,
+            limb_bits: config.limb_bits,
+            num_limbs: config.num_limbs,
             range_checker_bits,
             num_variables: 0,
             q_limbs: vec![],
@@ -105,21 +113,29 @@ impl ExprBuilder {
     // Below functions are used when adding variables and constraints manually, need to be careful.
     // Number of variables, constraints and computes should be consistent,
     // so there should be same number of calls to the new_var, add_constraint and add_compute.
-    pub fn new_var(&mut self) -> SymbolicExpr {
+    pub fn new_var(&mut self) -> (usize, SymbolicExpr) {
         self.num_variables += 1;
-        SymbolicExpr::Var(self.num_variables - 1)
+        // Allocate space for the new variable, to make sure they are corresponding to the same variable index.
+        self.constraints.push(SymbolicExpr::Input(0));
+        self.computes.push(SymbolicExpr::Input(0));
+        self.q_limbs.push(0);
+        self.carry_limbs.push(0);
+        (
+            self.num_variables - 1,
+            SymbolicExpr::Var(self.num_variables - 1),
+        )
     }
 
-    pub fn add_constraint(&mut self, constraint: SymbolicExpr) {
+    pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
         let (q_limbs, carry_limbs) =
             constraint.constraint_limbs(&self.prime, self.limb_bits, self.num_limbs);
-        self.constraints.push(constraint);
-        self.q_limbs.push(q_limbs);
-        self.carry_limbs.push(carry_limbs);
+        self.constraints[index] = constraint;
+        self.q_limbs[index] = q_limbs;
+        self.carry_limbs[index] = carry_limbs;
     }
 
-    pub fn add_compute(&mut self, compute: SymbolicExpr) {
-        self.computes.push(compute);
+    pub fn set_compute(&mut self, index: usize, compute: SymbolicExpr) {
+        self.computes[index] = compute;
     }
 }
 
@@ -130,6 +146,22 @@ pub struct FieldExpr {
     pub check_carry_mod_to_zero: CheckCarryModToZeroSubAir,
 
     pub range_bus: VariableRangeCheckerBus,
+}
+
+impl FieldExpr {
+    pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+        let subair = CheckCarryModToZeroSubAir::new(
+            builder.prime.clone(),
+            builder.limb_bits,
+            range_bus.index,
+            range_bus.range_max_bits,
+        );
+        FieldExpr {
+            builder,
+            check_carry_mod_to_zero: subair,
+            range_bus,
+        }
+    }
 }
 
 impl Deref for FieldExpr {
@@ -154,8 +186,12 @@ impl<F: Field> BaseAir<F> for FieldExpr {
 
 impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
     /// The sub-row slice owned by the expression builder.
-    type AirContext<'a> = &'a [AB::Var]
-    where AB: 'a, AB::Var: 'a, AB::Expr: 'a;
+    type AirContext<'a>
+        = &'a [AB::Var]
+    where
+        AB: 'a,
+        AB::Var: 'a,
+        AB::Expr: 'a;
 
     fn eval<'a>(&'a self, builder: &'a mut AB, local: &'a [AB::Var])
     where
@@ -311,7 +347,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // TODO: avoid all these copies and directly allocate
         sub_row.copy_from_slice(
             &[
-                vec![F::one()],
+                vec![F::ONE],
                 input_limbs.concat(),
                 vars_limbs.concat(),
                 all_q.concat(),
@@ -339,6 +375,15 @@ impl FieldExpr {
             vars[i] = r.clone();
         }
         vars
+    }
+
+    pub fn execute_with_output(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+        let vars = self.execute(inputs, flags);
+        self.builder
+            .output_indices
+            .iter()
+            .map(|i| vars[*i].clone())
+            .collect()
     }
 
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {

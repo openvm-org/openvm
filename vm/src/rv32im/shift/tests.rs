@@ -1,10 +1,12 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use afs_primitives::xor::XorLookupChip;
-use afs_stark_backend::{
+use ax_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -13,73 +15,40 @@ use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,
 };
-use rand::{rngs::StdRng, Rng};
+use rand::Rng;
 
 use super::{core::run_shift, Rv32ShiftChip, ShiftCoreChip};
 use crate::{
     arch::{
         instructions::ShiftOpcode,
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
     rv32im::{
         adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
         shift::ShiftCoreCols,
     },
-    system::vm::chip_set::BYTE_XOR_BUS,
-    utils::generate_long_number,
+    utils::{
+        generate_long_number, generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm,
+    },
 };
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_shift_rand_write_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    opcode: ShiftOpcode,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    c_imm: Option<usize>,
-    rng: &mut StdRng,
-) {
-    let is_imm = c_imm.is_some();
-
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = c_imm.unwrap_or_else(|| gen_pointer(rng, 4));
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    if !is_imm {
-        tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-    }
-
-    let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-    tester.execute(
-        chip,
-        Instruction::from_usize(
-            opcode as usize,
-            [rd, rs1, rs2, 1, if is_imm { 0 } else { 1 }],
-        ),
-    );
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
-    const RV32_TOTAL_BITS: usize = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
     let mut rng = create_seeded_rng();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
     let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32ShiftChip::<F>::new(
         Rv32BaseAluAdapterChip::new(
@@ -88,7 +57,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             tester.memory_controller(),
         ),
         ShiftCoreChip::new(
-            xor_lookup_chip.clone(),
+            bitwise_chip.clone(),
             tester.memory_controller().borrow().range_checker.clone(),
             0,
         ),
@@ -97,22 +66,28 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
 
     for _ in 0..num_ops {
         let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let imm = rng.gen_range(0..RV32_TOTAL_BITS);
-        let c = [imm as u32, 0, 0, 0];
-        let c_imm = if rng.gen_bool(0.5) { None } else { Some(imm) };
-        run_rv32_shift_rand_write_execute(&mut tester, &mut chip, opcode, b, c, c_imm, &mut rng);
+        let (c_imm, c) = if rng.gen_bool(0.5) {
+            (
+                None,
+                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
+            )
+        } else {
+            let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
+            (Some(imm), c)
+        };
+
+        let (instruction, rd) =
+            rv32_rand_write_register_or_imm(&mut tester, b, c, c_imm, opcode as usize, &mut rng);
+        tester.execute(&mut chip, instruction);
+
+        let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+        assert_eq!(
+            a.map(F::from_canonical_u32),
+            tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+        )
     }
 
-    // Test overflow cases
-    let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-    let c = [RV32_TOTAL_BITS as u32, 0, 0, 0];
-    run_rv32_shift_rand_write_execute(&mut tester, &mut chip, opcode, b, c, None, &mut rng);
-    let c = [RV32_TOTAL_BITS as u32, 1, 0, 0];
-    run_rv32_shift_rand_write_execute(&mut tester, &mut chip, opcode, b, c, None, &mut rng);
-    let c = [(1 << RV32_CELL_BITS) - 1; 4];
-    run_rv32_shift_rand_write_execute(&mut tester, &mut chip, opcode, b, c, None, &mut rng);
-
-    let tester = tester.build().load(chip).load(xor_lookup_chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -131,13 +106,13 @@ fn rv32_shift_sra_rand_test() {
     run_rv32_shift_rand_test(ShiftOpcode::SRA, 100);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32ShiftTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, ShiftCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
@@ -162,7 +137,10 @@ fn run_rv32_shift_negative_test(
     prank_vals: ShiftPrankValues<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     interaction_error: bool,
 ) {
-    let xor_lookup_chip = Arc::new(XorLookupChip::<RV32_CELL_BITS>::new(BYTE_XOR_BUS));
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
     let mut chip = Rv32ShiftTestChip::<F>::new(
@@ -171,7 +149,7 @@ fn run_rv32_shift_negative_test(
             vec![None],
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
         ),
-        ShiftCoreChip::new(xor_lookup_chip.clone(), range_checker_chip.clone(), 0),
+        ShiftCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone(), 0),
         tester.memory_controller(),
     );
 
@@ -206,9 +184,6 @@ fn run_rv32_shift_negative_test(
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         cols.a = a.map(F::from_canonical_u32);
-        if let Some(bit_shift) = prank_vals.bit_shift {
-            cols.bit_shift = F::from_canonical_u32(bit_shift);
-        }
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
             cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
         }
@@ -236,7 +211,7 @@ fn run_rv32_shift_negative_test(
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
-        .load(xor_lookup_chip)
+        .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
         VerificationError::NonZeroCumulativeSum
@@ -260,14 +235,14 @@ fn rv32_shift_wrong_negative_test() {
 fn rv32_sll_wrong_bit_shift_negative_test() {
     let a = [0, 4, 4, 4];
     let b = [1, 1, 1, 1];
-    let c = [9, 0, 0, 0];
+    let c = [9, 10, 100, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
         bit_multiplier_left: Some(4),
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, false);
+    run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, true);
 }
 
 #[test]
@@ -279,7 +254,7 @@ fn rv32_sll_wrong_limb_shift_negative_test() {
         limb_shift_marker: Some([0, 0, 1, 0]),
         ..Default::default()
     };
-    run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, false);
+    run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, true);
 }
 
 #[test]
@@ -394,41 +369,44 @@ fn rv32_sra_wrong_sign_negative_test() {
 #[test]
 fn run_sll_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LIMBS] = [45, 7, 61, 186];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [27, 0, 0, 0];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [91, 0, 100, 0];
     let z: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 104];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);
-    assert_eq!((y[0] as usize) % RV32_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS);
+    assert_eq!(shift / RV32_CELL_BITS, limb_shift);
+    assert_eq!(shift % RV32_CELL_BITS, bit_shift);
 }
 
 #[test]
 fn run_srl_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LIMBS] = [31, 190, 221, 200];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [17, 0, 0, 0];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [49, 190, 190, 190];
     let z: [u32; RV32_REGISTER_NUM_LIMBS] = [110, 100, 0, 0];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);
-    assert_eq!((y[0] as usize) % RV32_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS);
+    assert_eq!(shift / RV32_CELL_BITS, limb_shift);
+    assert_eq!(shift % RV32_CELL_BITS, bit_shift);
 }
 
 #[test]
 fn run_sra_sanity_test() {
     let x: [u32; RV32_REGISTER_NUM_LIMBS] = [31, 190, 221, 200];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [17, 0, 0, 0];
+    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [113, 20, 50, 80];
     let z: [u32; RV32_REGISTER_NUM_LIMBS] = [110, 228, 255, 255];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    assert_eq!((y[0] as usize) / RV32_CELL_BITS, limb_shift);
-    assert_eq!((y[0] as usize) % RV32_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS);
+    assert_eq!(shift / RV32_CELL_BITS, limb_shift);
+    assert_eq!(shift % RV32_CELL_BITS, bit_shift);
 }

@@ -1,7 +1,7 @@
 use std::array;
 
+use ax_poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use p3_field::Field;
-use poseidon2_air::poseidon2::columns::Poseidon2Cols;
 
 use super::air::Poseidon2VmAir;
 use crate::{
@@ -121,34 +121,34 @@ impl<T: Clone> Poseidon2VmIoCols<T> {
         }
     }
 }
-impl<T: Field> Poseidon2VmIoCols<T> {
+impl<F: Field> Poseidon2VmIoCols<F> {
     pub fn blank_row() -> Self {
         Self {
-            is_opcode: T::zero(),
-            is_compress_direct: T::zero(),
-            pc: T::zero(),
-            timestamp: T::zero(),
-            a: T::zero(),
-            b: T::zero(),
-            c: T::zero(),
-            d: T::one(),
-            e: T::one(),
-            is_compress_opcode: T::zero(),
+            is_opcode: F::ZERO,
+            is_compress_direct: F::ZERO,
+            pc: F::ZERO,
+            timestamp: F::ZERO,
+            a: F::ZERO,
+            b: F::ZERO,
+            c: F::ZERO,
+            d: F::ONE,
+            e: F::ONE,
+            is_compress_opcode: F::ZERO,
         }
     }
 
-    pub fn direct_io_cols(timestamp: T) -> Self {
+    pub fn direct_io_cols(timestamp: F) -> Self {
         Self {
-            is_opcode: T::zero(),
-            is_compress_direct: T::one(),
-            pc: T::zero(),
+            is_opcode: F::ZERO,
+            is_compress_direct: F::ONE,
+            pc: F::ZERO,
             timestamp,
-            a: T::zero(),
-            b: T::zero(),
-            c: T::zero(),
-            d: T::one(),
-            e: T::one(),
-            is_compress_opcode: T::zero(),
+            a: F::ZERO,
+            b: F::ZERO,
+            c: F::ZERO,
+            d: F::ONE,
+            e: F::ONE,
+            is_compress_opcode: F::ZERO,
         }
     }
 }
@@ -223,12 +223,12 @@ impl<T: Clone> Poseidon2VmAuxCols<T> {
     }
 }
 
-impl<T: Field> Poseidon2VmAuxCols<T> {
-    pub fn blank_row(air: &Poseidon2VmAir<T>) -> Self {
+impl<F: Field> Poseidon2VmAuxCols<F> {
+    pub fn blank_row(air: &Poseidon2VmAir<F>) -> Self {
         Self {
-            dst_ptr: T::default(),
-            lhs_ptr: T::default(),
-            rhs_ptr: T::default(),
+            dst_ptr: F::default(),
+            lhs_ptr: F::default(),
+            rhs_ptr: F::default(),
             internal: Poseidon2Cols::blank_row(&air.inner),
             ptr_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled()),
             input_aux_cols: array::from_fn(|_| MemoryReadAuxCols::disabled()),

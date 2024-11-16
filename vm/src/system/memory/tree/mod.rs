@@ -1,26 +1,15 @@
+pub mod public_values;
+
 use std::{collections::BTreeMap, sync::Arc};
 
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
-use crate::system::memory::Equipartition;
-
-pub trait HasherChip<const CHUNK: usize, F: Field> {
-    /// Statelessly compresses two chunks of data into a single chunk.
-    fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
-
-    /// Stateful version of `hash` for recording the event in the chip.
-    fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
-
-    fn hash(&self, values: &[F; CHUNK]) -> [F; CHUNK] {
-        self.compress(values, &[F::zero(); CHUNK])
-    }
-
-    fn hash_and_record(&mut self, values: &[F; CHUNK]) -> [F; CHUNK] {
-        self.compress_and_record(values, &[F::zero(); CHUNK])
-    }
-}
+use crate::{
+    arch::hasher::{Hasher, HasherChip},
+    system::memory::Equipartition,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryNode<const CHUNK: usize, F: PrimeField32> {
@@ -62,7 +51,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn construct_uniform(
         height: usize,
         leaf_value: [F; CHUNK],
-        hasher: &impl HasherChip<CHUNK, F>,
+        hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
             Self::new_leaf(leaf_value)
@@ -80,14 +69,14 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
         memory: &BTreeMap<usize, [F; CHUNK]>,
         height: usize,
         from: usize,
-        hasher: &impl HasherChip<CHUNK, F>,
+        hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));
         if height == 0 {
-            let values = *memory.get(&from).unwrap_or(&[F::zero(); CHUNK]);
+            let values = *memory.get(&from).unwrap_or(&[F::ZERO; CHUNK]);
             MemoryNode::new_leaf(hasher.hash(&values))
         } else if range.next().is_none() {
-            let leaf_value = hasher.hash(&[F::zero(); CHUNK]);
+            let leaf_value = hasher.hash(&[F::ZERO; CHUNK]);
             MemoryNode::construct_uniform(height, leaf_value, hasher)
         } else {
             let midpoint = from + (1 << (height - 1));
@@ -104,17 +93,14 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     pub fn tree_from_memory(
         memory_dimensions: MemoryDimensions,
         memory: &Equipartition<F, CHUNK>,
-        hasher: &impl HasherChip<CHUNK, F>,
+        hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         // Construct a BTreeMap that includes the address space in the label calculation,
         // representing the entire memory tree.
         let mut memory_modified = BTreeMap::new();
-        for (&(address_space, address_label), &values) in memory {
-            let label = (((address_space.as_canonical_u32() as usize)
-                - memory_dimensions.as_offset)
-                << memory_dimensions.address_height)
-                + address_label;
-            memory_modified.insert(label, values);
+        for (&label, &values) in memory {
+            let index = memory_dimensions.label_to_index(label);
+            memory_modified.insert(index, values);
         }
         Self::from_memory(
             &memory_modified,

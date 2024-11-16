@@ -1,9 +1,9 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     ir::{Array, Builder, Config, Ext, Felt, FromConstant, MemIndex, Ptr, Usize, Var, Variable},
     prelude::MemVariable,
 };
 
-use crate::outer_poseidon2::Poseidon2CircuitBuilder;
+use crate::{outer_poseidon2::Poseidon2CircuitBuilder, vars::OuterDigestVariable};
 
 #[derive(Clone)]
 pub enum DigestVal<C: Config> {
@@ -122,6 +122,20 @@ impl<C: Config> DigestVariable<C> {
         match self {
             DigestVariable::Felt(array) => array.len(),
             DigestVariable::Var(array) => array.len(),
+        }
+    }
+    /// Cast to OuterDigestVariable. This should only be used in static mode.
+    pub fn into_outer_digest(self) -> OuterDigestVariable<C> {
+        match self {
+            DigestVariable::Var(array) => array.vec().try_into().unwrap(),
+            DigestVariable::Felt(_) => panic!("Trying to get Var array from Felt array"),
+        }
+    }
+    /// Cast to an inner digest. This should only be used in dynamic mode.
+    pub fn into_inner_digest(self) -> Array<C, Felt<C::F>> {
+        match self {
+            DigestVariable::Felt(array) => array,
+            DigestVariable::Var(_) => panic!("Trying to get Felt array from Var array"),
         }
     }
 }

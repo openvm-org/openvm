@@ -1,16 +1,16 @@
-use afs_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_sdk::{
+use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
+use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{engine_from_perm, random_perm, BabyBearPoseidon2Engine},
+        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
+    engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use axvm_instructions::instruction::Instruction;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
-use p3_util::log2_strict_usize;
-use poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 use rand::Rng;
 
 use super::{Poseidon2Chip, CHUNK, WIDTH};
@@ -24,12 +24,6 @@ use crate::{
     },
     intrinsics::hashes::poseidon2::Poseidon2VmIoCols,
 };
-fn get_engine(max_trace_height: usize) -> BabyBearPoseidon2Engine {
-    let max_log_degree = log2_strict_usize(max_trace_height);
-    let perm = random_perm();
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
-    engine_from_perm(perm, max_log_degree, fri_params)
-}
 
 /// Create random instructions for the poseidon2 chip.
 fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
@@ -47,17 +41,16 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 a,
                 b,
                 c,
-                d: BabyBear::one(),
-                e: BabyBear::two(),
-                f: BabyBear::zero(),
-                g: BabyBear::zero(),
-                debug: String::new(),
+                d: BabyBear::ONE,
+                e: BabyBear::TWO,
+                f: BabyBear::ZERO,
+                g: BabyBear::ZERO,
             }
         })
         .collect()
 }
 
-fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
@@ -127,6 +120,10 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester {
     tester.build().load(chip).finalize()
 }
 
+fn get_engine() -> BabyBearBlake3Engine {
+    BabyBearBlake3Engine::new(standard_fri_params_with_100_bits_conjectured_security(3))
+}
+
 /// Checking that 50 random instructions pass.
 #[test]
 fn poseidon2_chip_random_50_test_new() {
@@ -142,7 +139,7 @@ fn poseidon2_negative_test() {
     let num_ops = 1;
     let mut tester = tester_with_random_poseidon2_ops(num_ops);
 
-    tester.test(get_engine).expect("Verification failed");
+    tester.simple_test().expect("Verification failed");
 
     disable_debug_builder();
     // test is slow, avoid too many repetitions
@@ -202,7 +199,7 @@ fn poseidon2_negative_test() {
 //         outs.iter()
 //             .enumerate()
 //             .flat_map(|(i, out)| {
-//                 vec![BabyBear::one()]
+//                 vec![BabyBear::ONE]
 //                     .into_iter()
 //                     .chain(hashes[i].0)
 //                     .chain(hashes[i].1)
@@ -212,7 +209,7 @@ fn poseidon2_negative_test() {
 //         width + 1,
 //     );
 //     dummy_direct_cpu_trace.values.extend(vec![
-//         BabyBear::zero();
+//         BabyBear::ZERO;
 //         (width + 1) * (correct_height - NUM_OPS)
 //     ]);
 //

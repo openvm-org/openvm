@@ -1,12 +1,16 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Gt, MillerLoopResult};
+use axvm_ecc::{
+    curve::bls12381::{Fq, Fq12, Fq2},
+    field::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
+    point::AffinePoint,
+};
 use num::BigInt;
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
-use crate::common::{EcPoint, ExpBigInt, FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
-    fn assert_final_exp_is_one(&self, f: Fq12, P: &[EcPoint<Fq>], Q: &[EcPoint<Fq2>]) {
+    fn assert_final_exp_is_one(&self, f: Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
         let (c, s) = self.final_exp_hint(f);
 
         // f * s = c^{q - x}
@@ -34,12 +38,6 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/hints.go#L273
     // returns c (residueWitness) and s (scalingFactor)
     fn final_exp_hint(&self, f: Fq12) -> (Fq12, Fq12) {
-        debug_assert_eq!(
-            MillerLoopResult(f).final_exponentiation(),
-            Gt(Fq12::one()),
-            "Trying to call final_exp_hint on {f:?} which does not final exponentiate to 1."
-        );
-
         // 1. get p-th root inverse
         let mut exp = FINAL_EXP_FACTOR.clone() * BigInt::from(27);
         let mut root = f.exp_bigint(exp.clone());

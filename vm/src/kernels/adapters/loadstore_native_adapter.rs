@@ -4,9 +4,9 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -30,7 +30,7 @@ use crate::{
     },
 };
 
-pub struct NativeLoadStoreProcessedInstruction<T> {
+pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
     // Absolute opcode number
     pub opcode: T,
@@ -49,10 +49,10 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     // TODO[yi]: Fix when vectorizing
     type Reads = ([T; 2], T);
     type Writes = [T; NUM_CELLS];
-    type ProcessedInstruction = NativeLoadStoreProcessedInstruction<T>;
+    type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeLoadStoreAdapterChip<F: Field, const NUM_CELLS: usize> {
     pub air: NativeLoadStoreAdapterAir<NUM_CELLS>,
     offset: usize,
@@ -336,9 +336,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             (
                 [
                     read1_cell.data[0],
-                    read2_cell.map_or_else(F::zero, |x| x.data[0]),
+                    read2_cell.map_or(F::ZERO, |x| x.data[0]),
                 ],
-                data_read.map_or_else(F::zero, |x| x.data[0]),
+                data_read.map_or(F::ZERO, |x| x.data[0]),
             ),
             record,
         ))
@@ -385,10 +385,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         cols.data_read_as = read_record
             .data_read
-            .map_or_else(F::zero, |read| read.address_space);
-        cols.data_read_pointer = read_record
-            .data_read
-            .map_or_else(F::zero, |read| read.pointer);
+            .map_or(F::ZERO, |read| read.address_space);
+        cols.data_read_pointer = read_record.data_read.map_or(F::ZERO, |read| read.pointer);
 
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;

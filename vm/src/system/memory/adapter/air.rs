@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use afs_primitives::{
+use ax_circuit_primitives::{
     is_less_than::{IsLessThanIo, IsLtSubAir},
     SubAir,
 };
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -62,12 +62,12 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
         );
 
         let parent_timestamp = local.is_right_larger * local.right_timestamp
-            + (AB::Expr::one() - local.is_right_larger) * local.left_timestamp;
+            + (AB::Expr::ONE - local.is_right_larger) * local.left_timestamp;
 
         // assuming valid:
         // Split = 1 => direction = 1 => receive parent with count 1, send left/right with count 1
         // Split = 0 => direction = -1 => receive parent with count -1, send left/right with count -1
-        let direction = local.is_valid * (AB::Expr::two() * local.is_split - AB::Expr::one());
+        let direction = local.is_valid * (AB::Expr::TWO * local.is_split - AB::Expr::ONE);
 
         self.memory_bus
             .receive(local.address, local.values.to_vec(), parent_timestamp)

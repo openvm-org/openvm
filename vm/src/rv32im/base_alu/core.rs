@@ -4,19 +4,19 @@ use std::{
     sync::Arc,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     utils::not,
-    xor::{XorBus, XorLookupChip},
 };
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
 use crate::arch::{
-    instructions::{AluOpcode, UsizeOpcode},
+    instructions::{BaseAluOpcode, UsizeOpcode},
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
@@ -37,7 +37,7 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bus: XorBus,
+    pub bus: BitwiseOperationLookupBus,
     offset: usize,
 }
 
@@ -77,7 +77,7 @@ where
             cols.opcode_and_flag,
         ];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -91,8 +91,8 @@ where
         // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
         // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUB when
         // carry[i] is (a[i] + b[i] - c[i] + carry[i - 1]) / 2^LIMB_BITS.
-        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
-        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::zero());
+        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
@@ -104,7 +104,7 @@ where
                     + if i > 0 {
                         carry_add[i - 1].clone()
                     } else {
-                        AB::Expr::zero()
+                        AB::Expr::ZERO
                     });
             builder
                 .when(cols.opcode_add_flag)
@@ -114,15 +114,15 @@ where
                     + if i > 0 {
                         carry_sub[i - 1].clone()
                     } else {
-                        AB::Expr::zero()
+                        AB::Expr::ZERO
                     });
             builder
                 .when(cols.opcode_sub_flag)
                 .assert_bool(carry_sub[i].clone());
         }
 
-        // Interaction with XorLookup to range check a for ADD and SUB, and constrain a's
-        // correctness for XOR, OR, and AND. XorLookup expects interaction [x, y, x ^ y].
+        // Interaction with BitwiseOperationLookup to range check a for ADD and SUB, and
+        // constrain a's correctness for XOR, OR, and AND.
         let bitwise = cols.opcode_xor_flag + cols.opcode_or_flag + cols.opcode_and_flag;
         for i in 0..NUM_LIMBS {
             let x = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * b[i];
@@ -130,11 +130,13 @@ where
             let x_xor_y = cols.opcode_xor_flag * a[i]
                 + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i])
                 + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
-            self.bus.send(x, y, x_xor_y).eval(builder, is_valid.clone());
+            self.bus
+                .send_xor(x, y, x_xor_y)
+                .eval(builder, is_valid.clone());
         }
 
-        let expected_opcode = flags.iter().zip(AluOpcode::iter()).fold(
-            AB::Expr::zero(),
+        let expected_opcode = flags.iter().zip(BaseAluOpcode::iter()).fold(
+            AB::Expr::ZERO,
             |acc, (flag, local_opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
             },
@@ -155,26 +157,29 @@ where
 
 #[derive(Clone, Debug)]
 pub struct BaseAluCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub opcode: AluOpcode,
+    pub opcode: BaseAluOpcode,
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
-    pub xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>,
+    pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(xor_lookup_chip: Arc<XorLookupChip<LIMB_BITS>>, offset: usize) -> Self {
+    pub fn new(
+        bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<LIMB_BITS>>,
+        offset: usize,
+    ) -> Self {
         Self {
             air: BaseAluCoreAir {
-                bus: xor_lookup_chip.bus(),
+                bus: bitwise_lookup_chip.bus(),
                 offset,
             },
-            xor_lookup_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -198,25 +203,25 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = AluOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index = BaseAluOpcode::from_usize(opcode - self.air.offset);
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
 
-        let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
+        let output = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),
         };
 
-        if local_opcode_index == AluOpcode::ADD || local_opcode_index == AluOpcode::SUB {
+        if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
             for a_val in a {
-                self.xor_lookup_chip.request(a_val, a_val);
+                self.bitwise_lookup_chip.request_xor(a_val, a_val);
             }
         } else {
             for (b_val, c_val) in b.iter().zip(c.iter()) {
-                self.xor_lookup_chip.request(*b_val, *c_val);
+                self.bitwise_lookup_chip.request_xor(*b_val, *c_val);
             }
         }
 
@@ -231,7 +236,7 @@ where
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", AluOpcode::from_usize(opcode - self.air.offset))
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.air.offset))
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
@@ -239,11 +244,11 @@ where
         row_slice.a = record.a;
         row_slice.b = record.b;
         row_slice.c = record.c;
-        row_slice.opcode_add_flag = F::from_bool(record.opcode == AluOpcode::ADD);
-        row_slice.opcode_sub_flag = F::from_bool(record.opcode == AluOpcode::SUB);
-        row_slice.opcode_xor_flag = F::from_bool(record.opcode == AluOpcode::XOR);
-        row_slice.opcode_or_flag = F::from_bool(record.opcode == AluOpcode::OR);
-        row_slice.opcode_and_flag = F::from_bool(record.opcode == AluOpcode::AND);
+        row_slice.opcode_add_flag = F::from_bool(record.opcode == BaseAluOpcode::ADD);
+        row_slice.opcode_sub_flag = F::from_bool(record.opcode == BaseAluOpcode::SUB);
+        row_slice.opcode_xor_flag = F::from_bool(record.opcode == BaseAluOpcode::XOR);
+        row_slice.opcode_or_flag = F::from_bool(record.opcode == BaseAluOpcode::OR);
+        row_slice.opcode_and_flag = F::from_bool(record.opcode == BaseAluOpcode::AND);
     }
 
     fn air(&self) -> &Self::Air {
@@ -252,16 +257,16 @@ where
 }
 
 pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: AluOpcode,
+    opcode: BaseAluOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> [u32; NUM_LIMBS] {
     match opcode {
-        AluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
-        AluOpcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::XOR => run_xor::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::OR => run_or::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluOpcode::AND => run_and::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }
 

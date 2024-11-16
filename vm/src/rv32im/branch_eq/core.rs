@@ -3,21 +3,18 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils::not;
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils::not;
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::instruction::Instruction;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use strum::IntoEnumIterator;
 
-use crate::{
-    arch::{
-        instructions::{BranchEqualOpcode, UsizeOpcode},
-        AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir,
-        VmCoreChip,
-    },
-    rv32im::adapters::JumpUiProcessedInstruction,
+use crate::arch::{
+    instructions::{BranchEqualOpcode, UsizeOpcode},
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 
 #[repr(C)]
@@ -58,7 +55,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
     I::Writes: Default,
-    I::ProcessedInstruction: From<JumpUiProcessedInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -69,7 +66,7 @@ where
         let cols: &BranchEqualCoreCols<_, NUM_LIMBS> = local.borrow();
         let flags = [cols.opcode_beq_flag, cols.opcode_bne_flag];
 
-        let is_valid = flags.iter().fold(AB::Expr::zero(), |acc, &flag| {
+        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
             acc + flag.into()
         });
@@ -101,7 +98,7 @@ where
         let expected_opcode = flags
             .iter()
             .zip(BranchEqualOpcode::iter())
-            .fold(AB::Expr::zero(), |acc, (flag, opcode)| {
+            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
                 acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
             })
             + AB::Expr::from_canonical_usize(self.offset);
@@ -114,7 +111,7 @@ where
             to_pc: Some(to_pc),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
-            instruction: JumpUiProcessedInstruction {
+            instruction: ImmInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 immediate: cols.imm.into(),
@@ -208,7 +205,7 @@ where
             if i == record.diff_idx {
                 record.diff_inv_val
             } else {
-                F::zero()
+                F::ZERO
             }
         });
     }
@@ -233,5 +230,5 @@ pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
             );
         }
     }
-    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::zero())
+    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::ZERO)
 }

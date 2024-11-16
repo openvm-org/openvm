@@ -4,10 +4,10 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
     paths:
       - "vm/**"
-      - "toolchain/compiler/**"
+      - "toolchain/native-compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -32,6 +32,6 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run compiler tests
-        working-directory: toolchain/compiler
+        working-directory: toolchain/native-compiler
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

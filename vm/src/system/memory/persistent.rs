@@ -1,26 +1,25 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashSet,
     iter,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_primitives::utils::next_power_of_two_or_zero;
-use afs_stark_backend::{
+use ax_circuit_derive::AlignedBorrow;
+use ax_circuit_primitives::utils::next_power_of_two_or_zero;
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, BaseAir};
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use rustc_hash::FxHashSet;
 
-use crate::system::{
-    memory::{
+use crate::{
+    arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
+    system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, tree::HasherChip, Equipartition, MemoryAddress,
-        TimestampedEquipartition,
+        offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
     },
-    vm::chip_set::POSEIDON2_DIRECT_BUS,
 };
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
@@ -41,6 +40,7 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 
 /// Imposes the following constraints:
 /// - `expand_direction` should be -1, 0, 1
+///
 /// Sends the following interactions:
 /// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from `merkle_bus`.
@@ -78,7 +78,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction =  1 => is_final = 0
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
-            AB::Expr::zero(),
+            AB::Expr::ZERO,
             local.address_space - AB::F::from_canonical_usize(self.memory_dims.as_offset),
             local.leaf_label.into(),
         ];
@@ -93,7 +93,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             POSEIDON2_DIRECT_BUS,
             iter::empty()
                 .chain(local.values.map(Into::into))
-                .chain(iter::repeat(AB::Expr::zero()).take(CHUNK))
+                .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
                 .chain(local.hash.map(Into::into)),
             local.expand_direction * local.expand_direction,
         );
@@ -111,10 +111,10 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: HashSet<(F, usize)>,
+    touched_labels: FxHashSet<(F, usize)>,
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -129,7 +129,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 memory_bus,
                 merkle_bus,
             },
-            touched_labels: HashSet::new(),
+            touched_labels: FxHashSet::default(),
         }
     }
 
@@ -150,7 +150,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
         let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
-        let mut rows = vec![F::zero(); height * width];
+        let mut rows = F::zero_vec(height * width);
 
         for (row, &(address_space, label)) in
             rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
@@ -160,7 +160,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 Some(values) => {
                     let initial_hash = hasher.hash_and_record(values);
                     PersistentBoundaryCols {
-                        expand_direction: F::one(),
+                        expand_direction: F::ONE,
                         address_space,
                         leaf_label: F::from_canonical_usize(label),
                         values: *values,
@@ -169,21 +169,21 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                     }
                 }
                 None => {
-                    let initial_hash = hasher.hash_and_record(&[F::zero(); CHUNK]);
+                    let initial_hash = hasher.hash_and_record(&[F::ZERO; CHUNK]);
                     PersistentBoundaryCols {
-                        expand_direction: F::one(),
+                        expand_direction: F::ONE,
                         address_space,
                         leaf_label: F::from_canonical_usize(label),
-                        values: [F::zero(); CHUNK],
+                        values: [F::ZERO; CHUNK],
                         hash: initial_hash,
-                        timestamp: F::zero(),
+                        timestamp: F::ZERO,
                     }
                 }
             };
             let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
             let final_hash = hasher.hash_and_record(&timestamped_values.values);
             *final_row.borrow_mut() = PersistentBoundaryCols {
-                expand_direction: F::neg_one(),
+                expand_direction: F::NEG_ONE,
                 address_space,
                 leaf_label: F::from_canonical_usize(label),
                 values: timestamped_values.values,

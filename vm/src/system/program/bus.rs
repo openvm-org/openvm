@@ -1,6 +1,6 @@
 use std::iter;
 
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::AbstractField;
 
 #[derive(Debug, Clone, Copy)]
@@ -21,7 +21,7 @@ impl ProgramBus {
                 operands
                     .into_iter()
                     .map(Into::into)
-                    .chain(iter::repeat(AB::Expr::zero()))
+                    .chain(iter::repeat(AB::Expr::ZERO))
                     .take(7),
             ),
             multiplicity,

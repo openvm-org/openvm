@@ -1,29 +1,22 @@
 use std::cmp::Reverse;
 
-use afs_compiler::ir::{
-    unsafe_array_transmute, Array, BigUintVar, Builder, Config, Ext, Felt, MemVariable, Usize, Var,
-    DIGEST_SIZE, LIMB_BITS, NUM_LIMBS,
-};
-use afs_primitives::bigint::utils::big_uint_to_num_limbs;
-use afs_stark_backend::{
+use ax_stark_backend::{
     keygen::types::TraceWidth,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{AirProofData, Commitments, Proof},
     },
 };
-use ax_ecc_lib::types::{
-    ECDSAInput, ECDSAInputVariable, ECDSASignature, ECDSASignatureVariable, ECPoint,
-    ECPointVariable,
+use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use axvm_native_compiler::ir::{
+    unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
-use ax_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use itertools::Itertools;
-use num_bigint_dig::BigUint;
 use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
-use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcsProof};
-use p3_merkle_tree::FieldMerkleTreeMmcs;
+use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
+use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
@@ -44,7 +37,7 @@ pub type InnerPerm =
 pub type InnerHash = PaddingFreeSponge<InnerPerm, 16, 8, 8>;
 pub type InnerDigest = [InnerVal; DIGEST_SIZE];
 pub type InnerCompress = TruncatedPermutation<InnerPerm, 2, 8, 16>;
-pub type InnerValMmcs = FieldMerkleTreeMmcs<
+pub type InnerValMmcs = MerkleTreeMmcs<
     <InnerVal as Field>::Packing,
     <InnerVal as Field>::Packing,
     InnerHash,
@@ -52,12 +45,11 @@ pub type InnerValMmcs = FieldMerkleTreeMmcs<
     8,
 >;
 pub type InnerChallengeMmcs = ExtensionMmcs<InnerVal, InnerChallenge, InnerValMmcs>;
-pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs>;
+pub type InnerInputProof = Vec<InnerBatchOpening>;
+pub type InnerQueryProof = QueryProof<InnerChallenge, InnerChallengeMmcs, InnerInputProof>;
 pub type InnerCommitPhaseStep = CommitPhaseProofStep<InnerChallenge, InnerChallengeMmcs>;
-pub type InnerFriProof = FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal>;
+pub type InnerFriProof = FriProof<InnerChallenge, InnerChallengeMmcs, InnerVal, InnerInputProof>;
 pub type InnerBatchOpening = BatchOpening<InnerVal, InnerValMmcs>;
-pub type InnerPcsProof =
-    TwoAdicFriPcsProof<InnerVal, InnerChallenge, InnerValMmcs, InnerChallengeMmcs>;
 
 pub trait Hintable<C: Config> {
     type HintVariable: MemVariable<C>;
@@ -383,7 +375,7 @@ impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let proof = InnerPcsProof::read(builder);
+        let proof = InnerFriProof::read(builder);
         let values = OpenedValues::read(builder);
 
         OpeningProofVariable { proof, values }
@@ -476,102 +468,16 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
     }
 }
 
-impl Hintable<InnerConfig> for BigUint {
-    type HintVariable = BigUintVar<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.uninit_biguint();
-        for i in 0..NUM_LIMBS {
-            // FIXME: range check for each element.
-            let v = builder.hint_var();
-            builder.set_value(&ret, i, v);
-        }
-        ret
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        vec![big_uint_to_num_limbs(self, LIMB_BITS, NUM_LIMBS)
-            .iter()
-            .map(|x| <InnerConfig as Config>::N::from_canonical_usize(*x))
-            .collect()]
-    }
-}
-
-impl Hintable<InnerConfig> for ECPoint {
-    type HintVariable = ECPointVariable<InnerConfig>;
-
-    // FIXME: should depend on curve for coordinate bits
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let ret = builder.array(2 * NUM_LIMBS);
-        for i in 0..2 * NUM_LIMBS {
-            // FIXME: range check for each element.
-            let v = builder.hint_var();
-            builder.set_value(&ret, i, v);
-        }
-        // ECPointVariable::`new` checks if the point is on the curve.
-        ECPointVariable { affine: ret }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let x = self.x.write().pop().unwrap();
-        let y = self.y.write().pop().unwrap();
-        vec![[x, y].concat()]
-    }
-}
-
-impl Hintable<InnerConfig> for ECDSASignature {
-    type HintVariable = ECDSASignatureVariable<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let r = BigUint::read(builder);
-        let s = BigUint::read(builder);
-        ECDSASignatureVariable { r, s }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret: Vec<Vec<<InnerConfig as Config>::N>> = self.r.write();
-        ret.extend(self.s.write());
-        ret
-    }
-}
-
-impl Hintable<InnerConfig> for ECDSAInput {
-    type HintVariable = ECDSAInputVariable<InnerConfig>;
-
-    fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let pubkey = ECPoint::read(builder);
-        let sig = ECDSASignature::read(builder);
-        let msg_hash = BigUint::read(builder);
-        Self::HintVariable {
-            pubkey,
-            sig,
-            msg_hash,
-        }
-    }
-
-    fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        let mut ret = self.pubkey.write();
-        ret.extend(self.sig.write());
-        ret.extend(self.msg_hash.write());
-        ret
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use afs_compiler::{
+    use axvm_circuit::system::program::util::execute_program;
+    use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
-        prelude::*,
     };
-    use afs_derive::{DslVariable, Hintable};
     use p3_field::AbstractField;
-    use stark_vm::system::program::util::execute_program;
 
-    use crate::{
-        hints::{Hintable, InnerChallenge, InnerVal},
-        types::InnerConfig,
-    };
+    use crate::hints::{Hintable, InnerChallenge, InnerVal};
 
     #[test]
     fn test_var_array() {
@@ -646,24 +552,5 @@ mod test {
 
         let program = builder.compile_isa();
         execute_program(program, stream);
-    }
-
-    #[derive(Hintable)]
-    struct TestStruct {
-        a: usize,
-        b: usize,
-        c: usize,
-    }
-
-    #[test]
-    fn test_macro() {
-        let x = TestStruct { a: 1, b: 2, c: 3 };
-        let stream = Hintable::<InnerConfig>::write(&x);
-        assert_eq!(
-            stream,
-            [1, 2, 3]
-                .map(|x| vec![InnerVal::from_canonical_usize(x)])
-                .to_vec()
-        );
     }
 }

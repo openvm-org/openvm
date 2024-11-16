@@ -1,28 +1,14 @@
 use std::{cell::RefCell, rc::Rc};
 
-use afs_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerBus,
-};
-use ax_ecc_primitives::field_expression::{ExprBuilder, FieldExpr};
-use num_bigint_dig::BigUint;
-
-use super::super::FIELD_ELEMENT_BITS;
+use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
+use ax_ecc_primitives::field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr};
 
 pub fn ec_add_ne_expr(
-    modulus: BigUint, // The coordinate field.
-    num_limbs: usize,
-    limb_bits: usize,
+    config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
 ) -> FieldExpr {
-    assert!(modulus.bits() <= num_limbs * limb_bits);
-    let subair = CheckCarryModToZeroSubAir::new(
-        modulus.clone(),
-        limb_bits,
-        range_bus.index,
-        range_bus.range_max_bits,
-        FIELD_ELEMENT_BITS,
-    );
-    let builder = ExprBuilder::new(modulus, limb_bits, num_limbs, range_bus.range_max_bits);
+    config.check_valid();
+    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x1 = ExprBuilder::new_input(builder.clone());
@@ -36,9 +22,5 @@ pub fn ec_add_ne_expr(
     y3.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr {
-        builder,
-        check_carry_mod_to_zero: subair,
-        range_bus,
-    }
+    FieldExpr::new(builder, range_bus)
 }

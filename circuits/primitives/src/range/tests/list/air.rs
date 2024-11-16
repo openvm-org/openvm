@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -32,6 +32,6 @@ impl<AB: InteractionBuilder> Air<AB> for ListAir {
         let local: &ListCols<AB::Var> = (*local).borrow();
 
         // We do not implement SubAirBridge trait for brevity
-        self.bus.send(local.val).eval(builder, AB::F::one());
+        self.bus.send(local.val).eval(builder, AB::F::ONE);
     }
 }

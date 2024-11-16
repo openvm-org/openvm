@@ -4,15 +4,16 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
     paths:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/compiler/**"
+      - "toolchain/native-compiler/**"
       - "circuits/ecc/**"
       - "lib/ecc/**"
       - "lib/ecc-execution/**"
+      - "cargo-axiom/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -30,16 +31,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
-
-      - name: Run ecc-lib crate tests
-        working-directory: lib/ecc
-        run: |
-          cargo nextest run --cargo-profile=fast --features parallel
 
       - name: Run ecc-execution crate tests
         working-directory: lib/ecc-execution
@@ -49,4 +45,15 @@ jobs:
       - name: Run ecc-circuits crate tests
         working-directory: circuits/ecc
         run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel,test-utils
+
+      - name: Install cargo-axiom
+        working-directory: cargo-axiom
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          cargo install --force --locked --path .
+
+      - name: Build axvm-ecc crate
+        working-directory: lib/ecc
+        run: |
+          cargo axiom build

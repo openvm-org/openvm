@@ -6,8 +6,8 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use itertools::izip;
 use p3_air::BaseAir;
@@ -35,7 +35,7 @@ use crate::{
 ///   from the heap, starting from the addresses in `rs`
 /// * Writes take the form of `NUM_WRITES` consecutive writes of size `WRITE_SIZE`
 ///   to the heap, starting from the address in `rd`.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NativeVecHeapAdapterChip<
     F: Field,
     const R: usize,
@@ -245,11 +245,11 @@ impl<
                     cols.rs_ptr
                         .first()
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.rs_ptr
                         .get(1)
                         .map(|&x| x.into())
-                        .unwrap_or(AB::Expr::zero()),
+                        .unwrap_or(AB::Expr::ZERO),
                     cols.ptr_as.into(),
                     cols.heap_as.into(),
                 ],

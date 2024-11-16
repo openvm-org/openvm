@@ -3,7 +3,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Lit, Meta, MetaNameValue};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Lit, Meta, MetaNameValue};
 
 #[proc_macro_derive(UsizeOpcode, attributes(opcode_offset))]
 pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
@@ -25,22 +25,53 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
     }
     let offset = offset.expect("opcode_offset attribute not found");
 
-    let methods = quote! {
-        impl UsizeOpcode for #name {
-            fn default_offset() -> usize {
-                #offset
-            }
+    match &ast.data {
+        Data::Struct(inner) => {
+            let inner = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            let inner_ty = inner.ty;
 
-            fn from_usize(value: usize) -> Self {
-                Self::from_repr(value.try_into().unwrap())
-                    .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
-            }
+            quote! {
+                impl UsizeOpcode for #name {
+                    fn default_offset() -> usize {
+                        #offset
+                    }
 
-            fn as_usize(&self) -> usize {
-                *self as usize
-            }
-        }
-    };
+                    fn from_usize(value: usize) -> Self {
+                        #name(<#inner_ty as UsizeOpcode>::from_usize(value))
+                    }
 
-    TokenStream::from(methods)
+                    fn as_usize(&self) -> usize {
+                        self.0.as_usize()
+                    }
+                }
+            }.into()
+        },
+        Data::Enum(_) => {
+            quote! {
+                impl UsizeOpcode for #name {
+                    fn default_offset() -> usize {
+                        #offset
+                    }
+
+                    fn from_usize(value: usize) -> Self {
+                        Self::from_repr(value.try_into().unwrap())
+                            .unwrap_or_else(|| panic!("Failed to convert usize {} to opcode {}", value, stringify!(#name)))
+                    }
+
+                    fn as_usize(&self) -> usize {
+                        *self as usize
+                    }
+                }
+            }.into()
+        },
+        Data::Union(_) => unimplemented!("Unions are not supported")
+    }
 }

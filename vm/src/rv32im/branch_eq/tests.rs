@@ -1,9 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, ChipUsageGetter,
 };
-use ax_sdk::utils::create_seeded_rng;
+use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::{instruction::Instruction, program::PC_BITS};
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
@@ -22,23 +22,20 @@ use crate::{
     arch::{
         instructions::{BranchEqualOpcode, UsizeOpcode},
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        BasicAdapterInterface, ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
-        VmCoreChip,
+        BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
+        VmChipWrapper, VmCoreChip,
     },
-    rv32im::adapters::{
-        JumpUiProcessedInstruction, Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS,
-        RV_B_TYPE_IMM_BITS,
-    },
+    rv32im::adapters::{Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
 };
 
 type F = BabyBear;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
@@ -65,7 +62,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
             1,
             1,
         ),
-        rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS)),
+        rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
     let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(opcode, &a, &b);
@@ -116,13 +113,13 @@ fn rv32_bne_rand_test() {
     run_rv32_branch_eq_rand_test(BranchEqualOpcode::BNE, 100);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// NEGATIVE TESTS
-///
-/// Given a fake trace of a single operation, setup a chip and run the test. We replace
-/// the write part of the trace and check that the core chip throws the expected error.
-/// A dummy adapter is used so memory interactions don't indirectly cause false passes.
-///////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// the write part of the trace and check that the core chip throws the expected error.
+// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+//////////////////////////////////////////////////////////////////////////////////////
 
 type Rv32BranchEqualTestChip<F> =
     VmChipWrapper<F, TestAdapterChip<F>, BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS>>;
@@ -276,7 +273,7 @@ fn execute_pc_increment_sanity_test() {
 
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
+        BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
@@ -284,7 +281,7 @@ fn execute_pc_increment_sanity_test() {
     instruction.opcode = BranchEqualOpcode::BNE.as_usize();
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
-        BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
+        BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
     >>::execute_instruction(&core, &instruction, 0, [x, y]);
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_some());
@@ -297,12 +294,12 @@ fn run_eq_sanity_test() {
     let (cmp_result, _, diff_val) =
         run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &x);
     assert!(cmp_result);
-    assert_eq!(diff_val, F::zero());
+    assert_eq!(diff_val, F::ZERO);
 
     let (cmp_result, _, diff_val) =
         run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &x);
     assert!(!cmp_result);
-    assert_eq!(diff_val, F::zero());
+    assert_eq!(diff_val, F::ZERO);
 }
 
 #[test]
@@ -314,7 +311,7 @@ fn run_ne_sanity_test() {
     assert!(!cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
-        F::one()
+        F::ONE
     );
 
     let (cmp_result, diff_idx, diff_val) =
@@ -322,6 +319,6 @@ fn run_ne_sanity_test() {
     assert!(cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u32(x[diff_idx]) - F::from_canonical_u32(y[diff_idx])),
-        F::one()
+        F::ONE
     );
 }

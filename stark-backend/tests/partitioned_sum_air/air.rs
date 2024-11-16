@@ -3,7 +3,7 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     air_builders::PartitionedAirBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -36,7 +36,7 @@ impl<AB: PartitionedAirBuilder> Air<AB> for SumAir {
         let x = builder.common_main().row_slice(0)[0];
         let ys = builder.cached_mains()[0].row_slice(0);
 
-        let mut y_sum = AB::Expr::zero();
+        let mut y_sum = AB::Expr::ZERO;
         for &y in &*ys {
             y_sum = y_sum + y;
         }

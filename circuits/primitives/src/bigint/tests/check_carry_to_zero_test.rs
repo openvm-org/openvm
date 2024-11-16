@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, sync::Arc};
 
-use afs_stark_backend::{
+use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use ax_sdk::{
+use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
@@ -72,7 +72,6 @@ impl<const N: usize, T: Clone> TestCarryCols<N, T> {
 
 pub struct TestCarryAir<const N: usize> {
     pub test_carry_sub_air: CheckCarryToZeroSubAir,
-    pub field_element_bits: usize,
     pub decomp: usize,
     pub num_limbs: usize,
     pub limb_bits: usize,
@@ -121,13 +120,13 @@ impl TestCarryAir<N> {
         assert_eq!(y_overflow.limbs.len(), 2 * N);
         let expr = x_overflow.clone() * x_overflow.clone() - y_overflow.clone();
         let carries = expr.calculate_carries(self.limb_bits);
-        let mut carries_f = vec![F::zero(); carries.len()];
+        let mut carries_f = F::zero_vec(carries.len());
         let (carry_min_abs, carry_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         for (i, &carry) in carries.iter().enumerate() {
             range_checker.add_count((carry + (carry_min_abs as isize)) as u32, carry_bits);
             carries_f[i] = F::from_canonical_usize(carry.unsigned_abs())
-                * if carry >= 0 { F::one() } else { F::neg_one() };
+                * if carry >= 0 { F::ONE } else { F::NEG_ONE };
         }
 
         TestCarryCols {
@@ -142,7 +141,7 @@ impl TestCarryAir<N> {
                 .map(|x| F::from_canonical_usize(*x as usize))
                 .collect(),
             carries: carries_f,
-            is_valid: F::one(),
+            is_valid: F::ONE,
         }
     }
 }
@@ -162,12 +161,9 @@ fn test_x_square_minus_y(x: BigUint, y: BigUint) {
         range_bus,
         range_decomp,
     )));
-    let field_element_bits = 30;
-    let check_carry_sub_air =
-        CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp, field_element_bits);
+    let check_carry_sub_air = CheckCarryToZeroSubAir::new(limb_bits, range_bus, range_decomp);
     let test_air = TestCarryAir::<N> {
         test_carry_sub_air: check_carry_sub_air,
-        field_element_bits,
         decomp: range_decomp,
         num_limbs,
         limb_bits,

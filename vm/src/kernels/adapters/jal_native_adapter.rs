@@ -4,8 +4,8 @@ use std::{
     marker::PhantomData,
 };
 
-use afs_derive::AlignedBorrow;
-use afs_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -14,9 +14,9 @@ use super::native_adapter::NativeWriteRecord;
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
+        VmAdapterInterface,
     },
-    rv32im::adapters::JumpUiProcessedInstruction,
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
@@ -25,7 +25,7 @@ use crate::{
         program::ProgramBus,
     },
 };
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct JalNativeAdapterChip<F: Field> {
     pub air: JalNativeAdapterAir,
     _marker: PhantomData<F>,
@@ -71,8 +71,7 @@ impl<F: Field> BaseAir<F> for JalNativeAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
-    type Interface =
-        BasicAdapterInterface<AB::Expr, JumpUiProcessedInstruction<AB::Expr>, 0, 1, 1, 1>;
+    type Interface = BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 1, 1>;
 
     fn eval(
         &self,
@@ -103,7 +102,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for JalNativeAdapterAir {
                 [
                     cols.a_pointer.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::zero(),
+                    AB::Expr::ZERO,
                     cols.a_as.into(),
                 ],
                 cols.from_state,
@@ -123,7 +122,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
     type ReadRecord = ();
     type WriteRecord = NativeWriteRecord<F, 1>;
     type Air = JalNativeAdapterAir;
-    type Interface = BasicAdapterInterface<F, JumpUiProcessedInstruction<F>, 0, 1, 1, 1>;
+    type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 1, 1>;
 
     fn preprocess(
         &mut self,

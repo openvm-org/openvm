@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use afs_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };
@@ -60,9 +60,9 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
         let value = *cols.value;
         let index = *cols.index;
 
-        let mut sum_flags = AB::Expr::zero();
-        let mut match_public_value_index = AB::Expr::zero();
-        let mut match_public_value = AB::Expr::zero();
+        let mut sum_flags = AB::Expr::ZERO;
+        let mut match_public_value_index = AB::Expr::ZERO;
+        let mut match_public_value = AB::Expr::ZERO;
         for (i, &&flag) in cols.custom_pv_flags.iter().enumerate() {
             builder.assert_bool(flag.into());
             sum_flags += flag.into();
@@ -155,18 +155,18 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let mut cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(row_slice);
         debug_assert_eq!(cols.width(), BaseAir::<F>::width(&self.air));
-        *cols.is_valid = F::one();
+        *cols.is_valid = F::ONE;
         *cols.value = record.value;
         *cols.index = record.index;
         let idx: usize = record.index.as_canonical_u32() as usize;
         // Assumption: row_slice is initialized with 0s.
-        *cols.custom_pv_flags[idx] = F::one();
+        *cols.custom_pv_flags[idx] = F::ONE;
     }
 
     fn generate_public_values(&self) -> Vec<F> {
         self.get_custom_public_values()
             .into_iter()
-            .map(|x| x.unwrap_or(F::zero()))
+            .map(|x| x.unwrap_or(F::ZERO))
             .collect()
     }
 

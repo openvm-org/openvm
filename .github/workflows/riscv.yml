@@ -1,0 +1,49 @@
+name: RISC-V Test Vectors
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "vm/**"
+      - "toolchain/riscv/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+jobs:
+  tests:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=64cpu-linux-arm64
+      - image=arm64-rust-riscv-dev-32gb # for riscv-gnu-toolchain
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Run Makefile
+        working-directory: toolchain/tests/rv32im-test-vectors
+        run: |
+          export PATH=/opt/riscv/bin:$PATH
+          make
+
+      - name: Run RISC-V test vector tests
+        working-directory: toolchain/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          cargo nextest run --cargo-profile=fast --run-ignored only -- test_rv32im_riscv_vector_runtime

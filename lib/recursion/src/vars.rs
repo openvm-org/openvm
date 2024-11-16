@@ -1,9 +1,9 @@
-use afs_compiler::{
+use axvm_native_compiler::{
     ir::{Array, Config, Ext, Felt, Usize},
     prelude::*,
 };
 
-use crate::{digest::DigestVariable, fri::types::TwoAdicPcsProofVariable, OUTER_DIGEST_SIZE};
+use crate::{digest::DigestVariable, fri::types::FriProofVariable, OUTER_DIGEST_SIZE};
 
 pub type OuterDigestVariable<C> = [Var<<C as Config>::N>; OUTER_DIGEST_SIZE];
 
@@ -71,7 +71,7 @@ pub struct CommitmentsVariable<C: Config> {
 
 #[derive(DslVariable, Clone)]
 pub struct OpeningProofVariable<C: Config> {
-    pub proof: TwoAdicPcsProofVariable<C>,
+    pub proof: FriProofVariable<C>,
     pub values: OpenedValuesVariable<C>,
 }
 

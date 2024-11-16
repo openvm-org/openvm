@@ -1,5 +1,5 @@
-use afs_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
-use ax_sdk::config::FriParameters;
+use ax_stark_sdk::config::FriParameters;
+use axvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use p3_commit::TwoAdicMultiplicativeCoset;
 use p3_field::{AbstractField, TwoAdicField};
 
@@ -18,7 +18,7 @@ pub fn const_fri_config<C: Config>(
 
         let constant_domain = TwoAdicMultiplicativeCoset {
             log_n: i,
-            shift: C::F::one(),
+            shift: C::F::ONE,
         };
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
         // FIXME: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
@@ -37,8 +37,8 @@ pub fn const_fri_config<C: Config>(
 
 /// Reference: https://github.com/Plonky3/Plonky3/blob/622375885320ac6bf3c338001760ed8f2230e3cb/field/src/helpers.rs#L136
 pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Var<C::N> {
-    let mut power = C::N::one();
-    let result: Var<C::N> = builder.eval(C::N::zero());
+    let mut power = C::N::ONE;
+    let result: Var<C::N> = builder.eval(C::N::ZERO);
     for val in vals.iter() {
         let bits = builder.num2bits_f_circuit(*val);
         let val = builder.bits2num_v_circuit(&bits);
@@ -53,7 +53,7 @@ pub fn split_32<C: Config>(builder: &mut Builder<C>, val: Var<C::N>, n: usize) -
     let bits = builder.num2bits_v_circuit(val, 256);
     let mut results = Vec::new();
     for i in 0..n {
-        let result: Felt<C::F> = builder.eval(C::F::zero());
+        let result: Felt<C::F> = builder.eval(C::F::ZERO);
         for j in 0..64 {
             let bit = bits[i * 64 + j];
             let t = builder.eval(result + C::F::from_wrapped_u64(1 << j));
@@ -85,7 +85,7 @@ pub fn cond_eval<C: Config, V: MemVariable<C, Expression: Clone> + CanSelect<C>>
         let v2 = v2.into();
         a = builder.uninit();
         b = builder.uninit();
-        builder.if_eq(cond, C::N::one()).then_or_else(
+        builder.if_eq(cond, C::N::ONE).then_or_else(
             |builder| {
                 builder.assign(&a, v2.clone());
                 builder.assign(&b, v1.clone());

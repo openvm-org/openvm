@@ -1,16 +1,14 @@
-use std::ops::Mul;
-
-use halo2curves_axiom::{
-    bn256::{Fq, Fq2, Fr, G1Affine, G2Affine},
-    group::prime::PrimeCurveAffine,
+use axvm_ecc::{
+    curve::bn254::{Fq, Fq2},
+    field::FieldExtension,
 };
+use ff::Field;
 use lazy_static::lazy_static;
 use num::{BigInt, Num};
-use rand::Rng;
-
-use crate::common::{AffineCoords, FieldExtension, ScalarMul};
 
 lazy_static! {
+    pub static ref BN254_XI: Fq2 = Fq2::from_coeffs([Fq::from_raw([9, 0, 0, 0]), Fq::ONE]);
+
     // exp1 = (p^12 - 1) / 3
     pub static ref EXP1: BigInt = BigInt::from_str_radix(
         "4030969696062745741797811005853058291874379204406359442560681893891674450106959530046539719647151210908190211459382793062006703141168852426020468083171325367934590379984666859998399967609544754664110191464072930598755441160008826659219834762354786403012110463250131961575955268597858015384895449311534622125256548620283853223733396368939858981844663598065852816056384933498610930035891058807598891752166582271931875150099691598048016175399382213304673796601585080509443902692818733420199004555566113537482054218823936116647313678747500267068559627206777530424029211671772692598157901876223857571299238046741502089890557442500582300718504160740314926185458079985126192563953772118929726791041828902047546977272656240744693339962973939047279285351052107950250121751682659529260304162131862468322644288196213423232132152125277136333208005221619443705106431645884840489295409272576227859206166894626854018093044908314720",
@@ -49,85 +47,11 @@ pub const BN254_SEED_NEG: bool = false;
 
 // from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bn254/pairing.go#L356
 // loopCounter = 6x₀+2 = 29793968203157093288 in 2-NAF (nonadjacent form)
-pub const BN254_PBE_BITS: usize = 66;
-pub const BN254_PBE_NAF: [i8; BN254_PBE_BITS] = [
+pub const BN254_PBE_NAF_LEN: usize = 66;
+pub const BN254_PBE_NAF: [i8; BN254_PBE_NAF_LEN] = [
     0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
     -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
     0, 0, 1, 0, -1, 0, 1,
 ];
 
 pub struct Bn254;
-
-impl Bn254 {
-    pub fn xi() -> Fq2 {
-        Fq2::from_coeffs(&[Fq::from_raw([9, 0, 0, 0]), Fq::one()])
-    }
-
-    pub fn seed() -> u64 {
-        BN254_SEED
-    }
-
-    pub fn pseudo_binary_encoding() -> [i8; BN254_PBE_BITS] {
-        BN254_PBE_NAF
-    }
-}
-
-impl AffineCoords<Fq> for G1Affine {
-    fn x(&self) -> Fq {
-        self.x
-    }
-
-    fn y(&self) -> Fq {
-        self.y
-    }
-
-    fn neg(&self) -> Self {
-        let mut pt = *self;
-        pt.y = -pt.y;
-        pt
-    }
-
-    fn random(rng: &mut impl Rng) -> Self {
-        G1Affine::random(rng)
-    }
-
-    fn generator() -> Self {
-        G1Affine::generator()
-    }
-}
-
-impl ScalarMul<Fr> for G1Affine {
-    fn scalar_mul(&self, s: Fr) -> Self {
-        (self.to_curve().mul(s)).into()
-    }
-}
-
-impl AffineCoords<Fq2> for G2Affine {
-    fn x(&self) -> Fq2 {
-        self.x
-    }
-
-    fn y(&self) -> Fq2 {
-        self.y
-    }
-
-    fn neg(&self) -> Self {
-        let mut pt = *self;
-        pt.y = -pt.y;
-        pt
-    }
-
-    fn random(rng: &mut impl Rng) -> Self {
-        G2Affine::random(rng)
-    }
-
-    fn generator() -> Self {
-        G2Affine::generator()
-    }
-}
-
-impl ScalarMul<Fr> for G2Affine {
-    fn scalar_mul(&self, s: Fr) -> Self {
-        (self.to_curve().mul(s)).into()
-    }
-}

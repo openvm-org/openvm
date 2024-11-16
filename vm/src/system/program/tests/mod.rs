@@ -1,9 +1,13 @@
 use std::{iter, sync::Arc};
 
-use afs_stark_backend::prover::types::AirProofInput;
-use ax_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+use ax_stark_backend::prover::types::AirProofInput;
+use ax_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+    },
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    engine::StarkFriEngine,
 };
 use axvm_instructions::{
     instruction::Instruction,
@@ -12,14 +16,23 @@ use axvm_instructions::{
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use serde::{de::DeserializeOwned, Serialize};
+use static_assertions::assert_impl_all;
 
 use crate::{
-    arch::instructions::{
-        BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-        NativeJalOpcode::*, NativeLoadStoreOpcode::*, TerminateOpcode::*, UsizeOpcode,
+    arch::{
+        instructions::{
+            BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
+            NativeJalOpcode::*, NativeLoadStoreOpcode::*, SystemOpcode::*, UsizeOpcode,
+        },
+        READ_INSTRUCTION_BUS,
     },
-    system::{program::ProgramChip, vm::chip_set::READ_INSTRUCTION_BUS},
+    system::program::{trace::AxVmCommittedExe, ProgramChip},
 };
+
+assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2OuterConfig>: Serialize, DeserializeOwned);
+
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();
     let mut chip = ProgramChip::new_with_program(program);
@@ -51,7 +64,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let width = 10;
     let desired_height = instructions.len().next_power_of_two();
     let cells_to_add = (desired_height - instructions.len()) * width;
-    program_cells.extend(iter::repeat(BabyBear::zero()).take(cells_to_add));
+    program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", instructions.len());
@@ -178,7 +191,7 @@ fn test_program_negative() {
         ]);
     }
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
-    counter_trace.row_mut(1)[1] = BabyBear::zero();
+    counter_trace.row_mut(1)[1] = BabyBear::ZERO;
 
     BabyBearPoseidon2Engine::run_test_fast(vec![
         program_proof_input,

@@ -1,13 +1,14 @@
 use backtrace::Backtrace;
 use p3_field::Field;
+use serde::{Deserialize, Serialize};
 
-use crate::utils::isize_to_field;
+use crate::{utils::isize_to_field, PhantomInstruction, SystemOpcode, UsizeOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
 
 #[allow(clippy::too_many_arguments)]
-#[derive(Clone, Debug, PartialEq, Eq, derive_new::new)]
+#[derive(Clone, Debug, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
 pub struct Instruction<F> {
     pub opcode: usize,
     pub a: F,
@@ -17,7 +18,6 @@ pub struct Instruction<F> {
     pub e: F,
     pub f: F,
     pub g: F,
-    pub debug: String,
 }
 
 impl<F: Field> Instruction<F> {
@@ -32,13 +32,12 @@ impl<F: Field> Instruction<F> {
             e: isize_to_field::<F>(e),
             f: isize_to_field::<F>(0),
             g: isize_to_field::<F>(0),
-            debug: String::new(),
         }
     }
 
     pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
         let mut operands = operands.map(F::from_canonical_usize).to_vec();
-        operands.resize(NUM_OPERANDS, F::zero());
+        operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
             opcode,
             a: operands[0],
@@ -48,7 +47,6 @@ impl<F: Field> Instruction<F> {
             e: operands[4],
             f: operands[5],
             g: operands[6],
-            debug: String::new(),
         }
     }
 
@@ -72,21 +70,24 @@ impl<F: Field> Instruction<F> {
             e: isize_to_field::<F>(e),
             f: isize_to_field::<F>(f),
             g: isize_to_field::<F>(g),
-            debug: String::new(),
         }
     }
 
-    pub fn debug(opcode: usize, debug: &str) -> Self {
+    pub fn phantom(kind: PhantomInstruction, a: F, b: F, c_upper: u16) -> Self {
         Self {
-            opcode,
-            a: F::zero(),
-            b: F::zero(),
-            c: F::zero(),
-            d: F::zero(),
-            e: F::zero(),
-            f: F::zero(),
-            g: F::zero(),
-            debug: String::from(debug),
+            opcode: SystemOpcode::PHANTOM.with_default_offset(),
+            a,
+            b,
+            c: F::from_canonical_u32((kind as u32) | ((c_upper as u32) << 16)),
+            ..Default::default()
+        }
+    }
+
+    pub fn debug(phantom: PhantomInstruction) -> Self {
+        Self {
+            opcode: SystemOpcode::PHANTOM.with_default_offset(),
+            c: F::from_canonical_usize(phantom as usize),
+            ..Default::default()
         }
     }
 }
@@ -102,12 +103,11 @@ impl<T: Default> Default for Instruction<T> {
             e: T::default(),
             f: T::default(),
             g: T::default(),
-            debug: String::new(),
         }
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DebugInfo {
     pub dsl_instruction: String,
     pub trace: Option<Backtrace>,
