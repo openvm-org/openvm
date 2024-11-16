@@ -4,7 +4,6 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use axvm_algebra::{DivAssignUnsafe, DivUnsafe, IntMod};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::{
@@ -17,6 +16,7 @@ use {
 };
 
 use super::Field;
+use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
 
 /// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
 /// Elements are represented as `c0 + c1 * u` where `u^2 = -1`.
@@ -466,8 +466,4 @@ impl<F: Field + IntMod> Field for Complex<F> {
     fn invert(&self) -> Option<Self> {
         Some(Self::ONE.div_unsafe(self))
     }
-}
-
-pub trait Xi {
-    const XI: Self;
 }

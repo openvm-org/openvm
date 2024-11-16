@@ -1,10 +1,7 @@
+use axvm_algebra::field::FieldExtension;
 pub use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Fq6};
 
-// use super::{Fq, Fq12, Fq2, Fq6};
-use crate::{
-    field::{ExpBigInt, FieldExtension, Fp12Mul},
-    pairing::{EvaluatedLine, LineMType},
-};
+use crate::pairing::{EvaluatedLine, LineMType};
 
 ///
 /// Note that halo2curves does not implement `Field` for Fq6, so we need to implement the intermediate points manually.
@@ -83,16 +80,3 @@ impl LineMType<Fq, Fq2, Fq12> for Fq12 {
 }
 
 impl ExpBigInt<Fq12> for Fq12 {}
-
-impl Fp12Mul for Fq12 {
-    type Fp = Fq;
-    type Fp2 = Fq2;
-
-    fn fp12_mul(&mut self, other: &Self, _xi: &Self::Fp2) {
-        *self *= other;
-    }
-
-    fn fp12_mul_refs(&self, other: &Self, _xi: &Self::Fp2) -> Self {
-        self * other
-    }
-}

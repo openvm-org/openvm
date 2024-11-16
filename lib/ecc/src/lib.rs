@@ -11,10 +11,13 @@ pub use group::*;
 mod msm;
 pub use msm::*;
 
-#[cfg(feature = "halo2curves")]
-pub mod curve;
+/// Implementation of this library's traits on halo2curves types.
+/// Used for testing and also VM runtime execution.
+/// These should **only** be importable on a host machine.
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+pub mod halo2curves;
 
-// #[cfg(feature = "halo2curves")]
+/// Traits for optimal Ate pairing check using intrinsic functions.
 pub mod pairing;
 
 // TEMPORARY[jpw]: this should be moved into pairing

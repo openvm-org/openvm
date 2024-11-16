@@ -10,6 +10,9 @@ use core::{
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 
+/// Field traits
+pub mod field;
+
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
     /// Output type of `div_unsafe`.

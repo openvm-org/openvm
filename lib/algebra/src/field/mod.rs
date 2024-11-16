@@ -3,16 +3,9 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+/// Complex quadratic extension of any ring.
 mod complex;
 pub use complex::*;
-
-mod sextic_ext_field;
-pub use sextic_ext_field::*;
-
-#[cfg(feature = "halo2curves")]
-mod exp_bytes_be;
-#[cfg(feature = "halo2curves")]
-pub use exp_bytes_be::*;
 
 /// This is a simplified trait for field elements.
 pub trait Field:
