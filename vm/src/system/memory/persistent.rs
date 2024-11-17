@@ -4,7 +4,6 @@ use std::{
 };
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -149,7 +148,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
-        let height = next_power_of_two_or_zero(2 * self.touched_labels.len());
+        // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
+        let height = (2 * self.touched_labels.len()).next_power_of_two();
         let mut rows = F::zero_vec(height * width);
 
         for (row, &(address_space, label)) in

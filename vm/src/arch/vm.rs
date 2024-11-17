@@ -247,7 +247,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
         let heights = segment.chip_set.current_trace_heights();
@@ -267,7 +267,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,

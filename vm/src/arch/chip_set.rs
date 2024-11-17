@@ -25,6 +25,7 @@ use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{program::Program, *};
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
@@ -84,7 +85,7 @@ use crate::{
         connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
+            MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK, MERKLE_AIR_OFFSET,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -109,6 +110,8 @@ pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// using persistent memory.
 pub const PUBLIC_VALUES_AIR_ID: usize = 2;
+/// AIR ID of the Memory Boundary AIR.
+pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
 /// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
@@ -128,24 +131,6 @@ pub struct VmChipSet<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
-    /// Returns the AIR ID of the given executor if it exists.
-    pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
-        let mut air_id = PUBLIC_VALUES_AIR_ID;
-        if self.public_values_chip.is_some() {
-            air_id += 1;
-        }
-        air_id += self.memory_controller.borrow().air_names().len();
-        for chip in &self.chips {
-            if let AxVmChip::Executor(chip) = chip {
-                let name: ExecutorName = chip.into();
-                if name == executor {
-                    return Some(air_id);
-                }
-            }
-            air_id += 1
-        }
-        None
-    }
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
     }
@@ -164,6 +149,31 @@ impl<F: PrimeField32> VmChipSet<F> {
                 }
             }
         }
+    }
+    /// Returns the AIR ID of the given executor if it exists.
+    pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
+        self.executor_to_air_id_mapping().get(&executor).copied()
+    }
+    /// Return mapping from executor name to AIR ID.
+    pub fn executor_to_air_id_mapping(&self) -> BTreeMap<ExecutorName, usize> {
+        let mut air_id = PUBLIC_VALUES_AIR_ID;
+        if self.public_values_chip.is_some() {
+            air_id += 1;
+        }
+        air_id += self.memory_controller.borrow().air_names().len();
+        self.chips
+            .iter()
+            .flat_map(|chip| {
+                let ret = if let AxVmChip::Executor(chip) = chip {
+                    let name: ExecutorName = chip.into();
+                    Some((name, air_id))
+                } else {
+                    None
+                };
+                air_id += 1;
+                ret
+            })
+            .collect()
     }
     /// Return IDs of AIRs which heights won't during execution.
     pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
@@ -309,6 +319,24 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
+    /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
+    pub fn memory_boundary_air_id(&self) -> usize {
+        assert!(
+            !self.continuation_enabled,
+            "Memory boundary AIR is not enabled in continuation mode"
+        );
+        let mut ret = PUBLIC_VALUES_AIR_ID;
+        if self.num_public_values > 0 {
+            ret += 1;
+        }
+        ret += BOUNDARY_AIR_OFFSET;
+        ret
+    }
+    /// Return mapping from executor name to AIR ID.
+    pub fn executor_to_air_id_mapping(&self) -> BTreeMap<ExecutorName, usize> {
+        self.create_chip_set::<BabyBear>()
+            .executor_to_air_id_mapping()
+    }
     pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
