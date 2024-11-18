@@ -17,7 +17,7 @@ do
         echo "$pkey_file already exists"
     else
         echo "downloading $pkey_file"
-        s5cmd cp --concurrency 10 "s3://axiom-crypto/challenge_0085/${pkey_file}" .
+        s5cmd --no-sign-request cp --concurrency 10 "s3://axiom-crypto/challenge_0085/${pkey_file}" .
     fi
 done
 cd ..

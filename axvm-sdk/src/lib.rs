@@ -9,8 +9,8 @@ use p3_baby_bear::BabyBear;
 
 pub mod commit;
 pub mod config;
-// #[cfg(feature = "static-verifier")]
-// pub mod static_verifier;
+#[cfg(feature = "static-verifier")]
+pub mod static_verifier;
 
 pub mod keygen;
 pub mod prover;
