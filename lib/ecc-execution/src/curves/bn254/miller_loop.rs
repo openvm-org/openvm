@@ -29,7 +29,7 @@ impl MillerStep for Bn254 {
         // x_2s = λ^2 - 2x
         let x_2s = lambda * lambda - two * x;
         // y_2s = λ(x - x_2s) - y
-        let y_2s = lambda * &(x - &x_2s) - y;
+        let y_2s = lambda * (x - x_2s) - y;
         let two_s = AffinePoint { x: x_2s, y: y_2s };
 
         // Tangent line
@@ -38,13 +38,12 @@ impl MillerStep for Bn254 {
         //   l_{\Psi(S),\Psi(S)}(P) = (λ * x_S - y_S) (1 / y_P)  - λ (x_P / y_P) w^2 + w^3
         // x0 = λ * x_S - y_S
         // x2 = - λ
-        let b = Self::Fp2::ZERO - lambda;
+        let b = lambda.neg();
         let c = lambda * x - y;
 
         (two_s, UnevaluatedLine { b, c })
     }
 
-    /// Miller add step
     fn miller_add_step(
         s: &AffinePoint<Self::Fp2>,
         q: &AffinePoint<Self::Fp2>,
@@ -56,9 +55,9 @@ impl MillerStep for Bn254 {
 
         // λ1 = (y_s - y_q) / (x_s - x_q)
         let x_delta = x_s - x_q;
-        let lambda = &((y_s - y_q).div_unsafe(&x_delta));
-        let x_s_plus_q = lambda * lambda - x_delta;
-        let y_s_plus_q = lambda * &(x_q - &x_s_plus_q) - y_q;
+        let lambda = (y_s - y_q).div_unsafe(&x_delta);
+        let x_s_plus_q = lambda * lambda - x_s - x_q;
+        let y_s_plus_q = lambda * (x_q - x_s_plus_q) - y_q;
 
         let s_plus_q = AffinePoint {
             x: x_s_plus_q,
@@ -66,7 +65,7 @@ impl MillerStep for Bn254 {
         };
 
         // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
-        let b = Self::Fp2::ZERO - lambda;
+        let b = lambda.neg();
         let c = lambda * x_s - y_s;
 
         (s_plus_q, UnevaluatedLine { b, c })
@@ -95,10 +94,9 @@ impl MillerStep for Bn254 {
         let x_s_plus_q = lambda1 * lambda1 - x_s - x_q;
 
         // λ2 = -λ1 - 2y_s / (x_{s+q} - x_s)
-        let lambda2 =
-            &(Self::Fp2::ZERO - lambda1.clone() - (two * y_s).div_unsafe(&(&x_s_plus_q - x_s)));
-        let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - &x_s_plus_q;
-        let y_s_plus_q_plus_s = lambda2 * &(x_s - &x_s_plus_q_plus_s) - y_s;
+        let lambda2 = &(lambda1.neg() - (two * y_s).div_unsafe(&(x_s_plus_q - x_s)));
+        let x_s_plus_q_plus_s = lambda2 * lambda2 - x_s - x_s_plus_q;
+        let y_s_plus_q_plus_s = lambda2 * (x_s - x_s_plus_q_plus_s) - y_s;
 
         let s_plus_q_plus_s = AffinePoint {
             x: x_s_plus_q_plus_s,
@@ -106,11 +104,11 @@ impl MillerStep for Bn254 {
         };
 
         // l_{\Psi(S),\Psi(Q)}(P) = (λ_1 * x_S - y_S) (1 / y_P) - λ_1 (x_P / y_P) w^2 + w^3
-        let b0 = Self::Fp2::ZERO - lambda1;
+        let b0 = lambda1.neg();
         let c0 = lambda1 * x_s - y_s;
 
         // l_{\Psi(S+Q),\Psi(S)}(P) = (λ_2 * x_S - y_S) (1 / y_P) - λ_2 (x_P / y_P) w^2 + w^3
-        let b1 = Self::Fp2::ZERO - lambda2;
+        let b1 = lambda2.neg();
         let c1 = lambda2 * x_s - y_s;
 
         (
@@ -210,8 +208,8 @@ impl MultiMillerLoop for Bn254 {
         Q_acc = Q_out_add;
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
-        for (lines_S_plus_Q, (x_over_y, y_inv)) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(&(*x_over_y, *y_inv));
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
             lines.push(line);
         }
 
@@ -232,8 +230,8 @@ impl MultiMillerLoop for Bn254 {
         Q_acc = Q_out_add;
 
         let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
-        for (lines_S_plus_Q, (x_over_y, y_inv)) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(&(*x_over_y, *y_inv));
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
             lines.push(line);
         }
 
