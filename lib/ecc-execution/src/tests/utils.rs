@@ -68,25 +68,20 @@ where
     let mut P_vec: Vec<A1> = vec![];
     let mut Q_vec: Vec<A2> = vec![];
     for i in 0..N {
-        let mut p = A1::generator();
-        let p: A1 = if a[i].is_negative() {
-            A1::new(
-                Fp::ONE,
-                Fp::ONE.neg(),
-                // Fr::from_raw([a[i], 0, 0, 0]),
-                // -Fr::from_raw([a[i], 0, 0, 0]),
-            )
+        let p = A1::generator();
+        let p_mul: A1 = if a[i].is_negative() {
+            A1::new(Fp::ONE * p.x(), Fp::ONE.neg() * p.y())
         } else {
-            A1::new(Fp::ONE, Fp::ONE)
+            A1::new(Fp::ONE * p.x(), Fp::ONE * p.y())
         };
-        let mut q = A2::generator();
-        let q: A2 = if b[i].is_negative() {
-            A2::new(Fp2::ONE, Fp2::ONE.neg())
+        let q = A2::generator();
+        let q_mul: A2 = if b[i].is_negative() {
+            A2::new(Fp2::ONE * q.x(), Fp2::ONE.neg() * q.y())
         } else {
-            A2::new(Fp2::ONE, Fp2::ONE)
+            A2::new(Fp2::ONE * q.x(), Fp2::ONE * q.y())
         };
-        P_vec.push(p);
-        Q_vec.push(q);
+        P_vec.push(p_mul);
+        Q_vec.push(q_mul);
     }
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
