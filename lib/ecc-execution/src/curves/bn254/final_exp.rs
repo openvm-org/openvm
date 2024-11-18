@@ -1,4 +1,8 @@
-use axvm_ecc::{algebra::field::FieldExtension, pairing::FinalExp, AffinePoint};
+use axvm_ecc::{
+    algebra::field::FieldExtension,
+    pairing::{FinalExp, MultiMillerLoop},
+    AffinePoint,
+};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
@@ -24,10 +28,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         let c_mul = c_q3 * c_q2_inv * c_q;
 
         // Compute miller loop with c_inv
-        todo!()
-        // let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+        // todo!()
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
-        // assert_eq!(fc * c_mul * u, Fq12::ONE);
+        assert_eq!(fc * c_mul * u, Fq12::ONE);
     }
 
     // Adapted from the Gnark implementation:

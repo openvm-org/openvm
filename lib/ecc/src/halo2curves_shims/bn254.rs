@@ -1,5 +1,4 @@
 use axvm_algebra::field::FieldExtension;
-use group::ScalarMul;
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fr, G1Affine, G2Affine};
 use rand::Rng;
 

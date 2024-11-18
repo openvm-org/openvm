@@ -62,35 +62,32 @@ where
     A2: AffineCoords<Fp2>,
     // Fr: Field,
     Fp: Field,
-    Fp2: FieldExtension<Fp>,
+    Fp2: Field + FieldExtension<Fp>,
 {
     assert!(N % 2 == 0, "Must have even number of P and Q scalars");
     let mut P_vec: Vec<A1> = vec![];
     let mut Q_vec: Vec<A2> = vec![];
-    // for i in 0..N {
-    //     let mut p = A1::generator();
-    //     let a: A1 = if a[i].is_negative() {
-    //         A1::new(
-    //             Fp::ONE,
-    //             Fp::from_raw(a[i].to_le_bytes()),
-    //             // Fr::from_raw([a[i], 0, 0, 0]),
-    //             // -Fr::from_raw([a[i], 0, 0, 0]),
-    //         )
-    //     } else {
-    //         A1::new(Fr::from_raw([a[i], 0, 0, 0]), Fr::from_raw([a[i], 0, 0, 0]))
-    //     };
-    //     let q = A2::generator();
-    //     let b: A2 = if b[i].is_negative() {
-    //         A2::new(
-    //             Fr::from_raw([b[i], 0, 0, 0]),
-    //             -Fr::from_raw([b[i], 0, 0, 0]),
-    //         )
-    //     } else {
-    //         A2::new(Fr::from_raw([b[i], 0, 0, 0]), Fr::from_raw([b[i], 0, 0, 0]))
-    //     };
-    //     P_vec.push(p);
-    //     Q_vec.push(q);
-    // }
+    for i in 0..N {
+        let mut p = A1::generator();
+        let p: A1 = if a[i].is_negative() {
+            A1::new(
+                Fp::ONE,
+                Fp::ONE.neg(),
+                // Fr::from_raw([a[i], 0, 0, 0]),
+                // -Fr::from_raw([a[i], 0, 0, 0]),
+            )
+        } else {
+            A1::new(Fp::ONE, Fp::ONE)
+        };
+        let mut q = A2::generator();
+        let q: A2 = if b[i].is_negative() {
+            A2::new(Fp2::ONE, Fp2::ONE.neg())
+        } else {
+            A2::new(Fp2::ONE, Fp2::ONE)
+        };
+        P_vec.push(p);
+        Q_vec.push(q);
+    }
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
