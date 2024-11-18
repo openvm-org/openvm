@@ -9,7 +9,7 @@ use ax_ecc_primitives::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc::{
-    pairing::{LineMulDType, UnevaluatedLine},
+    pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
     point::AffinePoint,
 };
 use axvm_ecc_constants::BN254;
@@ -261,7 +261,7 @@ fn test_evaluate_line() {
         })
         .collect();
 
-    let uneval: UnevaluatedLine<Fq, Fq2> = UnevaluatedLine {
+    let uneval: UnevaluatedLine<Fq2> = UnevaluatedLine {
         b: uneval_b,
         c: uneval_c,
     };

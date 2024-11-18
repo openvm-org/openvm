@@ -1,9 +1,9 @@
-use axvm_algebra::field::FieldExtension;
+use axvm_algebra::field::{Field, FieldExtension};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;
 
 use crate::{
-    pairing::{EvaluatedLine, FromLineMType},
+    pairing::{Evaluatable, EvaluatedLine, FromLineMType, UnevaluatedLine},
     AffineCoords,
 };
 
@@ -20,7 +20,24 @@ impl FromLineMType<Fq2> for Fq12 {
     }
 }
 
+impl Evaluatable<Fq, Fq2> for UnevaluatedLine<Fq2> {
+    fn evaluate(&self, xy_frac: &(Fq, Fq)) -> EvaluatedLine<Fq2> {
+        let (x_over_y, y_inv) = xy_frac;
+        EvaluatedLine {
+            b: self.b.mul_base(x_over_y),
+            c: self.c.mul_base(y_inv),
+        }
+    }
+}
+
 impl AffineCoords<Fq> for G1Affine {
+    fn new(x: Fq, y: Fq) -> Self {
+        let mut m = G1Affine::identity();
+        m.x = Fq::ONE * x;
+        m.y = y;
+        m
+    }
+
     fn x(&self) -> Fq {
         self.x
     }
@@ -45,6 +62,13 @@ impl AffineCoords<Fq> for G1Affine {
 }
 
 impl AffineCoords<Fq2> for G2Affine {
+    fn new(x: Fq2, y: Fq2) -> Self {
+        let mut m = G2Affine::identity();
+        m.x = Fq2::ONE * x;
+        m.y = y;
+        m
+    }
+
     fn x(&self) -> Fq2 {
         self.x
     }

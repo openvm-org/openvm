@@ -41,6 +41,9 @@ where
 }
 
 pub trait AffineCoords<F>: Clone {
+    /// Creates a new elliptic curve point from its affine coordinates.
+    fn new(x: F, y: F) -> Self;
+
     /// Returns the affine representation x-coordinate of the elliptic curve point.
     fn x(&self) -> F;
 
