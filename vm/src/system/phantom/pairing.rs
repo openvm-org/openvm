@@ -1,7 +1,7 @@
 use std::{array::from_fn, collections::VecDeque};
 
 use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
-use axvm_ecc::{curve::halo2curves_axiom::ff, field::FieldExtension, pairing::FinalExp};
+use axvm_ecc::{algebra::field::FieldExtension, halo2curves::ff, pairing::FinalExp};
 use axvm_ecc_constants::{BLS12381, BN254};
 use eyre::bail;
 use p3_field::PrimeField32;
@@ -18,7 +18,7 @@ pub fn hint_final_exp<F: PrimeField32>(
 ) -> eyre::Result<()> {
     match PairingCurve::from_repr(b as usize) {
         Some(PairingCurve::Bn254) => {
-            use axvm_ecc::curve::bn254::{Fq, Fq12, Fq2};
+            use axvm_ecc::halo2curves::bn256::{Fq, Fq12, Fq2};
             const N: usize = 32;
             debug_assert_eq!(BN254.NUM_LIMBS, N); // TODO: make this const instead of static
             let f: Fq12 = Fq12::from_coeffs(from_fn(|_| {
@@ -28,7 +28,7 @@ pub fn hint_final_exp<F: PrimeField32>(
                     fp
                 }))
             }));
-            let (c, u) = Bn254.final_exp_hint(f);
+            let (c, u) = Bn254::final_exp_hint(&f);
             hint_stream.clear();
             hint_stream.extend(
                 c.to_coeffs()
@@ -40,7 +40,7 @@ pub fn hint_final_exp<F: PrimeField32>(
             );
         }
         Some(PairingCurve::Bls12_381) => {
-            use axvm_ecc::curve::bls12381::{Fq, Fq12, Fq2};
+            use axvm_ecc::halo2curves::bls12_381::{Fq, Fq12, Fq2};
             const N: usize = 48;
             debug_assert_eq!(BLS12381.NUM_LIMBS, N); // TODO: make this const instead of static
             let f: Fq12 = Fq12::from_coeffs(from_fn(|_| {
@@ -50,7 +50,7 @@ pub fn hint_final_exp<F: PrimeField32>(
                     fp
                 }))
             }));
-            let (c, u) = Bls12_381.final_exp_hint(f);
+            let (c, u) = Bls12_381::final_exp_hint(&f);
             hint_stream.clear();
             hint_stream.extend(
                 c.to_coeffs()

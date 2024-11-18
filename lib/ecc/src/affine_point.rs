@@ -1,6 +1,7 @@
-use rand::Rng;
+use core::ops::Neg;
 
-use crate::field::Field;
+use axvm_algebra::Field;
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -14,7 +15,24 @@ impl<F: Field> AffinePoint<F> {
         Self { x, y }
     }
 
-    pub fn neg_assign(self) -> Self {
+    pub fn neg_borrow<'a>(&'a self) -> Self
+    where
+        &'a F: Neg<Output = F>,
+    {
+        Self {
+            x: self.x.clone(),
+            y: Neg::neg(&self.y),
+        }
+    }
+}
+
+impl<F> Neg for AffinePoint<F>
+where
+    F: Neg<Output = F>,
+{
+    type Output = AffinePoint<F>;
+
+    fn neg(self) -> AffinePoint<F> {
         Self {
             x: self.x,
             y: self.y.neg(),
@@ -22,7 +40,7 @@ impl<F: Field> AffinePoint<F> {
     }
 }
 
-pub trait AffineCoords<F: Field>: Clone {
+pub trait AffineCoords<F>: Clone {
     /// Returns the affine representation x-coordinate of the elliptic curve point.
     fn x(&self) -> F;
 

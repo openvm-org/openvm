@@ -1,10 +1,5 @@
-use axvm_ecc::{
-    curve::bls12381::{Fq, Fq2, G1Affine, G2Affine},
-    field::ExpBigInt,
-    pairing::{FinalExp, MultiMillerLoop},
-    point::{AffineCoords, AffinePoint},
-};
-use halo2curves_axiom::bls12_381::Fr;
+use axvm_ecc::AffinePoint;
+use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num::{BigInt, Num};
 

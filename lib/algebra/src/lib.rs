@@ -7,6 +7,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 
@@ -71,6 +72,7 @@ pub trait IntMod:
     /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
+        + Neg<Output = Self>
         + Mul<&'a Self, Output = Self>
         + DivUnsafe<&'a Self, Output = Self>
     where
@@ -121,12 +123,17 @@ pub trait IntMod:
     #[cfg(not(target_os = "zkvm"))]
     fn as_biguint(&self) -> BigUint;
 
+    fn neg_assign(&mut self);
+
     /// Doubles this IntMod.
     fn double(&self) -> Self {
         let mut ret = self.clone();
         ret += self;
         ret
     }
+
+    /// Squares `self` in-place.
+    fn square_assign(&mut self);
 
     /// Squares this IntMod.
     fn square(&self) -> Self {

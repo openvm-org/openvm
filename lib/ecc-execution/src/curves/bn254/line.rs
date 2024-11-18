@@ -1,22 +1,21 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc::{
-    curve::bn254::{Fq, Fq12, Fq2},
-    field::{Field, FieldExtension},
-    pairing::{EvaluatedLine, LineMulDType},
-    point::AffinePoint,
+    algebra::{field::FieldExtension, Field},
+    pairing::EvaluatedLine,
+    AffinePoint,
 };
 
-use super::Bn254;
+// use super::Bn254;
 
-impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {}
+// impl LineMulDType<Fq, Fq2, Fq12> for Bn254 {}
 
 /// Returns a line function for a tangent line at the point P
 #[allow(non_snake_case)]
-pub fn tangent_line_013<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+pub fn tangent_line_013<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp2>
 where
     Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
+    Fp2: FieldExtension<Fp>,
     for<'a> &'a Fp: Add<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Sub<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Mul<&'a Fp, Output = Fp>,

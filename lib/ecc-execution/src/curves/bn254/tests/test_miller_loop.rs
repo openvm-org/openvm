@@ -1,9 +1,6 @@
-use axvm_ecc::{
-    curve::bn254::{Fq, Fq2, G1Affine, G2Affine},
-    pairing::MultiMillerLoop,
-};
+use axvm_ecc::pairing::MultiMillerLoop;
 use halo2curves_axiom::{
-    bn256::{G2Prepared, Gt},
+    bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
 

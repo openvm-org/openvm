@@ -1,8 +1,5 @@
-use axvm_ecc::{
-    curve::bn254::{Fq, Fq2, Fr, G1Affine, G2Affine},
-    field::ExpBigInt,
-    pairing::{FinalExp, MultiMillerLoop},
-};
+use axvm_ecc::pairing::{FinalExp, MultiMillerLoop};
+use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use num::{BigInt, Num};
 
 use crate::{curves::bn254::Bn254, tests::utils::generate_test_points_generator_scalar};

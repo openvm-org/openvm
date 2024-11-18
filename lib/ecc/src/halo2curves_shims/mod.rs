@@ -1,30 +1,30 @@
-// use alloc::vec::Vec;
-
 use core::ops::Mul;
 
-use num::BigInt;
+use axvm_algebra::Field;
+use num_bigint::BigInt;
 
-use crate::field::Field;
+mod bls12_381;
+mod bn254;
 
-pub trait ExpBigInt<F: Field>: Field {
+pub trait ExpBigInt: Field {
     /// Exponentiates a field element by a BigInt
     fn exp_bigint(&self, k: BigInt) -> Self
     where
         for<'a> &'a Self: Mul<&'a Self, Output = Self>,
     {
         if k == BigInt::from(0) {
-            return Self::one();
+            return Self::ONE;
         }
 
         let mut e = k.clone();
         let mut x = self.clone();
 
         if k < BigInt::from(0) {
-            x = x.invert().unwrap();
+            x = Self::ONE.div_unsafe(&x);
             e = -k;
         }
 
-        let mut res = Self::one();
+        let mut res = Self::ONE;
 
         let x_sq = &x * &x;
         let ops = [x.clone(), x_sq.clone(), &x_sq * &x];
@@ -45,6 +45,6 @@ pub trait ExpBigInt<F: Field>: Field {
 
         res
     }
-
-    // fn exp_bigint(&self, is_positive: bool, k: Vec<u8>) -> Self {}
 }
+
+impl<F: Field> ExpBigInt for F where for<'a> &'a Self: Mul<&'a Self, Output = Self> {}

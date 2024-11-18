@@ -95,7 +95,7 @@ mod tests {
     };
     use ax_ecc_execution::curves::bn254::Bn254;
     use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
-    use axvm_ecc::{pairing::MillerStep, point::AffinePoint};
+    use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use halo2curves_axiom::bn256::G2Affine;

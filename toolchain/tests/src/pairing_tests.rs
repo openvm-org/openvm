@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 
 use ax_ecc_execution::axvm_ecc::{
-    curve::halo2curves_axiom::ff::Field,
-    field::FieldExtension,
+    algebra::field::FieldExtension,
+    halo2curves::ff::Field,
     pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop},
-    point::AffinePoint,
+    AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::arch::{VmConfig, VmExecutor};
@@ -19,9 +19,9 @@ type F = BabyBear;
 mod bn254 {
     use ax_ecc_execution::{
         axvm_ecc::{
-            curve::bn254::{Fq, Fq12, Fq2, G2Affine},
+            halo2curves::bn256::{Fq, Fq12, Fq2, G2Affine},
             pairing::MillerStep,
-            point::AffineCoords,
+            AffineCoords,
         },
         curves::bn254::Bn254,
     };
@@ -39,8 +39,8 @@ mod bn254 {
         let c = G2Affine::random(&mut rng);
 
         let f = Fq12::random(&mut rng);
-        let l0 = EvaluatedLine::<Fq, Fq2> { b: a.x(), c: a.y() };
-        let l1 = EvaluatedLine::<Fq, Fq2> { b: b.x(), c: b.y() };
+        let l0 = EvaluatedLine::<Fq2> { b: a.x(), c: a.y() };
+        let l1 = EvaluatedLine::<Fq2> { b: b.x(), c: b.y() };
 
         // Test mul_013_by_013
         let r0 = Bn254::mul_013_by_013(l0, l1);
@@ -112,7 +112,7 @@ mod bn254 {
 mod bls12_381 {
     use ax_ecc_execution::{
         axvm_ecc::{
-            curve::bls12381::{G1Affine, G2Affine},
+            halo2curves::bls12_381::{G1Affine, G2Affine},
             // pairing::LineMulMType,
         },
         curves::bls12_381::Bls12_381,
@@ -178,8 +178,8 @@ mod bls12_381 {
         let Q = G2Affine::generator();
         let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];
         let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
-        let f = bls12_381.multi_miller_loop(&ps, &qs);
-        let (c, s) = bls12_381.final_exp_hint(f);
+        let f = Bls12_381::multi_miller_loop(&ps, &qs);
+        let (c, s) = Bls12_381::final_exp_hint(&f);
         let io = [f, c, s]
             .into_iter()
             .flat_map(|fp12| fp12.to_coeffs())

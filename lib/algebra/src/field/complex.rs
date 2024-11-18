@@ -1,6 +1,7 @@
 use core::{
     fmt::{Debug, Formatter, Result},
     iter::{Product, Sum},
+    mem::MaybeUninit,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
@@ -15,7 +16,7 @@ use {
     core::mem::MaybeUninit,
 };
 
-use super::Field;
+use super::{ComplexConjugate, Field};
 use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
 
 /// Quadratic extension field of `F` with irreducible polynomial `X^2 + 1`.
@@ -45,14 +46,9 @@ impl<F: IntMod> Complex<F> {
     // One element (i.e. multiplicative identity)
     const ONE: Self = Self::new(F::ONE, F::ZERO);
 
-    /// Set this complex number to be its conjugate
-    pub fn conjugate_assign(&mut self) {
-        self.c1 *= -F::ONE
-    }
-
-    /// Conjugate of this complex number
-    pub fn conjugate(&self) -> Self {
-        Self::new(self.c0.clone(), -self.c1.clone())
+    pub fn neg_assign(&mut self) {
+        self.c0.neg_assign();
+        self.c1.neg_assign();
     }
 
     /// Implementation of AddAssign.
@@ -202,27 +198,29 @@ impl<F: IntMod> Complex<F> {
     }
 
     /// Implementation of Mul that doesn't cause zkvm to use an additional store.
+    ///
+    /// SAFETY: dst_ptr must be pointer for `&mut Self`.
+    /// It will only be written to at the end of the function.
     #[inline(always)]
-    fn mul_refs_impl(&self, other: &Self) -> Self {
+    unsafe fn mul_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
         #[cfg(not(target_os = "zkvm"))]
         {
             let mut res = self.clone();
             res.mul_assign_impl(other);
-            res
+            let dst = unsafe { &mut *dst_ptr };
+            *dst = res;
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::ComplexExtField as usize,
                 ComplexExtFieldBaseFunct7::Mul as usize
                     + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                uninit.as_mut_ptr(),
+                dst_ptr,
                 self as *const Self,
                 other as *const Self
             );
-            unsafe { uninit.assume_init() }
         }
     }
 
@@ -249,6 +247,19 @@ impl<F: IntMod> Complex<F> {
             );
             unsafe { uninit.assume_init() }
         }
+    }
+}
+
+impl<F: IntMod> ComplexConjugate for Complex<F> {
+    fn conjugate(self) -> Self {
+        Self {
+            c0: self.c0,
+            c1: -self.c1,
+        }
+    }
+
+    fn conjugate_assign(&mut self) {
+        self.c1.neg_assign();
     }
 }
 
@@ -364,11 +375,15 @@ impl<'a, F: IntMod> Mul<&'a Complex<F>> for Complex<F> {
     }
 }
 
-impl<'a, F: IntMod> Mul<&'a Complex<F>> for &Complex<F> {
+impl<'a, F: IntMod> Mul<&'a Complex<F>> for &'a Complex<F> {
     type Output = Complex<F>;
     #[inline(always)]
     fn mul(self, other: &'a Complex<F>) -> Self::Output {
-        self.mul_refs_impl(other)
+        let mut uninit: MaybeUninit<Complex<F>> = MaybeUninit::uninit();
+        unsafe {
+            self.mul_refs_impl(other, uninit.as_mut_ptr());
+            uninit.assume_init()
+        }
     }
 }
 
@@ -457,4 +472,10 @@ impl<F: Field + IntMod> Field for Complex<F> {
 
     const ZERO: Self = Self::ZERO;
     const ONE: Self = Self::ONE;
+
+    fn square_assign(&mut self) {
+        unsafe {
+            self.mul_refs_impl(self, self as *const Self as *mut Self);
+        }
+    }
 }

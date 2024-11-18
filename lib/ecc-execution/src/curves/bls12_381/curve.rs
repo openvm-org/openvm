@@ -1,10 +1,8 @@
-use axvm_ecc::{
-    curve::bls12381::{Fq, Fq2},
-    field::FieldExtension,
-};
-use ff::Field;
+use axvm_ecc::algebra::{field::FieldExtension, Field};
+use halo2curves_axiom::bls12_381::{Fq, Fq2};
 use lazy_static::lazy_static;
-use num::{BigInt, Num};
+use num_bigint::{BigInt, BigUint};
+use num_traits::Num;
 
 lazy_static! {
     pub static ref BLS12381_XI: Fq2 = Fq2::from_coeffs([Fq::ONE, Fq::ONE]);

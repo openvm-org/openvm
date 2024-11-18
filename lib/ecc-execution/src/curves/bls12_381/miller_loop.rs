@@ -7,28 +7,28 @@ use itertools::izip;
 
 use super::{Bls12_381, BLS12_381_PBE, BLS12_381_SEED_ABS};
 
-impl MillerStep for Bls12_381 {
-    type Fp = Fq;
-    type Fp2 = Fq2;
-}
+// impl MillerStep for Bls12_381 {
+//     type Fp2 = Fq2;
+// }
 
 #[allow(non_snake_case)]
 impl MultiMillerLoop for Bls12_381 {
+    type Fp = Fq;
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BLS12_381_SEED_ABS;
     const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PBE;
 
-    fn evaluate_lines_vec(&self, f: Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
+    fn evaluate_lines_vec(f: &Fq12, lines: Vec<EvaluatedLine<Fq, Fq2>>) -> Fq12 {
         let mut f = f;
         let mut lines = lines;
         if lines.len() % 2 == 1 {
-            f = Self::mul_by_023(f, lines.pop().unwrap());
+            f = Self::mul_by_023(f, &lines.pop().unwrap());
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = Self::mul_023_by_023(*line0, *line1);
-                f = Self::mul_by_02345(f, prod);
+                let prod = Self::mul_023_by_023(line0, line1);
+                f = Self::mul_by_02345(f, &prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");
             }

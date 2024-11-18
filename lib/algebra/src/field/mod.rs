@@ -44,10 +44,13 @@ pub trait Field:
 
     /// The one element of the field, the multiplicative identity.
     const ONE: Self;
+
+    /// Square `self` in-place
+    fn square_assign(&mut self);
 }
 
 /// Field extension trait. BaseField is the base field of the extension field.
-pub trait FieldExtension<BaseField: Field>: Field {
+pub trait FieldExtension<BaseField> {
     /// Extension field degree.
     const D: usize;
     /// This should be [BaseField; D]. It is an associated type due to rust const generic limitations.
@@ -62,12 +65,17 @@ pub trait FieldExtension<BaseField: Field>: Field {
     /// Embed a base field element into an extension field element.
     fn embed(base_elem: BaseField) -> Self;
 
-    /// Conjuagte an extension field element.
-    fn conjugate(&self) -> Self;
-
-    /// Frobenius map
+    /// Frobenius map: take `self` to the `p^power`th power, where `p` is the prime characteristic of the field.
     fn frobenius_map(&self, power: usize) -> Self;
 
     /// Multiply an extension field element by an element in the base field
-    fn mul_base(&self, rhs: BaseField) -> Self;
+    fn mul_base(&self, rhs: &BaseField) -> Self;
+}
+
+pub trait ComplexConjugate {
+    /// Conjugate an extension field element.
+    fn conjugate(self) -> Self;
+
+    /// Replace `self` with its conjugate.
+    fn conjugate_assign(&mut self);
 }

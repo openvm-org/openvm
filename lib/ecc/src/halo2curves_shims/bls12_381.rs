@@ -1,7 +1,24 @@
-pub use halo2curves_axiom::bls12_381::{Fq, Fq2, G1Affine, G2Affine};
+use axvm_algebra::field::FieldExtension;
+use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;
 
-use crate::point::AffineCoords;
+use crate::{
+    pairing::{EvaluatedLine, FromLineMType},
+    AffineCoords,
+};
+
+impl FromLineMType<Fq2> for Fq12 {
+    fn from_evaluated_line_m_type(line: EvaluatedLine<Fq2>) -> Fq12 {
+        Fq12::from_coeffs([
+            line.c,
+            Fq2::zero(),
+            line.b,
+            Fq2::one(),
+            Fq2::zero(),
+            Fq2::zero(),
+        ])
+    }
+}
 
 impl AffineCoords<Fq> for G1Affine {
     fn x(&self) -> Fq {
