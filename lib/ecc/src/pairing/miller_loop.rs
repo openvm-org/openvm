@@ -45,7 +45,7 @@ where
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
-        xy_fracs: Vec<(Self::Fp, Self::Fp)>,
+        xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>);
 
     /// Runs the multi-Miller loop with no embedded exponent
@@ -152,7 +152,7 @@ where
             f = Self::evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = Self::post_loop(&f, Q_acc, Q, c, xy_fracs);
+        let (f_out, _) = Self::post_loop(&f, Q_acc, Q, c, &xy_fracs);
         f = f_out;
 
         f

@@ -33,7 +33,7 @@ pub trait LineMulMType<Fp2, Fp12> {
     /// Multiplies two lines in 023-form to get an element in 02345-form
     fn mul_023_by_023(l0: &EvaluatedLine<Fp2>, l1: &EvaluatedLine<Fp2>) -> [Fp2; 5];
 
-    /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
+    /// Multiplies a line in 023-form with a Fp12 element to get an Fp12 element
     fn mul_by_023(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12;
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element

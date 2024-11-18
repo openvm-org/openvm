@@ -1,6 +1,11 @@
-use axvm_ecc::{halo2curves_shims::ExpBigInt, pairing::FinalExp, AffinePoint};
+use axvm_ecc::{
+    algebra::Field,
+    halo2curves_shims::ExpBigInt,
+    pairing::{FinalExp, MultiMillerLoop},
+    AffinePoint,
+};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-use num_bigint::{BigInt, BigUint};
+use num_bigint::{BigUint, Sign};
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 
@@ -25,10 +30,9 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // fc = f_{Miller,x,Q}(P) * c^{x}
         // where
         //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
-        todo!()
-        // let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
-        // assert_eq!(fc * c_q_inv * s, Fq12::one());
+        assert_eq!(fc * c_q_inv * s, Fq12::ONE);
     }
 
     // Adapted from the gnark implementation:
@@ -36,51 +40,51 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
     // returns c (residueWitness) and s (scalingFactor)
     fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
         // 1. get p-th root inverse
-        let mut exp = FINAL_EXP_FACTOR.clone() * BigInt::from(27);
-        let mut root = f.exp_bigint(exp.clone());
+        let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
+        let mut root = f.exp_bigint(Sign::Plus, exp.clone());
         let root_pth_inv: Fq12;
-        if root == Fq12::one() {
-            root_pth_inv = Fq12::one();
+        if root == Fq12::ONE {
+            root_pth_inv = Fq12::ONE;
         } else {
             let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
-            exp = -exp_inv % POLY_FACTOR.clone();
-            root_pth_inv = root.exp_bigint(exp);
+            exp = exp_inv % POLY_FACTOR.clone();
+            root_pth_inv = root.exp_bigint(Sign::Minus, exp);
         }
 
         // 2.1. get order of 3rd primitive root
-        let three = BigInt::from(3);
+        let three = BigUint::from(3u32);
         let mut order_3rd_power: u32 = 0;
         exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
 
-        root = f.exp_bigint(exp.clone());
+        root = f.exp_bigint(Sign::Plus, exp.clone());
         // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize order_3rd_power to 0
-        if root == Fq12::one() {
+        if root == Fq12::ONE {
             order_3rd_power = 0;
         }
-        root = root.exp_bigint(three.clone());
-        if root == Fq12::one() {
+        root = root.exp_bigint(Sign::Plus, three.clone());
+        if root == Fq12::ONE {
             order_3rd_power = 1;
         }
-        root = root.exp_bigint(three.clone());
-        if root == Fq12::one() {
+        root = root.exp_bigint(Sign::Plus, three.clone());
+        if root == Fq12::ONE {
             order_3rd_power = 2;
         }
-        root = root.exp_bigint(three.clone());
-        if root == Fq12::one() {
+        root = root.exp_bigint(Sign::Plus, three.clone());
+        if root == Fq12::ONE {
             order_3rd_power = 3;
         }
 
         // 2.2. get 27th root inverse
         let root_27th_inv: Fq12;
         if order_3rd_power == 0 {
-            root_27th_inv = Fq12::one();
+            root_27th_inv = Fq12::ONE;
         } else {
             let order_3rd = three.pow(order_3rd_power);
             exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-            root = f.exp_bigint(exp.clone());
+            root = f.exp_bigint(Sign::Plus, exp.clone());
             let exp_inv = exp.modinv(&order_3rd).unwrap();
-            exp = -exp_inv % order_3rd;
-            root_27th_inv = root.exp_bigint(exp);
+            exp = exp_inv % order_3rd;
+            root_27th_inv = root.exp_bigint(Sign::Minus, exp);
         }
 
         // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
@@ -91,7 +95,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // 3. get the witness residue
         // lambda = q - u, the optimal exponent
         exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
-        let c = f.exp_bigint(exp);
+        let c = f.exp_bigint(Sign::Plus, exp.clone());
 
         (c, s)
     }

@@ -1,7 +1,7 @@
 use axvm_ecc::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
     pairing::{
-        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, PairingIntrinsics,
+        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop,
         UnevaluatedLine,
     },
     AffinePoint,
@@ -182,7 +182,7 @@ impl MultiMillerLoop for Bn254 {
         Q_acc: Vec<AffinePoint<Fq2>>,
         Q: &[AffinePoint<Fq2>],
         _c: Option<Fq12>,
-        xy_fracs: Vec<(Fq, Fq)>,
+        xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut Q_acc = Q_acc;
         let mut lines = Vec::<EvaluatedLine<Fq2>>::new();

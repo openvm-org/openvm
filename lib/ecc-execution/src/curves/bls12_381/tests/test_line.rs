@@ -1,7 +1,7 @@
 use axvm_ecc::{
-    field::FieldExtension,
-    pairing::{LineMType, LineMulMType},
-    point::AffinePoint,
+    algebra::field::FieldExtension,
+    pairing::{Evaluatable, FromLineMType, LineMulMType},
+    AffinePoint,
 };
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
@@ -31,7 +31,7 @@ fn test_mul_023_by_023() {
     let line_1 = tangent_line_023::<Fq, Fq2>(ec_point_1);
 
     // Multiply the two line functions & convert to Fq12 to compare
-    let mul_023_by_023 = Bls12_381::mul_023_by_023(line_0, line_1);
+    let mul_023_by_023 = Bls12_381::mul_023_by_023(&line_0, &line_1);
     let mul_023_by_023 = Fq12::from_coeffs([
         mul_023_by_023[0],
         Fq2::ZERO,
@@ -58,7 +58,7 @@ fn test_mul_by_023() {
         y: rnd_pt.y,
     };
     let line = tangent_line_023::<Fq, Fq2>(ec_point);
-    let mul_by_023 = Bls12_381::mul_by_023(f, line);
+    let mul_by_023 = Bls12_381::mul_by_023(&f, &line);
 
     let check_mul_fp12 = Fq12::from_evaluated_line_m_type(line) * f;
     assert_eq!(mul_by_023, check_mul_fp12);
@@ -75,7 +75,7 @@ fn test_mul_by_02345() {
         Fq2::random(&mut rng),
         Fq2::random(&mut rng),
     ];
-    let mul_by_02345 = Bls12_381::mul_by_02345(f, x);
+    let mul_by_02345 = Bls12_381::mul_by_02345(&f, &x);
 
     let x_f12 = Fq12::from_coeffs([x[0], Fq2::ZERO, x[1], x[2], x[3], x[4]]);
     assert_eq!(mul_by_02345, f * x_f12);

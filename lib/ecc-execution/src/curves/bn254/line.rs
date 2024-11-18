@@ -2,7 +2,7 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc::{
     algebra::{field::FieldExtension, Field},
-    pairing::{Evaluatable, EvaluatedLine, LineMulDType},
+    pairing::{EvaluatedLine, LineMulDType},
     AffinePoint,
 };
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
@@ -10,6 +10,7 @@ use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
 use super::{Bn254, BN254_XI};
 
 impl LineMulDType<Fq2, Fq12> for Bn254 {
+    /// Multiplies two lines in 013-form to get an element in 01234-form
     fn mul_013_by_013(l0: &EvaluatedLine<Fq2>, l1: &EvaluatedLine<Fq2>) -> [Fq2; 5] {
         let b0 = &l0.b;
         let c0 = &l0.c;
@@ -28,10 +29,12 @@ impl LineMulDType<Fq2, Fq12> for Bn254 {
         [x0, x1, x2, x3, x4]
     }
 
+    /// Multiplies a line in 013-form with a Fp12 element to get an Fp12 element
     fn mul_by_013(f: &Fq12, l: &EvaluatedLine<Fq2>) -> Fq12 {
         Self::mul_by_01234(f, &[Fq2::ONE, l.b, Fq2::ZERO, l.c, Fq2::ZERO])
     }
 
+    /// Multiplies a line in 01234-form with a Fp12 element to get an Fp12 element
     fn mul_by_01234(f: &Fq12, x: &[Fq2; 5]) -> Fq12 {
         let fx = Fq12::from_coeffs([x[0], x[1], x[2], x[3], x[4], Fq2::ZERO]);
         f * fx
