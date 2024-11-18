@@ -18,7 +18,6 @@ where
     for<'a> &'a Self::Fp2: Add<&'a Self::Fp2, Output = Self::Fp2>,
     for<'a> &'a Self::Fp2: Sub<&'a Self::Fp2, Output = Self::Fp2>,
     for<'a> &'a Self::Fp2: Mul<&'a Self::Fp2, Output = Self::Fp2>,
-    for<'a> &'a Self::Fp2: Neg<Output = Self::Fp2>,
     for<'a> &'a Self::Fp12: Mul<&'a Self::Fp12, Output = Self::Fp12>,
 {
     type Fp12: FieldExtension<BaseField = Self::Fp2> + Fp12Mul;

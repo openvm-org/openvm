@@ -9,6 +9,9 @@ pub use fp2::*;
 mod fp12;
 pub use fp12::*;
 
+mod miller;
+pub use miller::*;
+
 use super::{LineMulMType, MillerStep};
 
 #[cfg(feature = "halo2curves")]
@@ -38,8 +41,3 @@ impl Field for Bls12381Fp {
 }
 
 impl LineMulMType<Bls12381Fp, Bls12381Fp2, Bls12381Fp12> for Bls12381Intrinsic {}
-
-impl MillerStep for Bls12381Intrinsic {
-    type Fp = Bls12381Fp;
-    type Fp2 = Bls12381Fp2;
-}
