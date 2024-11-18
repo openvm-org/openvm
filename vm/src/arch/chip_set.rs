@@ -167,13 +167,11 @@ impl<F: PrimeField32> VmChipSet<F> {
     /// Return IDs of AIRs which heights won't during execution.
     pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
         let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
-        let mut num_const_chip = 0;
-        for chip in self.chips.iter() {
-            match chip {
-                AxVmChip::Executor(_) => {}
-                _ => num_const_chip += 1,
-            }
-        }
+        let num_const_chip = self
+            .chips
+            .iter()
+            .filter(|chip| !matches!(chip, AxVmChip::Executor(_)))
+            .count();
         let num_air = self.num_airs();
         // Const chips are always in the end.
         // +1 is for RangeChecker.
