@@ -56,7 +56,7 @@ def bench():
     parser.add_argument('--features', type=str, help="Additional features")
     args = parser.parse_args()
 
-    feature_flags = ["bench-metrics", "parallel"] + ([args.features] if args.features else []) + [args.memory_allocator]
+    feature_flags = ["bench-metrics", "parallel", "function-span"] + ([args.features] if args.features else []) + [args.memory_allocator]
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
     if args.instance_type and 'x86' in args.instance_type:
