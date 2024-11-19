@@ -707,6 +707,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-encoder"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "p3-air",
+ "p3-field",
+]
+
+[[package]]
 name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [

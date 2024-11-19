@@ -24,6 +24,7 @@ members = [
     "toolchain/riscv/axvm",
     "toolchain/riscv/macros",
     "toolchain/build",
+    "toolchain/encoder",
     "toolchain/tests",
     "cargo-axiom",
     "lib/algebra",
@@ -76,6 +77,7 @@ lto = "thin"
 axiom-vm = { path = "axiom-vm", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
+axvm-encoder = { path = "toolchain/encoder", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
 axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
