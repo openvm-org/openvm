@@ -1,8 +1,7 @@
 use axvm_ecc::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
     pairing::{
-        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop,
-        UnevaluatedLine,
+        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },
     AffinePoint,
 };
