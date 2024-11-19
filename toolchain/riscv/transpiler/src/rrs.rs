@@ -242,20 +242,3 @@ impl<F: PrimeField32> CustomInstructionProcessor<F> for BasicInstructionProcesso
         instruction.map(|ret| (ret, 1))
     }
 }
-
-// /// Transpile the [`Instruction`]s from the 32-bit encoded instructions.
-// ///
-// /// # Panics
-// ///
-// /// This function will return an error if the [`Instruction`] cannot be processed.
-// pub(crate) fn transpile<F: PrimeField32>(instructions_u32: &[u32]) -> Vec<Instruction<F>> {
-//     let mut instructions = Vec::new();
-//     let mut transpiler = InstructionTranspiler::<F>(PhantomData);
-//     for instruction_u32 in instructions_u32 {
-//         assert!(*instruction_u32 != 115, "ecall is not supported");
-//         let instruction = process_instruction(&mut transpiler, *instruction_u32)
-//             .unwrap_or_else(|| process_custom_instruction(*instruction_u32));
-//         instructions.push(instruction);
-//     }
-//     instructions
-// }
