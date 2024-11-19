@@ -36,10 +36,10 @@ impl<F> Complex<F> {
 
 impl<F: IntMod> Complex<F> {
     // Zero element (i.e. additive identity)
-    const ZERO: Self = Self::new(F::ZERO, F::ZERO);
+    pub const ZERO: Self = Self::new(F::ZERO, F::ZERO);
 
     // One element (i.e. multiplicative identity)
-    const ONE: Self = Self::new(F::ONE, F::ZERO);
+    pub const ONE: Self = Self::new(F::ONE, F::ZERO);
 
     pub fn neg_assign(&mut self) {
         self.c0.neg_assign();
