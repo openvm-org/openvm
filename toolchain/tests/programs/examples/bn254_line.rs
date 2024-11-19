@@ -4,7 +4,7 @@
 use axvm::io::read_vec;
 use axvm_algebra::{field::FieldExtension, IntMod};
 use axvm_ecc::{
-    bn254::{Bn254, Fp, Fp12, Fp2},
+    bn254::{Bn254, Fp12, Fp2},
     pairing::{EvaluatedLine, LineMulDType},
 };
 

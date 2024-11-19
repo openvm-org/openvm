@@ -1,4 +1,4 @@
-use axvm_algebra::{field::FieldExtension, Field};
+use axvm_algebra::field::FieldExtension;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -8,10 +8,9 @@ use {
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
-use crate::pairing::{
-    Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, PairingIntrinsics as _,
-    UnevaluatedLine,
-};
+#[cfg(not(target_os = "zkvm"))]
+use crate::pairing::PairingIntrinsics;
+use crate::pairing::{Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, UnevaluatedLine};
 
 // TODO[jpw]: make macro
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {

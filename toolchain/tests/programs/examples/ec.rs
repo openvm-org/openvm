@@ -1,10 +1,7 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{
-    hint::black_box,
-    ops::{Add, AddAssign, Sub},
-};
+use core::hint::black_box;
 
 use axvm_algebra::IntMod;
 use axvm_ecc::{

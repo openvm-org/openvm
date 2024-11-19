@@ -2,13 +2,12 @@
 use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign};
 
-use axvm_algebra::{
-    field::{ComplexConjugate, FieldExtension},
-    Field,
-};
+use axvm_algebra::field::{ComplexConjugate, FieldExtension};
 
 use super::{Bn254, Fp2};
-use crate::pairing::{PairingIntrinsics as _, SexticExtField};
+#[cfg(not(target_os = "zkvm"))]
+use crate::pairing::PairingIntrinsics;
+use crate::pairing::SexticExtField;
 
 pub type Fp12 = SexticExtField<Fp2>;
 
@@ -65,7 +64,7 @@ impl<'a> MulAssign<&'a Fp12> for Fp12 {
             *self = crate::pairing::sextic_tower_mul_host(self, other, &Bn254::XI);
         }
         #[cfg(target_os = "zkvm")]
-        unsafe {
+        {
             crate::pairing::sextic_tower_mul_intrinsic::<Bn254>(
                 self as *mut Fp12 as *mut u8,
                 self as *const Fp12 as *const u8,

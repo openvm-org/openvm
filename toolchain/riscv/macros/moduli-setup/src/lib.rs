@@ -4,6 +4,7 @@ extern crate proc_macro;
 
 use axvm_macros_common::Stmts;
 use proc_macro::TokenStream;
+use quote::format_ident;
 use syn::{parse_macro_input, Stmt};
 
 fn string_to_bytes(s: &str) -> Vec<u8> {
@@ -110,6 +111,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 );
                                 let serialized_len = serialized_modulus.len();
 
+                                let module_name = format_ident!("algebra_impl_{}", mod_idx);
                                 let result = TokenStream::from(
                                     quote::quote_spanned! { span.into() =>
                                         #[cfg(target_os = "zkvm")]
@@ -345,7 +347,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         }
 
                                         // Put trait implementations in a private module to avoid conflicts
-                                        mod algebra_impl {
+                                        mod #module_name {
                                             use axvm_algebra::IntMod;
 
                                             use super::#struct_name;

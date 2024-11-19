@@ -1,6 +1,6 @@
 use core::{
     fmt::{Debug, Formatter, Result},
-    ops::{Add, AddAssign, Mul, Sub, SubAssign},
+    ops::{Add, AddAssign, Sub, SubAssign},
 };
 
 use axvm_algebra::Field;
@@ -9,7 +9,6 @@ use {
     super::shifted_funct7,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
 };
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 - \xi`.
@@ -80,13 +79,14 @@ pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
     );
 }
 
+#[cfg(not(target_os = "zkvm"))]
 pub(crate) fn sextic_tower_mul_host<F: Field>(
     lhs: &SexticExtField<F>,
     rhs: &SexticExtField<F>,
     xi: &F,
 ) -> SexticExtField<F>
 where
-    for<'a> &'a F: Mul<&'a F, Output = F>,
+    for<'a> &'a F: core::ops::Mul<&'a F, Output = F>,
 {
     // The following multiplication is hand-derived with respect to the basis where degree 6 extension
     // is composed of degree 3 extension followed by degree 2 extension.
