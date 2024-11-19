@@ -453,6 +453,13 @@ impl<F: IntMod> Neg for Complex<F> {
     }
 }
 
+impl<F: IntMod> Neg for &Complex<F> {
+    type Output = Complex<F>;
+    fn neg(self) -> Self::Output {
+        Complex::ZERO - self
+    }
+}
+
 impl<F: IntMod> Debug for Complex<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{:?} + {:?} * u", self.c0, self.c1)

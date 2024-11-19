@@ -5,7 +5,7 @@ use axvm::io::read_vec;
 use axvm_algebra::IntMod;
 use axvm_ecc::{
     bn254::{Bn254, Fp2},
-    pairing::{MillerStep, PairingIntrinsics},
+    pairing::MillerStep,
     AffinePoint,
 };
 
@@ -37,11 +37,12 @@ fn test_miller_step(io: &[u8]) {
 }
 
 fn test_miller_double_and_add_step(io: &[u8]) {
-    let s = &io[32 * 12..32 * 16];
-    let q = &io[32 * 16..32 * 20];
-    let pt = &io[32 * 20..32 * 24];
-    let l0 = &io[32 * 24..32 * 28];
-    let l1 = &io[32 * 28..32 * 32];
+    assert_eq!(io.len(), 32 * 20);
+    let s = &io[32 * 0..32 * 4];
+    let q = &io[32 * 4..32 * 8];
+    let pt = &io[32 * 8..32 * 12];
+    let l0 = &io[32 * 12..32 * 16];
+    let l1 = &io[32 * 16..32 * 20];
 
     let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
     let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
@@ -72,6 +73,6 @@ pub fn main() {
     let io = read_vec();
     assert_eq!(io.len(), 32 * 32);
 
-    test_miller_step(&io);
-    test_miller_double_and_add_step(&io);
+    test_miller_step(&io[..32 * 12]);
+    test_miller_double_and_add_step(&io[32 * 12..]);
 }
