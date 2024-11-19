@@ -355,7 +355,11 @@ impl VmConfig {
             let (range, offset) = default_executor_range(ExecutorName::PublicValues);
             let chip = Rc::new(RefCell::new(PublicValuesChip::new(
                 NativeAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
-                PublicValuesCoreChip::new(self.num_public_values, offset),
+                PublicValuesCoreChip::new(
+                    self.num_public_values,
+                    offset,
+                    self.poseidon2_max_constraint_degree as u32,
+                ),
                 memory_controller.clone(),
             )));
             for opcode in range {

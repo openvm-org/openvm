@@ -5,7 +5,7 @@ use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        FriParameters,
+        setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -233,8 +233,11 @@ fn test_vm_1_optional_air() {
 
 #[test]
 fn test_vm_public_values() {
+    setup_tracing();
+    let num_public_values = 100;
     let vm_config = VmConfig {
-        num_public_values: 3,
+        num_public_values,
+        collect_metrics: true,
         ..Default::default()
     };
     let engine =
@@ -256,7 +259,11 @@ fn test_vm_public_values() {
         let exe_result = vm.execute(program, vec![]).unwrap();
         assert_eq!(
             exe_result.public_values,
-            vec![None, None, Some(BabyBear::from_canonical_u32(12))]
+            [
+                vec![None, None, Some(BabyBear::from_canonical_u32(12))],
+                vec![None; num_public_values - 3]
+            ]
+            .concat(),
         );
         let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
         engine

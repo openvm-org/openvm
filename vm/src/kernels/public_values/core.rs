@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 
+use ax_circuit_primitives::SubAir;
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_encoder::Encoder;
 use axvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };
@@ -17,25 +19,27 @@ use crate::{
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PublicValuesCoreAir {
     /// Number of custom public values to publish.
     pub num_custom_pvs: usize,
     offset: usize,
+    encoder: Encoder,
 }
 
 impl PublicValuesCoreAir {
-    pub fn new(num_custom_pvs: usize, offset: usize) -> Self {
+    pub fn new(num_custom_pvs: usize, offset: usize, max_degree: u32) -> Self {
         Self {
             num_custom_pvs,
             offset,
+            encoder: Encoder::new(num_custom_pvs, max_degree),
         }
     }
 }
 
 impl<F: Field> BaseAir<F> for PublicValuesCoreAir {
     fn width(&self) -> usize {
-        3 + self.num_custom_pvs
+        3 + self.encoder.width()
     }
 }
 
@@ -60,18 +64,20 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
         let value = *cols.value;
         let index = *cols.index;
 
-        let mut sum_flags = AB::Expr::ZERO;
+        let vars = cols.custom_pv_vars.iter().map(|&&x| x).collect::<Vec<_>>();
+        self.encoder.eval(builder, &vars);
+
+        let flags = self.encoder.flags::<AB>(&vars);
+
         let mut match_public_value_index = AB::Expr::ZERO;
         let mut match_public_value = AB::Expr::ZERO;
-        for (i, &&flag) in cols.custom_pv_flags.iter().enumerate() {
-            builder.assert_bool(flag.into());
-            sum_flags += flag.into();
-            match_public_value_index += flag.into() * AB::F::from_canonical_usize(i);
-            match_public_value += flag.into() * builder.public_values()[i].into();
+        for (i, flag) in flags.iter().enumerate() {
+            match_public_value_index += flag.clone() * AB::F::from_canonical_usize(i);
+            match_public_value += flag.clone() * builder.public_values()[i].into();
         }
+        builder.assert_eq(is_valid, self.encoder.is_valid::<AB>(&vars));
 
         let mut when_publish = builder.when(is_valid);
-        when_publish.assert_one(sum_flags);
         when_publish.assert_eq(index, match_public_value_index);
         when_publish.assert_eq(value, match_public_value);
 
@@ -102,12 +108,9 @@ pub struct PublicValuesCoreChip<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> PublicValuesCoreChip<F> {
-    pub fn new(num_custom_pvs: usize, offset: usize) -> Self {
+    pub fn new(num_custom_pvs: usize, offset: usize, max_degree: u32) -> Self {
         Self {
-            air: PublicValuesCoreAir {
-                num_custom_pvs,
-                offset,
-            },
+            air: PublicValuesCoreAir::new(num_custom_pvs, offset, max_degree),
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
@@ -159,8 +162,10 @@ impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChi
         *cols.value = record.value;
         *cols.index = record.index;
         let idx: usize = record.index.as_canonical_u32() as usize;
-        // Assumption: row_slice is initialized with 0s.
-        *cols.custom_pv_flags[idx] = F::ONE;
+        let pt = self.air.encoder.get_flag_pt(idx);
+        for (i, var) in cols.custom_pv_vars.iter_mut().enumerate() {
+            **var = F::from_canonical_u32(pt[i]);
+        }
     }
 
     fn generate_public_values(&self) -> Vec<F> {

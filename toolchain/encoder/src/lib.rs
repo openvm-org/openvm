@@ -55,6 +55,8 @@ impl Encoder {
         pt: &[u32],
         vars: &[AB::Var],
     ) -> AB::Expr {
+        assert_eq!(self.var_cnt, pt.len(), "wrong point dimension");
+        assert_eq!(self.var_cnt, vars.len(), "wrong number of variables");
         let mut expr = AB::Expr::ONE;
         let mut denom = AB::F::ONE;
         for (i, &coord) in pt.iter().enumerate() {
@@ -65,10 +67,7 @@ impl Encoder {
         }
         {
             let sum: u32 = pt.iter().sum();
-            let var_sum = vars
-                .iter()
-                .take(self.var_cnt)
-                .fold(AB::Expr::ZERO, |acc, &v| acc + v);
+            let var_sum = vars.iter().fold(AB::Expr::ZERO, |acc, &v| acc + v);
             for j in 0..(self.max_degree - sum) {
                 expr *= AB::Expr::from_canonical_u32(self.max_degree - j) - var_sum.clone();
                 denom *= AB::F::from_canonical_u32(j + 1);
@@ -77,14 +76,27 @@ impl Encoder {
         expr * denom.inverse()
     }
 
-    pub fn get_flag<AB: InteractionBuilder>(&self, flag_idx: usize, vars: &[AB::Var]) -> AB::Expr {
+    pub fn get_flag_expr<AB: InteractionBuilder>(
+        &self,
+        flag_idx: usize,
+        vars: &[AB::Var],
+    ) -> AB::Expr {
         assert!(flag_idx < self.flag_cnt, "flag index out of range");
         self.expression_for_point::<AB>(&self.pts[flag_idx + 1], vars)
     }
 
+    pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
+        assert!(flag_idx < self.flag_cnt, "flag index out of range");
+        self.pts[flag_idx + 1].clone()
+    }
+
+    pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
+        AB::Expr::ONE - self.expression_for_point::<AB>(&self.pts[0], vars)
+    }
+
     pub fn flags<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> Vec<AB::Expr> {
-        (1..=self.flag_cnt)
-            .map(|i| self.get_flag::<AB>(i, vars))
+        (0..self.flag_cnt)
+            .map(|i| self.get_flag_expr::<AB>(i, vars))
             .collect()
     }
 
@@ -94,6 +106,10 @@ impl Encoder {
             expr += self.expression_for_point::<AB>(&self.pts[i], vars);
         }
         expr
+    }
+
+    pub fn width(&self) -> usize {
+        self.var_cnt
     }
 }
 
