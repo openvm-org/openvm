@@ -26,14 +26,14 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<EvaluatedLine<Fp, Fp2>> = MaybeUninit::uninit();
+            let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::Pairing as usize,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::EvaluateLine),
                 uninit.as_mut_ptr(),
-                self as *const u8,
-                xy_frac as *const u8,
+                self as *const UnevaluatedLine<Fp2>,
+                xy_frac as *const (Fp, Fp)
             );
             unsafe { uninit.assume_init() }
         }
@@ -76,8 +76,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
                 Custom1Funct3::Pairing as usize,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::Mul023By023),
                 uninit.as_mut_ptr(),
-                l0 as *const u8,
-                l1 as *const u8,
+                l0 as *const EvaluatedLine<Fp2>,
+                l1 as *const EvaluatedLine<Fp2>
             );
             unsafe { uninit.assume_init() }
         }
@@ -97,8 +97,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
                 Custom1Funct3::Pairing as usize,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy023),
                 uninit.as_mut_ptr(),
-                f as *const u8,
-                l as *const u8,
+                f as *const Fp12,
+                l as *const EvaluatedLine<Fp2>
             );
             unsafe { uninit.assume_init() }
         }
@@ -162,8 +162,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
                 Custom1Funct3::Pairing as usize,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy02345),
                 uninit.as_mut_ptr(),
-                f as *const u8,
-                x as *const u8
+                f as *const Fp12,
+                x as *const [Fp2; 5]
             );
             unsafe { uninit.assume_init() }
         }

@@ -4,7 +4,7 @@ use axvm_algebra::{DivUnsafe, Field};
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1, PAIRING_MAX_KINDS},
+    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
@@ -82,16 +82,14 @@ where
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<(
-                AffinePoint<Self::Fp2>,
-                UnevaluatedLine<Self::Fp, Self::Fp2>,
-            )> = MaybeUninit::uninit();
+            let mut uninit: MaybeUninit<(AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>)> =
+                MaybeUninit::uninit();
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::Pairing as usize,
                 shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
                 uninit.as_mut_ptr(),
-                s as *const u8,
+                s as *const _,
                 "x0"
             );
             unsafe { uninit.assume_init() }
@@ -184,10 +182,10 @@ where
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::Pairing as usize,
-                shifted_funct7(PairingBaseFunct7::MillerDoubleAndAddStep),
+                shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleAndAddStep),
                 uninit.as_mut_ptr(),
-                s as *const u8,
-                q as *const u8,
+                s as *const _,
+                q as *const _
             );
             unsafe { uninit.assume_init() }
         }

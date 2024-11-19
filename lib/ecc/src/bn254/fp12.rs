@@ -1,14 +1,10 @@
+#[cfg(target_os = "zkvm")]
+use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign};
 
 use axvm_algebra::{
     field::{ComplexConjugate, FieldExtension},
     Field,
-};
-#[cfg(target_os = "zkvm")]
-use {
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
 };
 
 use super::{Bn254, Fp2};
@@ -71,9 +67,9 @@ impl<'a> MulAssign<&'a Fp12> for Fp12 {
         #[cfg(target_os = "zkvm")]
         unsafe {
             crate::pairing::sextic_tower_mul_intrinsic::<Bn254>(
-                self as *mut u8,
-                self as *const u8,
-                other as *const u8,
+                self as *mut Fp12 as *mut u8,
+                self as *const Fp12 as *const u8,
+                other as *const Fp12 as *const u8,
             );
         }
     }
@@ -90,10 +86,10 @@ impl<'a> Mul<&'a Fp12> for &'a Fp12 {
         #[cfg(target_os = "zkvm")]
         unsafe {
             let mut uninit: MaybeUninit<Self::Output> = MaybeUninit::uninit();
-            crate::pairing::sextic_tower_mul_host::<Bn254>(
+            crate::pairing::sextic_tower_mul_intrinsic::<Bn254>(
                 uninit.as_mut_ptr() as *mut u8,
-                self as *const u8,
-                other as *const u8,
+                self as *const Fp12 as *const u8,
+                other as *const Fp12 as *const u8,
             );
             uninit.assume_init()
         }
