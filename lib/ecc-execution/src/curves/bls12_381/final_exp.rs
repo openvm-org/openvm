@@ -47,6 +47,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
             root_pth_inv = Fq12::ONE;
         } else {
             let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
+            // exp = BLS12381_MODULUS.clone() - (exp_inv % POLY_FACTOR.clone());
             exp = exp_inv % POLY_FACTOR.clone();
             root_pth_inv = root.exp_bigint(Sign::Minus, exp);
         }
@@ -84,6 +85,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
             root = f.exp_bigint(Sign::Plus, exp.clone());
             let exp_inv = exp.modinv(&order_3rd).unwrap();
             exp = exp_inv % order_3rd;
+            // exp = BLS12381_MODULUS.clone() - (exp_inv % order_3rd);
             root_27th_inv = root.exp_bigint(Sign::Minus, exp);
         }
 

@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    algebra::{field::FieldExtension, DivUnsafe, Field},
+    algebra::{DivUnsafe, Field},
     pairing::{
         Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },

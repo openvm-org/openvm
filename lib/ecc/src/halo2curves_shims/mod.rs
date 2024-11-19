@@ -7,7 +7,7 @@ mod bls12_381;
 mod bn254;
 
 pub trait ExpBigInt: Field {
-    /// Exponentiates a field element by a BigInt
+    /// Exponentiates a field element by a BigUint with sign
     fn exp_bigint(&self, sign: Sign, k: BigUint) -> Self
     where
         for<'a> &'a Self: Mul<&'a Self, Output = Self>,
@@ -16,12 +16,10 @@ pub trait ExpBigInt: Field {
             return Self::ONE;
         }
 
-        let mut e = k.clone();
         let mut x = self.clone();
 
         if sign == Sign::Minus {
             x = Self::ONE.div_unsafe(&x);
-            // e = -k;
         }
 
         let mut res = Self::ONE;
@@ -29,11 +27,10 @@ pub trait ExpBigInt: Field {
         let x_sq = &x * &x;
         let ops = [x.clone(), x_sq.clone(), &x_sq * &x];
 
-        let bytes = e.to_bytes_be();
+        let bytes = k.to_bytes_be();
         for &b in bytes.iter() {
             let mut mask = 0xc0;
             for j in 0..4 {
-                // res = res.square().square()
                 res = &res * &res * &res * &res;
                 let c = (b & mask) >> (6 - 2 * j);
                 if c != 0 {
@@ -42,7 +39,6 @@ pub trait ExpBigInt: Field {
                 mask >>= 2;
             }
         }
-
         res
     }
 }

@@ -1,6 +1,6 @@
 use axvm_ecc::{
     algebra::field::FieldExtension,
-    pairing::{Evaluatable, FromLineMType, LineMulMType},
+    pairing::{FromLineMType, LineMulMType},
     AffinePoint,
 };
 use halo2curves_axiom::{

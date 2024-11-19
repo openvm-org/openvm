@@ -14,8 +14,8 @@ use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
 #[allow(non_snake_case)]
 fn test_bls12_381_final_exp_hint() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-        // generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
-        generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
+        generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
+    // generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
 
     let f = Bls12_381::multi_miller_loop(&P_ecpoints, &Q_ecpoints);
     let (c, s) = Bls12_381::final_exp_hint(&f);
@@ -25,6 +25,7 @@ fn test_bls12_381_final_exp_hint() {
         16,
     ).unwrap();
     let c_qt = c.exp_bigint(Sign::Plus, q) * c.exp_bigint(Sign::Plus, SEED_NEG.clone());
+    // let c_qt = c.exp_bigint(q) * c.exp_bigint(SEED_NEG.clone());
 
     assert_eq!(f * s, c_qt);
 }
@@ -68,10 +69,7 @@ fn generate_test_points_bls12_381(
             p.y = -p.y;
         }
         let q = G2Affine::generator() * b[i];
-        let mut q = G2Affine::from(q);
-        if i % 2 == 1 {
-            q.y = -q.y;
-        }
+        let q = G2Affine::from(q);
         P_vec.push(p);
         Q_vec.push(q);
     }

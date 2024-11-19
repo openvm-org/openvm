@@ -5,7 +5,7 @@ use axvm_ecc::{
     pairing::{EvaluatedLine, LineMulMType},
     AffinePoint,
 };
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use halo2curves_axiom::bls12_381::{Fq12, Fq2};
 
 use super::{Bls12_381, BLS12381_XI};
 
