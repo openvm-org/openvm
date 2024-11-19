@@ -25,6 +25,7 @@ use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{program::Program, *};
 use itertools::zip_eq;
 use num_bigint_dig::BigUint;
+use num_traits::Zero;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
@@ -875,6 +876,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config32,
                         class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
@@ -905,6 +907,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config48,
                         class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));

@@ -12,13 +12,11 @@ use num_traits::{Num, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use super::{ec_add_ne_expr, ec_double_expr};
 use crate::{
     arch::{
-        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, VmChipWrapper,
-        BITWISE_OP_LOOKUP_BUS,
+        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    intrinsics::field_expression::FieldExpressionCoreChip,
+    intrinsics::ecc::weierstrass::{EcAddNeChip, EcDoubleChip},
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
 };
@@ -36,18 +34,6 @@ fn test_add_ne() {
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
-    let expr = ec_add_ne_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-    );
-    let core = FieldExpressionCoreChip::new(
-        expr,
-        Rv32WeierstrassOpcode::default_offset(),
-        vec![Rv32WeierstrassOpcode::EC_ADD_NE as usize],
-        vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
-        "EcAddNe",
-    );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -57,6 +43,12 @@ fn test_add_ne() {
         tester.program_bus(),
         tester.memory_controller(),
         bitwise_chip.clone(),
+    );
+    let mut chip = EcAddNeChip::new(
+        adapter,
+        tester.memory_controller(),
+        config,
+        Rv32WeierstrassOpcode::default_offset(),
     );
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
@@ -71,12 +63,10 @@ fn test_add_ne() {
     let p2_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
-
     let r = chip
+        .0
         .core
-        .air
-        .expr
+        .expr()
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
@@ -86,7 +76,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
     tester.execute(&mut chip, instruction);
@@ -104,19 +94,6 @@ fn test_double() {
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
-    let expr = ec_double_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-        BigUint::zero(),
-    );
-    let core = FieldExpressionCoreChip::new(
-        expr,
-        Rv32WeierstrassOpcode::default_offset(),
-        vec![Rv32WeierstrassOpcode::EC_DOUBLE as usize],
-        vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
-        "EcDouble",
-    );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -134,9 +111,15 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = EcDoubleChip::new(
+        adapter,
+        tester.memory_controller(),
+        config,
+        Rv32WeierstrassOpcode::default_offset(),
+        BigUint::zero(),
+    );
 
-    let r = chip.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
@@ -145,7 +128,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, instruction);
@@ -167,19 +150,6 @@ fn test_p256_double() {
         16,
     )
     .unwrap();
-    let expr = ec_double_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-        a,
-    );
-    let core = FieldExpressionCoreChip::new(
-        expr,
-        Rv32WeierstrassOpcode::default_offset(),
-        vec![Rv32WeierstrassOpcode::EC_DOUBLE as usize],
-        vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
-        "EcDouble",
-    );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -207,9 +177,15 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = EcDoubleChip::new(
+        adapter,
+        tester.memory_controller(),
+        config,
+        Rv32WeierstrassOpcode::default_offset(),
+        a,
+    );
 
-    let r = chip.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -228,7 +204,7 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, instruction);

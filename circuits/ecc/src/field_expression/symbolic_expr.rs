@@ -1,6 +1,5 @@
 use std::{
     cmp::{max, min},
-    collections::HashMap,
     convert::identity,
     ops::{Add, Div, Mul, Sub},
 };
@@ -21,7 +20,7 @@ use p3_util::log2_ceil_usize;
 pub enum SymbolicExpr {
     Input(usize),
     Var(usize),
-    Const(char, BigUint, usize), // (name, value, num_limbs)
+    Const(usize, BigUint, usize), // (index, value, number of limbs)
     Add(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Sub(Box<SymbolicExpr>, Box<SymbolicExpr>),
     Mul(Box<SymbolicExpr>, Box<SymbolicExpr>),
@@ -39,9 +38,9 @@ pub enum SymbolicExpr {
 impl std::fmt::Display for SymbolicExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            SymbolicExpr::Input(i) => write!(f, "Input({})", i),
-            SymbolicExpr::Var(i) => write!(f, "Var({})", i),
-            SymbolicExpr::Const(name, _, _) => write!(f, "{}", name),
+            SymbolicExpr::Input(i) => write!(f, "Input_{}", i),
+            SymbolicExpr::Var(i) => write!(f, "Var_{}", i),
+            SymbolicExpr::Const(i, _, _) => write!(f, "Const_{}", i),
             SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
             SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
             SymbolicExpr::Mul(lhs, rhs) => write!(f, "{} * {}", lhs, rhs),
@@ -391,7 +390,7 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<isize>],
         variables: &[OverflowInt<isize>],
-        constants: &HashMap<char, OverflowInt<isize>>,
+        constants: &[OverflowInt<isize>],
         flags: &[bool],
     ) -> OverflowInt<isize> {
         match self {
@@ -405,7 +404,7 @@ impl SymbolicExpr {
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
-            SymbolicExpr::Const(name, _, _) => constants[name].clone(),
+            SymbolicExpr::Const(i, _, _) => constants[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
                 lhs.evaluate_overflow_isize(inputs, variables, constants, flags)
                     + rhs.evaluate_overflow_isize(inputs, variables, constants, flags)
@@ -442,7 +441,7 @@ impl SymbolicExpr {
         &self,
         inputs: &[OverflowInt<AB::Expr>],
         variables: &[OverflowInt<AB::Expr>],
-        constants: &HashMap<char, OverflowInt<AB::Expr>>,
+        constants: &[OverflowInt<AB::Expr>],
         flags: &[AB::Var],
     ) -> OverflowInt<AB::Expr> {
         match self {
@@ -456,7 +455,7 @@ impl SymbolicExpr {
             }
             SymbolicExpr::Input(i) => inputs[*i].clone(),
             SymbolicExpr::Var(i) => variables[*i].clone(),
-            SymbolicExpr::Const(name, _, _) => constants[name].clone(),
+            SymbolicExpr::Const(i, _, _) => constants[*i].clone(),
             SymbolicExpr::Add(lhs, rhs) => {
                 lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)
                     + rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags)

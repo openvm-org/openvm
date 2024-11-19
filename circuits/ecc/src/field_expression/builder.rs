@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
+use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 use ax_circuit_primitives::{
     bigint::{
@@ -47,7 +47,7 @@ pub struct ExprBuilder {
     // This should be equal to number of constraints, but declare it to be explicit.
     pub num_variables: usize,
 
-    pub constants: HashMap<char, (BigUint, Vec<usize>)>, // name -> value and limbs
+    pub constants: Vec<(BigUint, Vec<usize>)>, // value and limbs
 
     /// The number of bits in a canonical representation of a limb.
     pub limb_bits: usize,
@@ -82,7 +82,7 @@ impl ExprBuilder {
             num_limbs: config.num_limbs,
             range_checker_bits,
             num_variables: 0,
-            constants: HashMap::new(),
+            constants: vec![],
             q_limbs: vec![],
             carry_limbs: vec![],
             constraints: vec![],
@@ -129,21 +129,18 @@ impl ExprBuilder {
         )
     }
 
-    pub fn new_const(
-        builder: Rc<RefCell<ExprBuilder>>,
-        name: char,
-        value: BigUint,
-    ) -> FieldVariable {
+    pub fn new_const(builder: Rc<RefCell<ExprBuilder>>, value: BigUint) -> FieldVariable {
         let mut borrowed = builder.borrow_mut();
+        let index = borrowed.constants.len();
         let limbs = big_uint_to_limbs(&value, borrowed.limb_bits);
         let num_limbs = limbs.len();
         let range_checker_bits = borrowed.range_checker_bits;
         let limb_bits = borrowed.limb_bits;
-        borrowed.constants.insert(name, (value.clone(), limbs));
+        borrowed.constants.push((value.clone(), limbs));
         drop(borrowed);
 
         FieldVariable {
-            expr: SymbolicExpr::Const(name, value, num_limbs),
+            expr: SymbolicExpr::Const(index, value, num_limbs),
             builder,
             limb_max_abs: (1 << limb_bits) - 1,
             max_overflow_bits: limb_bits,
@@ -234,17 +231,15 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         } = self.load_vars(local);
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
-        let constants = self
+        let constants: Vec<_> = self
             .constants
             .iter()
-            .map(|(name, (_, limbs))| {
+            .map(|(_, limbs)| {
                 let limbs_expr: Vec<_> = limbs
                     .iter()
-                    .map(|i| AB::Expr::from_canonical_usize(*i))
+                    .map(|limb| AB::Expr::from_canonical_usize(*limb))
                     .collect();
-                let limbs_overflow =
-                    OverflowInt::from_canonical_unsigned_limbs(limbs_expr, self.limb_bits);
-                (*name, limbs_overflow)
+                OverflowInt::from_canonical_unsigned_limbs(limbs_expr, self.limb_bits)
             })
             .collect();
 
@@ -326,14 +321,12 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         let prime_overflow =
             OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, Some(self.num_limbs));
 
-        let constants = self
+        let constants: Vec<_> = self
             .constants
             .iter()
-            .map(|(name, (_, limbs))| {
+            .map(|(_, limbs)| {
                 let limbs_isize: Vec<_> = limbs.iter().map(|i| *i as isize).collect();
-                let limbs_overflow =
-                    OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits);
-                (*name, limbs_overflow)
+                OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits)
             })
             .collect();
 

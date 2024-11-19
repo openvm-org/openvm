@@ -15,7 +15,7 @@ pub fn ec_double_expr(
 
     let mut x1 = ExprBuilder::new_input(builder.clone());
     let mut y1 = ExprBuilder::new_input(builder.clone());
-    let a = ExprBuilder::new_const(builder.clone(), 'a', a_biguint);
+    let a = ExprBuilder::new_const(builder.clone(), a_biguint);
     let mut lambda = (x1.square().int_mul(3) + a) / (y1.int_mul(2));
     let mut x3 = lambda.square() - x1.int_mul(2);
     x3.save_output();
