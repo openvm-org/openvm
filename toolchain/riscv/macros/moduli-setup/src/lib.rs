@@ -638,7 +638,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                         impl axvm_algebra::Reduce for #struct_name {
                                             fn reduce_le_bytes(bytes: &[u8]) -> Self {
-                                                let mut res = Self::ZERO;
+                                                let mut res = <Self as IntMod>::ZERO;
                                                 let base = Self::from_u32(256);
                                                 for b in bytes.iter().rev() {
                                                     res = res * &base + Self::from_u8(*b);
@@ -647,7 +647,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
 
                                             fn reduce_be_bytes(bytes: &[u8]) -> Self {
-                                                let mut res = Self::ZERO;
+                                                let mut res = <Self as IntMod>::ZERO;
                                                 let base = Self::from_u32(256);
                                                 for b in bytes.iter() {
                                                     res = res * &base + Self::from_u8(*b);

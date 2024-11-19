@@ -5,10 +5,7 @@ use axvm_algebra::{
     field::{Complex, ComplexConjugate},
     DivAssignUnsafe, DivUnsafe, IntMod,
 };
-use axvm_ecc::{
-    field::Complex,
-    sw::{IntModN, Secp256k1Coord},
-};
+use axvm_ecc::sw::Secp256k1Coord;
 
 axvm::entry!(main);
 

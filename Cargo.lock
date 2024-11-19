@@ -694,6 +694,7 @@ dependencies = [
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
+ "k256",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "rand 0.8.5",
