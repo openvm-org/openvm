@@ -326,7 +326,7 @@ impl EcCurve {
 }
 
 // TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,

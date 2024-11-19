@@ -137,21 +137,21 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
             let s5 = &self_coeffs[5];
 
             // NOTE[yj]: Hand-calculated multiplication for Fp12 * 02345 ∈ Fp2; this is likely not the most efficient implementation
-            // c0 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
-            // c1 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
-            // c2 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
-            // c3 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
-            // c4 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
-            // c5 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
+            // c00 = cs0co0 + xi(cs1co2 + cs2co1 + cs3co5 + cs4co4)
+            // c01 = cs0co1 + cs1co0 + xi(cs2co2 + cs4co5 + cs5co4)
+            // c02 = cs0co2 + cs1co1 + cs2co0 + cs3co4 + xi(cs5co5)
+            // c10 = cs3co0 + xi(cs1co5 + cs2co4 + cs4co2 + cs5co1)
+            // c11 = cs0co4 + cs3co1 + cs4co0 + xi(cs2co5 + cs5co2)
+            // c12 = cs0co5 + cs1co4 + cs3co2 + cs4co1 + cs5co0
             //   where cs*: self.c*
-            let c0 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s3 * o5 + s4 * o4);
-            let c1 = s0 * o1 + s1 * o0 + xi * &(s2 * o2 + s4 * o5 + s5 * o4);
-            let c2 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + xi * &(s5 * o5);
-            let c3 = s3 * o0 + xi * &(s1 * o5 + s2 * o4 + s4 * o2 + s5 * o1);
-            let c4 = s0 * o4 + s3 * o1 + s4 * o0 + xi * &(s2 * o5 + s5 * o2);
-            let c5 = s0 * o5 + s1 * o4 + s3 * o2 + s4 * o1 + s5 * o0;
+            let c00 = s0 * o0 + xi * &(s1 * o2 + s2 * o1 + s3 * o5 + s4 * o4);
+            let c01 = s0 * o1 + s1 * o0 + xi * &(s2 * o2 + s4 * o5 + s5 * o4);
+            let c02 = s0 * o2 + s1 * o1 + s2 * o0 + s3 * o4 + xi * &(s5 * o5);
+            let c10 = s3 * o0 + xi * &(s1 * o5 + s2 * o4 + s4 * o2 + s5 * o1);
+            let c11 = s0 * o4 + s3 * o1 + s4 * o0 + xi * &(s2 * o5 + s5 * o2);
+            let c12 = s0 * o5 + s1 * o4 + s3 * o2 + s4 * o1 + s5 * o0;
 
-            Fp12::from_coeffs([c0, c3, c1, c4, c2, c5])
+            Fp12::from_coeffs([c00, c10, c01, c11, c02, c12])
         }
         #[cfg(target_os = "zkvm")]
         {

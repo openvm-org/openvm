@@ -1438,9 +1438,10 @@ fn gen_pairing_executor_tuple(
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
     supported_pairing_curves
         .iter()
-        .enumerate()
-        .flat_map(|(i, curve)| {
-            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+        .flat_map(|curve| {
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
