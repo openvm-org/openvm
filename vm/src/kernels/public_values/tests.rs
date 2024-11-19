@@ -44,7 +44,7 @@ fn public_values_happy_path_1() {
         is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(2),
-        custom_pv_vars: to_field_vec(vec![0, 0, 1]),
+        custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
     let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
@@ -61,7 +61,7 @@ fn public_values_neg_pv_not_match() {
         is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(2),
-        custom_pv_vars: to_field_vec(vec![0, 0, 1]),
+        custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
     let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
@@ -81,7 +81,7 @@ fn public_values_neg_index_out_of_bound() {
         is_valid: F::ONE,
         value: F::from_canonical_u32(12),
         index: F::from_canonical_u32(8),
-        custom_pv_vars: to_field_vec(vec![0, 0, 0]),
+        custom_pv_vars: to_field_vec(vec![0, 0]),
         _marker: Default::default(),
     };
     let air: Arc<dyn AnyRap<_>> = Arc::new(PublicValuesCoreAir::new(3, 0, 2));
@@ -108,14 +108,14 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
             is_valid: F::ONE,
             value: F::from_canonical_u32(12),
             index: F::from_canonical_u32(0),
-            custom_pv_vars: to_field_vec(vec![0, 0, 1]),
+            custom_pv_vars: to_field_vec(vec![0, 1]),
             _marker: Default::default(),
         },
         PublicValuesCoreColsView::<F, F> {
             is_valid: F::ONE,
             value: F::from_canonical_u32(13),
             index: F::from_canonical_u32(0),
-            custom_pv_vars: to_field_vec(vec![0, 0, 1]),
+            custom_pv_vars: to_field_vec(vec![0, 1]),
             _marker: Default::default(),
         },
     ];
