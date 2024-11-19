@@ -92,8 +92,6 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        // executor.execute(elf, vec![io0])?;
-
         // Test miller_double_and_add_step
         let (pt, l0, l1) = Bn254::miller_double_and_add_step(&s, &q);
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]

@@ -4,23 +4,22 @@
 use axvm::io::read_vec;
 use axvm_algebra::IntMod;
 use axvm_ecc::{
-    pairing::{
-        bn254::{Bn254Fp2, Bn254Intrinsic},
-        MillerStep,
-    },
-    point::AffinePoint,
+    bn254::{Bn254, Fp2},
+    pairing::{MillerStep, PairingIntrinsics},
+    AffinePoint,
 };
 
 axvm::entry!(main);
 
 fn test_miller_step(io: &[u8]) {
+    assert_eq!(io.len(), 32 * 12);
     let s = &io[..32 * 4];
     let pt = &io[32 * 4..32 * 8];
     let l = &io[32 * 8..32 * 12];
 
-    let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Bn254Fp2>) };
+    let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
 
-    let (pt_cmp, l_cmp) = Bn254Intrinsic::miller_double_step(s_cast.clone());
+    let (pt_cmp, l_cmp) = Bn254::miller_double_step(&s_cast);
     let mut pt_bytes = [0u8; 32 * 4];
     let mut l_bytes = [0u8; 32 * 4];
 
@@ -44,10 +43,9 @@ fn test_miller_double_and_add_step(io: &[u8]) {
     let l0 = &io[32 * 24..32 * 28];
     let l1 = &io[32 * 28..32 * 32];
 
-    let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Bn254Fp2>) };
-    let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Bn254Fp2>) };
-    let (pt_cmp, l0_cmp, l1_cmp) =
-        Bn254Intrinsic::miller_double_and_add_step(s_cast.clone(), q_cast.clone());
+    let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
+    let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
+    let (pt_cmp, l0_cmp, l1_cmp) = Bn254::miller_double_and_add_step(&s_cast, &q_cast);
     let mut pt_bytes = [0u8; 32 * 4];
     let mut l0_bytes = [0u8; 32 * 4];
     let mut l1_bytes = [0u8; 32 * 4];
