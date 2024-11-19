@@ -45,11 +45,14 @@ jobs:
             exit 1
           fi
 
-          matrix=$(jq -c --argjson label_present "$([[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]] && echo true || echo false)" '
+          LABELS=$(echo "${{ toJson(github.event.pull_request.labels) }}" | jq -r '.[].name')
+          RUN_BENCH_E2E=$(echo "$LABELS" | grep -q "run-benchmark-e2e" && echo true || echo false)
+
+          matrix=$(jq -c --argjson run_e2e "$RUN_BENCH_E2E" '
             [
               .benchmarks[] |
               .name as $name |
-              select($label_present or .e2e_bench != true) |
+              select($run_e2e or .e2e_bench != true) |
               .run_params[] |
               {
                 name: $name,
