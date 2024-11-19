@@ -13,6 +13,8 @@ on:
           - revm_transfer
           - regex
           - base64_json
+          - rkyv
+          - bincode
       instance_type:
         type: string
         required: false
