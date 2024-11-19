@@ -44,7 +44,9 @@ jobs:
             echo "Error: ./ci/benchmark-config.json not found"
             exit 1
           fi
+
           echo ${{ github.event.pull_request.labels }}
+          labels=$(echo "${{ toJson(github.event.pull_request.labels) }}" | jq -r '.[].name')
 
           if [ -n "${{ github.event.pull_request.labels }}" ]; then
             RUN_BENCH_LABEL=$(echo "${{ github.event.pull_request.labels }}" | jq -c '.[] | select(.name == "run-benchmark")')
