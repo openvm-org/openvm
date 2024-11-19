@@ -36,7 +36,7 @@ where
     ) -> Result<AxvmVerifyingKey<C>>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
+        // for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let (r, s) = sig.split_scalars();
 
@@ -62,8 +62,8 @@ where
 
         let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
         let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let neg_u1 = &z / &r;
-        let u2 = &s / &r;
+        let neg_u1 = z.div_unsafe(&r);
+        let u2 = s.div_unsafe(&r);
         let NEG_G = Point::NEG_GENERATOR;
         let public_key = msm(&[neg_u1, u2], &[NEG_G, R]);
 
@@ -71,7 +71,7 @@ where
             VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
         );
 
-        vk.verify_prehashed(prehash, sig)?;
+        vk.verify_prehashed::<Scalar, Point>(prehash, sig)?;
 
         Ok(vk)
     }
@@ -85,14 +85,14 @@ where
     ) -> Result<()>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
+        // for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
         let (r, s) = sig.split_scalars();
         let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
         let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let u1 = &z / &s;
-        let u2 = &r / &s;
+        let u1 = z.div_unsafe(&s);
+        let u2 = r.clone().div_unsafe(&s);
 
         let G = Point::GENERATOR;
         let Q = Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
