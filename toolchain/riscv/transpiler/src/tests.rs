@@ -47,7 +47,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let program = Transpiler::<BabyBear>::default().transpile(&elf.instructions);
+    let program = Transpiler::<BabyBear>::default_with_intrinsics().transpile(&elf.instructions);
     for instruction in program {
         println!("{:?}", instruction);
     }

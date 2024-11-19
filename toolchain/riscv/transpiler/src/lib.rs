@@ -26,7 +26,7 @@ mod tests;
 impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     fn from(elf: Elf) -> Self {
         let program = Program::new_without_debug_infos(
-            &Transpiler::default().transpile(&elf.instructions),
+            &Transpiler::default_with_intrinsics().transpile(&elf.instructions),
             DEFAULT_PC_STEP,
             elf.pc_base,
             elf.max_num_public_values,
