@@ -28,6 +28,7 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
             elf.max_num_public_values,
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
+
         Self {
             program,
             pc_start: elf.pc_start,
@@ -39,6 +40,7 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
                     },
                 },
             },
+            fn_bounds: elf.fn_bounds,
         }
     }
 }

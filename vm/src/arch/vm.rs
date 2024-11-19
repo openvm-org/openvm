@@ -92,6 +92,7 @@ impl<F: PrimeField32> VmExecutor<F> {
             exe.program.clone(),
             streams.clone(),
             Some(memory_image_to_equipartition(exe.init_memory)),
+            exe.fn_bounds.clone(),
         );
         let mut pc = exe.pc_start;
 
@@ -128,6 +129,7 @@ impl<F: PrimeField32> VmExecutor<F> {
                 exe.program.clone(),
                 streams.clone(),
                 Some(final_memory),
+                exe.fn_bounds.clone(),
             );
             segment.cycle_tracker = cycle_tracker;
         }
@@ -288,6 +290,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
                 hint_stream: VecDeque::new(),
             })),
             None,
+            exe.fn_bounds,
         );
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
