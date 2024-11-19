@@ -46,10 +46,11 @@ jobs:
           fi
 
           echo ${{ github.event.pull_request.labels }}
-          labels=$(echo "${{ toJson(github.event.pull_request.labels) }}" | jq -r '.[].name')
+          LABELS=$(echo "${{ toJson(github.event.pull_request.labels) }}" | jq -r '.[].name')
+          echo "${LABELS}"
 
-          if [ -n "${{ github.event.pull_request.labels }}" ]; then
-            RUN_BENCH_LABEL=$(echo "${{ github.event.pull_request.labels }}" | jq -c '.[] | select(.name == "run-benchmark")')
+          if [ -n "${LABELS}" ]; then
+            RUN_BENCH_LABEL=$(echo "${LABELS}" | jq -c '.[] | select(.name == "run-benchmark")')
           else
             RUN_BENCH_LABEL=""
           fi
