@@ -44,10 +44,18 @@ jobs:
             echo "Error: ./ci/benchmark-config.json not found"
             exit 1
           fi
-          matrix=$(jq -c '
+
+          if [ -n "${{ github.event.pull_request.labels }}" ]; then
+            RUN_BENCH_LABEL=$(echo "${{ github.event.pull_request.labels }}" | jq -c '.[] | select(.name == "run-benchmark")')
+          else
+            RUN_BENCH_LABEL=""
+          fi
+
+          matrix=$(jq -c --argjson label_present "$([[ -n $RUN_BENCH_LABEL ]] && echo true || echo false)" '
             [
               .benchmarks[] |
               .name as $name |
+              select($label_present or .run_without_label == true) |
               .run_params[] |
               {
                 name: $name,
