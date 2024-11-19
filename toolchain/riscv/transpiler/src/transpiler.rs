@@ -8,9 +8,14 @@ use crate::{
     rrs::BasicInstructionProcessor,
 };
 
-#[derive(Default)]
 pub struct Transpiler<F> {
     processors: Vec<Rc<dyn CustomInstructionProcessor<F>>>,
+}
+
+impl<F: PrimeField32> Default for Transpiler<F> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<F: PrimeField32> Transpiler<F> {
