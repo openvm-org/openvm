@@ -1,8 +1,14 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm_algebra::{DivAssignUnsafe, DivUnsafe, IntMod};
-use axvm_ecc::{field::Complex, sw::Secp256k1Coord};
+use axvm_algebra::{
+    field::{Complex, ComplexConjugate},
+    DivAssignUnsafe, DivUnsafe, IntMod,
+};
+use axvm_ecc::{
+    field::Complex,
+    sw::{IntModN, Secp256k1Coord},
+};
 
 axvm::entry!(main);
 
@@ -19,7 +25,7 @@ pub fn main() {
     for _ in 0..32 {
         let mut res = &a * &b;
         res += &a * &Complex::new(Secp256k1Coord::ZERO, -b.c1.double());
-        res.div_assign_unsafe(&b * &b.conjugate());
+        res.div_assign_unsafe(&b * &b.clone().conjugate());
 
         if a.clone().div_unsafe(&b) - res != Complex::<Secp256k1Coord>::ZERO {
             panic!();

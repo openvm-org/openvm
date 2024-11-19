@@ -20,6 +20,7 @@ use crate::{
     constraints::halo2::{
         baby_bear::{
             AssignedBabyBear, AssignedBabyBearExt4, BabyBearChip, BabyBearExt4, BabyBearExt4Chip,
+            BABYBEAR_MAX_BITS,
         },
         poseidon2_perm::{Poseidon2Params, Poseidon2State},
     },
@@ -238,6 +239,15 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                 DslIr::NegE(a, b) => {
                     let x = ext_chip.neg(ctx, exts[&b.0]);
                     exts.insert(a.0, x);
+                }
+                DslIr::CastFV(a, b) => {
+                    let felt = felts[&b.0];
+                    let reduced_felt = if felt.max_bits > BABYBEAR_MAX_BITS {
+                        f_chip.reduce(ctx, felt)
+                    } else {
+                        felt
+                    };
+                    vars.insert(a.0, reduced_felt.value);
                 }
                 DslIr::CircuitNum2BitsV(value, bits, output) => {
                     let shortened_bits = bits.min(Fr::NUM_BITS as usize);

@@ -210,7 +210,7 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
-        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17);
+        let mem_config = MemoryConfig::new(2, 1, 29, 29, 17, 64, None);
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,

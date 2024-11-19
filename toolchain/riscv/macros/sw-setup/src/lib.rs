@@ -72,6 +72,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                         fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                             #[cfg(not(target_os = "zkvm"))]
                             {
+                                use axvm_algebra::DivUnsafe;
                                 let lambda = (&p2.y - &p1.y).div_unsafe(&p2.x - &p1.x);
                                 let x3 = &lambda * &lambda - &p1.x - &p2.x;
                                 let y3 = &lambda * &(&p1.x - &x3) - &p1.y;
@@ -97,6 +98,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                         fn add_ne_assign(&mut self, p2: &#struct_name) {
                             #[cfg(not(target_os = "zkvm"))]
                             {
+                                use axvm_algebra::DivUnsafe;
                                 let lambda = (&p2.y - &self.y).div_unsafe(&p2.x - &self.x);
                                 let x3 = &lambda * &lambda - &self.x - &p2.x;
                                 let y3 = &lambda * &(&self.x - &x3) - &self.y;
@@ -122,6 +124,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                         fn double_impl(p: &#struct_name) -> #struct_name {
                             #[cfg(not(target_os = "zkvm"))]
                             {
+                                use axvm_algebra::DivUnsafe;
                                 let two = #intmod_type::from_u8(2);
                                 let lambda = &p.x * &p.x * #intmod_type::from_u8(3).div_unsafe(&p.y * &two);
                                 let x3 = &lambda * &lambda - &p.x * &two;
@@ -148,6 +151,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                         fn double_assign_impl(&mut self) {
                             #[cfg(not(target_os = "zkvm"))]
                             {
+                                use axvm_algebra::DivUnsafe;
                                 let two = #intmod_type::from_u8(2);
                                 let lambda = &self.x * &self.x * #intmod_type::from_u8(3).div_unsafe(&self.y * &two);
                                 let x3 = &lambda * &lambda - &self.x * &two;

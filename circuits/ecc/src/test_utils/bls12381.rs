@@ -1,3 +1,4 @@
+use ax_ecc_execution::axvm_ecc::algebra::field::FieldExtension;
 use ax_stark_sdk::utils::create_seeded_rng_with_seed;
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2},
@@ -15,20 +16,10 @@ pub fn bls12381_fq2_to_biguint_vec(x: Fq2) -> Vec<BigUint> {
 }
 
 pub fn bls12381_fq12_to_biguint_vec(x: Fq12) -> Vec<BigUint> {
-    vec![
-        bls12381_fq_to_biguint(x.c0.c0.c0),
-        bls12381_fq_to_biguint(x.c0.c0.c1),
-        bls12381_fq_to_biguint(x.c0.c1.c0),
-        bls12381_fq_to_biguint(x.c0.c1.c1),
-        bls12381_fq_to_biguint(x.c0.c2.c0),
-        bls12381_fq_to_biguint(x.c0.c2.c1),
-        bls12381_fq_to_biguint(x.c1.c0.c0),
-        bls12381_fq_to_biguint(x.c1.c0.c1),
-        bls12381_fq_to_biguint(x.c1.c1.c0),
-        bls12381_fq_to_biguint(x.c1.c1.c1),
-        bls12381_fq_to_biguint(x.c1.c2.c0),
-        bls12381_fq_to_biguint(x.c1.c2.c1),
-    ]
+    x.to_coeffs()
+        .into_iter()
+        .flat_map(bls12381_fq2_to_biguint_vec)
+        .collect()
 }
 
 pub fn bls12381_fq12_random(seed: u64) -> Vec<BigUint> {

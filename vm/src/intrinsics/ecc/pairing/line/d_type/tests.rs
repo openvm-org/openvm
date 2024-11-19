@@ -9,8 +9,8 @@ use ax_ecc_primitives::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc::{
-    pairing::{LineMulDType, UnevaluatedLine},
-    point::AffinePoint,
+    pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
+    AffinePoint,
 };
 use axvm_ecc_constants::BN254;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
@@ -96,7 +96,7 @@ fn test_mul_013_by_013() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 10);
 
-    let r_cmp = Bn254::mul_013_by_013(line0, line1);
+    let r_cmp = Bn254::mul_013_by_013(&line0, &line1);
     let r_cmp_bigint = r_cmp
         .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
@@ -137,7 +137,7 @@ fn test_mul_by_01234() {
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
+    let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
@@ -157,15 +157,10 @@ fn test_mul_by_01234() {
 
     let mut rng = StdRng::seed_from_u64(8);
     let f = Fq12::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(12);
     let x0 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(1);
     let x1 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(5);
     let x2 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(77);
     let x3 = Fq2::random(&mut rng);
-    let mut rng = StdRng::seed_from_u64(31);
     let x4 = Fq2::random(&mut rng);
 
     let input_f = bn254_fq12_to_biguint_vec(f);
@@ -175,7 +170,6 @@ fn test_mul_by_01234() {
         bn254_fq2_to_biguint_vec(x2),
         bn254_fq2_to_biguint_vec(x3),
         bn254_fq2_to_biguint_vec(x4),
-        bn254_fq2_to_biguint_vec(Fq2::zero()),
     ]
     .concat();
 
@@ -191,7 +185,7 @@ fn test_mul_by_01234() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp = Bn254::mul_by_01234(f, [x0, x1, x2, x3, x4]);
+    let r_cmp = Bn254::mul_by_01234(&f, &[x0, x1, x2, x3, x4]);
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {
@@ -232,10 +226,15 @@ fn test_evaluate_line() {
         limb_bits: LIMB_BITS,
         num_limbs: NUM_LIMBS,
     };
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        bitwise_chip.clone(),
     );
     let mut chip = EvaluateLineChip::new(
         adapter,
@@ -261,7 +260,7 @@ fn test_evaluate_line() {
         })
         .collect();
 
-    let uneval: UnevaluatedLine<Fq, Fq2> = UnevaluatedLine {
+    let uneval: UnevaluatedLine<Fq2> = UnevaluatedLine {
         b: uneval_b,
         c: uneval_c,
     };
@@ -282,6 +281,6 @@ fn test_evaluate_line() {
     );
 
     tester.execute(&mut chip, instruction);
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }

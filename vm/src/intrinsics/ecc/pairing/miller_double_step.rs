@@ -95,7 +95,7 @@ mod tests {
     };
     use ax_ecc_execution::curves::bn254::Bn254;
     use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
-    use axvm_ecc::{pairing::MillerStep, point::AffinePoint};
+    use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use halo2curves_axiom::bn256::G2Affine;
@@ -157,7 +157,7 @@ mod tests {
         let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(bn254_fq_to_biguint);
 
         let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
-        let (Q_acc_init, l_init) = Bn254::miller_double_step(Q_ecpoint.clone());
+        let (Q_acc_init, l_init) = Bn254::miller_double_step(&Q_ecpoint);
         let result = chip
             .core
             .expr()

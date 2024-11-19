@@ -3,8 +3,9 @@ use std::{collections::BTreeMap, sync::Arc};
 use ax_stark_backend::{engine::StarkEngine, p3_uni_stark::StarkGenericConfig};
 use ax_stark_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        FriParameters,
     },
     engine::StarkFriEngine,
     utils::create_seeded_rng,
@@ -15,6 +16,7 @@ use axvm_circuit::{
         SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak256::utils::keccak256,
+    prover::{local::VmLocalProver, types::VmProvingKey, SingleSegmentVmProver},
     system::{
         memory::{tree::public_values::UserPublicValuesProof, CHUNK},
         program::trace::AxVmCommittedExe,
@@ -141,6 +143,52 @@ fn test_vm_1() {
 }
 
 #[test]
+fn test_vm_1_override_executor_height() {
+    // If height of an executor is overridden, the AIR should:
+    // - Present even if there is no record
+    // - The height of the main trace` should be the overridden height
+    let fri_params = FriParameters::standard_fast();
+    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let program = Program::from_instructions(&[Instruction::from_isize(
+        TERMINATE.with_default_offset(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    )]);
+    let committed_exe = Arc::new(AxVmCommittedExe::commit(program.into(), e.config().pcs()));
+
+    let mut vm_config = vm_config_with_field_arithmetic();
+    vm_config.overridden_executor_heights =
+        Some(BTreeMap::from([(ExecutorName::FieldArithmetic, 100)]));
+    let chip_set = vm_config.create_chip_set::<BabyBear>();
+    let field_air_id = chip_set
+        .get_executor_air_id(ExecutorName::FieldArithmetic)
+        .unwrap();
+    let vm_pk = vm_config.generate_pk(e.keygen_builder());
+    let prover = VmLocalProver::<BabyBearPoseidon2Config, BabyBearPoseidon2Engine>::new(
+        VmProvingKey {
+            fri_params,
+            vm_config,
+            vm_pk,
+        },
+        committed_exe,
+    );
+
+    let proof = prover.prove(vec![]);
+    let mut found = false;
+    for proof_input in proof.per_air {
+        if proof_input.air_id == field_air_id {
+            found = true;
+            // 128 == 100.next_power_of_two()
+            assert_eq!(proof_input.degree, 128);
+        }
+    }
+    assert!(found, "FieldArithmetic AIR should be present");
+}
+
+#[test]
 fn test_vm_1_optional_air() {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
@@ -205,9 +253,9 @@ fn test_vm_public_values() {
             engine.config.pcs(),
         ));
         let vm = SingleSegmentVmExecutor::new(vm_config);
-        let pvs = vm.execute(program, vec![]).unwrap();
+        let exe_result = vm.execute(program, vec![]).unwrap();
         assert_eq!(
-            pvs,
+            exe_result.public_values,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
         let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
@@ -269,7 +317,7 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -572,6 +620,51 @@ fn test_vm_field_extension_arithmetic() {
 }
 
 #[test]
+fn test_vm_max_access_adapater_8() {
+    let instructions = vec![
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 2, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 3, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 4, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 5, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 1, 6, 0, 0, 1),
+        Instruction::from_isize(STOREW.with_default_offset(), 2, 7, 0, 0, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4ADD.with_default_offset(), 8, 0, 4, 1, 1),
+        Instruction::from_isize(FE4SUB.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4MUL.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(BBE4DIV.with_default_offset(), 12, 0, 4, 1, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    let mut config = VmConfig::default()
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::FieldArithmetic)
+        .add_executor(ExecutorName::FieldExtension);
+    {
+        let chip_set1 = config.create_chip_set::<BabyBear>();
+        let mem_ctrl1 = chip_set1.memory_controller.borrow();
+        config.memory_config.max_access_adapter_n = 8;
+        let chip_set2 = config.create_chip_set::<BabyBear>();
+        let mem_ctrl2 = chip_set2.memory_controller.borrow();
+        // AccessAdapterAir with N=16/32/64 are disabled.
+        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
+        assert_eq!(
+            mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
+            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 3
+        );
+        assert_eq!(
+            mem_ctrl1.current_trace_heights().len(),
+            mem_ctrl2.current_trace_heights().len() + 3
+        );
+    }
+    air_test(config, program);
+}
+
+#[test]
 fn test_vm_field_extension_arithmetic_persistent() {
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
@@ -594,7 +687,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)

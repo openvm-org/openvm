@@ -108,6 +108,9 @@ pub enum DslIr<C: Config> {
     /// Compares a variable and an immediate
     LessThanVI(Var<C::N>, Var<C::N>, C::N),
 
+    /// Cast a Felt to a Var.
+    CastFV(Var<C::N>, Felt<C::F>),
+
     // =======
 
     // Control flow.
