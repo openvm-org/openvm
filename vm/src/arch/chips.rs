@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
-    var_range::VariableRangeCheckerChip,
 };
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -139,11 +138,11 @@ pub enum AxVmExecutor<F: PrimeField32> {
     /// Only for BN254 for now
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
     /// Only for BN254 for now
-    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 12, 32>>>),
+    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 10, 12, 32>>>),
     /// Only for BLS12-381 for now
     EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 12, 30, 16>>>),
     /// Only for BLS12-381 for now
-    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 36, 16>>>),
+    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 30, 36, 16>>>),
     MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
     MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
     MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
@@ -156,8 +155,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    // Lookup tables that are not executors:
-    RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors

@@ -128,6 +128,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     mem_config.as_height,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
+                    mem_config.boundary_air_height,
                 ),
             },
             memory: Memory::new(&Equipartition::<_, 1>::new()),
@@ -465,6 +466,11 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.mem_config.max_access_adapter_n >= N {
             airs.push(Arc::new(self.access_adapter_air::<N>()));
         }
+    }
+
+    /// Return the number of AIRs in the memory controller.
+    pub fn num_airs(&self) -> usize {
+        self.air_names().len()
     }
 
     pub fn air_names(&self) -> Vec<String> {

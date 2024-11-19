@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     iter,
     ops::{Range, RangeInclusive},
     rc::Rc,
@@ -23,7 +23,6 @@ use ax_stark_backend::{
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{program::Program, *};
-use itertools::zip_eq;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
@@ -114,7 +113,7 @@ pub const PUBLIC_VALUES_AIR_ID: usize = 2;
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 pub struct VmChipSet<F: PrimeField32> {
-    pub executors: BTreeMap<usize, AxVmExecutor<F>>,
+    pub executors: HashMap<usize, AxVmExecutor<F>>,
 
     // ATTENTION: chip destruction should follow the following field order:
     pub program_chip: ProgramChip<F>,
@@ -165,16 +164,61 @@ impl<F: PrimeField32> VmChipSet<F> {
             }
         }
     }
-    pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
-        iter::once(get_name_and_cells(&self.program_chip))
-            .chain([get_name_and_cells(&self.connector_chip)])
-            .chain(self.public_values_chip.as_ref().map(get_name_and_cells))
-            .chain(zip_eq(
-                self.memory_controller.borrow().air_names(),
-                self.memory_controller.borrow().current_trace_cells(),
-            ))
-            .chain(self.chips.iter().map(get_name_and_cells))
-            .chain([get_name_and_cells(&self.range_checker_chip)])
+    /// Return IDs of AIRs which heights won't during execution.
+    pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
+        let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
+        let num_const_chip = self
+            .chips
+            .iter()
+            .filter(|chip| !matches!(chip, AxVmChip::Executor(_)))
+            .count();
+        let num_air = self.num_airs();
+        // Const chips are always in the end.
+        // +1 is for RangeChecker.
+        ret.extend((num_air - (num_const_chip + 1))..num_air);
+        ret
+    }
+    /// Return the number of AIRs in the chip set.
+    /// Careful: this costs more than O(1) due to bad implementation.
+    pub(crate) fn num_airs(&self) -> usize {
+        self.air_names().len()
+    }
+    /// Return air names of all chips in order.
+    pub(crate) fn air_names(&self) -> Vec<String> {
+        iter::once(self.program_chip.air_name())
+            .chain([self.connector_chip.air_name()])
+            .chain(self.public_values_chip.as_ref().map(|c| c.air_name()))
+            .chain(self.memory_controller.borrow().air_names())
+            .chain(self.chips.iter().map(|c| c.air_name()))
+            .chain([self.range_checker_chip.air_name()])
+            .collect()
+    }
+    /// Return trace heights of all chips in order.
+    pub(crate) fn current_trace_heights(&self) -> Vec<usize> {
+        iter::once(self.program_chip.current_trace_height())
+            .chain([self.connector_chip.current_trace_height()])
+            .chain(
+                self.public_values_chip
+                    .as_ref()
+                    .map(|c| c.current_trace_height()),
+            )
+            .chain(self.memory_controller.borrow().current_trace_heights())
+            .chain(self.chips.iter().map(|c| c.current_trace_height()))
+            .chain([self.range_checker_chip.current_trace_height()])
+            .collect()
+    }
+    /// Return trace cells of all chips in order.
+    pub(crate) fn current_trace_cells(&self) -> Vec<usize> {
+        iter::once(self.program_chip.current_trace_cells())
+            .chain([self.connector_chip.current_trace_cells()])
+            .chain(
+                self.public_values_chip
+                    .as_ref()
+                    .map(|c| c.current_trace_cells()),
+            )
+            .chain(self.memory_controller.borrow().current_trace_cells())
+            .chain(self.chips.iter().map(|c| c.current_trace_cells()))
+            .chain([self.range_checker_chip.current_trace_cells()])
             .collect()
     }
     pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
@@ -291,7 +335,7 @@ impl VmConfig {
         };
         let program_chip = ProgramChip::default();
 
-        let mut executors: BTreeMap<usize, AxVmExecutor<F>> = BTreeMap::new();
+        let mut executors: HashMap<usize, AxVmExecutor<F>> = HashMap::new();
 
         // Use BTreeSet to ensure deterministic order.
         // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
@@ -998,6 +1042,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config32,
@@ -1012,6 +1057,7 @@ impl VmConfig {
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
                         ),
                         memory_controller.clone(),
                         config48,
@@ -1054,7 +1100,7 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy01234 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy01234Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1070,7 +1116,7 @@ impl VmConfig {
                 }
                 ExecutorName::EcLineMulBy02345 => {
                     let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
                             execution_bus,
                             program_bus,
                             memory_controller.clone(),
@@ -1818,8 +1864,4 @@ impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
             per_air: self.proof_input_per_air,
         }
     }
-}
-
-fn get_name_and_cells(chip: &impl ChipUsageGetter) -> (String, usize) {
-    (chip.air_name(), chip.current_trace_cells())
 }

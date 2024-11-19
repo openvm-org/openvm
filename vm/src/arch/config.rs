@@ -38,11 +38,13 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
+    /// If set, the height of the trace of boundary AIR(for volatile memory) will be overridden.
+    pub boundary_air_height: Option<usize>,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 16, 64)
+        Self::new(29, 1, 29, 29, 16, 64, None)
     }
 }
 
