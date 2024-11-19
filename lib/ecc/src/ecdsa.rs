@@ -1,4 +1,4 @@
-use core::ops::{Add, Mul};
+use core::ops::{Add, Div};
 
 use axvm_algebra::{IntMod, Reduce};
 use ecdsa::{
@@ -13,8 +13,9 @@ use elliptic_curve::{
     PrimeField,
 };
 
-use crate::{msm, sw::SwPoint};
+use crate::{msm, sw::SwPoint, CyclicGroup};
 
+// TODO: maybe do IntrinsicCurve: https://github.com/axiom-crypto/afs-prototype/pull/813#discussion_r1847477785
 pub struct AxvmVerifyingKey<C>(pub VerifyingKey<C>)
 where
     C: PrimeCurve + CurveArithmetic;
@@ -28,14 +29,14 @@ where
 {
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/recovery.rs.html#281-316
     #[allow(non_snake_case)]
-    pub fn recover_from_prehash<Scalar: IntMod + Reduce, Point: SwPoint>(
+    pub fn recover_from_prehash<Scalar: IntMod + Reduce, Point: SwPoint + CyclicGroup>(
         prehash: &[u8],
         sig: &Signature<C>,
         recovery_id: RecoveryId,
     ) -> Result<AxvmVerifyingKey<C>>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
+        for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let (r, s) = sig.split_scalars();
 
@@ -43,6 +44,7 @@ where
 
         let mut r_bytes = r.to_repr();
         if recovery_id.is_x_reduced() {
+            // TODO: maybe need to optimize this.
             match Option::<C::Uint>::from(
                 C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
             ) {
@@ -60,11 +62,10 @@ where
 
         let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
         let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let r_inv = Scalar::ONE.div_unsafe(r);
-        let u1 = -(&z * &r_inv);
-        let u2 = &s * &r_inv;
-        let G = Point::generator();
-        let public_key = msm(&[u1, u2], &[G, R]);
+        let neg_u1 = &z / &r;
+        let u2 = &s / &r;
+        let NEG_G = Point::NEG_GENERATOR;
+        let public_key = msm(&[neg_u1, u2], &[NEG_G, R]);
 
         let vk = AxvmVerifyingKey(
             VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
@@ -77,24 +78,23 @@ where
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
     #[allow(non_snake_case)]
-    pub fn verify_prehashed<Scalar: IntMod + Reduce, Point: SwPoint>(
+    pub fn verify_prehashed<Scalar: IntMod + Reduce, Point: SwPoint + CyclicGroup>(
         &self,
         prehash: &[u8],
         sig: &Signature<C>,
     ) -> Result<()>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        for<'a> &'a Scalar: Mul<&'a Scalar, Output = Scalar>,
+        for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
         let (r, s) = sig.split_scalars();
         let r = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
         let s = Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let s_inv = Scalar::ONE.div_unsafe(s);
-        let u1 = &z * &s_inv;
-        let u2 = &r * &s_inv;
+        let u1 = &z / &s;
+        let u2 = &r / &s;
 
-        let G = Point::generator();
+        let G = Point::GENERATOR;
         let Q = Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
         let result = msm(&[u1, u2], &[G, Q]);
 

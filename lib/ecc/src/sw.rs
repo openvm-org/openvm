@@ -6,6 +6,7 @@ use elliptic_curve::{
     sec1::{Coordinates, EncodedPoint, ModulusSize},
     Curve,
 };
+use hex_literal::hex;
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom1Funct3, ModArithBaseFunct7, SwBaseFunct7, CUSTOM_1},
@@ -13,11 +14,13 @@ use {
     core::mem::MaybeUninit,
 };
 
-use super::group::Group;
+use super::group::{CyclicGroup, Group};
 
+// TODO: consider consolidate with AffineCoords. Also separate encoding and x/y.
 pub trait SwPoint: Group {
     type Coordinate: IntMod;
 
+    // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/sec1/index.html
     // Note: sec1 bytes are in big endian.
     fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
     where
@@ -37,11 +40,25 @@ axvm::moduli_setup! {
     Secp256k1Scalar = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141";
 }
 
-// Each curve has: (Name, GeneratorX, GeneratorY)
 axvm::sw_setup! {
-    Secp256k1Point = (
-        Secp256k1Coord,
-        "0x79be667e f9dcbbac 55a06295 ce870b07 029bfcdb 2dce28d9 59f2815b 16f81798",
-        "0x483ada77 26a3c465 5da4fbfc 0e1108a8 fd17b448 a6855419 9c47d08f fb10d4b8",
-    );
+    Secp256k1Point = Secp256k1Coord;
+}
+
+impl CyclicGroup for Secp256k1Point {
+    const GENERATOR: Self = Secp256k1Point {
+        x: Secp256k1Coord::from_const_bytes(hex!(
+            "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
+        )),
+        y: Secp256k1Coord::from_const_bytes(hex!(
+            "B8D410FB8FD0479C195485A648B417FDA808110EFCFBA45D65C4A32677DA3A48"
+        )),
+    };
+    const NEG_GENERATOR: Self = Secp256k1Point {
+        x: Secp256k1Coord::from_const_bytes(hex!(
+            "97E407E9A37E0DA626D731D2240364FDF8F478316A9D5FAA5344230681994186"
+        )),
+        y: Secp256k1Coord::from_const_bytes(hex!(
+            "7727EF046F2FB863E6AB7A59B74BE80257F7EEF103045BA29A3B5CD98825C5B7"
+        )),
+    };
 }

@@ -97,6 +97,10 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 Self(bytes)
                                             }
 
+                                            const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
+                                                Self(bytes)
+                                            }
+
                                             #[inline(always)]
                                             fn add_assign_impl(&mut self, other: &Self) {
                                                 #[cfg(not(target_os = "zkvm"))]
@@ -331,12 +335,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 Self(arr)
                                             }
 
-                                            fn from_be_bytes(bytes: &[u8]) -> Self {
-                                                let mut arr = [0u8; #limbs];
-                                                arr.copy_from_slice(&bytes.iter().rev().copied().collect::<Vec<_>>());
-                                                Self(arr)
-                                            }
-
                                             fn from_u8(val: u8) -> Self {
                                                 Self::from_const_u8(val)
                                             }
@@ -355,10 +353,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                                             fn as_le_bytes(&self) -> &[u8] {
                                                 &(self.0)
-                                            }
-
-                                            fn as_be_bytes(&self) -> Vec<u8> {
-                                                self.0.iter().rev().copied().collect::<Vec<_>>()
                                             }
 
                                             #[cfg(not(target_os = "zkvm"))]

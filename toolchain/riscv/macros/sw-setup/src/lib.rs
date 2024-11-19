@@ -2,15 +2,12 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::{string_to_bytes, Stmts};
+use axvm_macros_common::Stmts;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, Expr, ExprPath, Ident, Stmt};
 
 // Returns (ec_struct_name, intmod_type, x, y)
-fn parse_input(
-    expr: &Expr,
-    span: proc_macro::Span,
-) -> Result<(Ident, ExprPath, String, String), &str> {
+fn parse_input(expr: &Expr, span: proc_macro::Span) -> Result<(Ident, ExprPath), &str> {
     let assign = if let syn::Expr::Assign(assign) = expr {
         assign
     } else {
@@ -27,43 +24,13 @@ fn parse_input(
         return Err("Left hand side must be an identifier");
     };
 
-    let tuple = if let syn::Expr::Tuple(tuple) = &*assign.right {
-        tuple
-    } else {
-        return Err("Right hand side must be a tuple");
-    };
-
-    if tuple.elems.len() != 3 {
-        return Err("Tuple must have exactly 3 elements");
-    }
-
-    let intmod_type = if let syn::Expr::Path(path) = &tuple.elems[0] {
+    let intmod_type = if let syn::Expr::Path(path) = &*assign.right {
         path
     } else {
-        return Err("First element of tuple must be an identifier");
+        return Err("Right hand side must be an identifier");
     };
 
-    let x = if let syn::Expr::Lit(lit) = &tuple.elems[1] {
-        if let syn::Lit::Str(str_lit) = &lit.lit {
-            str_lit.value()
-        } else {
-            return Err("Second element of tuple must be a string literal");
-        }
-    } else {
-        return Err("Second element of tuple must be a literal");
-    };
-
-    let y = if let syn::Expr::Lit(lit) = &tuple.elems[2] {
-        if let syn::Lit::Str(str_lit) = &lit.lit {
-            str_lit.value()
-        } else {
-            return Err("Third element of tuple must be a string literal");
-        }
-    } else {
-        return Err("Third element of tuple must be a literal");
-    };
-
-    Ok((struct_name, intmod_type.clone(), x, y))
+    Ok((struct_name, intmod_type.clone()))
 }
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
@@ -86,9 +53,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
     for stmt in stmts {
         let result: Result<TokenStream, &str> = match stmt.clone() {
             Stmt::Expr(expr, _) => {
-                let (struct_name, intmod_type, x, y) = parse_input(&expr, span).unwrap();
-                let x_bytes = string_to_bytes(&x);
-                let y_bytes = string_to_bytes(&y);
+                let (struct_name, intmod_type) = parse_input(&expr, span).unwrap();
                 let result = TokenStream::from(quote::quote_spanned! { span.into() =>
 
                     #[derive(Eq, PartialEq, Clone, Debug)]
@@ -269,13 +234,6 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
                         fn is_identity(&self) -> bool {
                             self.x == <#intmod_type as IntMod>::ZERO && self.y == <#intmod_type as IntMod>::ZERO
-                        }
-
-                        fn generator() -> Self {
-                            Self {
-                                x: #intmod_type::from_le_bytes(&[#(#x_bytes),*]),
-                                y: #intmod_type::from_le_bytes(&[#(#y_bytes),*]),
-                            }
                         }
 
                         fn double(&self) -> Self {

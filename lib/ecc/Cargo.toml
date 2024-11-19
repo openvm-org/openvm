@@ -13,7 +13,6 @@ rand.workspace = true
 strum_macros.workspace = true
 ecdsa = { workspace = true , features = ["verifying"]}
 elliptic-curve = { workspace = true , features = ["arithmetic", "sec1"]}
-k256 = { workspace = true }
 hex-literal = { workspace = true }
 axvm-algebra = { workspace = true }
 

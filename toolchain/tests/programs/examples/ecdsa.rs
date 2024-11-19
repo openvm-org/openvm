@@ -38,7 +38,5 @@ pub fn main() {
     ))
     .unwrap();
 
-    if recovered_key.0 != expected_key {
-        panic!();
-    }
+    assert_eq!(recovered_key.0, expected_key);
 }

@@ -25,8 +25,11 @@ pub trait Group:
     fn identity() -> Self;
     fn is_identity(&self) -> bool;
 
-    fn generator() -> Self;
-
     fn double(&self) -> Self;
     fn double_assign(&mut self);
+}
+
+pub trait CyclicGroup: Group {
+    const GENERATOR: Self;
+    const NEG_GENERATOR: Self;
 }

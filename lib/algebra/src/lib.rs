@@ -91,7 +91,10 @@ pub trait IntMod:
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
-    fn from_be_bytes(bytes: &[u8]) -> Self;
+    fn from_be_bytes(bytes: &[u8]) -> Self {
+        let vec = bytes.iter().rev().copied().collect::<Vec<_>>();
+        Self::from_le_bytes(&vec)
+    }
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -106,7 +109,9 @@ pub trait IntMod:
     fn as_le_bytes(&self) -> &[u8];
 
     /// Value of this IntMod as an array of bytes, big endian.
-    fn as_be_bytes(&self) -> Vec<u8>;
+    fn as_be_bytes(&self) -> Vec<u8> {
+        self.as_le_bytes().iter().rev().copied().collect::<Vec<_>>()
+    }
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
