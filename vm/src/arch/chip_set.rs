@@ -24,6 +24,7 @@ use ax_stark_backend::{
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{program::Program, *};
 use num_bigint_dig::BigUint;
+use num_traits::Zero;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
@@ -41,7 +42,7 @@ use crate::{
                 EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
             },
-            sw::{EcAddNeChip, EcDoubleChip},
+            weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
@@ -919,6 +920,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config32,
                         class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
@@ -949,6 +951,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config48,
                         class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));

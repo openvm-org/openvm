@@ -1,7 +1,7 @@
 pub mod fp12;
 pub mod fp2;
 pub mod pairing;
-pub mod sw;
+pub mod weierstrass;
 
 use num_bigint_dig::BigUint;
 
