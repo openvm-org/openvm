@@ -28,6 +28,7 @@ axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-stark-sdk = { workspace = true }
+axvm-encoder = { workspace = true }
 
 parking_lot.workspace = true
 enum-utils.workspace = true

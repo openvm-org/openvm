@@ -622,6 +622,7 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-ecc",
  "axvm-ecc-constants",
+ "axvm-encoder",
  "axvm-instructions",
  "backtrace",
  "cfg-if",

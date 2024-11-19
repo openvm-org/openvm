@@ -2,6 +2,7 @@ use ax_circuit_primitives::SubAir;
 use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
+#[derive(Clone, Debug)]
 pub struct Encoder {
     var_cnt: usize,
     flag_cnt: usize,
@@ -79,6 +80,12 @@ impl Encoder {
     pub fn get_flag<AB: InteractionBuilder>(&self, flag_idx: usize, vars: &[AB::Var]) -> AB::Expr {
         assert!(flag_idx < self.flag_cnt, "flag index out of range");
         self.expression_for_point::<AB>(&self.pts[flag_idx + 1], vars)
+    }
+
+    pub fn flags<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> Vec<AB::Expr> {
+        (1..=self.flag_cnt)
+            .map(|i| self.get_flag::<AB>(i, vars))
+            .collect()
     }
 
     pub fn sum_of_unused<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
