@@ -4,10 +4,7 @@
 use core::hint::black_box;
 
 use axvm::intrinsics::keccak256;
-use axvm_ecc::{
-    sw::{Secp256k1Point, Secp256k1Scalar},
-    VerifyingKey,
-};
+use axvm_ecc::VerifyingKey;
 use hex_literal::hex;
 use k256::ecdsa::{self, RecoveryId, Signature};
 axvm::entry!(main);
@@ -28,10 +25,7 @@ pub fn main() {
 
     let prehash = keccak256(black_box(msg));
 
-    let recovered_key = VerifyingKey::recover_from_prehash::<Secp256k1Scalar, Secp256k1Point>(
-        &prehash, &signature, recid,
-    )
-    .unwrap();
+    let recovered_key = VerifyingKey::recover_from_prehash(&prehash, &signature, recid).unwrap();
 
     let expected_key = ecdsa::VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"
