@@ -36,7 +36,7 @@ fn main() -> Result<()> {
             let file_data = include_bytes!("../../programs/rkyv/minecraft_savedata.bin");
 
             let fe_bytes = file_data
-                .into_iter()
+                .iter()
                 .map(|&b| AbstractField::from_canonical_u8(b))
                 .collect::<Vec<BabyBear>>();
 
