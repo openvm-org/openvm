@@ -5,9 +5,10 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, ProofInput},
 };
-use axvm_instructions::{instruction::DebugInfo, program::Program};
+#[cfg(feature = "function-span")]
+use axvm_instructions::exe::FnBound;
+use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use exe::{FnBound, FnBounds};
 use itertools::izip;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
@@ -35,6 +36,8 @@ pub struct ExecutionSegment<F: PrimeField32> {
     /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
     pub(crate) collected_metrics: VmMetrics,
+
+    #[allow(dead_code)]
     pub(crate) fn_bounds: FnBounds,
 
     pub air_names: Vec<String>,
@@ -123,6 +126,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Cycle span by function if function start/end addresses are available
+        #[cfg(feature = "function-span")]
         let mut current_fn = FnBound::default();
 
         self.chip_set
@@ -177,28 +181,25 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         return Err(ExecutionError::Fail(pc));
                     }
                     PhantomInstruction::CtStart => {
-                        if self.fn_bounds.is_empty() {
-                            // hack to remove "CT-" prefix
-                            self.cycle_tracker.start(
-                                dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..]
-                                    .to_string(),
-                            )
-                        }
+                        // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
+                        self.cycle_tracker.start(
+                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
+                        )
                     }
                     PhantomInstruction::CtEnd => {
-                        if self.fn_bounds.is_empty() {
-                            // hack to remove "CT-" prefix
-                            self.cycle_tracker.end(
-                                dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..]
-                                    .to_string(),
-                            )
-                        }
+                        // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
+                        self.cycle_tracker.end(
+                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
+                        )
                     }
                     _ => {}
                 }
             }
             prev_backtrace = trace;
 
+            #[cfg(feature = "function-span")]
             if !self.fn_bounds.is_empty() && (pc < current_fn.start || pc > current_fn.end) {
                 current_fn = self
                     .fn_bounds

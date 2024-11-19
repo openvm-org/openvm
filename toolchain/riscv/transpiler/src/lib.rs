@@ -29,11 +29,6 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
 
-        #[cfg(not(feature = "function-span"))]
-        let fn_bounds = Default::default();
-        #[cfg(feature = "function-span")]
-        let fn_bounds = elf.fn_bounds;
-
         Self {
             program,
             pc_start: elf.pc_start,
@@ -45,7 +40,7 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
                     },
                 },
             },
-            fn_bounds,
+            fn_bounds: elf.fn_bounds,
         }
     }
 }

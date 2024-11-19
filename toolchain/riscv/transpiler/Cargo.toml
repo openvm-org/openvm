@@ -27,4 +27,4 @@ serde = { workspace = true, features = ["alloc"] }
 
 [features]
 parallel = ["axvm-circuit/parallel"]
-function-span = []
+function-span = ["axvm-circuit/function-span"]

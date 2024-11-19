@@ -7,7 +7,8 @@ use std::{
 };
 
 #[cfg(feature = "function-span")]
-use axvm_instructions::exe::{FnBound, FnBounds};
+use axvm_instructions::exe::FnBound;
+use axvm_instructions::exe::FnBounds;
 use axvm_platform::WORD_SIZE;
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
@@ -45,31 +46,11 @@ pub struct Elf {
     /// Field arithmetic configuration.
     pub(crate) supported_moduli: Vec<String>,
     /// Debug info for spanning benchmark metrics by function.
-    #[cfg(feature = "function-span")]
     pub(crate) fn_bounds: FnBounds,
 }
 
 impl Elf {
     /// Create a new [Elf].
-    #[cfg(not(feature = "function-span"))]
-    pub(crate) const fn new(
-        instructions: Vec<u32>,
-        pc_start: u32,
-        pc_base: u32,
-        memory_image: BTreeMap<u32, u32>,
-        supported_moduli: Vec<String>,
-    ) -> Self {
-        Self {
-            instructions,
-            pc_start,
-            pc_base,
-            memory_image,
-            max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
-            supported_moduli,
-        }
-    }
-
-    #[cfg(feature = "function-span")]
     pub(crate) const fn new(
         instructions: Vec<u32>,
         pc_start: u32,
@@ -112,6 +93,9 @@ impl Elf {
         } else if elf.ehdr.e_type != ET_EXEC {
             bail!("Invalid ELF type, must be executable");
         }
+
+        #[cfg(not(feature = "function-span"))]
+        let fn_bounds = Default::default();
 
         #[cfg(feature = "function-span")]
         let mut fn_bounds = FnBounds::new();
@@ -259,30 +243,15 @@ impl Elf {
             eprintln!("no .axiom section found");
         }
 
-        #[cfg(not(feature = "function-span"))]
-        {
-            Ok(Elf::new(
-                instructions,
-                entry,
-                base_address,
-                image,
-                (0..supported_moduli.len())
-                    .map(|x| supported_moduli[&(x as u32)].clone())
-                    .collect(),
-            ))
-        }
-        #[cfg(feature = "function-span")]
-        {
-            Ok(Elf::new(
-                instructions,
-                entry,
-                base_address,
-                image,
-                (0..supported_moduli.len())
-                    .map(|x| supported_moduli[&(x as u32)].clone())
-                    .collect(),
-                fn_bounds,
-            ))
-        }
+        Ok(Elf::new(
+            instructions,
+            entry,
+            base_address,
+            image,
+            (0..supported_moduli.len())
+                .map(|x| supported_moduli[&(x as u32)].clone())
+                .collect(),
+            fn_bounds,
+        ))
     }
 }
