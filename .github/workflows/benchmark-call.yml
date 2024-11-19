@@ -309,4 +309,6 @@ jobs:
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
-          git push --force
+          git fetch origin gh-pages
+          git merge origin/gh-pages --no-edit
+          git push origin gh-pages
