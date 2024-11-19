@@ -1,9 +1,7 @@
-use core::ops::{Add, Div};
+use core::ops::Add;
 
 use axvm_algebra::{IntMod, Reduce};
-use ecdsa::{
-    hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize, VerifyingKey,
-};
+use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize};
 use elliptic_curve::{
     bigint::CheckedAdd,
     generic_array::ArrayLength,
@@ -16,11 +14,11 @@ use elliptic_curve::{
 use crate::{msm, sw::SwPoint, CyclicGroup};
 
 // TODO: maybe do IntrinsicCurve: https://github.com/axiom-crypto/afs-prototype/pull/813#discussion_r1847477785
-pub struct AxvmVerifyingKey<C>(pub VerifyingKey<C>)
+pub struct VerifyingKey<C>(pub ecdsa::VerifyingKey<C>)
 where
     C: PrimeCurve + CurveArithmetic;
 
-impl<C> AxvmVerifyingKey<C>
+impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     SignatureSize<C>: ArrayLength<u8>,
@@ -33,10 +31,9 @@ where
         prehash: &[u8],
         sig: &Signature<C>,
         recovery_id: RecoveryId,
-    ) -> Result<AxvmVerifyingKey<C>>
+    ) -> Result<VerifyingKey<C>>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        // for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let (r, s) = sig.split_scalars();
 
@@ -67,8 +64,8 @@ where
         let NEG_G = Point::NEG_GENERATOR;
         let public_key = msm(&[neg_u1, u2], &[NEG_G, R]);
 
-        let vk = AxvmVerifyingKey(
-            VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
+        let vk = VerifyingKey(
+            ecdsa::VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
         );
 
         vk.verify_prehashed::<Scalar, Point>(prehash, sig)?;
@@ -85,7 +82,6 @@ where
     ) -> Result<()>
     where
         for<'a> &'a Point: Add<&'a Point, Output = Point>,
-        // for<'a> &'a Scalar: Div<&'a Scalar, Output = Scalar>,
     {
         let z = Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
         let (r, s) = sig.split_scalars();
