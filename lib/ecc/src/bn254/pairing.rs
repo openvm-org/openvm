@@ -26,7 +26,7 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let mut uninit: MaybeUninit<EvaluatedLine<Fp, Fp2>> = MaybeUninit::uninit();
+            let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
             custom_insn_r!(
                 CUSTOM_1,
                 Custom1Funct3::Pairing as usize,

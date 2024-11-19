@@ -16,17 +16,6 @@ use crate::pairing::{PairingIntrinsics as _, SexticExtField};
 
 pub type Fp12 = SexticExtField<Fp2>;
 
-// impl<F: Field> Field for SexticExtField<F> {
-//     type SelfRef<'a>
-//         = &'a Self
-//     where
-//         F: 'a;
-
-//     const ZERO: Self = Self::new([F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO]);
-
-//     const ONE: Self = Self::new([F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO]);
-// }
-
 impl FieldExtension<Fp2> for Fp12 {
     const D: usize = 6;
     type Coeffs = [Fp2; 6];

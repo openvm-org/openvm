@@ -157,7 +157,7 @@ mod tests {
         let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(bn254_fq_to_biguint);
 
         let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
-        let (Q_acc_init, l_init) = Bn254::miller_double_step(Q_ecpoint.clone());
+        let (Q_acc_init, l_init) = Bn254::miller_double_step(&Q_ecpoint);
         let result = chip
             .core
             .expr()

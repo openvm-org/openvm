@@ -19,7 +19,7 @@ type F = BabyBear;
 mod bn254 {
     use ax_ecc_execution::{
         axvm_ecc::{
-            halo2curves::bn256::{Fq, Fq12, Fq2, G2Affine},
+            halo2curves::bn256::{Fq12, Fq2, G2Affine},
             pairing::MillerStep,
             AffineCoords,
         },
@@ -43,7 +43,7 @@ mod bn254 {
         let l1 = EvaluatedLine::<Fq2> { b: b.x(), c: b.y() };
 
         // Test mul_013_by_013
-        let r0 = Bn254::mul_013_by_013(l0, l1);
+        let r0 = Bn254::mul_013_by_013(&l0, &l1);
         let io0 = [l0, l1]
             .into_iter()
             .flat_map(|fp2| fp2.into_iter())
@@ -55,7 +55,7 @@ mod bn254 {
 
         // Test mul_by_01234
         let x = [c.x(), c.y(), b.x(), b.y(), a.x()];
-        let r1 = Bn254::mul_by_01234(f, x);
+        let r1 = Bn254::mul_by_01234(&f, &x);
         // NOTE[yj]: this is ugly but calling `to_coeffs` gives us a different coefficient ordering
         let io1 = [f.c0.c0, f.c0.c1, f.c0.c2, f.c1.c0, f.c1.c1, f.c1.c2]
             .into_iter()
@@ -66,9 +66,9 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        let io = io0.into_iter().chain(io1).collect::<Vec<_>>();
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(elf, vec![io_all])?;
         Ok(())
     }
 
@@ -85,7 +85,7 @@ mod bn254 {
         let q = AffinePoint::new(Q.x(), Q.y());
 
         // Test miller_double_step
-        let (pt, l) = Bn254::miller_double_step(s.clone());
+        let (pt, l) = Bn254::miller_double_step(&s);
         let io0 = [s.x, s.y, pt.x, pt.y, l.b, l.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
@@ -95,16 +95,16 @@ mod bn254 {
         // executor.execute(elf, vec![io0])?;
 
         // Test miller_double_and_add_step
-        let (pt, l0, l1) = Bn254::miller_double_and_add_step(s.clone(), q.clone());
+        let (pt, l0, l1) = Bn254::miller_double_and_add_step(&s, &q);
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        let io = io0.into_iter().chain(io1).collect::<Vec<_>>();
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(elf, vec![io_all])?;
         Ok(())
     }
 }
@@ -173,7 +173,6 @@ mod bls12_381 {
         let elf = build_example_program("final_exp_hint")?;
         let executor = VmExecutor::<F>::new(VmConfig::rv32im());
 
-        let bls12_381 = Bls12_381;
         let P = G1Affine::generator();
         let Q = G2Affine::generator();
         let ps = vec![AffinePoint::new(P.x, P.y), AffinePoint::new(P.x, -P.y)];

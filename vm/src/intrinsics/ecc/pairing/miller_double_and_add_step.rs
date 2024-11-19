@@ -164,7 +164,7 @@ mod tests {
 
         let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
         let Q_ecpoint2 = AffinePoint { x: Q2.x, y: Q2.y };
-        let (Q_daa, l_qa, l_sqs) = Bn254::miller_double_and_add_step(Q_ecpoint, Q_ecpoint2);
+        let (Q_daa, l_qa, l_sqs) = Bn254::miller_double_and_add_step(&Q_ecpoint, &Q_ecpoint2);
         let result = chip
             .0
             .core

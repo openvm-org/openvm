@@ -6,14 +6,9 @@ use core::{
 };
 
 #[cfg(target_os = "zkvm")]
-use {
-    axvm_platform::{
-        constants::{
-            ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1,
-        },
-        custom_insn_r,
-    },
-    core::mem::MaybeUninit,
+use axvm_platform::{
+    constants::{ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1},
+    custom_insn_r,
 };
 
 use super::{ComplexConjugate, Field};
