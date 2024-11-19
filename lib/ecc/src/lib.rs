@@ -12,6 +12,8 @@ mod group;
 pub use group::*;
 mod msm;
 pub use msm::*;
+mod ecdsa;
+pub use ecdsa::*;
 
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.

@@ -1,6 +1,8 @@
 #![no_std]
 
 //! Modular arithmetic traits for use with axVM intrinsics.
+extern crate alloc;
+use alloc::vec::Vec;
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
@@ -96,8 +98,14 @@ pub trait IntMod:
     /// Creates a new IntMod from an instance of Repr.
     fn from_repr(repr: Self::Repr) -> Self;
 
-    /// Creates a new IntMod from an array of bytes.
+    /// Creates a new IntMod from an array of bytes, little endian.
     fn from_le_bytes(bytes: &[u8]) -> Self;
+
+    /// Creates a new IntMod from an array of bytes, big endian.
+    fn from_be_bytes(bytes: &[u8]) -> Self {
+        let vec = bytes.iter().rev().copied().collect::<Vec<_>>();
+        Self::from_le_bytes(&vec)
+    }
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -108,8 +116,13 @@ pub trait IntMod:
     /// Creates a new IntMod from a u64.
     fn from_u64(val: u64) -> Self;
 
-    /// Value of this IntMod as an array of bytes.
+    /// Value of this IntMod as an array of bytes, little endian.
     fn as_le_bytes(&self) -> &[u8];
+
+    /// Value of this IntMod as an array of bytes, big endian.
+    fn as_be_bytes(&self) -> Vec<u8> {
+        self.as_le_bytes().iter().rev().copied().collect::<Vec<_>>()
+    }
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -147,5 +160,14 @@ pub trait IntMod:
         let mut ret = self.square();
         ret *= self;
         ret
+    }
+}
+
+// Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
+pub trait Reduce: Sized {
+    /// Interpret the given bytes as an integer and perform a modular reduction.
+    fn reduce_le_bytes(bytes: &[u8]) -> Self;
+    fn reduce_be_bytes(bytes: &[u8]) -> Self {
+        Self::reduce_le_bytes(&bytes.iter().rev().copied().collect::<Vec<_>>())
     }
 }
