@@ -16,11 +16,7 @@ impl Fp12 {
     pub fn invert(&self) -> Self {
         let mut s = self.clone();
         fp12_invert_assign::<Fp, Fp2>(&mut s.c, &Bls12_381::XI);
-        SexticExtField::new(s.c)
-    }
-
-    pub fn div_assign_unsafe_impl(&mut self, other: &Self) {
-        *self *= other.invert();
+        s
     }
 }
 
@@ -101,6 +97,7 @@ impl ComplexConjugate for Fp12 {
 }
 
 impl<'a> MulAssign<&'a Fp12> for Fp12 {
+    #[inline(always)]
     fn mul_assign(&mut self, other: &'a Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
@@ -119,7 +116,7 @@ impl<'a> MulAssign<&'a Fp12> for Fp12 {
 
 impl<'a> Mul<&'a Fp12> for &'a Fp12 {
     type Output = Fp12;
-
+    #[inline(always)]
     fn mul(self, other: &'a Fp12) -> Self::Output {
         #[cfg(not(target_os = "zkvm"))]
         {
@@ -164,17 +161,18 @@ impl<'a> Mul<&'a Fp12> for Fp12 {
 }
 
 impl<'a> DivAssignUnsafe<&'a Fp12> for Fp12 {
+    #[inline(always)]
     fn div_assign_unsafe(&mut self, other: &'a Fp12) {
-        self.div_assign_unsafe_impl(other);
+        *self *= other.invert();
     }
 }
 
 impl<'a> DivUnsafe<&'a Fp12> for &'a Fp12 {
     type Output = Fp12;
-
+    #[inline(always)]
     fn div_unsafe(self, other: &'a Fp12) -> Self::Output {
         let mut res = self.clone();
-        res.div_assign_unsafe_impl(other);
+        res.div_assign_unsafe(other);
         res
     }
 }
@@ -182,27 +180,25 @@ impl<'a> DivUnsafe<&'a Fp12> for &'a Fp12 {
 impl DivAssignUnsafe for Fp12 {
     #[inline(always)]
     fn div_assign_unsafe(&mut self, other: Self) {
-        self.div_assign_unsafe_impl(&other);
+        *self *= other.invert();
     }
 }
 
 impl DivUnsafe for Fp12 {
     type Output = Self;
     #[inline(always)]
-    fn div_unsafe(self, other: Self) -> Self::Output {
-        let mut res = self.clone();
-        res.div_assign_unsafe_impl(&other);
-        res
+    fn div_unsafe(mut self, other: Self) -> Self::Output {
+        self.div_assign_unsafe(other);
+        self
     }
 }
 
 impl<'a> DivUnsafe<&'a Fp12> for Fp12 {
     type Output = Self;
     #[inline(always)]
-    fn div_unsafe(self, other: &'a Fp12) -> Self::Output {
-        let mut res = self.clone();
-        res.div_assign_unsafe_impl(other);
-        res
+    fn div_unsafe(mut self, other: &'a Fp12) -> Self::Output {
+        self.div_assign_unsafe(other);
+        self
     }
 }
 
