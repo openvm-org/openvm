@@ -4,7 +4,13 @@ use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Fq6};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
-use crate::bls12_381::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign, fp_invert_assign};
+use crate::{
+    bls12_381::Bls12_381,
+    pairing::{
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, fp_invert_assign,
+        PairingIntrinsics,
+    },
+};
 
 fn convert_fq_to_bls12381fp(x: Fq) -> Fp {
     let bytes = x.to_bytes();
@@ -61,7 +67,7 @@ fn test_fp6_invert() {
     let fp6c1 = convert_fq2_to_bls12381fp2(fq6.c1);
     let fp6c2 = convert_fq2_to_bls12381fp2(fq6.c2);
     let mut fp6 = [fp6c0, fp6c1, fp6c2];
-    fp6_invert_assign(&mut fp6);
+    fp6_invert_assign::<Fp, Fp2>(&mut fp6, &Bls12_381::XI);
 
     let fq6_invc0 = convert_fq2_to_bls12381fp2(fq6_inv.c0);
     let fq6_invc1 = convert_fq2_to_bls12381fp2(fq6_inv.c1);
@@ -76,9 +82,9 @@ fn test_fp2_invert() {
     let fq2 = Fq2::random(&mut rng);
     let fq2_inv = fq2.invert().unwrap();
 
-    let mut fp2 = convert_fq2_to_bls12381fp2(fq2);
-    fp2_invert_assign(&mut fp2);
-    assert_eq!(fp2, convert_fq2_to_bls12381fp2(fq2_inv));
+    let mut fp2 = convert_fq2_to_bls12381fp2(fq2).to_coeffs();
+    fp2_invert_assign::<Fp>(&mut fp2);
+    assert_eq!(fp2, convert_fq2_to_bls12381fp2(fq2_inv).to_coeffs());
 }
 
 #[test]
@@ -88,7 +94,7 @@ fn test_fp_invert() {
     let fq_inv = fq.invert().unwrap();
 
     let mut fp = convert_fq_to_bls12381fp(fq);
-    fp_invert_assign(&mut fp);
+    fp_invert_assign::<Fp>(&mut fp);
     assert_eq!(fp, convert_fq_to_bls12381fp(fq_inv));
 }
 
@@ -106,7 +112,7 @@ fn test_fp6_square() {
     let fp6c1 = convert_fq2_to_bls12381fp2(fq6.c1);
     let fp6c2 = convert_fq2_to_bls12381fp2(fq6.c2);
     let mut fp6 = [fp6c0, fp6c1, fp6c2];
-    fp6_square_assign(&mut fp6);
+    fp6_square_assign::<Fp, Fp2>(&mut fp6, &Bls12_381::XI);
 
     let fq6_sqc0 = convert_fq2_to_bls12381fp2(fq6_sq.c0);
     let fq6_sqc1 = convert_fq2_to_bls12381fp2(fq6_sq.c1);

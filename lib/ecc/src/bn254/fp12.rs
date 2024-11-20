@@ -7,55 +7,18 @@ use axvm_algebra::{
     DivAssignUnsafe, DivUnsafe, Field,
 };
 
-use super::{
-    fp6_invert_assign, fp6_mul_assign, fp6_mul_by_nonresidue_assign, fp6_neg_assign,
-    fp6_square_assign, fp6_sub_assign, Bn254, Fp2,
-};
+use super::{Bn254, Fp, Fp2};
 #[cfg(not(target_os = "zkvm"))]
 use crate::pairing::PairingIntrinsics;
-use crate::pairing::SexticExtField;
+use crate::pairing::{fp12_invert_assign, SexticExtField};
 
 pub type Fp12 = SexticExtField<Fp2>;
 
 impl Fp12 {
     pub fn invert(&self) -> Self {
-        let mut c0s = [self.c[0].clone(), self.c[1].clone(), self.c[2].clone()];
-        let mut c1s = [self.c[3].clone(), self.c[4].clone(), self.c[5].clone()];
-
-        Fp12::new([
-            c0s[0].clone(),
-            c0s[1].clone(),
-            c0s[2].clone(),
-            c1s[0].clone(),
-            c1s[1].clone(),
-            c1s[2].clone(),
-        ])
-
-        // fp6_square_assign(&mut c0s);
-        // fp6_square_assign(&mut c1s);
-        // fp6_mul_by_nonresidue_assign(&mut c1s);
-        // fp6_sub_assign(&mut c0s, &c1s);
-
-        // fp6_invert_assign(&mut c0s);
-        // let mut t0 = c0s.clone();
-        // let mut t1 = c0s;
-        // fp6_mul_assign(
-        //     &mut t0,
-        //     &[self.c[0].clone(), self.c[1].clone(), self.c[2].clone()],
-        // );
-        // fp6_mul_assign(
-        //     &mut t1,
-        //     &[self.c[3].clone(), self.c[4].clone(), self.c[5].clone()],
-        // );
-        // fp6_neg_assign(&mut t1);
-        // Fp12::new([
-        //     t0[0].clone(),
-        //     t0[1].clone(),
-        //     t0[2].clone(),
-        //     t1[0].clone(),
-        //     t1[1].clone(),
-        //     t1[2].clone(),
-        // ])
+        let mut s = self.clone();
+        fp12_invert_assign::<Fp, Fp2>(&mut s.c, &Bn254::XI);
+        SexticExtField::new(s.c)
     }
 
     pub fn div_assign_unsafe_impl(&mut self, other: &Self) {

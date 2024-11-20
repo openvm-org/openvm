@@ -1,14 +1,12 @@
 use axvm::moduli_setup;
-use axvm_algebra::{DivUnsafe, Field, IntMod};
+use axvm_algebra::{Field, IntMod};
 
 mod fp12;
 mod fp2;
-mod fp6;
 pub mod pairing;
 
 pub use fp12::*;
 pub use fp2::*;
-pub use fp6::*;
 
 use crate::pairing::PairingIntrinsics;
 
@@ -44,10 +42,4 @@ impl PairingIntrinsics for Bn254 {
 
     const PAIRING_IDX: usize = 0;
     const XI: Fp2 = Fp2::new(Fp::from_const_u8(9), Fp::from_const_u8(1));
-}
-
-// Inverse z = x⁻¹ (mod p)
-pub(crate) fn fp_invert_assign(x: &mut Fp) {
-    let res = <Fp as Field>::ONE.div_unsafe_refs_impl(x);
-    *x = res;
 }

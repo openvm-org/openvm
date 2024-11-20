@@ -1,12 +1,9 @@
 use core::{
     fmt::{Debug, Formatter, Result},
-    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use axvm_algebra::{
-    field::{Complex, ComplexConjugate, FieldExtension},
-    DivAssignUnsafe, DivUnsafe, Field, IntMod,
-};
+use axvm_algebra::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,
@@ -29,36 +26,6 @@ impl<F> SexticExtField<F> {
         Self { c }
     }
 }
-
-// impl<F: Field> SexticExtField<F> {
-//     pub fn div_assign_unsafe_impl(&mut self, other: &Self);
-
-//     pub fn invert(&self) -> Self {
-//         let [c0, c1, c2, c3, c4, c5] = self.c.clone();
-//         let mut c0s = [c0.clone(), c2.clone(), c4.clone()];
-//         let mut c1s = [c1.clone(), c3.clone(), c5.clone()];
-
-//         fp6_square_assign(&mut c0s);
-//         fp6_square_assign(&mut c1s);
-//         fp6_mul_by_nonresidue(&mut c1s);
-//         fp6_sub_assign(&mut c0s, &c1s);
-
-//         fp6_invert(&mut c0s);
-//         let mut t0 = c0s.clone();
-//         let mut t1 = c0s.clone();
-//         fp6_mul_assign(&mut t0, &[c0, c2, c4]);
-//         fp6_mul_assign(&mut t1, &[c1, c3, c5]);
-//         fp6_neg_assign(&mut t1);
-//         SexticExtField::new([
-//             t0[0].clone(),
-//             t1[0].clone(),
-//             t0[1].clone(),
-//             t1[1].clone(),
-//             t0[2].clone(),
-//             t1[2].clone(),
-//         ])
-//     }
-// }
 
 impl<'a, F: Field> AddAssign<&'a SexticExtField<F>> for SexticExtField<F> {
     #[inline(always)]
@@ -156,22 +123,6 @@ where
     SexticExtField::new([c0, c3, c1, c4, c2, c5])
 }
 
-// pub(crate) fn sextic_tower_div_unsafe_host<F: Field>(
-//     lhs: &SexticExtField<F>,
-//     rhs: &SexticExtField<F>,
-//     xi: &F,
-// ) -> SexticExtField<F>
-// where
-//     for<'a> &'a F: core::ops::Mul<&'a F, Output = F>,
-// {
-//     // Invert rhs
-//     // let rhs_inv = sextic_tower_invert(rhs);
-//     let rhs_inv = rhs.invert();
-
-//     // Multiply lhs by the inverse of rhs
-//     sextic_tower_mul_host(lhs, &rhs_inv, xi)
-// }
-
 // Auto-derived implementations:
 
 impl<F: Field> AddAssign for SexticExtField<F> {
@@ -224,39 +175,6 @@ impl<'a, F: Field> Sub<&'a SexticExtField<F>> for SexticExtField<F> {
     }
 }
 
-// impl<F: Field> DivAssignUnsafe for SexticExtField<F> {
-//     #[inline(always)]
-//     fn div_assign_unsafe(&mut self, other: Self) {
-//         self.div_assign_unsafe_impl(&other);
-//     }
-// }
-
-// impl<F: Field> DivUnsafe for SexticExtField<F> {
-//     type Output = Self;
-//     #[inline(always)]
-//     fn div_unsafe(mut self, other: Self) -> Self::Output {
-//         self -= other;
-//         self
-//     }
-// }
-
-// impl<'a, F: Field> DivUnsafe<&'a SexticExtField<F>> for SexticExtField<F> {
-//     type Output = Self;
-//     #[inline(always)]
-//     fn div_unsafe(mut self, other: &'a SexticExtField<F>) -> Self::Output {
-//         self /= other;
-//         self
-//     }
-// }
-
-// impl<F: Field> Neg for SexticExtField<F> {
-//     type Output = SexticExtField<F>;
-//     #[inline(always)]
-//     fn neg(self) -> Self::Output {
-//         Self::ZERO - &self
-//     }
-// }
-
 impl<F: Field> Debug for SexticExtField<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(
@@ -266,19 +184,3 @@ impl<F: Field> Debug for SexticExtField<F> {
         )
     }
 }
-
-// pub fn sextic_tower_invert<F: Field>(x: &SexticExtField<F>) -> SexticExtField<F> {
-//     let mut c0s = [F::ZERO; 3];
-//     let mut c1s = [F::ZERO; 3];
-//     c0s.clone_from_slice(&x.c[0..3]);
-//     c1s.clone_from_slice(&x.c[3..6]);
-
-//     fp6_square_assign(&mut c0s);
-//     fp6_square_assign(&mut c1s);
-
-//     fp6_mul_by_nonresidue(&mut c1s);
-
-//     todo!("finish")
-// }
-
-pub fn fp12_mul_by_nonresidue<F: Field>(x: &mut SexticExtField<F>) {}

@@ -42,7 +42,7 @@ where
     type SelfRef<'a> = &'a F;
 
     fn double_assign(&mut self) {
-        *self += self.clone();
+        *self += *self;
     }
 
     fn square_assign(&mut self) {

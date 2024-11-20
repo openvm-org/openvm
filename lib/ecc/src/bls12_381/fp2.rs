@@ -2,10 +2,10 @@ use core::ops::Neg;
 
 use axvm_algebra::{
     field::{Complex, FieldExtension},
-    Field, IntMod,
+    Field,
 };
 
-use super::{fp_invert_assign, fp_square_assign, Fp};
+use super::Fp;
 
 pub type Fp2 = Complex<Fp>;
 
@@ -45,34 +45,4 @@ impl FieldExtension<Fp> for Fp2 {
             c1: &self.c1 * rhs,
         }
     }
-}
-
-// pub(crate) fn fp2_invert_assign(x: &mut Fp2) {
-//     let mut c0 = x.c0.clone();
-//     fp_square_assign(&mut c0);
-//     let mut c1 = x.c1.clone();
-//     fp_square_assign(&mut c1);
-//     let mut inv = &c0 + &c1;
-//     fp_invert_assign(&mut inv);
-//     x.c0 *= &inv;
-//     inv.neg_assign();
-//     x.c1 *= &inv;
-// }
-
-pub(crate) fn fp2_invert_assign(x: &mut Fp2) {
-    let mut t1 = x.c1.clone();
-    <Fp as Field>::square_assign(&mut t1);
-    let mut t0 = x.c0.clone();
-    <Fp as Field>::square_assign(&mut t0);
-    t0 += &t1;
-    fp_invert_assign(&mut t0);
-    let mut tmp = Fp2 {
-        c0: x.c0.clone(),
-        c1: x.c1.clone(),
-    };
-    tmp.c0 *= &t0;
-    tmp.c1 *= &t0;
-    tmp.c1.neg_assign();
-
-    *x = tmp;
 }
