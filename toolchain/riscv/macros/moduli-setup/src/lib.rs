@@ -644,7 +644,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                             * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     remaining.as_ptr(),
-                                                    "x0"
+                                                    "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                                                 );
                                                 axvm_platform::custom_insn_r!(
                                                     axvm_platform::constants::CUSTOM_1,
@@ -654,7 +654,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                             * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     remaining.as_ptr(),
-                                                    "x1"
+                                                    "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                                                 );
                                                 axvm_platform::custom_insn_r!(
                                                     axvm_platform::constants::CUSTOM_1,
@@ -664,7 +664,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                             * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                                     uninit.as_mut_ptr(),
                                                     remaining.as_ptr(),
-                                                    "x2"
+                                                    "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
                                                 );
                                             }
                                         }

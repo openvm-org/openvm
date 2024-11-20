@@ -58,7 +58,7 @@ We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **010101
 Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.axiom` section of the ELF file in the serialized format. This is achieved by the `setup_moduli!` macro: for example, the following code
 
 ```rust
-setup_moduli! {
+moduli_setup! {
     Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
     Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
 }
@@ -66,10 +66,7 @@ setup_moduli! {
 
 generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields, and saves the list of moduli in the static `AXIOM_SERIALIZED_MODULI` variable in the `.axiom` section. Hexadecimal and decimal formats are supported.
 
-**NB:** we need to use the `AXIOM_SERIALIZED_MODULI` variable for the linker not to optimize it away at the moment. This can be done, for example, by putting `core::hint::black_box(AXIOM_SERIALIZED_MODULI)` anywhere in the main function.
-
-To sync the modular chips with the particular value of the modulus, they handle a special `setup<N>` instruction that reads the value of the modulus from memory and verifies that this value is the same that the chips uses.
-The opcode is the same for each chip, but the chip to be set up is defined by the `rs2` value, which is treated as immediate and transpiled into the `f` operand of the instruction. This should be the first instruction every modular chip receives.
+For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_Bls12381()` and `setup_Bn254()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
@@ -82,7 +79,7 @@ We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list 
 | mulmod\<N\>  | R   | 0101011     | 000    | `idx*8+2` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 * [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                        |
 | divmod\<N\>  | R   | 0101011     | 000    | `idx*8+3` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 / [rs2: N::NUM_LIMBS]_2 (mod N)` (undefined when `gcd([rs2: N::NUM_LIMBS]_2, N) != 1`)                                                                                  |
 | iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value. |
-| setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rs1: N::NUM_LIMBS]_2 == N)` in the chip defined by `imm`. For the sake of implementation convenience it also writes something into `[rd: N::NUM_LIMBS]_2` (or into `rd`).                                    |
+| setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rs1: N::NUM_LIMBS]_2 == N)` in the chip defined by `imm`. For the sake of implementation convenience it also writes something (can be anything) into `[rd: N::NUM_LIMBS]_2` (or into `rd`).                  |
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -221,7 +218,7 @@ The transpilation will only be valid for programs where:
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`         |
-| setup\<N\>     | SETUP_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2, rs2`            |
+| setup\<N\>     | SETUP_(ADDSUB|MULDIV|ISEQ)_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2`            |
 | sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`       |
 | sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`              |
 | hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`          |
