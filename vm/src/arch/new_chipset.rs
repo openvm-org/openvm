@@ -115,7 +115,8 @@ mod tests {
         let a = EnumA::A(1);
         assert_eq!(a.as_any_kind().downcast_ref::<u8>(), Some(&1));
         let b = EnumB::D(a);
-        assert_eq!(b.as_any_kind().downcast_ref::<u64>(), None);
+        assert!(b.as_any_kind().downcast_ref::<u64>().is_none());
+        assert!(b.as_any_kind().downcast_ref::<EnumA>().is_none());
         assert_eq!(b.as_any_kind().downcast_ref::<u8>(), Some(&1));
         let c = EnumB::C(3);
         assert_eq!(c.as_any_kind().downcast_ref::<u64>(), Some(&3));
