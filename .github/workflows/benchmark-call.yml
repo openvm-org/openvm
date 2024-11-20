@@ -153,7 +153,7 @@ jobs:
             .benchmarks[] |
             select(.name == $name) |
             .working_directory
-          ' ./.github/workflows/benchmark-config.json)
+          ' ./ci/benchmark-config.json)
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
