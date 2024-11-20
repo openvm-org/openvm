@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::{izip, Itertools};
+use p3_challenger::CanObserve;
 use p3_commit::Pcs;
+use p3_field::AbstractExtensionField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
@@ -24,12 +26,13 @@ use crate::{
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(super) fn generate_permutation_traces_and_exposed_values<SC: StarkGenericConfig>(
     mpk: &MultiStarkProvingKeyView<SC>,
-    challenges: &[Vec<SC::Challenge>],
+    challenger: &mut SC::Challenger,
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
 ) -> (
-    Vec<Vec<Vec<SC::Challenge>>>,
-    Vec<Option<RowMajorMatrix<SC::Challenge>>>,
+    Vec<Vec<SC::Challenge>>,                    // challenges
+    Vec<Vec<Vec<SC::Challenge>>>,               // exposed_values_after_challenge
+    Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace
 )
 where
     Domain<SC>: Send + Sync,
@@ -38,9 +41,10 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
+    let challenges = mpk.vk_view().sample_challenges(challenger);
     let perm_trace_per_air = tracing::info_span!("generate permutation traces").in_scope(|| {
         generate_permutation_trace_per_air(
-            challenges,
+            &challenges,
             mpk,
             main_views_per_air,
             public_values_per_air,
@@ -48,12 +52,21 @@ where
     });
     let cumulative_sum_per_air = extract_cumulative_sums::<SC>(&perm_trace_per_air);
 
+    // Challenger needs to observe what is exposed (cumulative_sums)
+    for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
+        challenger.observe_slice(cumulative_sum.as_base_slice());
+    }
+
     let exposed_values_after_challenge = cumulative_sum_per_air
         .into_iter()
         .map(|csum| csum.map_or(vec![], |x| vec![vec![x]]))
         .collect_vec();
 
-    (exposed_values_after_challenge, perm_trace_per_air)
+    (
+        challenges,
+        exposed_values_after_challenge,
+        perm_trace_per_air,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

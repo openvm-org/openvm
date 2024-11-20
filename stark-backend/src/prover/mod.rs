@@ -6,7 +6,6 @@ use std::{
 use itertools::{izip, multiunzip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
-use p3_field::AbstractExtensionField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
@@ -146,10 +145,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect();
         challenger.observe_slice(&main_trace_commitments);
 
-        // TODO: this is not needed if there are no interactions. Number of challenge rounds should be specified in proving key
-        // Generate permutation challenges
-        let challenges = mpk.vk_view().sample_challenges(challenger);
-
         let mut common_main_idx = 0;
         let mut degree_per_air = Vec::with_capacity(num_air);
         let mut main_views_per_air = Vec::with_capacity(num_air);
@@ -168,10 +163,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect();
 
         // TODO[zach]: Use trait for this.
-        let (exposed_values_after_challenge, perm_trace_per_air) =
+        let (challenges, exposed_values_after_challenge, perm_trace_per_air) =
             generate_permutation_traces_and_exposed_values(
                 &mpk,
-                &challenges,
+                challenger,
                 &main_views_per_air,
                 &pvs_per_air,
             );
@@ -192,12 +187,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let perm_prover_data = tracing::info_span!("commit to permutation traces")
             .in_scope(|| commit_perm_traces::<SC>(pcs, perm_trace_per_air, &domain_per_air));
 
-        // Challenger needs to observe exposed_values_after_challenge (aka cumulative_sums)
-        for exposed_values_per_phase in exposed_values_after_challenge.iter().flatten() {
-            for exposed_values in exposed_values_per_phase.iter() {
-                challenger.observe_slice(exposed_values.as_base_slice());
-            }
-        }
         // Challenger observes commitment if exists
         if let Some(data) = &perm_prover_data {
             challenger.observe(data.commit.clone());
