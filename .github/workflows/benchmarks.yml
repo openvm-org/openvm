@@ -46,6 +46,7 @@ jobs:
           fi
 
           LABELS='${{ toJson(github.event.pull_request.labels) }}'
+          echo $LABELS
           RUN_BENCH_LABEL=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
 
           matrix=$(jq -c --argjson run_e2e "$([[ -n $RUN_BENCH_LABEL ]] && echo true || echo false)" '

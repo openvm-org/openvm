@@ -152,7 +152,7 @@ jobs:
             .benchmarks[] |
             select(.name == $name) |
             .e2e_bench
-          ' ./.github/workflows/config.json)
+          ' ./ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
 
           if [[ "${E2E_BENCH}" == "true" ]]; then
