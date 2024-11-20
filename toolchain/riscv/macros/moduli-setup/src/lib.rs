@@ -663,6 +663,8 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 ptr += 4;
                                                 let remaining = &#serialized_name[ptr..];
 
+                                                // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
+                                                // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
                                                 let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                                                 axvm_platform::custom_insn_r!(
                                                     axvm_platform::constants::CUSTOM_1,
