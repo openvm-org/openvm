@@ -19,9 +19,8 @@ pub type Fp12 = SexticExtField<Fp2>;
 
 impl Fp12 {
     pub fn invert(&self) -> Self {
-        let [c0, c1, c2, c3, c4, c5] = self.c.clone();
-        let mut c0s = [c0.clone(), c2.clone(), c4.clone()];
-        let mut c1s = [c1.clone(), c3.clone(), c5.clone()];
+        let mut c0s = [self.c[0].clone(), self.c[1].clone(), self.c[2].clone()];
+        let mut c1s = [self.c[3].clone(), self.c[4].clone(), self.c[5].clone()];
 
         fp6_square_assign(&mut c0s);
         fp6_square_assign(&mut c1s);
@@ -30,16 +29,22 @@ impl Fp12 {
 
         fp6_invert_assign(&mut c0s);
         let mut t0 = c0s.clone();
-        let mut t1 = c0s.clone();
-        fp6_mul_assign(&mut t0, &[c0, c2, c4]);
-        fp6_mul_assign(&mut t1, &[c1, c3, c5]);
+        let mut t1 = c0s;
+        fp6_mul_assign(
+            &mut t0,
+            &[self.c[0].clone(), self.c[1].clone(), self.c[2].clone()],
+        );
+        fp6_mul_assign(
+            &mut t1,
+            &[self.c[3].clone(), self.c[4].clone(), self.c[5].clone()],
+        );
         fp6_neg_assign(&mut t1);
         Fp12::new([
             t0[0].clone(),
-            t1[0].clone(),
             t0[1].clone(),
-            t1[1].clone(),
             t0[2].clone(),
+            t1[0].clone(),
+            t1[1].clone(),
             t1[2].clone(),
         ])
     }
