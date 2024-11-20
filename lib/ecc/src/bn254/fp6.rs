@@ -8,7 +8,7 @@ pub(crate) fn fp6_invert_assign(c: &mut [Fp2; 3]) {
     c0 *= &Bn254::XI;
     // fp2_mul_by_nonresidue_assign(&mut c0);
     c0 *= &c[1];
-    c0 = -c0;
+    c0.neg_assign();
     {
         let mut c0s = c[0].clone();
         c0s.square_assign();
@@ -44,9 +44,9 @@ pub(crate) fn fp6_invert_assign(c: &mut [Fp2; 3]) {
 
     fp2_invert_assign(&mut tmp1);
     let mut tmp = [tmp1.clone(), tmp1.clone(), tmp1.clone()];
-    tmp[0] *= &c[0];
-    tmp[1] *= &c[1];
-    tmp[2] *= &c[2];
+    tmp[0] *= &c0;
+    tmp[1] *= &c1;
+    tmp[2] *= &c2;
 
     *c = tmp;
 }
