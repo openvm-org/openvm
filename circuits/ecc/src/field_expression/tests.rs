@@ -31,6 +31,7 @@ fn test_add() {
     let x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
+    builder.borrow_mut().new_flag();
     let builder = builder.borrow().clone();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
@@ -42,7 +43,7 @@ fn test_add() {
     let inputs = vec![x, y];
 
     let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
+    expr.generate_subrow((&range_checker, inputs, vec![true]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
