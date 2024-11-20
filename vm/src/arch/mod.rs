@@ -4,8 +4,10 @@ mod chips;
 mod execution;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
+/// Traits and builders to compose collections of chips into a virtual machine.
+mod new_chipset;
 /// Definitions of ProcessedInstruction types for use in integration API
-mod processed_instructions;
+mod processed_instructions; // rename to chipset once stable. Note: chipset is one word.
 
 mod chip_set;
 mod config;
