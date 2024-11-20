@@ -13,7 +13,7 @@ use eyre::Result;
 use p3_baby_bear::BabyBear;
 use test_case::test_case;
 
-use crate::{elf::Elf, rrs::transpile, AxVmExe};
+use crate::{elf::Elf, transpiler::Transpiler, AxVmExe};
 
 type F = BabyBear;
 
@@ -47,7 +47,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let program = transpile::<BabyBear>(&elf.instructions);
+    let program = Transpiler::<BabyBear>::default_with_intrinsics().transpile(&elf.instructions);
     for instruction in program {
         println!("{:?}", instruction);
     }
