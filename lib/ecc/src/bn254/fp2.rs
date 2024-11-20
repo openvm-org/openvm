@@ -47,26 +47,26 @@ impl FieldExtension<Fp> for Fp2 {
     }
 }
 
-// pub(crate) fn fp2_mul_by_nonresidue_assign(x: &mut Fp2) {
-//     // (xu+y)(u+9) = (9x+y)u+(9y-x)
-//     let t0 = x.c0.clone();
-//     let t1 = x.c1.clone();
+pub(crate) fn fp2_mul_by_nonresidue_assign(x: &mut Fp2) {
+    // (xu+y)(u+9) = (9x+y)u+(9y-x)
+    let t0 = x.c0.clone();
+    let t1 = x.c1.clone();
 
-//     // 8*x*i + 8*y
-//     x.double_assign();
-//     x.double_assign();
-//     x.double_assign();
+    // 8*x*i + 8*y
+    x.double_assign();
+    x.double_assign();
+    x.double_assign();
 
-//     // 9x + y
-//     x.c0 += &t0;
-//     // (9&y - x)
-//     x.c1 -= &t1;
+    // 9x + y
+    x.c0 += &t0;
+    // (9&y - x)
+    x.c1 -= &t1;
 
-//     // (9*x)u
-//     x.c1 += &t1;
-//     // (9*x + y)
-//     x.c1 += &t0;
-// }
+    // (9*x)u
+    x.c1 += &t1;
+    // (9*x + y)
+    x.c1 += &t0;
+}
 
 pub(crate) fn fp2_invert_assign(x: &mut Fp2) {
     let mut t1 = x.c1.clone();
