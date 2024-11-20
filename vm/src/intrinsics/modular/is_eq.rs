@@ -211,7 +211,7 @@ where
 
         let expected_opcode = AB::Expr::from_canonical_usize(self.offset)
             + cols.is_setup
-                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP as usize)
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
             + (AB::Expr::ONE - cols.is_setup)
                 * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
@@ -292,8 +292,8 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.air.modulus_limbs);
         let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.air.modulus_limbs);
-        let is_setup =
-            instruction.opcode - self.air.offset == Rv32ModularArithmeticOpcode::SETUP as usize;
+        let is_setup = instruction.opcode - self.air.offset
+            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
         if !is_setup {
             assert!(b_cmp, "{:?} >= {:?}", b, self.air.modulus_limbs);

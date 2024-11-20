@@ -348,14 +348,20 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Instruct
                     let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS) as usize
                         * Rv32ModularArithmeticOpcode::COUNT;
                     if base_funct7 == ModArithBaseFunct7::SetupMod as u8 {
+                        let local_opcode = match dec_insn.rs2 {
+                            0 => Rv32ModularArithmeticOpcode::SETUP_ADDSUB,
+                            1 => Rv32ModularArithmeticOpcode::SETUP_MULDIV,
+                            2 => Rv32ModularArithmeticOpcode::SETUP_ISEQ,
+                            _ => panic!("invalid opcode"),
+                        };
                         Some(Instruction::new(
-                            Rv32ModularArithmeticOpcode::SETUP.with_default_offset() + mod_idx_shift,
+                            local_opcode.with_default_offset() + mod_idx_shift,
                             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                             F::ZERO, // rs2 = 0
                             F::ONE,  // d_as = 1
                             F::TWO,  // e_as = 2
-                            F::from_canonical_usize(dec_insn.rs2), // this is treated as immediate
+                            F::ZERO,
                             F::ZERO,
                         ))
                     } else {

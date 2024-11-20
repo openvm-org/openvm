@@ -331,7 +331,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
             &mut tester,
             vec![modulus_limbs],
             vec![[F::ZERO; TOTAL_LIMBS]],
-            opcode_offset + Rv32ModularArithmeticOpcode::SETUP as usize,
+            opcode_offset + Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize,
         );
         tester.execute(&mut chip, setup_instruction);
     }
