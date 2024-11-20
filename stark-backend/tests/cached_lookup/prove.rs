@@ -5,7 +5,7 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig},
     keygen::types::MultiStarkVerifyingKey,
     prover::types::{Proof, ProofInput},
     utils::disable_debug_builder,
@@ -22,7 +22,6 @@ use ax_stark_sdk::{
     },
     engine::StarkEngine,
 };
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 

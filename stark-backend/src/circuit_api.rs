@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use p3_uni_stark::StarkGenericConfig;
 
 use crate::{
+    config::StarkGenericConfig,
     prover::types::{Proof, ProofInput},
     verifier::VerificationError,
 };

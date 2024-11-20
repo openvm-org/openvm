@@ -10,12 +10,11 @@ use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
     air_builders::debug::check_constraints::{check_constraints, check_logup},
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
         metrics::trace_metrics,

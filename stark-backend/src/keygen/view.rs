@@ -1,9 +1,8 @@
 use itertools::Itertools;
 use p3_challenger::FieldChallenger;
-use p3_uni_stark::StarkGenericConfig;
 
 use crate::{
-    config::Com,
+    config::{Com, StarkGenericConfig},
     keygen::types::{
         MultiStarkProvingKey, MultiStarkVerifyingKey, StarkProvingKey, StarkVerifyingKey,
     },

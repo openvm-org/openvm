@@ -2,14 +2,13 @@ use itertools::{izip, Itertools};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{Domain, PackedChallenge, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use self::single::compute_single_rap_quotient_values;
 use super::trace::SingleRapCommittedTraceView;
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
-    config::{Com, PcsProverData},
+    config::{Com, Domain, PackedChallenge, PcsProverData, StarkGenericConfig, Val},
     rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 

@@ -5,12 +5,11 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::symbolic::SymbolicConstraints,
-    config::{Com, PcsProverData},
+    config::{Com, PcsProverData, StarkGenericConfig, Val},
 };
 
 /// Widths of different parts of trace matrix

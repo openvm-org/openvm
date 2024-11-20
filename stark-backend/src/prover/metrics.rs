@@ -2,10 +2,12 @@ use std::fmt::Display;
 
 use itertools::Itertools;
 use p3_field::AbstractExtensionField;
-use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
-use crate::keygen::types::{StarkProvingKey, TraceWidth};
+use crate::{
+    config::{StarkGenericConfig, Val},
+    keygen::types::{StarkProvingKey, TraceWidth},
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceMetrics {

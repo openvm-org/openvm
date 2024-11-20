@@ -1,6 +1,7 @@
 use std::any::type_name;
 
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
+use ax_stark_backend::config::StarkConfig;
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
@@ -9,7 +10,6 @@ use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::ExternalLayerConstants;
 use p3_symmetric::{CryptographicPermutation, PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::StarkConfig;
 use rand::{rngs::StdRng, SeedableRng};
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,

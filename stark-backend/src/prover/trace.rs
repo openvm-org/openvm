@@ -10,13 +10,12 @@ use p3_matrix::{
     Matrix,
 };
 use p3_maybe_rayon::prelude::*;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
     commit::CommittedSingleMatrixView,
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     interaction::trace::generate_permutation_trace,
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
     prover::quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},

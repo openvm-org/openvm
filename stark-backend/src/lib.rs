@@ -7,7 +7,6 @@ pub use p3_commit;
 pub use p3_field;
 pub use p3_matrix;
 pub use p3_maybe_rayon;
-pub use p3_uni_stark;
 pub use p3_util;
 
 /// AIR builders for prover and verifier, including support for cross-matrix permutation arguments.

@@ -1,10 +1,9 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use ax_stark_backend::prover::types::AirProofInput;
+use ax_stark_backend::{config::StarkGenericConfig, prover::types::AirProofInput};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use p3_matrix::Matrix;
-use p3_uni_stark::StarkGenericConfig;
 use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},

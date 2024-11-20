@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 
 use crate::{
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,

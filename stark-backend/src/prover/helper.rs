@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use itertools::izip;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
+    config::{StarkGenericConfig, Val},
     prover::types::{AirProofInput, AirProofRawInput},
     rap::AnyRap,
 };

@@ -1,5 +1,5 @@
 use ax_stark_backend::{
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig},
     engine::VerificationData,
     verifier::VerificationError,
 };
@@ -15,7 +15,6 @@ use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 use crate::hints::InnerVal;
 
