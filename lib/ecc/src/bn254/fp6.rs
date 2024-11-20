@@ -61,7 +61,7 @@ pub(crate) fn fp6_sub_assign(a: &mut [Fp2; 3], b: &[Fp2; 3]) {
     }
 }
 
-/// Squares 3 elements of a sextic extension field, which acts as a single Fp6 element, in place
+/// Squares 3 elements of `Fp2`, which represents as a single Fp6 element, in place
 pub(crate) fn fp6_square_assign(c: &mut [Fp2; 3]) {
     // s0 = a^2
     let mut s0 = c[0].clone();
