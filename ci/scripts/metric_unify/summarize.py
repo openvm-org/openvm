@@ -124,8 +124,9 @@ def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
     res += other_info
     return res
 
-def write_md_table(rows, headers, file_path='summary.md', rewrite=False):
+def write_md_table(rows, title, headers, file_path='summary.md', rewrite=False):
     with open(file_path, 'w' if rewrite else 'a') as f:
+        f.write('### ' + title + '\n')
         f.write('| ' + ' | '.join(headers) + ' |\n')
         f.write('|' + '---|' * len(headers) + '\n')
         for row in rows:
@@ -150,7 +151,7 @@ def main():
     outputs = []
     for md_file in md_files:
         outputs.append(generate_row(md_file, ["leaf_aggregation"], {}, args.gh_pages_link))
-    write_md_table(outputs, headers, rewrite=True)
+    write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
     if args.e2e_md_files is not None:
         outputs = []
@@ -158,7 +159,7 @@ def main():
         for md_file in md_files:
             outputs.append(generate_row(md_file, ["root_verifier", "leaf_verifier", "internal_verifier"], {"internal.*": "internal_verifier"}, args.gh_pages_link))
         if outputs:
-            write_md_table(outputs, e2e_headers)
+            write_md_table(outputs, "E2E Benchmarks", e2e_headers)
 
 if __name__ == '__main__':
     main()
