@@ -59,8 +59,10 @@ impl<F: PrimeField32> ChipsetBuilder<F> {
 }
 
 pub trait ChipsetConfig<F: PrimeField32> {
+    /// This is expected to be an enum to dispatch [`InstructionExecutor`]s.
     type Executor: InstructionExecutor<F>;
     /// Should implement `Chip<SC>` but we don't impose a trait bound to avoid the generic `StarkGenericConfig`.
+    /// This is expected to be an enum of chip types.
     type Chip;
 
     fn create_chipset(
