@@ -183,11 +183,9 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      # TODO[stephenh]: remove rm line after backfill
       - name: Update github pages with new bench results
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
-          git rm -f -r=false ${GH_PAGES_PATH}/*.md || true
           mkdir -p ${GH_PAGES_PATH}
           cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
