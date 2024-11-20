@@ -116,6 +116,18 @@
           "agg_log_blowup": 2
         }
       ]
+    },
+    {
+      "name": "ecrecover",
+      "working_directory": "benchmarks",
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "mimalloc",
+          "app_log_blowup": 2,
+          "agg_log_blowup": 2
+        }
+      ]
     }
   ]
 }
