@@ -46,6 +46,30 @@ impl<F: IntMod> Complex<F> {
         self.c1.neg_assign();
     }
 
+    pub fn mul_by_nonresidue(&mut self) {
+        // (xu+y)(u+9) = (9x+y)u+(9y-x)
+        let t0 = self.c0.clone();
+        let t1 = self.c1.clone();
+
+        // 8*x*i + 8*y
+        self.c0.double_assign();
+        self.c1.double_assign();
+        self.c0.double_assign();
+        self.c1.double_assign();
+        self.c0.double_assign();
+        self.c1.double_assign();
+
+        // 9*y
+        self.c0 += &t0;
+        // (9*y - x)
+        self.c0 -= &t1;
+
+        // (9*x)u
+        self.c1 += &t1;
+        // (9*x + y)
+        self.c1 += &t0;
+    }
+
     /// Implementation of AddAssign.
     #[inline(always)]
     fn add_assign_impl(&mut self, other: &Self) {
@@ -474,6 +498,10 @@ impl<F: Field + IntMod> Field for Complex<F> {
 
     const ZERO: Self = Self::ZERO;
     const ONE: Self = Self::ONE;
+
+    fn double_assign(&mut self) {
+        self.add_refs_impl(self);
+    }
 
     fn square_assign(&mut self) {
         unsafe {

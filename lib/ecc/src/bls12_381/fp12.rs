@@ -114,7 +114,7 @@ impl Mul for Fp12 {
 impl<'a> Mul<&'a Fp12> for Fp12 {
     type Output = Self;
     #[inline(always)]
-    fn mul(mut self, other: &'a Fp12) -> Fp12 {
+    fn mul(mut self, other: &'a Fp12) -> Self::Output {
         self *= other;
         self
     }

@@ -419,6 +419,10 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                     }
                                                 }
 
+                                                fn double_assign(&mut self) {
+                                                    self.add_refs_impl(self);
+                                                }
+
                                                 fn square_assign(&mut self) {
                                                     unsafe {
                                                         // SAFETY: we borrow self as &Self and as *mut Self but

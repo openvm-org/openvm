@@ -125,6 +125,9 @@ pub trait IntMod:
 
     fn neg_assign(&mut self);
 
+    /// Doubles `self` in-place.
+    fn double_assign(&mut self);
+
     /// Doubles this IntMod.
     fn double(&self) -> Self {
         let mut ret = self.clone();

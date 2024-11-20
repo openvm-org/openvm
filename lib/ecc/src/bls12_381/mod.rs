@@ -23,6 +23,10 @@ impl Field for Fp {
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;
 
+    fn double_assign(&mut self) {
+        IntMod::double_assign(self);
+    }
+
     fn square_assign(&mut self) {
         IntMod::square_assign(self);
     }
