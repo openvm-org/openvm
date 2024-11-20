@@ -90,7 +90,7 @@ jobs:
   #   secrets: inherit
 
   summarize:
-    needs: [create-matrix, benchmark]
+    needs: [create-matrix]
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
