@@ -38,11 +38,13 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
+    /// If set, the height of the trace of boundary AIR(for volatile memory) will be overridden.
+    pub boundary_air_height: Option<usize>,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 16, 64)
+        Self::new(29, 1, 29, 29, 16, 64, None)
     }
 }
 
@@ -272,7 +274,7 @@ impl VmConfig {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
-        .add_executor(ExecutorName::FriMatOpening)
+        .add_executor(ExecutorName::FriReducedOpening)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {
@@ -324,7 +326,7 @@ impl EcCurve {
 }
 
 // TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,

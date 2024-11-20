@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
-    var_range::VariableRangeCheckerChip,
 };
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -29,7 +28,7 @@ use crate::{
                 EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
             },
-            sw::{EcAddNeChip, EcDoubleChip},
+            weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
@@ -40,7 +39,7 @@ use crate::{
     },
     kernels::{
         branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip, fri::FriMatOpeningChip, jal::KernelJalChip,
+        field_extension::FieldExtensionChip, fri::FriReducedOpeningChip, jal::KernelJalChip,
         loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
@@ -92,7 +91,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
+    FriReducedOpening(Rc<RefCell<FriReducedOpeningChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
@@ -156,8 +155,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    // Lookup tables that are not executors:
-    RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors

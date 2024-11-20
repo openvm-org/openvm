@@ -112,7 +112,7 @@ pub enum AsmInstruction<F, EF> {
     Poseidon2Compress(i32, i32, i32),
 
     /// (a, b, res, len, alpha, alpha_pow)
-    FriMatOpening(i32, i32, i32, i32, i32, i32),
+    FriReducedOpening(i32, i32, i32, i32, i32, i32),
 
     /// Print a variable.
     PrintV(i32),
@@ -340,7 +340,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::CycleTrackerEnd() => {
                 write!(f, "cycle_tracker_end")
             }
-            AsmInstruction::FriMatOpening(a, b, res, len, alpha, alpha_pow) => {
+            AsmInstruction::FriReducedOpening(a, b, res, len, alpha, alpha_pow) => {
                 write!(
                     f,
                     "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",

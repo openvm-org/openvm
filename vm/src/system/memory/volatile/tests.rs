@@ -8,7 +8,7 @@ use ax_stark_sdk::{
 };
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::Rng;
 use test_log::test;
 
@@ -43,7 +43,8 @@ fn boundary_air_test() {
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let boundary_chip = VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
+    let boundary_chip =
+        VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone(), None);
 
     let mut final_memory = TimestampedEquipartition::new();
 
@@ -106,6 +107,24 @@ fn boundary_air_test() {
     );
 
     let boundary_trace = boundary_chip.generate_trace(&final_memory);
+    // test trace height override
+    {
+        let overridden_height = boundary_trace.height() * 2;
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let boundary_chip = VolatileBoundaryChip::new(
+            memory_bus,
+            2,
+            LIMB_BITS,
+            range_checker.clone(),
+            Some(overridden_height),
+        );
+        let boundary_trace = boundary_chip.generate_trace(&final_memory);
+        assert_eq!(
+            boundary_trace.height(),
+            overridden_height.next_power_of_two()
+        );
+    }
+
     let range_checker_trace = range_checker.generate_trace();
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(

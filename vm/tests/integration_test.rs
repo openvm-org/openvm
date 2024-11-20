@@ -253,9 +253,9 @@ fn test_vm_public_values() {
             engine.config.pcs(),
         ));
         let vm = SingleSegmentVmExecutor::new(vm_config);
-        let pvs = vm.execute(program, vec![]).unwrap();
+        let exe_result = vm.execute(program, vec![]).unwrap();
         assert_eq!(
-            pvs,
+            exe_result.public_values,
             vec![None, None, Some(BabyBear::from_canonical_u32(12))]
         );
         let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
@@ -307,6 +307,7 @@ fn test_vm_initial_memory() {
         pc_start: 0,
         init_memory,
         custom_op_config: Default::default(),
+        fn_bounds: Default::default(),
     };
     air_test(config, exe);
 }
@@ -317,7 +318,7 @@ fn test_vm_1_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)
@@ -687,7 +688,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
     let config = VmConfig {
         poseidon2_max_constraint_degree: 3,
         continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64),
+        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
         ..VmConfig::default()
     }
     .add_executor(ExecutorName::LoadStore)

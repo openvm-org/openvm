@@ -3,8 +3,18 @@ name = "axvm-algebra"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+description = "axVM library for algebra over rings and fields, including modular arithmetic."
 
 [dependencies]
-num-bigint-dig = { workspace = true, default-features = false }
+axvm-platform = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+halo2curves-axiom = { workspace = true, optional = true }
 
 [dev-dependencies]
+
+[features]
+default = []
+std = []
+halo2curves = ["dep:halo2curves-axiom"]

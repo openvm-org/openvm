@@ -9,8 +9,8 @@ use ax_ecc_primitives::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
 };
 use axvm_ecc::{
-    pairing::{LineMulDType, UnevaluatedLine},
-    point::AffinePoint,
+    pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
+    AffinePoint,
 };
 use axvm_ecc_constants::BN254;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
@@ -96,7 +96,7 @@ fn test_mul_013_by_013() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 10);
 
-    let r_cmp = Bn254::mul_013_by_013(line0, line1);
+    let r_cmp = Bn254::mul_013_by_013(&line0, &line1);
     let r_cmp_bigint = r_cmp
         .map(|x| [bn254_fq_to_biguint(x.c0), bn254_fq_to_biguint(x.c1)])
         .concat();
@@ -185,7 +185,7 @@ fn test_mul_by_01234() {
         .collect::<Vec<_>>();
     assert_eq!(output.len(), 12);
 
-    let r_cmp = Bn254::mul_by_01234(f, [x0, x1, x2, x3, x4]);
+    let r_cmp = Bn254::mul_by_01234(&f, &[x0, x1, x2, x3, x4]);
     let r_cmp_bigint = bn254_fq12_to_biguint_vec(r_cmp);
 
     for i in 0..12 {
@@ -260,7 +260,7 @@ fn test_evaluate_line() {
         })
         .collect();
 
-    let uneval: UnevaluatedLine<Fq, Fq2> = UnevaluatedLine {
+    let uneval: UnevaluatedLine<Fq2> = UnevaluatedLine {
         b: uneval_b,
         c: uneval_c,
     };

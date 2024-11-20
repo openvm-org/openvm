@@ -135,9 +135,9 @@ pub enum Poseidon2Opcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FriOpcode {
-    /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
-    /// for a single matrix.
-    FRI_MAT_OPENING,
+    /// In FRI pcs opening verification, the reduced opening polynomial is computed one evaluation
+    /// per column polynomial, per opening point
+    FRI_REDUCED_OPENING,
 }
 
 // =================================================================================================

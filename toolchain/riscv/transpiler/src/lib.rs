@@ -8,7 +8,7 @@ use axvm_instructions::{
 pub use axvm_platform;
 use elf::Elf;
 use p3_field::PrimeField32;
-use rrs::transpile;
+use transpiler::Transpiler;
 
 use crate::util::elf_memory_image_to_axvm_memory_image;
 
@@ -16,18 +16,23 @@ pub mod elf;
 pub mod rrs;
 pub mod util;
 
+pub mod custom_processor;
+pub mod intrinsic_processor;
+pub mod transpiler;
+
 #[cfg(test)]
 mod tests;
 
 impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     fn from(elf: Elf) -> Self {
         let program = Program::new_without_debug_infos(
-            &transpile(&elf.instructions),
+            &Transpiler::default_with_intrinsics().transpile(&elf.instructions),
             DEFAULT_PC_STEP,
             elf.pc_base,
             elf.max_num_public_values,
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
+
         Self {
             program,
             pc_start: elf.pc_start,
@@ -39,6 +44,7 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
                     },
                 },
             },
+            fn_bounds: elf.fn_bounds,
         }
     }
 }

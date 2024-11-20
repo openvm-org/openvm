@@ -10,7 +10,8 @@ ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true
 rand_core = "0.6.4"
-num = "0.4.3"
+num-bigint = { workspace = true, features = ["std"] }
+num-traits.workspace = true
 rand.workspace = true
 lazy_static.workspace = true
 group = "0.13.0"
