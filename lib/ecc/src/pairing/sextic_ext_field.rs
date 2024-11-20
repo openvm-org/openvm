@@ -3,7 +3,7 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use axvm_algebra::Field;
+use axvm_algebra::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,
@@ -27,34 +27,41 @@ impl<F> SexticExtField<F> {
     }
 }
 
-// TODO: implement these directly using F operations (no intrinsics)
 impl<'a, F: Field> AddAssign<&'a SexticExtField<F>> for SexticExtField<F> {
     #[inline(always)]
-    fn add_assign(&mut self, _other: &'a SexticExtField<F>) {
-        todo!()
+    fn add_assign(&mut self, other: &'a SexticExtField<F>) {
+        for i in 0..6 {
+            self.c[i] += &other.c[i];
+        }
     }
 }
 
 impl<'a, F: Field> Add<&'a SexticExtField<F>> for &SexticExtField<F> {
     type Output = SexticExtField<F>;
     #[inline(always)]
-    fn add(self, _other: &'a SexticExtField<F>) -> Self::Output {
-        todo!()
+    fn add(self, other: &'a SexticExtField<F>) -> Self::Output {
+        let mut res = self.clone();
+        res += other;
+        res
+    }
+}
+
+impl<'a, F: Field> SubAssign<&'a SexticExtField<F>> for SexticExtField<F> {
+    #[inline(always)]
+    fn sub_assign(&mut self, other: &'a SexticExtField<F>) {
+        for i in 0..6 {
+            self.c[i] -= &other.c[i];
+        }
     }
 }
 
 impl<'a, F: Field> Sub<&'a SexticExtField<F>> for &SexticExtField<F> {
     type Output = SexticExtField<F>;
     #[inline(always)]
-    fn sub(self, _other: &'a SexticExtField<F>) -> Self::Output {
-        todo!()
-    }
-}
-
-impl<'a, F: Field> SubAssign<&'a SexticExtField<F>> for SexticExtField<F> {
-    #[inline(always)]
-    fn sub_assign(&mut self, _other: &'a SexticExtField<F>) {
-        todo!()
+    fn sub(self, other: &'a SexticExtField<F>) -> Self::Output {
+        let mut res = self.clone();
+        res -= other;
+        res
     }
 }
 
@@ -167,13 +174,6 @@ impl<'a, F: Field> Sub<&'a SexticExtField<F>> for SexticExtField<F> {
         self
     }
 }
-
-// impl<F: Field> Neg for SexticExtField<F> {
-//     type Output = SexticExtField<F>;
-//     fn neg(self) -> Self::Output {
-//         Self::ZERO - &self
-//     }
-// }
 
 impl<F: Field> Debug for SexticExtField<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
