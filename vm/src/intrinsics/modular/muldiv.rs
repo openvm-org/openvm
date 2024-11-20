@@ -45,6 +45,7 @@ impl ModularMulDivCoreAir {
         let (z_idx, z) = builder.borrow_mut().new_var();
         let z = FieldVariable::from_var(builder.clone(), z);
         let is_mul_flag = builder.borrow_mut().new_flag();
+        let is_div_flag = builder.borrow_mut().new_flag();
         // constraint is x * y = z, or z * y = x
         let lvar = FieldVariable::select(is_mul_flag, &x, &z);
         let rvar = FieldVariable::select(is_mul_flag, &z, &x);
@@ -53,7 +54,11 @@ impl ModularMulDivCoreAir {
         let compute = SymbolicExpr::Select(
             is_mul_flag,
             Box::new(x.expr.clone() * y.expr.clone()),
-            Box::new(x.expr.clone() / y.expr.clone()),
+            Box::new(SymbolicExpr::Select(
+                is_div_flag,
+                Box::new(x.expr.clone() / y.expr.clone()),
+                Box::new(x.expr.clone()),
+            )),
         );
         builder.borrow_mut().set_compute(z_idx, compute);
 
@@ -89,7 +94,6 @@ where
 
         let FieldExprCols {
             is_valid,
-            is_setup,
             inputs,
             vars,
             flags,
@@ -97,19 +101,18 @@ where
         } = self.expr.load_vars(local);
         assert_eq!(inputs.len(), 2);
         assert_eq!(vars.len(), 1);
-        assert_eq!(flags.len(), 1);
+        assert_eq!(flags.len(), 2);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
 
         // Attention: we multiply in the setup case, hence flags[0] (is_mul_flag) does NOT imply that is_setup is false!
-        let local_opcode_idx = (flags[0] - is_setup)
+        let local_opcode_idx = flags[0]
             * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::MUL as usize)
-            + is_setup
+            + flags[1] * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::DIV as usize)
+            + (AB::Expr::ONE - flags[0] - flags[1])
                 * AB::Expr::from_canonical_usize(
                     Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
-                )
-            + (AB::Expr::ONE - flags[0])
-                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::DIV as usize);
+                );
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -146,7 +149,7 @@ pub struct ModularMulDivCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
     pub is_mul_flag: bool,
-    pub is_setup: bool,
+    pub is_div_flag: bool,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularMulDivCoreChip
@@ -186,19 +189,19 @@ where
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_mul_flag = match local_opcode {
             // for SETUP_MULDIV, we want to fictiously multiply by zero and not divide
-            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
-            Rv32ModularArithmeticOpcode::DIV => false,
+            Rv32ModularArithmeticOpcode::MUL => true,
+            Rv32ModularArithmeticOpcode::DIV | Rv32ModularArithmeticOpcode::SETUP_MULDIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
-        let is_setup = match local_opcode {
-            Rv32ModularArithmeticOpcode::SETUP_MULDIV => true,
-            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::DIV => false,
+        let is_div_flag = match local_opcode {
+            Rv32ModularArithmeticOpcode::DIV => true,
+            Rv32ModularArithmeticOpcode::MUL | Rv32ModularArithmeticOpcode::SETUP_MULDIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
         let vars = self.air.expr.execute(
             vec![x_biguint.clone(), y_biguint.clone()],
-            vec![is_mul_flag],
+            vec![is_mul_flag, is_div_flag],
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -215,7 +218,7 @@ where
                 x: x_biguint,
                 y: y_biguint,
                 is_mul_flag,
-                is_setup,
+                is_div_flag,
             },
         ))
     }
@@ -229,11 +232,10 @@ where
             (
                 &self.range_checker,
                 vec![record.x, record.y],
-                vec![record.is_mul_flag],
+                vec![record.is_mul_flag, record.is_div_flag],
             ),
             row_slice,
         );
-        row_slice[1] = F::from_bool(record.is_setup);
     }
 
     fn air(&self) -> &Self::Air {

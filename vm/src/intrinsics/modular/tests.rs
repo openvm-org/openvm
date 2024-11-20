@@ -114,10 +114,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             assert!(a < modulus);
             assert!(b < modulus);
         }
-        let expected_answer = if op == ADD_LOCAL {
-            (&a + &b) % &modulus
-        } else {
-            (&a + &modulus - &b) % &modulus
+        let expected_answer = match op - ADD_LOCAL {
+            0 => (&a + &b) % &modulus,
+            1 => (&a + &modulus - &b) % &modulus,
+            2 => a.clone(),
+            _ => panic!(),
         };
 
         // Write to memories
@@ -242,10 +243,11 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
             assert!(a < modulus);
             assert!(b < modulus);
         }
-        let expected_answer = if op != MUL_LOCAL + 1 {
-            (&a * &b) % &modulus
-        } else {
-            (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus
+        let expected_answer = match op - MUL_LOCAL {
+            0 => (&a * &b) % &modulus,
+            1 => (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus,
+            2 => a.clone(),
+            _ => panic!(),
         };
 
         // Write to memories
