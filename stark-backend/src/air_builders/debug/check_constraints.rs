@@ -9,7 +9,7 @@ use crate::{
     config::{StarkGenericConfig, Val},
     interaction::{
         debug::{generate_logical_interactions, LogicalInteractions},
-        InteractionType, SymbolicInteraction,
+        InteractionType, RapPhaseSeqKind, SymbolicInteraction,
     },
     rap::{PartitionedBaseAir, Rap},
 };
@@ -25,6 +25,7 @@ pub fn check_constraints<R, SC>(
     challenges: &[Vec<SC::Challenge>],
     public_values: &[Val<SC>],
     exposed_values_after_challenge: &[Vec<SC::Challenge>],
+    rap_phase_seq_kind: RapPhaseSeqKind,
 ) where
     R: for<'a> Rap<DebugConstraintBuilder<'a, SC>>
         + BaseAir<Val<SC>>
@@ -93,6 +94,7 @@ pub fn check_constraints<R, SC>(
             is_first_row: Val::<SC>::ZERO,
             is_last_row: Val::<SC>::ZERO,
             is_transition: Val::<SC>::ONE,
+            rap_phase_seq_kind,
             has_common_main: rap.common_main_width() > 0,
         };
         if i == 0 {

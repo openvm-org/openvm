@@ -1,6 +1,6 @@
 use std::any::type_name;
 
-use ax_stark_backend::config::StarkConfig;
+use ax_stark_backend::{config::StarkConfig, interaction::stark_log_up::StarkLogUpPhase};
 use ff::PrimeField;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, FFBn254Fr, Poseidon2Bn254};
@@ -43,8 +43,10 @@ type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 type Dft = Radix2DitParallel<Val>;
 type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH, 2>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
+type RapPhase<P> = StarkLogUpPhase<Val, Challenge, Challenger<P>>;
 
-pub type BabyBearPermutationOuterConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
+pub type BabyBearPermutationOuterConfig<P> =
+    StarkConfig<Pcs<P>, RapPhase<P>, Challenge, Challenger<P>>;
 pub type BabyBearPoseidon2OuterConfig = BabyBearPermutationOuterConfig<Perm>;
 pub type BabyBearPoseidon2OuterEngine = BabyBearPermutationOuterEngine<Perm>;
 
@@ -146,7 +148,8 @@ where
         mmcs: challenge_mmcs,
     };
     let pcs = Pcs::new(dft, val_mmcs, fri_config);
-    BabyBearPermutationOuterConfig::new(pcs)
+    let rap_phase = StarkLogUpPhase::new();
+    BabyBearPermutationOuterConfig::new(pcs, rap_phase)
 }
 
 /// The permutation for outer recursion.

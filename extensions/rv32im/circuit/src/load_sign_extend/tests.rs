@@ -234,7 +234,7 @@ fn loadstore_negative_tests() {
         None,
         None,
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_loadstore_test(
@@ -245,7 +245,7 @@ fn loadstore_negative_tests() {
         None,
         Some([202, 109, 183, 26]),
         Some(31212),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_loadstore_test(
@@ -256,7 +256,7 @@ fn loadstore_negative_tests() {
         Some([true, false, false]),
         Some([250, 132, 77, 5]),
         Some(47741),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 

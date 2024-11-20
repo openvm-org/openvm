@@ -99,12 +99,12 @@ fn negative_jal_test() {
     let tester = tester.build().load_air_proof_input(chip_input).finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     );
     let result = tester.simple_test();
     assert_eq!(
         result.err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "{}",
         msg
     );

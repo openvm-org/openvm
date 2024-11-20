@@ -1,6 +1,6 @@
 use std::any::type_name;
 
-use ax_stark_backend::config::StarkConfig;
+use ax_stark_backend::{config::StarkConfig, interaction::stark_log_up::StarkLogUpPhase};
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
@@ -41,8 +41,10 @@ type ChallengeMmcs<P> = ExtensionMmcs<Val, Challenge, ValMmcs<P>>;
 pub type Challenger<P> = DuplexChallenger<Val, P, WIDTH, RATE>;
 type Dft = Radix2DitParallel<Val>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
+type RapPhase<P> = StarkLogUpPhase<Val, Challenge, Challenger<P>>;
 
-pub type GoldilocksPermutationConfig<P> = StarkConfig<Pcs<P>, Challenge, Challenger<P>>;
+pub type GoldilocksPermutationConfig<P> =
+    StarkConfig<Pcs<P>, RapPhase<P>, Challenge, Challenger<P>>;
 pub type GoldilocksPoseidonConfig = GoldilocksPermutationConfig<Perm>;
 pub type GoldilocksPoseidonEngine = GoldilocksPermutationEngine<Perm>;
 
@@ -150,7 +152,8 @@ where
         mmcs: challenge_mmcs,
     };
     let pcs = Pcs::new(dft, val_mmcs, fri_config);
-    GoldilocksPermutationConfig::new(pcs)
+    let rap_phase = RapPhase::new();
+    GoldilocksPermutationConfig::new(pcs, rap_phase)
 }
 
 pub fn random_perm() -> Perm {

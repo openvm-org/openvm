@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 pub use super::trace::{ProverTraceData, TraceCommitter};
 use crate::{
-    config::{Com, StarkGenericConfig, Val},
+    config::{Com, RapPhaseSeqPartialProof, StarkGenericConfig, Val},
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     prover::opener::OpeningProof,
     rap::AnyRap,
@@ -48,6 +48,8 @@ pub struct Proof<SC: StarkGenericConfig> {
     pub opening: OpeningProof<SC>,
     /// Proof data for each AIR
     pub per_air: Vec<AirProofData<SC>>,
+    /// Partial proof for rap phase if it exists
+    pub rap_phase_seq_proof: Option<RapPhaseSeqPartialProof<SC>>,
 }
 
 #[derive(Serialize, Deserialize, Derivative)]

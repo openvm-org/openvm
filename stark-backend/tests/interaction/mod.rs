@@ -125,7 +125,7 @@ fn test_interaction_stark_multi_rows_neg() {
         any_rap_arc_vec![sender_air, receiver_air],
         vec![vec![], vec![]],
     );
-    assert_eq!(res, Err(VerificationError::NonZeroCumulativeSum));
+    assert_eq!(res, Err(VerificationError::ChallengePhaseError));
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn test_interaction_stark_multi_senders_neg() {
         any_rap_arc_vec![sender_air, sender_air, receiver_air],
         vec![vec![]; 3],
     );
-    assert_eq!(res, Err(VerificationError::NonZeroCumulativeSum));
+    assert_eq!(res, Err(VerificationError::ChallengePhaseError));
 }
 
 #[test]

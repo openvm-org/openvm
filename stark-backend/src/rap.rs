@@ -64,7 +64,7 @@ pub trait PermutationAirBuilderWithExposedValues: PermutationAirBuilder {
 /// RAP trait for all-purpose dynamic dispatch use.
 /// This trait is auto-implemented if you implement `Air` and `BaseAirWithPublicValues` and `PartitionedBaseAir` traits.
 pub trait AnyRap<SC: StarkGenericConfig>:
-    Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
+Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
     + for<'a> Rap<DebugConstraintBuilder<'a, SC>> // for debugging
     + BaseAirWithPublicValues<Val<SC>>

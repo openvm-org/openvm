@@ -138,7 +138,7 @@ fn negative_test_xor_limbs_chip() {
     );
     assert_eq!(
         result.err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it passed"
     );
 }

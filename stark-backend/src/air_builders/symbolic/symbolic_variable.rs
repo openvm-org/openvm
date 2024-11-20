@@ -56,7 +56,7 @@ impl Entry {
 
 /// A variable within the evaluation window, i.e. a column in either the local or next row.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct SymbolicVariable<F: Field> {
+pub struct SymbolicVariable<F> {
     pub entry: Entry,
     pub index: usize,
     pub(crate) _phantom: PhantomData<F>,

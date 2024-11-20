@@ -129,7 +129,7 @@ fn negative_test_variable_range_checker_chip_send() {
     });
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );
 }
@@ -240,7 +240,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
     });
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );
 }

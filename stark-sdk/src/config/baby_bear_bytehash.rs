@@ -1,4 +1,4 @@
-use ax_stark_backend::config::StarkConfig;
+use ax_stark_backend::{config::StarkConfig, interaction::stark_log_up::StarkLogUpPhase};
 use p3_baby_bear::BabyBear;
 use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_commit::ExtensionMmcs;
@@ -26,7 +26,9 @@ type Challenger<H> = SerializingChallenger32<Val, HashChallenger<u8, H, 32>>;
 
 type Pcs<H> = TwoAdicFriPcs<Val, Dft, ValMmcs<H>, ChallengeMmcs<H>>;
 
-pub type BabyBearByteHashConfig<H> = StarkConfig<Pcs<H>, Challenge, Challenger<H>>;
+type RapPhase<H> = StarkLogUpPhase<Val, Challenge, Challenger<H>>;
+
+pub type BabyBearByteHashConfig<H> = StarkConfig<Pcs<H>, RapPhase<H>, Challenge, Challenger<H>>;
 
 pub struct BabyBearByteHashEngine<H>
 where
@@ -93,7 +95,8 @@ where
         mmcs: challenge_mmcs,
     };
     let pcs = Pcs::new(dft, val_mmcs, fri_config);
-    BabyBearByteHashConfig::new(pcs)
+    let rap_phase = StarkLogUpPhase::new();
+    BabyBearByteHashConfig::new(pcs, rap_phase)
 }
 
 pub trait BabyBearByteHashEngineWithDefaultHash<H>

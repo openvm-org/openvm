@@ -39,7 +39,7 @@ fn instrumented_verify<SC: StarkGenericConfig, E: StarkEngineWithHashInstrumenta
     let verifier = engine.verifier();
     // Do not check cumulative sum
     let res = verifier.verify(&mut challenger, &vk, &proof);
-    if matches!(res, Err(ref err) if err != &VerificationError::NonZeroCumulativeSum) {
+    if matches!(res, Err(ref err) if err != &VerificationError::ChallengePhaseError) {
         panic!("{res:?}");
     };
 

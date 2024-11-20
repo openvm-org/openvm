@@ -118,7 +118,7 @@ fn test_interaction_cached_trace_neg() {
         *debug.lock().unwrap() = false;
     });
     assert_eq!(
-        prove_and_verify_indexless_lookups(sender, receiver),
-        Err(VerificationError::NonZeroCumulativeSum)
+        prove_and_verify_indexless_lookups(sender, receiver).err(),
+        Some(VerificationError::ChallengePhaseError)
     );
 }

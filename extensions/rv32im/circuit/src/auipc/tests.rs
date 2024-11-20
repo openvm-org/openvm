@@ -200,7 +200,7 @@ fn invalid_limb_negative_tests() {
         Some([197, 202, 49, 70]),
         Some([166, 243, 17]),
         Some([36, 62, 52]),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 
@@ -231,7 +231,7 @@ fn overflow_negative_tests() {
         None,
         Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -240,7 +240,7 @@ fn overflow_negative_tests() {
         Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
         Some([0, 0, 0]),
         Some([1, 0, 0]),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 

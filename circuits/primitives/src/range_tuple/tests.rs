@@ -114,7 +114,7 @@ fn test_range_tuple_chip() {
 //             vec![range_trace]
 //         )
 //         .err(),
-//         Some(VerificationError::NonZeroCumulativeSum),
+//         Some(VerificationError::ChallengePhaseError),
 //         "Expected constraint to fail"
 //     );
 // }

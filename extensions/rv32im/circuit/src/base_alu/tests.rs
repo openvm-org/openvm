@@ -176,7 +176,7 @@ fn run_rv32_alu_negative_test(
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     } else {
         VerificationError::OodEvaluationMismatch
     });

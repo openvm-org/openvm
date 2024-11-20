@@ -1,7 +1,6 @@
 use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
-use p3_field::{AbstractExtensionField, AbstractField};
 use tracing::instrument;
 
 use crate::{
@@ -15,6 +14,8 @@ pub mod constraints;
 mod error;
 
 pub use error::*;
+
+use crate::interaction::RapPhaseSeq;
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {
@@ -35,35 +36,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         proof: &Proof<SC>,
     ) -> Result<(), VerificationError> {
         let mvk = mvk.view(&proof.get_air_ids());
-        let cumulative_sums = proof
-            .per_air
-            .iter()
-            .map(|p| {
-                assert!(
-                    p.exposed_values_after_challenge.len() <= 1,
-                    "Verifier does not support more than 1 challenge phase"
-                );
-                p.exposed_values_after_challenge.first().map(|values| {
-                    assert_eq!(
-                        values.len(),
-                        1,
-                        "Only exposed value should be cumulative sum"
-                    );
-                    values[0]
-                })
-            })
-            .collect_vec();
-
         self.verify_raps(challenger, &mvk, proof)?;
-
-        // Check cumulative sum
-        let sum: SC::Challenge = cumulative_sums
-            .into_iter()
-            .map(|c| c.unwrap_or(SC::Challenge::ZERO))
-            .sum();
-        if sum != SC::Challenge::ZERO {
-            return Err(VerificationError::NonZeroCumulativeSum);
-        }
         Ok(())
     }
 
@@ -94,32 +67,44 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
         // Observe main trace commitments
         challenger.observe_slice(&proof.commitments.main_trace);
 
-        let mut challenges = Vec::new();
-        for (phase_idx, (&num_to_sample, commit)) in mvk
-            .num_challenges_per_phase()
+        // Verification of challenge phase (except openings, which are done next).
+        let rap_phase = self.config.rap_phase_seq();
+        let exposed_values_per_air_per_phase = proof
+            .per_air
             .iter()
-            .zip_eq(&proof.commitments.after_challenge)
-            .enumerate()
-        {
-            // Sample challenges needed in this phase
-            challenges.push(
-                (0..num_to_sample)
-                    .map(|_| challenger.sample_ext_element::<SC::Challenge>())
-                    .collect_vec(),
-            );
-            // For each RAP, the exposed values in current phase
-            for air_proof in &proof.per_air {
-                let exposed_values = air_proof.exposed_values_after_challenge.get(phase_idx);
-                if let Some(values) = exposed_values {
-                    // Observe exposed values (in ext field)
-                    for value in values {
-                        challenger.observe_slice(value.as_base_slice());
-                    }
-                }
-            }
-            // Observe single commitment to all trace matrices in this phase
-            challenger.observe(commit.clone());
-        }
+            .map(|proof| proof.exposed_values_after_challenge.clone())
+            .collect_vec();
+        let permutation_opened_values = proof
+            .opening
+            .values
+            .after_challenge
+            .iter()
+            .map(|after_challenge_per_matrix| {
+                after_challenge_per_matrix
+                    .iter()
+                    .map(|after_challenge| {
+                        vec![after_challenge.local.clone(), after_challenge.next.clone()]
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        assert!(
+            proof.commitments.after_challenge.len() <= 1,
+            "at most one challenge phase currently supported"
+        );
+
+        let (after_challenge_data, rap_phase_seq_result) = rap_phase.partially_verify(
+            challenger,
+            proof.rap_phase_seq_proof.as_ref(),
+            &exposed_values_per_air_per_phase,
+            &proof.commitments.after_challenge,
+            &permutation_opened_values,
+        );
+        // We don't want to bail on error yet; `OodEvaluationMismatch` should take precedence over
+        // `ChallengePhaseError`, but we won't know if the former happens until later.
+        let rap_phase_seq_result =
+            rap_phase_seq_result.map_err(|_| VerificationError::ChallengePhaseError);
 
         // Draw `alpha` challenge
         let alpha: SC::Challenge = challenger.sample_ext_element();
@@ -199,13 +184,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 .per_air
                 .iter()
                 .zip_eq(&domains)
-                .filter_map(|(vk, domain)| {
-                    if vk.has_common_main() {
-                        Some(*domain)
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|(vk, domain)| vk.has_common_main().then_some(*domain))
                 .zip_eq(values_per_mat)
                 .map(|(domain, values)| trace_domain_and_openings(domain, zeta, values))
                 .collect_vec();
@@ -218,13 +197,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
             .per_air
             .iter()
             .zip_eq(&domains)
-            .filter_map(|(vk, domain)| {
-                if vk.has_interaction() {
-                    Some(*domain)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(vk, domain)| vk.has_interaction().then_some(*domain))
             .collect_vec();
         if after_challenge_domain_per_air.is_empty() {
             assert_eq!(proof.commitments.after_challenge.len(), 0);
@@ -309,12 +282,13 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
                 &qc_domains,
                 zeta,
                 alpha,
-                &challenges,
+                &after_challenge_data.challenges_per_phase,
                 &air_proof.public_values,
                 &air_proof.exposed_values_after_challenge,
             )?;
         }
 
-        Ok(())
+        // If we made it this far, use the `rap_phase_result` as the final result.
+        rap_phase_seq_result
     }
 }

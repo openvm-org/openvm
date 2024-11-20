@@ -194,7 +194,7 @@ fn negative_hintstore_tests() {
     run_negative_hintstore_test(
         HINT_STOREW,
         Some([92, 187, 45, 280]),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 ///////////////////////////////////////////////////////////////////////////////////////

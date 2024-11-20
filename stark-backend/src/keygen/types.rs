@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::symbolic::SymbolicConstraints,
-    config::{Com, PcsProverData, StarkGenericConfig, Val},
+    config::{Com, PcsProverData, RapPhaseSeqProvingKey, StarkGenericConfig, Val},
+    interaction::RapPhaseSeqKind,
 };
 
 /// Widths of different parts of trace matrix
@@ -63,6 +64,7 @@ pub struct StarkVerifyingKey<SC: StarkGenericConfig> {
     /// The factor to multiple the trace degree by to get the degree of the quotient polynomial. Determined from the max constraint degree of the AIR constraints.
     /// This is equivalently the number of chunks the quotient polynomial is split into.
     pub quotient_degree: usize,
+    pub rap_phase_seq_kind: RapPhaseSeqKind,
 }
 
 /// Common verifying key for multiple AIRs.
@@ -93,8 +95,7 @@ pub struct StarkProvingKey<SC: StarkGenericConfig> {
     pub vk: StarkVerifyingKey<SC>,
     /// Prover only data for preprocessed trace
     pub preprocessed_data: Option<ProverOnlySinglePreprocessedData<SC>>,
-    /// Number of interactions to bundle in permutation trace
-    pub interaction_chunk_size: usize,
+    pub rap_phase_seq_pk: RapPhaseSeqProvingKey<SC>,
 }
 
 /// Common proving key for multiple AIRs.

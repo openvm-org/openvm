@@ -15,15 +15,13 @@ use tracing::instrument;
 use crate::{
     air_builders::debug::check_constraints::{check_constraints, check_logup},
     config::{Domain, StarkGenericConfig, Val},
+    interaction::RapPhaseSeqKind,
     keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
         metrics::trace_metrics,
         opener::OpeningProver,
         quotient::ProverQuotientData,
-        trace::{
-            commit_quotient_traces, generate_permutation_traces_and_exposed_values,
-            ProverTraceData, TraceCommitter,
-        },
+        trace::{commit_quotient_traces, ProverTraceData, TraceCommitter},
         types::{AirProofData, Commitments, Proof, ProofInput},
     },
     rap::AnyRap,
@@ -39,6 +37,10 @@ pub mod quotient;
 /// Trace commitment computation
 mod trace;
 pub mod types;
+
+pub use trace::PairTraceView;
+
+use crate::{config::RapPhaseSeqPartialProof, interaction::RapPhaseSeq};
 
 thread_local! {
    pub static USE_DEBUG_BUILDER: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
@@ -79,8 +81,9 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
     ) -> Proof<SC> {
         assert!(mpk.validate(&proof_input), "Invalid proof input");
         let pcs = self.config.pcs();
+        let rap_phase_seq = self.config.rap_phase_seq();
 
-        let (air_ids, air_inputs): (Vec<_>, Vec<_>) = multiunzip(proof_input.per_air.into_iter());
+        let (air_ids, air_inputs): (Vec<_>, Vec<_>) = proof_input.per_air.into_iter().unzip();
         let (
             airs,
             cached_mains_pdata_per_air,
@@ -154,14 +157,58 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .map(|&degree| pcs.natural_domain_for_degree(degree))
             .collect();
 
-        // TODO[zach]: Use trait for this.
-        let (challenges, exposed_values_after_challenge, perm_trace_per_air) =
-            generate_permutation_traces_and_exposed_values(
-                &mpk,
+        let preprocessed_trace_per_air = mpk
+            .per_air
+            .iter()
+            .map(|pk| pk.preprocessed_data.as_ref().map(|d| d.trace.as_view()))
+            .collect_vec();
+        let trace_view_per_air = izip!(
+            preprocessed_trace_per_air.iter(),
+            main_views_per_air.iter(),
+            pvs_per_air.iter()
+        )
+        .map(|(preprocessed, main, pvs)| PairTraceView {
+            preprocessed,
+            partitioned_main: main,
+            public_values: pvs,
+        })
+        .collect_vec();
+
+        let (constraints_per_air, rap_pk_per_air): (Vec<_>, Vec<_>) = mpk
+            .per_air
+            .iter()
+            .map(|pk| (&pk.vk.symbolic_constraints, pk.rap_phase_seq_pk.clone()))
+            .unzip();
+
+        let (rap_phase_seq_proof, rap_phase_seq_data) = rap_phase_seq
+            .partially_prove(
                 challenger,
-                &main_views_per_air,
-                &pvs_per_air,
-            );
+                &rap_pk_per_air,
+                &constraints_per_air,
+                &trace_view_per_air,
+            )
+            .map_or((None, None), |(p, d)| (Some(p), Some(d)));
+
+        let (perm_trace_per_air, exposed_values_after_challenge, challenges) =
+            if let Some(phase_data) = rap_phase_seq_data {
+                assert_eq!(mpk.vk_view().num_phases(), 1);
+                assert_eq!(
+                    mpk.vk_view().num_challenges_in_phase(0),
+                    phase_data.challenges.len()
+                );
+                (
+                    phase_data.after_challenge_trace_per_air,
+                    phase_data
+                        .exposed_values_per_air
+                        .into_iter()
+                        .map(|v| v.into_iter().collect_vec())
+                        .collect(),
+                    vec![phase_data.challenges],
+                )
+            } else {
+                assert_eq!(mpk.vk_view().num_phases(), 0);
+                (vec![None; num_air], vec![vec![]; num_air], vec![])
+            };
 
         #[cfg(debug_assertions)]
         debug_constraints_and_interactions(
@@ -172,6 +219,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             &perm_trace_per_air,
             &exposed_values_after_challenge,
             &challenges,
+            SC::RapPhaseSeq::ID,
         );
 
         // Commit to permutation traces: this means only 1 challenge round right now
@@ -216,6 +264,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             quotient_data,
             domain_per_air,
             pvs_per_air,
+            rap_phase_seq_proof,
         )
     }
 }
@@ -243,6 +292,7 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
     quotient_data: ProverQuotientData<SC>,
     domain_per_air: Vec<Domain<SC>>,
     public_values_per_air: Vec<Vec<Val<SC>>>,
+    rap_phase_seq_proof: Option<RapPhaseSeqPartialProof<SC>>,
 ) -> Proof<SC> {
     // Observe quotient commitment
     challenger.observe(quotient_data.commit.clone());
@@ -352,6 +402,7 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
             },
         )
         .collect(),
+        rap_phase_seq_proof,
     }
 }
 
@@ -378,6 +429,7 @@ fn commit_perm_traces<SC: StarkGenericConfig>(
 }
 
 #[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     raps: &[Arc<dyn AnyRap<SC>>],
     mpk: &MultiStarkProvingKeyView<SC>,
@@ -386,6 +438,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     perm_trace_per_air: &[Option<RowMajorMatrix<SC::Challenge>>],
     exposed_values_after_challenge: &[Vec<Vec<SC::Challenge>>],
     challenges: &[Vec<SC::Challenge>],
+    rap_phase_seq_kind: RapPhaseSeqKind,
 ) {
     USE_DEBUG_BUILDER.with(|debug| {
         if *debug.lock().unwrap() {
@@ -413,6 +466,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                         challenges,
                         public_values,
                         exposed_values_after_challenge,
+                        rap_phase_seq_kind,
                     );
                     preprocessed_trace
                 },

@@ -11,6 +11,6 @@ pub enum VerificationError {
     /// `quotient(zeta) Z_H(zeta)`.
     #[error("out-of-domain evaluation mismatch")]
     OodEvaluationMismatch,
-    #[error("non-zero cumulative sum")]
-    NonZeroCumulativeSum,
+    #[error("challenge phase error")]
+    ChallengePhaseError,
 }

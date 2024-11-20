@@ -14,7 +14,10 @@ use super::{
 };
 use crate::{
     config::{PackedChallenge, PackedVal, StarkGenericConfig, Val},
-    interaction::{Interaction, InteractionBuilder, InteractionType},
+    interaction::{
+        rap::InteractionPhaseAirBuilder, Interaction, InteractionBuilder, InteractionType,
+        RapPhaseSeqKind,
+    },
     rap::PermutationAirBuilderWithExposedValues,
 };
 
@@ -33,8 +36,9 @@ pub struct ProverConstraintFolder<'a, SC: StarkGenericConfig> {
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
     pub interactions: Vec<Interaction<PackedVal<SC>>>,
-    /// Number of interactions to bundle in permutation trace
+    /// Number of interactions to bundle in permutation trace, if applicable.
     pub interaction_chunk_size: usize,
+    pub rap_phase_seq_kind: RapPhaseSeqKind,
     pub has_common_main: bool,
 }
 
@@ -196,12 +200,6 @@ where
     fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
         &self.interactions
     }
-
-    fn finalize_interactions(&mut self) {}
-
-    fn interaction_chunk_size(&self) -> usize {
-        self.interaction_chunk_size
-    }
 }
 
 impl<SC> SymbolicEvaluator<Val<SC>, PackedVal<SC>> for ProverConstraintFolder<'_, SC>
@@ -218,5 +216,17 @@ where
             Entry::Public => self.public_values[index].into(),
             _ => panic!("After challenge evaluation not allowed"),
         }
+    }
+}
+
+impl<SC: StarkGenericConfig> InteractionPhaseAirBuilder for ProverConstraintFolder<'_, SC> {
+    fn finalize_interactions(&mut self) {}
+
+    fn interaction_chunk_size(&self) -> usize {
+        self.interaction_chunk_size
+    }
+
+    fn rap_phase_seq_kind(&self) -> RapPhaseSeqKind {
+        self.rap_phase_seq_kind
     }
 }

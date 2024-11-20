@@ -253,7 +253,7 @@ fn overflow_negative_tests() {
         None,
         None,
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_jalr_test(
@@ -269,7 +269,7 @@ fn overflow_negative_tests() {
             1,
         ]),
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 ///////////////////////////////////////////////////////////////////////////////////////

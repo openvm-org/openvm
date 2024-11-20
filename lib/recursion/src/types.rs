@@ -49,6 +49,7 @@ where
         params,
         quotient_degree,
         symbolic_constraints,
+        rap_phase_seq_kind: _,
     } = vk;
     StarkVerificationAdvice {
         preprocessed_data: preprocessed_data.map(|data| VerifierSinglePreprocessedDataInProgram {

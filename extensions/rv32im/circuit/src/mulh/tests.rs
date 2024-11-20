@@ -206,7 +206,7 @@ fn run_rv32_mulh_negative_test(
         .load(range_tuple_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     } else {
         VerificationError::OodEvaluationMismatch
     });

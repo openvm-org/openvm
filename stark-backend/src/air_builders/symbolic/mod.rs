@@ -17,8 +17,8 @@ use self::{
 use super::PartitionedAirBuilder;
 use crate::{
     interaction::{
-        Interaction, InteractionBuilder, InteractionType, NUM_PERM_CHALLENGES,
-        NUM_PERM_EXPOSED_VALUES,
+        rap::InteractionPhaseAirBuilder, Interaction, InteractionBuilder, InteractionType,
+        RapPhaseSeqKind, SymbolicInteraction,
     },
     keygen::types::{StarkVerifyingParams, TraceWidth},
     rap::{BaseAirWithPublicValues, PermutationAirBuilderWithExposedValues, Rap},
@@ -31,7 +31,7 @@ pub mod symbolic_variable;
 /// The constraints contain the constraints on the logup partial sums.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub struct SymbolicConstraints<F: Field> {
+pub struct SymbolicConstraints<F> {
     /// All constraints of the RAP, including the constraints on the logup partial sums.
     pub constraints: Vec<SymbolicExpression<F>>,
     /// Only for debug purposes. `constraints` also contains the constraints on the logup partial sums.
@@ -86,6 +86,7 @@ pub fn get_symbolic_builder<F, R>(
     width: &TraceWidth,
     num_challenges_to_sample: &[usize],
     num_exposed_values_after_challenge: &[usize],
+    rap_phase_seq_kind: RapPhaseSeqKind,
     interaction_chunk_size: usize,
 ) -> SymbolicRapBuilder<F>
 where
@@ -97,6 +98,7 @@ where
         rap.num_public_values(),
         num_challenges_to_sample,
         num_exposed_values_after_challenge,
+        rap_phase_seq_kind,
         interaction_chunk_size,
     );
     Rap::eval(rap, &mut builder);
@@ -105,7 +107,7 @@ where
 
 /// An `AirBuilder` for evaluating constraints symbolically, and recording them for later use.
 #[derive(Debug)]
-pub struct SymbolicRapBuilder<F: Field> {
+pub struct SymbolicRapBuilder<F> {
     preprocessed: RowMajorMatrix<SymbolicVariable<F>>,
     partitioned_main: Vec<RowMajorMatrix<SymbolicVariable<F>>>,
     after_challenge: Vec<RowMajorMatrix<SymbolicVariable<F>>>,
@@ -113,8 +115,9 @@ pub struct SymbolicRapBuilder<F: Field> {
     challenges: Vec<Vec<SymbolicVariable<F>>>,
     exposed_values_after_challenge: Vec<Vec<SymbolicVariable<F>>>,
     constraints: Vec<SymbolicExpression<F>>,
-    interactions: Vec<Interaction<SymbolicExpression<F>>>,
+    interactions: Vec<SymbolicInteraction<F>>,
     interaction_chunk_size: usize,
+    rap_phase_seq_kind: RapPhaseSeqKind,
     trace_width: TraceWidth,
 }
 
@@ -127,6 +130,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
         num_public_values: usize,
         num_challenges_to_sample: &[usize],
         num_exposed_values_after_challenge: &[usize],
+        rap_phase_seq_kind: RapPhaseSeqKind,
         interaction_chunk_size: usize,
     ) -> Self {
         let preprocessed_width = width.preprocessed.unwrap_or(0);
@@ -169,6 +173,7 @@ impl<F: Field> SymbolicRapBuilder<F> {
             constraints: vec![],
             interactions: vec![],
             interaction_chunk_size,
+            rap_phase_seq_kind,
             trace_width: width.clone(),
         }
     }
@@ -369,7 +374,9 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
     fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
         &self.interactions
     }
+}
 
+impl<F: Field> InteractionPhaseAirBuilder for SymbolicRapBuilder<F> {
     fn finalize_interactions(&mut self) {
         let num_interactions = self.num_interactions();
         if num_interactions != 0 {
@@ -382,14 +389,22 @@ impl<F: Field> InteractionBuilder for SymbolicRapBuilder<F> {
 
             let perm_width = num_interactions.div_ceil(self.interaction_chunk_size) + 1;
             self.after_challenge = Self::new_after_challenge(&[perm_width]);
-            self.challenges = Self::new_challenges(&[NUM_PERM_CHALLENGES]);
+
+            let phases_shapes = self.rap_phase_seq_kind.shape();
+            let phase_shape = phases_shapes.first().unwrap();
+
+            self.challenges = Self::new_challenges(&[phase_shape.num_challenges]);
             self.exposed_values_after_challenge =
-                Self::new_exposed_values_after_challenge(&[NUM_PERM_EXPOSED_VALUES]);
+                Self::new_exposed_values_after_challenge(&[phase_shape.num_exposed_values]);
         }
     }
 
     fn interaction_chunk_size(&self) -> usize {
         self.interaction_chunk_size
+    }
+
+    fn rap_phase_seq_kind(&self) -> RapPhaseSeqKind {
+        self.rap_phase_seq_kind
     }
 }
 

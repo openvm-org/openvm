@@ -2,74 +2,21 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::{izip, Itertools};
-use p3_challenger::CanObserve;
 use p3_commit::Pcs;
-use p3_field::AbstractExtensionField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
-use p3_maybe_rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
     commit::CommittedSingleMatrixView,
     config::{Com, Domain, PcsProverData, StarkGenericConfig, Val},
-    interaction::trace::generate_permutation_trace,
-    keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
+    keygen::view::MultiStarkProvingKeyView,
     prover::quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
     rap::AnyRap,
 };
-
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(super) fn generate_permutation_traces_and_exposed_values<SC: StarkGenericConfig>(
-    mpk: &MultiStarkProvingKeyView<SC>,
-    challenger: &mut SC::Challenger,
-    main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
-    public_values_per_air: &[Vec<Val<SC>>],
-) -> (
-    Vec<Vec<SC::Challenge>>,                    // challenges, per phase
-    Vec<Vec<Vec<SC::Challenge>>>,               // exposed values, per air, per phase
-    Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace, per air
-) {
-    let num_phases = mpk.vk_view().num_phases();
-    if num_phases == 0 {
-        let num_airs = mpk.per_air.len();
-        return (vec![], vec![vec![]; num_airs], vec![None; num_airs]);
-    }
-
-    debug_assert_eq!(num_phases, 1, "expected exactly one phase");
-    let challenges = mpk.vk_view().sample_challenges_for_phase(challenger, 0);
-    debug_assert_eq!(challenges.len(), 2, "Expected exactly two challenges");
-
-    let perm_trace_per_air = tracing::info_span!("generate permutation traces").in_scope(|| {
-        generate_permutation_trace_per_air(
-            &challenges.clone().try_into().unwrap(),
-            mpk,
-            main_views_per_air,
-            public_values_per_air,
-        )
-    });
-    let cumulative_sum_per_air = extract_cumulative_sums::<SC>(&perm_trace_per_air);
-
-    // Challenger needs to observe what is exposed (cumulative_sums)
-    for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
-        challenger.observe_slice(cumulative_sum.as_base_slice());
-    }
-
-    let challenges_per_phase = vec![challenges];
-    let exposed_values_after_challenge = cumulative_sum_per_air
-        .into_iter()
-        .map(|csum| csum.map_or(vec![], |x| vec![vec![x]]))
-        .collect_vec();
-
-    (
-        challenges_per_phase,
-        exposed_values_after_challenge,
-        perm_trace_per_air,
-    )
-}
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
@@ -103,51 +50,6 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
         quotient_committer.quotient_values(raps, &qvks, &trace_views, public_values_per_air);
     // Commit to quotient polynomias. One shared commit for all quotient polynomials
     quotient_committer.commit(quotient_values)
-}
-
-/// Returns a list of optional tuples of (permutation trace,cumulative sum) for each AIR.
-fn generate_permutation_trace_per_air<SC: StarkGenericConfig>(
-    challenges: &[SC::Challenge; 2],
-    mpk: &MultiStarkProvingKeyView<SC>,
-    main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
-    public_values_per_air: &[Vec<Val<SC>>],
-) -> Vec<Option<RowMajorMatrix<SC::Challenge>>>
-where
-    StarkProvingKey<SC>: Send + Sync,
-{
-    mpk.per_air
-        .par_iter()
-        .zip_eq(main_views_per_air.par_iter())
-        .zip_eq(public_values_per_air.par_iter())
-        .map(|((pk, main), public_values)| {
-            let interactions = &pk.vk.symbolic_constraints.interactions;
-            let preprocessed_trace = pk.preprocessed_data.as_ref().map(|d| d.trace.as_view());
-            generate_permutation_trace(
-                interactions,
-                &preprocessed_trace,
-                main,
-                public_values,
-                challenges,
-                pk.interaction_chunk_size,
-            )
-        })
-        .collect::<Vec<_>>()
-}
-
-fn extract_cumulative_sums<SC: StarkGenericConfig>(
-    perm_traces: &[Option<RowMajorMatrix<SC::Challenge>>],
-) -> Vec<Option<SC::Challenge>> {
-    perm_traces
-        .iter()
-        .map(|perm_trace| {
-            perm_trace.as_ref().map(|perm_trace| {
-                *perm_trace
-                    .row_slice(perm_trace.height() - 1)
-                    .last()
-                    .unwrap()
-            })
-        })
-        .collect()
 }
 
 fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
@@ -263,6 +165,13 @@ pub struct ProverTraceData<SC: StarkGenericConfig> {
     /// not implement clone and should not be cloned. The prover only needs a reference to
     /// this data, so we use a smart pointer to elide lifetime concerns.
     pub data: Arc<PcsProverData<SC>>,
+}
+
+/// A view of just the preprocessed AIR, without any after challenge columns.
+pub struct PairTraceView<'a, F> {
+    pub preprocessed: &'a Option<RowMajorMatrixView<'a, F>>,
+    pub partitioned_main: &'a [RowMajorMatrixView<'a, F>],
+    pub public_values: &'a [F],
 }
 
 /// The full RAP trace consists of horizontal concatenation of multiple matrices of the same height:

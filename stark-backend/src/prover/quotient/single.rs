@@ -11,6 +11,7 @@ use tracing::instrument;
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
     config::{Domain, PackedChallenge, PackedVal, StarkGenericConfig, Val},
+    interaction::RapPhaseSeqKind,
     rap::{PartitionedBaseAir, Rap},
 };
 
@@ -35,6 +36,7 @@ pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     public_values: &'a [Val<SC>],
     // Values exposed to verifier after challenge round i
     exposed_values_after_challenge: &'a [&'a [PackedChallenge<SC>]],
+    rap_phase_seq_kind: RapPhaseSeqKind,
     interaction_chunk_size: usize,
 ) -> Vec<SC::Challenge>
 where
@@ -167,6 +169,7 @@ where
                 exposed_values_after_challenge,
                 interactions: vec![],
                 interaction_chunk_size,
+                rap_phase_seq_kind,
                 has_common_main: rap.common_main_width() > 0,
                 constraint_index: 0,
             };

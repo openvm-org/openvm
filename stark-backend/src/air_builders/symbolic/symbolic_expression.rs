@@ -15,7 +15,7 @@ use super::symbolic_variable::SymbolicVariable;
 /// An expression over `SymbolicVariable`s.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "F: Field")]
-pub enum SymbolicExpression<F: Field> {
+pub enum SymbolicExpression<F> {
     Variable(SymbolicVariable<F>),
     IsFirstRow,
     IsLastRow,

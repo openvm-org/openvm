@@ -265,7 +265,7 @@ fn negative_write_data_tests() {
         Some(true),
         Some([13, 11, 156, 23]),
         Some(43641),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_loadstore_test(

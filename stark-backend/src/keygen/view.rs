@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use p3_challenger::FieldChallenger;
 
 use crate::{
     config::{Com, StarkGenericConfig},
@@ -51,18 +50,6 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'_, SC> {
     /// Returns all non-empty preprocessed commits.
     pub fn flattened_preprocessed_commits(&self) -> Vec<Com<SC>> {
         self.preprocessed_commits().into_iter().flatten().collect()
-    }
-
-    /// Samples the required number of challenges in the given phase and returns them.
-    pub fn sample_challenges_for_phase(
-        &self,
-        challenger: &mut SC::Challenger,
-        phase_idx: usize,
-    ) -> Vec<SC::Challenge> {
-        let num_challenges = self.num_challenges_in_phase(phase_idx);
-        (0..num_challenges)
-            .map(|_| challenger.sample_ext_element::<SC::Challenge>())
-            .collect()
     }
 
     pub fn num_phases(&self) -> usize {

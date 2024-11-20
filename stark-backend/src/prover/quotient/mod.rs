@@ -9,6 +9,7 @@ use super::trace::SingleRapCommittedTraceView;
 use crate::{
     air_builders::{prover::ProverConstraintFolder, symbolic::SymbolicConstraints},
     config::{Com, Domain, PackedChallenge, PcsProverData, StarkGenericConfig, Val},
+    interaction::RapPhaseSeqKind,
     rap::{AnyRap, PartitionedBaseAir, Rap},
 };
 
@@ -56,7 +57,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub fn quotient_values<'a>(
         &self,
         raps: Vec<impl AsRef<dyn AnyRap<SC>>>,
-        qvks: &[QuotientVKData<'a, SC>],
+        qvks: &[QuotientVkData<'a, SC>],
         traces: &[SingleRapCommittedTraceView<'a, SC>],
         public_values: &'a [Vec<Val<SC>>],
     ) -> QuotientData<SC> {
@@ -70,7 +71,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
     pub(crate) fn single_rap_quotient_values<'a, R>(
         &self,
         rap: &'a R,
-        qvk: &QuotientVKData<'a, SC>,
+        qvk: &QuotientVkData<'a, SC>,
         trace: &SingleRapCommittedTraceView<'a, SC>,
         public_values: &'a [Val<SC>],
     ) -> SingleQuotientData<SC>
@@ -136,6 +137,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
                 .iter()
                 .map(|v| v.as_slice())
                 .collect_vec(),
+            qvk.rap_phase_seq_kind,
             qvk.interaction_chunk_size,
         );
         SingleQuotientData {
@@ -232,8 +234,9 @@ pub struct QuotientChunk<SC: StarkGenericConfig> {
 }
 
 /// All necessary data from VK to compute ProverQuotientData
-pub struct QuotientVKData<'a, SC: StarkGenericConfig> {
+pub struct QuotientVkData<'a, SC: StarkGenericConfig> {
     pub quotient_degree: usize,
+    pub rap_phase_seq_kind: RapPhaseSeqKind,
     pub interaction_chunk_size: usize,
     /// Symbolic constraints of the AIR in all challenge phases. This is
     /// a serialization of the constraints in the AIR.

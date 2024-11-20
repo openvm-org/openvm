@@ -220,7 +220,7 @@ fn opcode_flag_negative_test() {
         Some(false),
         Some(false),
         Some(false),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -301,7 +301,7 @@ fn overflow_negative_tests() {
         None,
         None,
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 

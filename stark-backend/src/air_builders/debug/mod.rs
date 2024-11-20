@@ -7,7 +7,10 @@ use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 use super::{PartitionedAirBuilder, ViewPair};
 use crate::{
     config::{StarkGenericConfig, Val},
-    interaction::{Interaction, InteractionBuilder, InteractionType},
+    interaction::{
+        rap::InteractionPhaseAirBuilder, Interaction, InteractionBuilder, InteractionType,
+        RapPhaseSeqKind,
+    },
     rap::PermutationAirBuilderWithExposedValues,
 };
 
@@ -27,6 +30,7 @@ pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
     pub is_transition: Val<SC>,
     pub public_values: &'a [Val<SC>],
     pub exposed_values_after_challenge: &'a [Vec<SC::Challenge>],
+    pub rap_phase_seq_kind: RapPhaseSeqKind,
     pub has_common_main: bool,
 }
 
@@ -205,8 +209,6 @@ where
         // no-op, interactions are debugged elsewhere
     }
 
-    fn finalize_interactions(&mut self) {}
-
     fn num_interactions(&self) -> usize {
         0
     }
@@ -214,8 +216,16 @@ where
     fn all_interactions(&self) -> &[Interaction<Self::Expr>] {
         &[]
     }
+}
+
+impl<SC: StarkGenericConfig> InteractionPhaseAirBuilder for DebugConstraintBuilder<'_, SC> {
+    fn finalize_interactions(&mut self) {}
 
     fn interaction_chunk_size(&self) -> usize {
         0
+    }
+
+    fn rap_phase_seq_kind(&self) -> RapPhaseSeqKind {
+        self.rap_phase_seq_kind
     }
 }
