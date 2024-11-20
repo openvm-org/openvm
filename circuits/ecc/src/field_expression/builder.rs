@@ -40,6 +40,7 @@ pub struct ExprBuilder {
     pub prime: BigUint,
     // Same value, but we need BigInt for computing the quotient.
     pub prime_bigint: BigInt,
+    pub prime_limbs: Vec<usize>,
 
     pub num_input: usize,
     pub num_flags: usize,
@@ -72,8 +73,9 @@ impl ExprBuilder {
     pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         Self {
-            prime: config.modulus,
+            prime: config.modulus.clone(),
             prime_bigint,
+            prime_limbs: big_uint_to_limbs(&config.modulus, config.limb_bits),
             num_input: 0,
             num_flags: 0,
             limb_bits: config.limb_bits,
@@ -210,15 +212,14 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         } = self.load_vars(local);
 
         {
-            let modulus_limbs = big_uint_to_limbs(&self.builder.prime, self.builder.limb_bits);
-            for i in 0..inputs[0].len().max(modulus_limbs.len()) {
+            for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
                 let lhs = if i < inputs[0].len() {
                     inputs[0][i].into()
                 } else {
                     AB::Expr::ZERO
                 };
-                let rhs = if i < modulus_limbs.len() {
-                    AB::Expr::from_canonical_usize(modulus_limbs[i])
+                let rhs = if i < self.builder.prime_limbs.len() {
+                    AB::Expr::from_canonical_usize(self.builder.prime_limbs[i])
                 } else {
                     AB::Expr::ZERO
                 };
