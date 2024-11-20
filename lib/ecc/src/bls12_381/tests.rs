@@ -38,6 +38,19 @@ fn convert_fq12_to_bls12381fp12(x: Fq12) -> Fp12 {
 }
 
 #[test]
+fn test_bls12381_frobenius() {
+    let mut rng = StdRng::seed_from_u64(15);
+    let pow = 1;
+    let fq = Fq12::random(&mut rng);
+    let fq_frob = fq.frobenius_map();
+
+    let fp = convert_fq12_to_bls12381fp12(fq);
+    let fp_frob = fp.frobenius_map(pow);
+
+    assert_eq!(fp_frob, convert_fq12_to_bls12381fp12(fq_frob));
+}
+
+#[test]
 fn test_fp12_invert() {
     let mut rng = StdRng::seed_from_u64(15);
     let fq = Fq12::random(&mut rng);
