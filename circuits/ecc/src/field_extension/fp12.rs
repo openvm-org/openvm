@@ -253,7 +253,8 @@ mod tests {
         };
         let indices = r.save();
 
-        let builder = builder.borrow().clone();
+        let mut builder = builder.borrow().clone();
+        builder.finalize();
         let air = FieldExpr::new(builder, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 

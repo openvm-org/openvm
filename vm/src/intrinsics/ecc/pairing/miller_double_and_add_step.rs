@@ -96,7 +96,8 @@ pub fn miller_double_and_add_step_expr(
     b1.save_output();
     c1.save_output();
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
     FieldExpr::new(builder, range_bus)
 }
 

@@ -36,13 +36,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let (expr, flag_id) =
+        let (expr, is_mul_flag, is_div_flag) =
             fp2_muldiv_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![Fp2Opcode::MUL as usize, Fp2Opcode::DIV as usize],
-            vec![flag_id],
+            vec![is_mul_flag, is_div_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2MulDiv",
         );
@@ -53,17 +53,20 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 pub fn fp2_muldiv_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, usize) {
+) -> (FieldExpr, usize, usize) {
     config.check_valid();
     let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x = Fp2::new(builder.clone());
     let mut y = Fp2::new(builder.clone());
-    let flag = builder.borrow_mut().new_flag();
+    let is_mul_flag = builder.borrow_mut().new_flag();
+    let is_div_flag = builder.borrow_mut().new_flag();
     let (z_idx, mut z) = Fp2::new_var(builder.clone());
-    let mut lvar = Fp2::select(flag, &x, &z);
-    let mut rvar = Fp2::select(flag, &z, &x);
+
+    let mut lvar = Fp2::select(is_mul_flag, &x, &z);
+
+    let mut rvar = Fp2::select(is_mul_flag, &z, &x);
     let fp2_constraint = lvar.mul(&mut y).sub(&mut rvar);
 
     z.save_output();
@@ -79,16 +82,33 @@ pub fn fp2_muldiv_expr(
     let compute_z0_div = (&x.c0.expr * &y.c0.expr + &x.c1.expr * &y.c1.expr)
         / (&y.c0.expr * &y.c0.expr + &y.c1.expr * &y.c1.expr);
     let compute_z0_mul = &x.c0.expr * &y.c0.expr - &x.c1.expr * &y.c1.expr;
-    let compute_z0 = SymbolicExpr::Select(flag, Box::new(compute_z0_mul), Box::new(compute_z0_div));
+    let compute_z0 = SymbolicExpr::Select(
+        is_mul_flag,
+        Box::new(compute_z0_mul),
+        Box::new(SymbolicExpr::Select(
+            is_div_flag,
+            Box::new(compute_z0_div),
+            Box::new(x.c0.expr.clone()),
+        )),
+    );
     let compute_z1_div = (&x.c1.expr * &y.c0.expr - &x.c0.expr * &y.c1.expr)
         / (&y.c0.expr * &y.c0.expr + &y.c1.expr * &y.c1.expr);
     let compute_z1_mul = &x.c1.expr * &y.c0.expr + &x.c0.expr * &y.c1.expr;
-    let compute_z1 = SymbolicExpr::Select(flag, Box::new(compute_z1_mul), Box::new(compute_z1_div));
+    let compute_z1 = SymbolicExpr::Select(
+        is_mul_flag,
+        Box::new(compute_z1_mul),
+        Box::new(SymbolicExpr::Select(
+            is_div_flag,
+            Box::new(compute_z1_div),
+            Box::new(x.c1.expr),
+        )),
+    );
     builder.borrow_mut().set_compute(z_idx.0, compute_z0);
     builder.borrow_mut().set_compute(z_idx.1, compute_z1);
 
-    let builder = builder.borrow().clone();
-    (FieldExpr::new(builder, range_bus), flag)
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
+    (FieldExpr::new(builder, range_bus), is_mul_flag, is_div_flag)
 }
 
 #[cfg(test)]
@@ -161,7 +181,7 @@ mod tests {
             .0
             .core
             .expr()
-            .execute_with_output(inputs.to_vec(), vec![true]);
+            .execute_with_output(inputs.to_vec(), vec![true, false]);
         assert_eq!(r_mul.len(), 2);
         assert_eq!(r_mul[0], expected_mul[0]);
         assert_eq!(r_mul[1], expected_mul[1]);
@@ -171,7 +191,7 @@ mod tests {
             .0
             .core
             .expr()
-            .execute_with_output(inputs.to_vec(), vec![false]);
+            .execute_with_output(inputs.to_vec(), vec![false, true]);
         assert_eq!(r_div.len(), 2);
         assert_eq!(r_div[0], expected_div[0]);
         assert_eq!(r_div[1], expected_div[1]);

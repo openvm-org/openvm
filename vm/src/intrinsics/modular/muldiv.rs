@@ -62,7 +62,8 @@ impl ModularMulDivCoreAir {
         );
         builder.borrow_mut().set_compute(z_idx, compute);
 
-        let builder = builder.borrow().clone();
+        let mut builder = builder.borrow().clone();
+        builder.finalize();
 
         let expr = FieldExpr::new(builder, range_bus);
         Self { expr, offset }

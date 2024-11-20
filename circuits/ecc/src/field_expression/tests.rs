@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use ax_circuit_primitives::{bigint::utils::*, SubAir, TraceSubRowGenerator};
 use ax_stark_backend::interaction::InteractionBuilder;
 use ax_stark_sdk::{
@@ -31,8 +33,8 @@ fn test_add() {
     let x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
-    builder.borrow_mut().new_flag();
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -43,7 +45,7 @@ fn test_add() {
     let inputs = vec![x, y];
 
     let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![true]), &mut row);
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
     let FieldExprCols { vars, .. } = expr.load_vars(&row);
     assert_eq!(vars.len(), 1);
     let generated = evaluate_biguint(&vars[0], LIMB_BITS);
@@ -67,8 +69,8 @@ fn test_div() {
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
-    let builder = builder.borrow().clone();
-
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -109,7 +111,8 @@ fn test_auto_carry_mul() {
     x4.save();
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -151,7 +154,8 @@ fn test_auto_carry_intmul() {
     x4.save();
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -202,7 +206,8 @@ fn test_auto_carry_add() {
     // But x5 is var(1) implies x4 was saved as var(0).
     assert_eq!(x5.expr, SymbolicExpr::Var(1));
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -229,22 +234,30 @@ fn test_auto_carry_add() {
     .expect("Verification failed");
 }
 
+fn make_addsub_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
+    let x3 = x1.clone() + x2.clone();
+    let x4 = x1.clone() - x2.clone();
+    let (is_add_flag, is_sub_flag) = {
+        let mut builder = builder.borrow_mut();
+        let is_add = builder.new_flag();
+        let is_sub = builder.new_flag();
+        (is_add, is_sub)
+    };
+    let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
+    let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
+    x6.save();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
+    builder
+}
+
 #[test]
 fn test_select() {
     let prime = secp256k1_coord_prime();
     let (range_checker, builder) = setup(&prime);
-
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let x3 = x1.clone() + x2.clone();
-    let x4 = x1 - x2;
-    let flag = {
-        let mut builder = builder.borrow_mut();
-        builder.new_flag()
-    };
-    let mut x5 = FieldVariable::select(flag, &x3, &x4);
-    x5.save();
-    let builder = builder.borrow().clone();
+    let builder = make_addsub_chip(builder);
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -253,7 +266,7 @@ fn test_select() {
     let y = generate_random_biguint(&prime);
     let expected = (&x + &prime - &y) % prime;
     let inputs = vec![x, y];
-    let flags = vec![false];
+    let flags = vec![false, true];
 
     let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, flags), &mut row);
@@ -276,17 +289,7 @@ fn test_select() {
 fn test_select2() {
     let prime = secp256k1_coord_prime();
     let (range_checker, builder) = setup(&prime);
-    let x1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let x3 = x1.clone() + x2.clone();
-    let x4 = x1 - x2;
-    let flag = {
-        let mut builder = builder.borrow_mut();
-        builder.new_flag()
-    };
-    let mut x5 = FieldVariable::select(flag, &x3, &x4);
-    x5.save();
-    let builder = builder.borrow().clone();
+    let builder = make_addsub_chip(builder);
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -295,7 +298,7 @@ fn test_select2() {
     let y = generate_random_biguint(&prime);
     let expected = (&x + &y) % prime;
     let inputs = vec![x, y];
-    let flags = vec![true];
+    let flags = vec![true, false];
 
     let mut row = BabyBear::zero_vec(width);
     expr.generate_subrow((&range_checker, inputs, flags), &mut row);

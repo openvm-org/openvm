@@ -22,6 +22,7 @@ pub fn ec_double_expr(
     let mut y3 = lambda * (x1 - x3.clone()) - y1;
     y3.save_output();
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
     FieldExpr::new(builder, range_bus)
 }

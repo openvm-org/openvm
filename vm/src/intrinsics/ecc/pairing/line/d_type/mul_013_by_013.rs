@@ -99,7 +99,8 @@ pub fn mul_013_by_013_expr(
 
     [l0, l1, l2, l3, l4].map(|mut l| l.save_output());
 
-    let builder = builder.borrow().clone();
+    let mut builder = builder.borrow().clone();
+    builder.finalize();
     FieldExpr {
         builder,
         check_carry_mod_to_zero: subair,

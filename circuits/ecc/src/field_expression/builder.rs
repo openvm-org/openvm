@@ -69,6 +69,10 @@ pub struct ExprBuilder {
     pub computes: Vec<SymbolicExpr>,
 
     pub output_indices: Vec<usize>,
+
+    /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
+    finalized: bool,
+    has_dummy_flag: bool,
 }
 
 impl ExprBuilder {
@@ -90,6 +94,22 @@ impl ExprBuilder {
             constraints: vec![],
             computes: vec![],
             output_indices: vec![],
+            finalized: false,
+            has_dummy_flag: false,
+        }
+    }
+
+    pub fn is_finalized(&self) -> bool {
+        self.finalized
+    }
+
+    pub fn finalize(&mut self) {
+        self.finalized = true;
+
+        // setup the dummy flag
+        if self.num_flags == 0 {
+            self.new_flag();
+            self.has_dummy_flag = true;
         }
     }
 
@@ -113,6 +133,15 @@ impl ExprBuilder {
     pub fn new_flag(&mut self) -> usize {
         self.num_flags += 1;
         self.num_flags - 1
+    }
+
+    // Number of real (not dummy) flags.
+    pub fn num_op_flags(&self) -> usize {
+        if self.has_dummy_flag {
+            0
+        } else {
+            self.num_flags
+        }
     }
 
     // Below functions are used when adding variables and constraints manually, need to be careful.
@@ -201,6 +230,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
 impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
+        assert!(self.builder.is_finalized());
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
             + self.builder.carry_limbs.iter().sum::<usize>()
@@ -223,6 +253,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         AB::Var: 'a,
         AB::Expr: 'a,
     {
+        assert!(self.builder.is_finalized());
         let FieldExprCols {
             is_valid,
             inputs,
@@ -232,7 +263,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
+        println!("flags: {:?}", flags.len());
         let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
+        println!("is_setup: {:?}", is_setup);
 
         {
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
@@ -322,11 +355,24 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         (range_checker, inputs, flags): (&'a VariableRangeCheckerChip, Vec<BigUint>, Vec<bool>),
         sub_row: &'a mut [F],
     ) {
+        assert!(self.builder.is_finalized());
         assert_eq!(inputs.len(), self.num_input);
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
-        let limb_bits = self.limb_bits;
 
+        let mut flags = flags.clone();
+        if !self.builder.has_dummy_flag {
+            println!("no dummy flag");
+            assert!(flags.len() == self.builder.num_flags);
+        } else {
+            println!("dummy flag");
+            // Just one dummy flag.
+            assert!(self.builder.num_flags == 1);
+            assert!(flags.is_empty());
+            flags.push(true);
+        }
+
+        let limb_bits = self.limb_bits;
         let mut vars = vec![BigUint::zero(); self.num_variables];
 
         // BigInt type is required for computing the quotient.
@@ -437,6 +483,7 @@ impl FieldExpr {
     }
 
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+        assert!(self.builder.is_finalized());
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {
             let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);
@@ -455,6 +502,7 @@ impl FieldExpr {
     }
 
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
+        assert!(self.builder.is_finalized());
         let is_valid = arr[0].clone();
         let mut idx = 1;
         let mut inputs = vec![];
