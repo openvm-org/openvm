@@ -69,7 +69,7 @@ rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program
 
 ## Adding a Benchmark to CI
 
-To add the benchmark to CI, update the [.github/workflows/benchmark-config.json](../.github/workflows/benchmark-config.json) file and set it's configuration parameters. If you want the benchmark to run on every PR, follow the existing format.
+To add the benchmark to CI, update the [ci/benchmark-config.json](../ci/benchmark-config.json) file and set it's configuration parameters. If you want the benchmark to run on every PR, follow the existing format.
 
 TODO[stephenh]: Allow selectively run benchmarks via labels. Tracked in INT-2602.
 
