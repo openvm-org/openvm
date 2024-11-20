@@ -73,9 +73,9 @@ fn test_fp6_square() {
     let mut fp6 = [fp6c0, fp6c1, fp6c2];
     fp6_square_assign(&mut fp6);
 
-    let fp6_sqc0 = convert_fq2_to_bn254fp2(fq6_sq.c0);
-    let fp6_sqc1 = convert_fq2_to_bn254fp2(fq6_sq.c1);
-    let fp6_sqc2 = convert_fq2_to_bn254fp2(fq6_sq.c2);
-    let fp6_sq = [fp6_sqc0, fp6_sqc1, fp6_sqc2];
-    assert_eq!(fp6, fp6_sq);
+    let fq6_sqc0 = convert_fq2_to_bn254fp2(fq6_sq.c0);
+    let fq6_sqc1 = convert_fq2_to_bn254fp2(fq6_sq.c1);
+    let fq6_sqc2 = convert_fq2_to_bn254fp2(fq6_sq.c2);
+    let fq6_sq = [fq6_sqc0, fq6_sqc1, fq6_sqc2];
+    assert_eq!(fp6, fq6_sq);
 }
