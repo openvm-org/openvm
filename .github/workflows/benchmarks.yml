@@ -83,10 +83,10 @@ jobs:
           e2e_md_files=$(echo "$matrix" | jq -r '
             .[] |
             select(.e2e_bench == "true") |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.leaf_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
           e2e_md_file_list=$(echo "$e2e_md_files" | paste -sd "," -)
-          echo "e2e with apostrophes: ${md_file_list}"
+          echo "e2e with apostrophes: ${e2e_md_file_list}"
 
           md_files=$(echo "$matrix" | jq -r '
             .[] |
@@ -102,7 +102,7 @@ jobs:
             "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.leaf_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
           e2e_md_file_list=$(echo "$e2e_md_files" | paste -sd "," -)
-          echo "e2e without apostrophes: ${md_file_list}"
+          echo "e2e without apostrophes: ${e2e_md_file_list}"
 
   benchmark:
     needs: create-matrix
