@@ -50,7 +50,7 @@ jobs:
           RUN_BENCH_LABEL=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
           echo $RUN_BENCH_LABEL
 
-          matrix=$(jq -c --argjson run_e2e "$([[ -n $RUN_BENCH_LABEL ]] && echo true || echo false)" '
+          matrix=$(jq -c --argjson run_e2e $RUN_BENCH_LABEL '
             [
               .benchmarks[] |
               .name as $name |

@@ -148,23 +148,21 @@ jobs:
       - name: Setup e2e (halo2 and arguments)
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
-          echo "Listing current directory contents:"
-          ls -la
-          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
-            .benchmarks[] |
-            select(.name == $name) |
-            .e2e_bench
-          ' ./ci/benchmark-config.json)
-          echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
+          # E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+          #   .benchmarks[] |
+          #   select(.name == $name) |
+          #   .e2e_bench
+          # ' ./ci/benchmark-config.json)
+          # echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
 
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            echo "Adding static-verifier feature flag"
-            echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
-            ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
-            INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
-            echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
-            bash trusted_setup_s3.sh
-          fi
+          # if [[ "${E2E_BENCH}" == "true" ]]; then
+          #   echo "Adding static-verifier feature flag"
+          #   echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
+          #   ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
+          #   INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
+          #   echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
+          #   bash trusted_setup_s3.sh
+          # fi
 
       - name: Set BIN_NAME and CMD_ARGS
         run: |
@@ -183,6 +181,8 @@ jobs:
       - name: Set working directory
         id: set-working-dir
         run: |
+          echo "Listing current directory contents:"
+          ls -la
           WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.name == $name) |
