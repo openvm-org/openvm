@@ -40,7 +40,7 @@ pub trait Field:
         Self: 'a;
 
     /// The zero element of the field, the additive identity.
-    fn zero() -> Self;
+    const ZERO: Self;
 
     /// The one element of the field, the multiplicative identity.
     const ONE: Self;
