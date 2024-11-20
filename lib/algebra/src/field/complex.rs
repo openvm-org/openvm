@@ -476,7 +476,8 @@ impl<F: Field + IntMod> Field for Complex<F> {
     const ONE: Self = Self::ONE;
 
     fn double_assign(&mut self) {
-        *self += self.clone();
+        Field::double_assign(&mut self.c0);
+        Field::double_assign(&mut self.c1);
     }
 
     fn square_assign(&mut self) {
