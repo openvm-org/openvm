@@ -3,16 +3,8 @@
 
 use core::hint::black_box;
 
-use axvm::{
-    intrinsics::keccak256,
-    io::{read, reveal},
-};
-use hex_literal::hex;
-use k256::ecdsa::{
-    self,
-    signature::{Signer, Verifier},
-    RecoveryId, Signature, SigningKey, VerifyingKey,
-};
+use axvm::{intrinsics::keccak256, io::read_vec};
+use k256::ecdsa::{SigningKey, VerifyingKey};
 use rand_core::OsRng;
 use revm_precompile::secp256k1::ec_recover_run;
 use revm_primitives::alloy_primitives::Bytes;
@@ -20,9 +12,8 @@ use revm_primitives::alloy_primitives::Bytes;
 axvm::entry!(main);
 
 pub fn main() {
-    // TODO: read_vec
-    let msg = b"example message";
-    let prehash = keccak256(black_box(msg));
+    let msg = read_vec();
+    let prehash = keccak256(black_box(&msg));
 
     let signing_key: SigningKey = SigningKey::random(&mut OsRng);
     let verifying_key = VerifyingKey::from(&signing_key);
