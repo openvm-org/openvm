@@ -1,5 +1,9 @@
 use std::{marker::PhantomData, ops::Add};
 
+use ax_stark_backend::keygen::types::StarkVerifyingKey;
+use p3_field::AbstractExtensionField;
+use p3_uni_stark::{StarkGenericConfig, Val};
+
 use crate::config::FriParameters;
 
 /// Properties of a multi-trace circuit necessary to estimate verifier cost.
@@ -182,5 +186,35 @@ impl FriVerifierCostEstimate {
             query,
             constraint_eval: PhantomData,
         }
+    }
+
+    pub fn from_vk<SC: StarkGenericConfig>(
+        vks: &[&StarkVerifyingKey<SC>],
+        fri_params: FriParameters,
+        log_max_height: usize,
+    ) -> Self {
+        let num_main_columns: usize = vks
+            .iter()
+            .map(|vk| {
+                vk.params.width.common_main + vk.params.width.cached_mains.iter().sum::<usize>()
+            })
+            .sum();
+        let ext_degree = <SC::Challenge as AbstractExtensionField<Val<SC>>>::D;
+        let num_perm_columns: usize = vks
+            .iter()
+            .map(|vk| vk.params.width.after_challenge.iter().sum::<usize>())
+            .sum::<usize>()
+            * ext_degree;
+        let quotient_degree = vks.iter().map(|vk| vk.quotient_degree).max().unwrap_or(0);
+        Self::new(
+            VerifierCostParameters {
+                num_main_columns,
+                num_perm_columns,
+                log_max_height,
+                quotient_degree,
+            },
+            fri_params,
+            ext_degree,
+        )
     }
 }
