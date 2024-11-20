@@ -40,34 +40,6 @@ fn main() -> Result<()> {
                 )
             })?;
 
-        // #[cfg(feature = "aggregation")]
-        // {
-        //     // Leaf aggregation: 1->1 proof "aggregation"
-        //     // TODO[jpw]: put real user public values number, placeholder=0
-        //     let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-        //     let config = VmConfig::aggregation(0, max_constraint_degree);
-        //     let compiler_options = CompilerOptions {
-        //         enable_cycle_tracker: true,
-        //         ..Default::default()
-        //     };
-        //     for (seg_idx, vdata) in vdata.into_iter().enumerate() {
-        //         info_span!(
-        //             "Leaf Aggregation",
-        //             group = "leaf_aggregation",
-        //             segment = seg_idx
-        //         )
-        //         .in_scope(|| {
-        //             let (program, input_stream) =
-        //                 build_verification_program(vdata, compiler_options.clone());
-        //             let engine = BabyBearPoseidon2Engine::new(
-        //                 FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
-        //             );
-        //             bench_from_exe(engine, config.clone(), program, input_stream).unwrap_or_else(
-        //                 |e| panic!("Leaf aggregation failed for segment {}: {e}", seg_idx),
-        //             )
-        //         });
-        //     }
-        // }
         Ok(())
     })
 }
