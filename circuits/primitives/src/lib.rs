@@ -12,6 +12,7 @@
 //! - [assert_less_than]
 //! - [bigint]
 //! - [bitwise_op_lookup]
+//! - [encoder]
 //! - [is_equal]
 //! - [is_equal_array]
 //! - [is_less_than]
@@ -21,6 +22,7 @@
 pub mod assert_less_than;
 pub mod bigint;
 pub mod bitwise_op_lookup;
+pub mod encoder;
 pub mod is_equal;
 pub mod is_equal_array;
 pub mod is_less_than;

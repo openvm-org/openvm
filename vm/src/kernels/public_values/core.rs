@@ -1,8 +1,7 @@
 use std::sync::Mutex;
 
-use ax_circuit_primitives::SubAir;
+use ax_circuit_primitives::{encoder::Encoder, SubAir};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_encoder::Encoder;
 use axvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };

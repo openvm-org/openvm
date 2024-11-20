@@ -24,7 +24,6 @@ members = [
     "toolchain/riscv/axvm",
     "toolchain/riscv/macros",
     "toolchain/build",
-    "toolchain/encoder",
     "toolchain/tests",
     "cargo-axiom",
     "lib/algebra",

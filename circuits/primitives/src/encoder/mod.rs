@@ -1,6 +1,7 @@
-use ax_circuit_primitives::SubAir;
 use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
+
+use crate::SubAir;
 
 #[derive(Clone, Debug)]
 pub struct Encoder {
