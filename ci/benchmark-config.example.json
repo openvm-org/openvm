@@ -3,6 +3,7 @@
     {
       "name": "verify_fibair",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
@@ -15,6 +16,7 @@
     {
       "name": "fibonacci",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
@@ -27,6 +29,7 @@
     {
       "name": "fibonacci",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
@@ -39,6 +42,7 @@
     {
       "name": "fibonacci",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-x64",
@@ -51,6 +55,7 @@
     {
       "name": "fibonacci",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-x64",
@@ -63,6 +68,7 @@
     {
       "name": "revm_transfer",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
@@ -75,6 +81,7 @@
     {
       "name": "regex",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
@@ -87,6 +94,20 @@
     {
       "name": "base64_json",
       "working_directory": "benchmarks",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "mimalloc",
+          "app_log_blowup": 2,
+          "agg_log_blowup": 2
+        }
+      ]
+    },
+    {
+      "name": "fib_e2e",
+      "working_directory": "benchmarks",
+      "e2e_bench": true,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",

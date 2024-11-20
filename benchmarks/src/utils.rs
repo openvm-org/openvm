@@ -23,9 +23,17 @@ pub struct BenchmarkCli {
     #[arg(short, long, alias = "app_log_blowup")]
     pub app_log_blowup: Option<usize>,
 
-    /// Aggregation level log blowup, default set by the benchmark
+    /// Aggregation (leaf) level log blowup, default set by the benchmark
     #[arg(short, long, alias = "agg_log_blowup")]
     pub agg_log_blowup: Option<usize>,
+
+    /// Root level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "root_log_blowup")]
+    pub root_log_blowup: Option<usize>,
+
+    /// Internal level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "internal_log_blowup")]
+    pub internal_log_blowup: Option<usize>,
 }
 
 fn get_programs_dir() -> PathBuf {
