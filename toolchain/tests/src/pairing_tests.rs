@@ -21,7 +21,7 @@ mod bn254 {
 
     use ax_ecc_execution::{
         axvm_ecc::{
-            halo2curves::bn256::{Fq12, Fq2, G2Affine},
+            halo2curves::bn256::{Fq12, Fq2, G1Affine, G2Affine},
             pairing::MillerStep,
             AffineCoords,
         },
@@ -58,7 +58,6 @@ mod bn254 {
         // Test mul_by_01234
         let x = [c.x(), c.y(), b.x(), b.y(), a.x()];
         let r1 = Bn254::mul_by_01234(&f, &x);
-        // NOTE[yj]: this is ugly but calling `to_coeffs` gives us a different coefficient ordering
         let io1 = iter::empty()
             .chain(f.to_coeffs())
             .chain(x)
@@ -98,6 +97,43 @@ mod bn254 {
         let (pt, l0, l1) = Bn254::miller_double_and_add_step(&s, &q);
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]
             .into_iter()
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        executor.execute(elf, vec![io_all])?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_bn254_miller_loop() -> Result<()> {
+        let elf = build_example_program("bn254_miller_loop")?;
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_canonical_pairing_curves()
+                .add_canonical_modulus(),
+        );
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(256);
+        let S = G1Affine::random(&mut rng);
+        let Q = G2Affine::random(&mut rng);
+
+        let s = AffinePoint::new(S.x(), S.y());
+        let q = AffinePoint::new(Q.x(), Q.y());
+
+        // Test miller_loop
+        let f = Bn254::multi_miller_loop(&[s.clone()], &[q.clone()]);
+        let io0 = [s.x, s.y]
+            .into_iter()
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = [q.x, q.y]
+            .into_iter()
+            .chain(f.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
