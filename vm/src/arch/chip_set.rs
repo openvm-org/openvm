@@ -1464,21 +1464,21 @@ fn gen_modular_executor_tuple(
                 res.extend([
                     (
                         Rv32ModularArithmeticOpcode::ADD as usize
-                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize),
                         ExecutorName::ModularAddSubRv32_1x32,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::MUL as usize
-                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize),
                         ExecutorName::ModularMulDivRv32_1x32,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize),
                         ExecutorName::ModularIsEqualRv32_1x32,
                         class_offset,
                         modulus,
@@ -1488,21 +1488,21 @@ fn gen_modular_executor_tuple(
                 res.extend([
                     (
                         Rv32ModularArithmeticOpcode::ADD as usize
-                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize),
                         ExecutorName::ModularAddSubRv32_3x16,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::MUL as usize
-                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize),
                         ExecutorName::ModularMulDivRv32_3x16,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize),
                         ExecutorName::ModularIsEqualRv32_3x16,
                         class_offset,
                         modulus,
