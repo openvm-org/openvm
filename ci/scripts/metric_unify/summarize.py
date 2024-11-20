@@ -157,7 +157,8 @@ def main():
         md_files = args.e2e_md_files.split(',')
         for md_file in md_files:
             outputs.append(generate_row(md_file, ["root_verifier", "leaf_verifier", "internal_verifier"], {"internal.*": "internal_verifier"}, args.gh_pages_link))
-        write_md_table(outputs, e2e_headers)
+        if outputs:
+            write_md_table(outputs, e2e_headers)
 
 if __name__ == '__main__':
     main()
