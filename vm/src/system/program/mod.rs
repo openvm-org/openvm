@@ -5,7 +5,7 @@ use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use p3_field::{Field, PrimeField64};
+use p3_field::PrimeField64;
 
 use crate::{arch::READ_INSTRUCTION_BUS, system::program::trace::padding_instruction};
 
@@ -89,7 +89,7 @@ impl Display for ExecutionError {
 impl Error for ExecutionError {}
 
 #[derive(Debug)]
-pub struct ProgramChip<F: Field> {
+pub struct ProgramChip<F> {
     pub air: ProgramAir,
     pub program: Program<F>,
     pub true_program_length: usize,

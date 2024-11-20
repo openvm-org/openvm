@@ -95,7 +95,7 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesCoreChip<F: PrimeField32> {
+pub struct PublicValuesCoreChip<F> {
     air: PublicValuesCoreAir,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     custom_pvs: Mutex<Vec<Option<F>>>,

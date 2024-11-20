@@ -1,9 +1,78 @@
-use std::any::Any;
+use std::{any::Any, cell::RefCell, rc::Rc};
+
+use p3_field::PrimeField32;
+use rustc_hash::FxHashMap;
+
+use super::InstructionExecutor;
+use crate::{
+    kernels::public_values::PublicValuesChip,
+    system::{connector::VmConnectorChip, memory::MemoryControllerRef, program::ProgramChip},
+};
 
 /// A helper trait for downcasting types that may be enums.
 pub trait AnyEnum {
     /// Recursively "unwraps" enum and casts to `Any` for downcasting.
     fn as_any_kind(&self) -> &dyn Any;
+}
+
+// PublicValuesChip needs F: PrimeField32 due to Adapter
+pub struct SystemChipset<F: PrimeField32> {
+    // ATTENTION: chip destruction should follow the following field order:
+    pub program_chip: ProgramChip<F>,
+    pub connector_chip: VmConnectorChip<F>,
+    /// PublicValuesChip is disabled when num_public_values == 0.
+    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
+    pub memory_controller: MemoryControllerRef<F>,
+}
+
+pub struct ChipsetBuilder<F: PrimeField32> {
+    system: SystemChipset<F>,
+    /// Bus indices are in range [0, bus_idx_max)
+    bus_idx_max: usize,
+    /// Chips that are already included in the chipset and may be used
+    /// as dependencies. The order should be that depended-on chips are ordered
+    /// **before** their dependents.
+    chips: Vec<Box<dyn AnyEnum>>,
+}
+
+impl<F: PrimeField32> ChipsetBuilder<F> {
+    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
+        &self.system.memory_controller
+    }
+
+    pub fn new_bus(&mut self) -> usize {
+        let idx = self.bus_idx_max;
+        self.bus_idx_max += 1;
+        idx
+    }
+
+    /// Looks through built chips to see if there exists any of type `C` by downcasting.
+    /// Returns all chips of type `C` in the chipset.
+    ///
+    /// Note: the type `C` will usually be a smart pointer to a chip.
+    pub fn find_chip<C: 'static>(&self) -> Vec<&C> {
+        self.chips
+            .iter()
+            .filter_map(|c| c.as_any_kind().downcast_ref())
+            .collect()
+    }
+}
+
+pub trait ChipsetConfig<F: PrimeField32> {
+    type Executor: InstructionExecutor<F>;
+    /// Should implement `Chip<SC>` but we don't impose a trait bound to avoid the generic `StarkGenericConfig`.
+    type Chip;
+
+    fn create_chipset(
+        &self,
+        builder: &mut ChipsetBuilder<F>,
+    ) -> Chipset<Self::Executor, Self::Chip>;
+}
+
+pub struct Chipset<E, C> {
+    /// TODO: usize -> AxVmOpcode(usize)
+    pub executors: FxHashMap<usize, E>,
+    pub chips: Vec<C>,
 }
 
 #[cfg(test)]
