@@ -154,7 +154,6 @@ jobs:
             .e2e_bench
           ' ../../ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
-          echo $E2E_BENCH
 
           if [[ "${E2E_BENCH}" == "true" ]]; then
             echo "Adding static-verifier feature flag"
@@ -182,8 +181,6 @@ jobs:
       - name: Set working directory
         id: set-working-dir
         run: |
-          echo "Listing current directory contents:"
-          ls -la
           WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.name == $name) |

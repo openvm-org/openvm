@@ -97,7 +97,6 @@ def read_first_markdown_table(md_file):
 
 # group stats (ex. app, agg, root) are either added to the row as is, or aggregated together
 def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
-    print(md_file)
     table, other_info = read_first_markdown_table(md_file)
     sections = [table[0].group] + sections
     section_by_group = {};
@@ -117,13 +116,12 @@ def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
     for section in sections:
         group_row = section_by_group.get(section)
         if group_row is None:
-            res += ["-"] * COLS_PER_SECTION
+            res += [format_cell("-", None, None)] * COLS_PER_SECTION
         else:    
             res.append(str(group_row.log_blowup))
             for cell in group_row.cells:
                 res.append(str(cell))
     res += other_info
-    print(res)
     return res
 
 def write_md_table(rows, headers, file_path='summary.md', rewrite=False):
@@ -152,7 +150,6 @@ def main():
     outputs = []
     for md_file in md_files:
         outputs.append(generate_row(md_file, ["leaf_aggregation"], {}, args.gh_pages_link))
-    print(outputs)
     write_md_table(outputs, headers, rewrite=True)
 
     if args.e2e_md_files is not None:
