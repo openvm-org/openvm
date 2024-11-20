@@ -234,7 +234,11 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
 
         for flag in flags.iter() {
             builder.assert_bool(*flag);
+            builder.when(*flag).assert_one(is_valid);
         }
+        builder.assert_bool(is_setup);
+        builder.when(is_setup).assert_one(is_valid);
+        builder.assert_bool(flags.iter().fold(is_setup.into(), |acc, &x| acc + x));
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i].evaluate_overflow_expr::<AB>(&inputs, &vars, &flags);
             self.check_carry_mod_to_zero.eval(

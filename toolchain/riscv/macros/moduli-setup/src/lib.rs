@@ -626,7 +626,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         pub fn #setup_function() {
                                             #[cfg(target_os = "zkvm")]
                                             {
-                                                core::hint::black_box(#serialized_name);
                                                 let mut ptr = 0;
                                                 assert_eq!(#serialized_name[ptr], 1);
                                                 ptr += 1;

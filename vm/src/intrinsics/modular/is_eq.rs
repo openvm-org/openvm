@@ -116,6 +116,7 @@ where
 
         builder.assert_bool(cols.is_valid);
         builder.assert_bool(cols.is_setup);
+        builder.when(cols.is_setup).assert_one(cols.is_valid);
         builder.assert_bool(cols.cmp_result);
 
         // Constrain that either b == c or b != c, depending on the value of cmp_result.
