@@ -59,7 +59,7 @@ jobs:
             ]
           ' ./.github/workflows/benchmark-config.json)
           if [ $? -ne 0 ]; then
-            echo "Error: Failed to parse ./.github/workflows/benchmark-config.json"
+            echo "Error: Failed to parse ./ci/benchmark-config.json"
             exit 1
           fi
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
