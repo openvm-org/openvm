@@ -3,8 +3,12 @@
 use std::{
     cmp::min,
     collections::{BTreeMap, HashMap},
+    fmt::Debug,
 };
 
+#[cfg(feature = "function-span")]
+use axvm_instructions::exe::FnBound;
+use axvm_instructions::exe::FnBounds;
 use axvm_platform::WORD_SIZE;
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
@@ -41,6 +45,8 @@ pub struct Elf {
     pub(crate) max_num_public_values: usize,
     /// Field arithmetic configuration.
     pub(crate) supported_moduli: Vec<String>,
+    /// Debug info for spanning benchmark metrics by function.
+    pub(crate) fn_bounds: FnBounds,
 }
 
 impl Elf {
@@ -51,6 +57,7 @@ impl Elf {
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
         supported_moduli: Vec<String>,
+        fn_bounds: FnBounds,
     ) -> Self {
         Self {
             instructions,
@@ -59,6 +66,7 @@ impl Elf {
             memory_image,
             max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
             supported_moduli,
+            fn_bounds,
         }
     }
 
@@ -84,6 +92,31 @@ impl Elf {
             bail!("Invalid machine type, must be RISC-V");
         } else if elf.ehdr.e_type != ET_EXEC {
             bail!("Invalid ELF type, must be executable");
+        }
+
+        #[cfg(not(feature = "function-span"))]
+        let fn_bounds = Default::default();
+
+        #[cfg(feature = "function-span")]
+        let mut fn_bounds = FnBounds::new();
+        #[cfg(feature = "function-span")]
+        {
+            if let Some((symtab, stringtab)) = elf.symbol_table()? {
+                for symbol in symtab.iter() {
+                    if symbol.st_symtype() == elf::abi::STT_FUNC {
+                        fn_bounds.insert(
+                            symbol.st_value as u32,
+                            FnBound {
+                                start: symbol.st_value as u32,
+                                end: (symbol.st_value + symbol.st_size - (WORD_SIZE as u64)) as u32,
+                                name: stringtab.get(symbol.st_name as usize).unwrap().to_string(),
+                            },
+                        );
+                    }
+                }
+            } else {
+                println!("No symbol table found");
+            }
         }
 
         // Get the entrypoint of the ELF file as an u32.
@@ -218,6 +251,7 @@ impl Elf {
             (0..supported_moduli.len())
                 .map(|x| supported_moduli[&(x as u32)].clone())
                 .collect(),
+            fn_bounds,
         ))
     }
 }

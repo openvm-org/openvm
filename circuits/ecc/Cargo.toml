@@ -15,6 +15,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
+ax-ecc-execution = { workspace = true, optional = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true
@@ -33,4 +34,4 @@ halo2curves-axiom = { workspace = true }
 [features]
 default = []
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:halo2curves-axiom"]
+test-utils = ["dep:halo2curves-axiom", "dep:ax-ecc-execution"]

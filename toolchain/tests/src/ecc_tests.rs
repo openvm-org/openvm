@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
+    arch::{ExecutorName, VmConfig, VmExecutor},
     intrinsics::modular::SECP256K1_COORD_PRIME,
 };
 use eyre::Result;
@@ -56,6 +56,19 @@ fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
     let executor = VmExecutor::<F>::new(
         VmConfig::rv32im()
+            .add_canonical_modulus()
+            .add_canonical_ec_curves(),
+    );
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_ecdsa_runtime() -> Result<()> {
+    let elf = build_example_program("ecdsa")?;
+    let executor = VmExecutor::<F>::new(
+        VmConfig::rv32im()
+            .add_executor(ExecutorName::Keccak256Rv32)
             .add_canonical_modulus()
             .add_canonical_ec_curves(),
     );
