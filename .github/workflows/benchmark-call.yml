@@ -148,6 +148,8 @@ jobs:
       - name: Setup e2e (halo2 and arguments)
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
+          echo "Listing current directory contents:"
+          ls -la
           E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.name == $name) |
