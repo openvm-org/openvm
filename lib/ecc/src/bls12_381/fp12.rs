@@ -7,7 +7,10 @@ use axvm_algebra::{
     DivAssignUnsafe, DivUnsafe, Field,
 };
 
-use super::{Bls12_381, Fp2};
+use super::{
+    fp6_invert_assign, fp6_mul_assign, fp6_mul_by_nonresidue_assign, fp6_neg_assign,
+    fp6_square_assign, fp6_sub_assign, Bls12_381, Fp2,
+};
 #[cfg(not(target_os = "zkvm"))]
 use crate::pairing::PairingIntrinsics;
 use crate::pairing::SexticExtField;
@@ -16,7 +19,27 @@ pub type Fp12 = SexticExtField<Fp2>;
 
 impl Fp12 {
     pub fn invert(&self) -> Self {
-        todo!()
+        let mut c0 = [self.c[0].clone(), self.c[1].clone(), self.c[2].clone()];
+        let mut c0s = c0.clone();
+        fp6_square_assign(&mut c0s);
+        let mut c1 = [self.c[3].clone(), self.c[4].clone(), self.c[5].clone()];
+        let mut c1s = c1.clone();
+        fp6_square_assign(&mut c1s);
+        fp6_mul_by_nonresidue_assign(&mut c1s);
+        fp6_sub_assign(&mut c0s, &c1s);
+
+        fp6_invert_assign(&mut c0s);
+        fp6_mul_assign(&mut c0, &c0s);
+        fp6_neg_assign(&mut c0s);
+        fp6_mul_assign(&mut c1, &c0s);
+        Self::new([
+            c0[0].clone(),
+            c0[1].clone(),
+            c0[2].clone(),
+            c1[0].clone(),
+            c1[1].clone(),
+            c1[2].clone(),
+        ])
     }
 
     pub fn div_assign_unsafe_impl(&mut self, other: &Self) {
@@ -165,7 +188,7 @@ impl<'a> DivUnsafe<&'a Fp12> for &'a Fp12 {
 
     fn div_unsafe(self, other: &'a Fp12) -> Self::Output {
         let mut res = self.clone();
-        res.div_assign_unsafe_impl(&other);
+        res.div_assign_unsafe_impl(other);
         res
     }
 }

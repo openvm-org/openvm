@@ -1,12 +1,11 @@
 use axvm_algebra::Field;
 
-use super::{fp2_invert_assign, fp2_mul_by_nonresidue_assign, Bn254, Fp2};
+use super::{fp2_invert_assign, Bn254, Fp2};
 use crate::pairing::PairingIntrinsics;
 
 pub(crate) fn fp6_invert_assign(c: &mut [Fp2; 3]) {
     let mut c0 = c[2].clone();
     c0 *= &Bn254::XI;
-    // fp2_mul_by_nonresidue_assign(&mut c0);
     c0 *= &c[1];
     c0.neg_assign();
     {
@@ -17,7 +16,6 @@ pub(crate) fn fp6_invert_assign(c: &mut [Fp2; 3]) {
     let mut c1 = c[2].clone();
     c1.square_assign();
     c1 *= &Bn254::XI;
-    // fp2_mul_by_nonresidue_assign(&mut c1);
     {
         let mut c01 = c[0].clone();
         c01 *= &c[1];
@@ -37,7 +35,6 @@ pub(crate) fn fp6_invert_assign(c: &mut [Fp2; 3]) {
     tmp2 *= &c2;
     tmp1 += &tmp2;
     tmp1 *= &Bn254::XI;
-    // fp2_mul_by_nonresidue_assign(&mut tmp1);
     tmp2 = c[0].clone();
     tmp2 *= &c0;
     tmp1 += &tmp2;
@@ -59,9 +56,7 @@ pub(crate) fn fp6_mul_by_nonresidue_assign(c: &mut [Fp2; 3]) {
 }
 
 pub(crate) fn fp6_sub_assign(a: &mut [Fp2; 3], b: &[Fp2; 3]) {
-    for i in 0..3 {
-        a[i] -= &b[i];
-    }
+    a.iter_mut().zip(b).for_each(|(a, b)| *a -= b);
 }
 
 /// Squares 3 elements of `Fp2`, which represents as a single Fp6 element, in place
@@ -92,13 +87,11 @@ pub(crate) fn fp6_square_assign(c: &mut [Fp2; 3]) {
     // new c0 = 2bc.mul_by_xi + a^2
     c[0] = s3.clone();
     c[0] *= &Bn254::XI;
-    // fp2_mul_by_nonresidue_assign(&mut c[0]);
     c[0] += &s0;
 
     // new c1 = (c^2).mul_by_xi + 2ab
     c[1] = s4.clone();
     c[1] *= &Bn254::XI;
-    // fp2_mul_by_nonresidue_assign(&mut c[1]);
     c[1] += &s1;
 
     // new c2 = 2ab + (a - b + c)^2 + 2bc - a^2 - c^2 = b^2 + 2ac
@@ -162,7 +155,5 @@ pub(crate) fn fp6_mul_assign(a: &mut [Fp2; 3], b: &[Fp2; 3]) {
 }
 
 pub(crate) fn fp6_neg_assign(a: &mut [Fp2; 3]) {
-    for i in 0..3 {
-        a[i].neg_assign();
-    }
+    a.iter_mut().for_each(|x| x.neg_assign());
 }
