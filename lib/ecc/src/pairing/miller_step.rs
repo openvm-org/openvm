@@ -1,16 +1,15 @@
-use core::ops::{Add, Mul, Sub};
-
-#[cfg(target_os = "zkvm")]
-use {
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
-};
+use core::ops::{Add, Mul, Neg, Sub};
 
 use axvm_algebra::{DivUnsafe, Field};
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
+    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
+    axvm_platform::custom_insn_r,
+    core::mem::MaybeUninit,
+};
+#[cfg(target_os = "zkvm")]
+use {
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
@@ -62,7 +61,7 @@ where
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let one = &Self::Fp2::one();
+            let one = &Self::Fp2::ONE;
             let two = &(one + one);
             let three = &(one + two);
 
@@ -142,7 +141,7 @@ where
     ) {
         #[cfg(not(target_os = "zkvm"))]
         {
-            let one = &Self::Fp2::one();
+            let one = &Self::Fp2::ONE;
             let two = &(one + one);
 
             let x_s = &s.x;

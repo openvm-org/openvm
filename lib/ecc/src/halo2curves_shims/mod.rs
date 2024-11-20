@@ -22,7 +22,7 @@ pub trait ExpBigInt: Field {
             x = Self::ONE.div_unsafe(&x);
         }
 
-        let mut res = Self::one();
+        let mut res = Self::ONE;
 
         let x_sq = &x * &x;
         let ops = [x.clone(), x_sq.clone(), &x_sq * &x];

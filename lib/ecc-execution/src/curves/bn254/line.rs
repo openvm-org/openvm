@@ -7,7 +7,7 @@ use axvm_ecc::{
 };
 use halo2curves_axiom::bn256::{Fq12, Fq2};
 
-use super::Bn254;
+use super::{Bn254, BN254_XI};
 
 impl LineMulDType<Fq2, Fq12> for Bn254 {
     /// Multiplies two lines in 013-form to get an element in 01234-form

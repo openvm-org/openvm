@@ -7,7 +7,7 @@ use axvm_ecc::{
 };
 use halo2curves_axiom::bls12_381::{Fq12, Fq2};
 
-use super::Bls12_381;
+use super::{Bls12_381, BLS12381_XI};
 
 impl LineMulMType<Fq2, Fq12> for Bls12_381 {
     fn mul_023_by_023(l0: &EvaluatedLine<Fq2>, l1: &EvaluatedLine<Fq2>) -> [Fq2; 5] {
@@ -54,7 +54,7 @@ where
     for<'a> &'a Fp2: Mul<&'a Fp2, Output = Fp2>,
     for<'a> &'a Fp2: Neg<Output = Fp2>,
 {
-    let one = &Fp2::one();
+    let one = &Fp2::ONE;
     let two = &(one + one);
     let three = &(one + two);
     let x = &Fp2::embed(P.x);

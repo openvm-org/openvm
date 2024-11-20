@@ -73,13 +73,13 @@ where
         let c_inv = if let Some(c) = c.as_ref() {
             (&Self::Fp12::ONE).div_unsafe(c)
         } else {
-            Self::Fp12::one()
+            Self::Fp12::ONE
         };
 
         let mut f = if let Some(c) = c.clone() {
             c
         } else {
-            Self::Fp12::one()
+            Self::Fp12::ONE
         };
         let mut Q_acc = Q.to_vec();
 
