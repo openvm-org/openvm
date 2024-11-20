@@ -8,9 +8,7 @@ use axvm_algebra::{
 };
 
 use super::{Bls12_381, Fp, Fp2};
-#[cfg(not(target_os = "zkvm"))]
-use crate::pairing::PairingIntrinsics;
-use crate::pairing::{fp12_invert_assign, SexticExtField};
+use crate::pairing::{fp12_invert_assign, PairingIntrinsics, SexticExtField};
 
 pub type Fp12 = SexticExtField<Fp2>;
 
