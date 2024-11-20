@@ -96,7 +96,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
 
         let mut challenges = Vec::new();
         for (phase_idx, (&num_to_sample, commit)) in mvk
-            .num_challenges_to_sample()
+            .num_challenges_per_phase()
             .iter()
             .zip_eq(&proof.commitments.after_challenge)
             .enumerate()

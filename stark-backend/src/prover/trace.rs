@@ -30,9 +30,9 @@ pub(super) fn generate_permutation_traces_and_exposed_values<SC: StarkGenericCon
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
 ) -> (
-    Vec<Vec<SC::Challenge>>,                    // challenges
-    Vec<Vec<Vec<SC::Challenge>>>,               // exposed_values_after_challenge
-    Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace
+    Vec<Vec<SC::Challenge>>,                    // challenges, per phase
+    Vec<Vec<Vec<SC::Challenge>>>,               // exposed values, per air, per phase
+    Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace, per air
 )
 where
     Domain<SC>: Send + Sync,
@@ -41,10 +41,19 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
-    let challenges = mpk.vk_view().sample_challenges(challenger);
+    let num_phases = mpk.vk_view().num_phases();
+    if num_phases == 0 {
+        let num_airs = mpk.per_air.len();
+        return (vec![], vec![vec![]; num_airs], vec![None; num_airs]);
+    }
+
+    debug_assert_eq!(num_phases, 1, "expected exactly one phase");
+    let challenges = mpk.vk_view().sample_challenges_for_phase(challenger, 0);
+    debug_assert_eq!(challenges.len(), 2, "Expected exactly two challenges");
+
     let perm_trace_per_air = tracing::info_span!("generate permutation traces").in_scope(|| {
         generate_permutation_trace_per_air(
-            &challenges,
+            &challenges.clone().try_into().unwrap(),
             mpk,
             main_views_per_air,
             public_values_per_air,
@@ -57,13 +66,14 @@ where
         challenger.observe_slice(cumulative_sum.as_base_slice());
     }
 
+    let challenges_per_phase = vec![challenges];
     let exposed_values_after_challenge = cumulative_sum_per_air
         .into_iter()
         .map(|csum| csum.map_or(vec![], |x| vec![vec![x]]))
         .collect_vec();
 
     (
-        challenges,
+        challenges_per_phase,
         exposed_values_after_challenge,
         perm_trace_per_air,
     )
@@ -112,7 +122,7 @@ where
 
 /// Returns a list of optional tuples of (permutation trace,cumulative sum) for each AIR.
 fn generate_permutation_trace_per_air<SC: StarkGenericConfig>(
-    challenges: &[Vec<SC::Challenge>],
+    challenges: &[SC::Challenge; 2],
     mpk: &MultiStarkProvingKeyView<SC>,
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
@@ -120,9 +130,6 @@ fn generate_permutation_trace_per_air<SC: StarkGenericConfig>(
 where
     StarkProvingKey<SC>: Send + Sync,
 {
-    // Generate permutation traces
-    let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
-
     mpk.per_air
         .par_iter()
         .zip_eq(main_views_per_air.par_iter())
@@ -135,7 +142,7 @@ where
                 &preprocessed_trace,
                 main,
                 public_values,
-                perm_challenges,
+                challenges,
                 pk.interaction_chunk_size,
             )
         })
