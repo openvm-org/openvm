@@ -2,43 +2,10 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::Stmts;
+use axvm_macros_common::{string_to_bytes, Stmts};
 use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{parse_macro_input, Stmt};
-
-fn string_to_bytes(s: &str) -> Vec<u8> {
-    if s.starts_with("0x") {
-        return s
-            .chars()
-            .skip(2)
-            .filter(|c| !c.is_whitespace())
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>()
-            .chunks(2)
-            .map(|ch| u8::from_str_radix(&ch.iter().rev().collect::<String>(), 16).unwrap())
-            .collect();
-    }
-    let mut digits = s
-        .chars()
-        .map(|c| c.to_digit(10).expect("Invalid numeric literal"))
-        .collect::<Vec<_>>();
-    let mut bytes = Vec::new();
-    while !digits.is_empty() {
-        let mut rem = 0u32;
-        let mut new_digits = Vec::new();
-        for &d in digits.iter() {
-            rem = rem * 10 + d;
-            new_digits.push(rem / 256);
-            rem %= 256;
-        }
-        digits = new_digits.into_iter().skip_while(|&d| d == 0).collect();
-        bytes.push(rem as u8);
-    }
-    bytes
-}
 
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -129,6 +96,10 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             const fn from_const_u8(val: u8) -> Self {
                                                 let mut bytes = [0; #limbs];
                                                 bytes[0] = val;
+                                                Self(bytes)
+                                            }
+
+                                            const fn from_const_bytes(bytes: [u8; #limbs]) -> Self {
                                                 Self(bytes)
                                             }
 
@@ -666,6 +637,19 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                                                     write!(f, "{:?}", self.as_le_bytes())
                                                 }
+                                            }
+                                        }
+
+                                        impl axvm_algebra::Reduce for #struct_name {
+                                            fn reduce_le_bytes(bytes: &[u8]) -> Self {
+                                                let mut res = <Self as IntMod>::ZERO;
+                                                // base should be 2 ^ #limbs which exceeds what Self can represent
+                                                let mut base = Self::from_le_bytes(&[255u8; #limbs]);
+                                                base += <Self as IntMod>::ONE;
+                                                for chunk in bytes.chunks(#limbs).rev() {
+                                                    res = res * &base + Self::from_le_bytes(chunk);
+                                                }
+                                                res
                                             }
                                         }
                                     },

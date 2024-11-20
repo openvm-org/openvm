@@ -28,7 +28,7 @@ use crate::{
                 EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
             },
-            sw::{EcAddNeChip, EcDoubleChip},
+            weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
@@ -39,7 +39,7 @@ use crate::{
     },
     kernels::{
         branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip, fri::FriMatOpeningChip, jal::KernelJalChip,
+        field_extension::FieldExtensionChip, fri::FriReducedOpeningChip, jal::KernelJalChip,
         loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
@@ -91,7 +91,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
+    FriReducedOpening(Rc<RefCell<FriReducedOpeningChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),

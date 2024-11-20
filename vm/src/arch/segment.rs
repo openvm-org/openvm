@@ -5,7 +5,9 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, ProofInput},
 };
-use axvm_instructions::{instruction::DebugInfo, program::Program};
+#[cfg(feature = "function-span")]
+use axvm_instructions::exe::FnBound;
+use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
 use itertools::izip;
 use p3_field::PrimeField32;
@@ -31,10 +33,13 @@ pub struct ExecutionSegment<F: PrimeField32> {
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
+    /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
-    /// Collected metrics for this segment alone.
-    /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
+
+    #[allow(dead_code)]
+    pub(crate) fn_bounds: FnBounds,
+
     pub air_names: Vec<String>,
     pub const_height_air_ids: Vec<usize>,
     pub since_last_segment_check: usize,
@@ -81,6 +86,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         program: Program<F>,
         streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
+        fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.set_streams(streams);
@@ -99,8 +105,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             config,
             chip_set,
             final_memory: None,
-            collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
+            collected_metrics: Default::default(),
+            fn_bounds,
             air_names,
             const_height_air_ids,
             since_last_segment_check: 0,
@@ -117,6 +124,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
+
+        // Cycle span by function if function start/end addresses are available
+        #[cfg(feature = "function-span")]
+        let mut current_fn = FnBound::default();
 
         self.chip_set
             .connector_chip
@@ -171,12 +182,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     }
                     PhantomInstruction::CtStart => {
                         // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.start(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
                     }
                     PhantomInstruction::CtEnd => {
                         // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.end(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
@@ -185,6 +198,21 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             }
             prev_backtrace = trace;
+
+            #[cfg(feature = "function-span")]
+            if !self.fn_bounds.is_empty() && (pc < current_fn.start || pc > current_fn.end) {
+                current_fn = self
+                    .fn_bounds
+                    .range(..=pc)
+                    .next_back()
+                    .map(|(_, func)| (*func).clone())
+                    .unwrap();
+                if pc == current_fn.start {
+                    self.cycle_tracker.start(current_fn.name.clone());
+                } else {
+                    self.cycle_tracker.force_end();
+                }
+            };
 
             let mut opcode_name = None;
             if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {

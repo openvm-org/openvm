@@ -28,3 +28,8 @@ pub trait Group:
     fn double(&self) -> Self;
     fn double_assign(&mut self);
 }
+
+pub trait CyclicGroup: Group {
+    const GENERATOR: Self;
+    const NEG_GENERATOR: Self;
+}

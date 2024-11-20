@@ -40,8 +40,8 @@ jobs:
       - name: Create benchmark matrix from JSON
         id: create-matrix
         run: |
-          if [ ! -f ./.github/workflows/benchmark-config.json ]; then
-            echo "Error: ./.github/workflows/benchmark-config.json not found"
+          if [ ! -f ./ci/benchmark-config.json ]; then
+            echo "Error: ./ci/benchmark-config.json not found"
             exit 1
           fi
           matrix=$(jq -c '
@@ -57,9 +57,9 @@ jobs:
                 agg_log_blowup: .agg_log_blowup
               }
             ]
-          ' ./.github/workflows/benchmark-config.json)
+          ' ./ci/benchmark-config.json)
           if [ $? -ne 0 ]; then
-            echo "Error: Failed to parse ./.github/workflows/benchmark-config.json"
+            echo "Error: Failed to parse ./ci/benchmark-config.json"
             exit 1
           fi
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
