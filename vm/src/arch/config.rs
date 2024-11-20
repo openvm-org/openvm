@@ -274,7 +274,7 @@ impl VmConfig {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
-        .add_executor(ExecutorName::FriMatOpening)
+        .add_executor(ExecutorName::FriReducedOpening)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {
