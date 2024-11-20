@@ -8,6 +8,7 @@ use crate::{
     rrs::BasicInstructionProcessor,
 };
 
+/// Collection of [`CustomInstructionProcessor`]s.
 pub struct Transpiler<F> {
     processors: Vec<Rc<dyn CustomInstructionProcessor<F>>>,
 }
@@ -35,6 +36,12 @@ impl<F: PrimeField32> Transpiler<F> {
         Self { processors: procs }
     }
 
+    /// Iterates over a sequence of 32-bit RISC-V instructions `instructions_u32`. The iterator
+    /// applies every processor in the [`Transpiler`] to determine if one of them knows how to transpile
+    /// the current instruction (and possibly a contiguous section of following instructions).
+    /// If so, it advances the iterator by the amount specified by the processor.
+    /// The transpiler will panic if two different processors claim to know how to transpile the same instruction
+    /// to avoid ambiguity.
     pub fn transpile(&self, instructions_u32: &[u32]) -> Vec<Instruction<F>> {
         let mut instructions = Vec::new();
         let mut ptr = 0;
