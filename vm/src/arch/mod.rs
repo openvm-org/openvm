@@ -29,6 +29,7 @@ pub use chips::*;
 pub use config::*;
 pub use execution::*;
 pub use integration_api::*;
+pub use new_chipset::*;
 pub use processed_instructions::*;
 pub use segment::*;
 pub use vm::*;
