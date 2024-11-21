@@ -4,7 +4,7 @@ use itertools::izip;
 use p3_matrix::dense::DenseMatrix;
 
 use crate::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{StarkGenericConfig, Val},
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
@@ -54,14 +54,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         chips: Vec<Arc<dyn AnyRap<SC>>>,
         traces: Vec<DenseMatrix<Val<SC>>>,
         public_values: Vec<Vec<Val<SC>>>,
-    ) -> Result<VerificationData<SC>, VerificationError>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Result<VerificationData<SC>, VerificationError> {
         self.run_test_impl(AirProofInput::multiple_simple(chips, traces, public_values))
     }
 
@@ -70,14 +63,7 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
     fn run_test_impl(
         &self,
         air_proof_inputs: Vec<AirProofInput<SC>>,
-    ) -> Result<VerificationData<SC>, VerificationError>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Result<VerificationData<SC>, VerificationError> {
         let mut keygen_builder = self.keygen_builder();
         let air_ids = self.set_up_keygen_builder(&mut keygen_builder, &air_proof_inputs);
         let proof_input = ProofInput {
@@ -122,26 +108,12 @@ pub trait StarkEngine<SC: StarkGenericConfig> {
         &self,
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Result<(), VerificationError>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Result<(), VerificationError> {
         let proof = self.prove(pk, proof_input);
         self.verify(&pk.get_vk(), &proof)
     }
 
-    fn prove(&self, pk: &MultiStarkProvingKey<SC>, proof_input: ProofInput<SC>) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    fn prove(&self, pk: &MultiStarkProvingKey<SC>, proof_input: ProofInput<SC>) -> Proof<SC> {
         let prover = self.prover();
         let committer = TraceCommitter::new(prover.pcs());
 

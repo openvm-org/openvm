@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        config::{StarkGenericConfig, Val},
         prover::types::Proof,
     },
     bench::run_with_metric_collection,
@@ -203,11 +203,6 @@ fn single_segment_execute_and_prove<SC: StarkGenericConfig, E: StarkFriEngine<SC
 ) -> Proof<SC>
 where
     Val<SC>: PrimeField32,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     counter!("fri.log_blowup").absolute(prover.pk.fri_params.log_blowup as u64);
     let mut vm_config = prover.pk.vm_config.clone();

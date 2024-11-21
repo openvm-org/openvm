@@ -103,7 +103,6 @@ where
     Domain<AggSC>: Send + Sync,
     PcsProverData<AggSC>: Send + Sync,
     Com<AggSC>: Send + Sync,
-    AggSC::Challenge: Send + Sync,
     PcsProof<AggSC>: Send + Sync,
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);

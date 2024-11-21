@@ -469,6 +469,7 @@ dependencies = [
  "p3-merkle-tree",
  "p3-poseidon2",
  "p3-symmetric",
+ "p3-uni-stark",
  "p3-util",
  "rand 0.8.5",
  "rayon",
@@ -3445,6 +3446,24 @@ dependencies = [
  "itertools 0.13.0",
  "p3-field",
  "serde",
+]
+
+[[package]]
+name = "p3-uni-stark"
+version = "0.1.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=9b267c4#9b267c411cc8965c709b27d7b0ef81e225603c59"
+dependencies = [
+ "itertools 0.13.0",
+ "p3-air",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-util",
+ "serde",
+ "tracing",
 ]
 
 [[package]]

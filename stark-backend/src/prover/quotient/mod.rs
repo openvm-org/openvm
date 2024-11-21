@@ -59,12 +59,7 @@ impl<'pcs, SC: StarkGenericConfig> QuotientCommitter<'pcs, SC> {
         qvks: &[QuotientVKData<'a, SC>],
         traces: &[SingleRapCommittedTraceView<'a, SC>],
         public_values: &'a [Vec<Val<SC>>],
-    ) -> QuotientData<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-    {
+    ) -> QuotientData<SC> {
         let raps = raps.iter().map(|rap| rap.as_ref()).collect_vec();
         let inner = izip!(raps, qvks, traces, public_values)
             .map(|(rap, qvk, trace, pis)| self.single_rap_quotient_values(rap, qvk, trace, pis))
