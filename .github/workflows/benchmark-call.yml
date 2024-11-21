@@ -151,6 +151,12 @@ jobs:
           E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.name == $name) |
+            select(.instance_type == ${{ inputs.instance_type }}) |
+            select(.memory_allocator == ${{ inputs.memory_allocator }}) |
+            select(.app_log_blowup == ${{ inputs.app_log_blowup }}) |
+            select(.agg_log_blowup == ${{ inputs.agg_log_blowup }}) |
+            select((.root_log_blowup // 0) == ${{ inputs.root_log_blowup }}) |
+            select((.internal_log_blowup // 0) == ${{ inputs.internal_log_blowup }}) |
             .e2e_bench
           ' ../../ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
