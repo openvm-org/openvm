@@ -107,9 +107,6 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref }}
       # The secret is actually just deploy key only for revm for now.
-      - name: Check SSH Key
-        run: |
-          echo "${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}" | ssh-keygen -y -f /dev/stdin | ssh-keygen -lf -
       - name: Give GitHub Actions access to axiom-crypto/revm
         uses: webfactory/ssh-agent@v0.9.0
         with:
