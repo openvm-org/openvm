@@ -27,6 +27,19 @@
       ]
     },
     {
+      "name": "fibonacci",
+      "working_directory": "benchmarks",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-x64",
+          "memory_allocator": "jemalloc",
+          "app_log_blowup": 2,
+          "agg_log_blowup": 2
+        }
+      ]
+    },
+    {
       "name": "regex",
       "working_directory": "benchmarks",
       "e2e_bench": false,

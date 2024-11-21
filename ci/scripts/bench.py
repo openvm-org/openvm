@@ -10,7 +10,7 @@ from metric_unify.utils import get_git_root, create_bench_metrics_dir
 def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, root_log_blowup, internal_log_blowup, instance_type, memory_allocator):
     # Command to run
     command = [
-        "cargo", "run", "--no-default-features", "--bin", bin_name, "--release", "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", "maxperf", "--features", ",".join(feature_flags), "--"
     ]
     output_path = f".bench_metrics/{bin_name}"
 
