@@ -96,23 +96,7 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
     fn mul_by_023(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12 {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            Fp12::from_evaluated_line_m_type(l.clone()) * f
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
-            custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
-                shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy023),
-                uninit.as_mut_ptr(),
-                f as *const Fp12,
-                l as *const EvaluatedLine<Fp2>
-            );
-            unsafe { uninit.assume_init() }
-        }
+        Fp12::from_evaluated_line_m_type(l.clone()) * f
     }
 
     /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element

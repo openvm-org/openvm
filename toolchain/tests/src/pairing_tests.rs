@@ -113,7 +113,8 @@ mod bn254 {
         let executor = VmExecutor::<F>::new(
             VmConfig::rv32im()
                 .add_canonical_pairing_curves()
-                .add_canonical_modulus(),
+                .add_canonical_modulus()
+                .add_canonical_ec_curves(),
         );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(256);

@@ -100,23 +100,7 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
 
     /// Multiplies a line in 013-form with a Fp12 element to get an Fp12 element
     fn mul_by_013(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12 {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            Fp12::from_evaluated_line_d_type(l.clone()) * f
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
-            custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
-                shifted_funct7::<Bn254>(PairingBaseFunct7::MulBy013),
-                uninit.as_mut_ptr(),
-                f as *const Fp12,
-                l as *const EvaluatedLine<Fp2>
-            );
-            unsafe { uninit.assume_init() }
-        }
+        Fp12::from_evaluated_line_d_type(l.clone()) * f
     }
 
     /// Multiplies a line in 01234-form with a Fp12 element to get an Fp12 element

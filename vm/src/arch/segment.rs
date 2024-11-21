@@ -228,6 +228,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;
             } else {
+                // NOTE[yj]: Debug. delete this.
+                // self.chip_set.executors.iter().for_each(|(k, v)| {
+                //     println!("opcode: {:#x} | executor: {:?}", k, v.executor_name())
+                // });
                 return Err(ExecutionError::DisabledOperation(pc, opcode));
             };
 

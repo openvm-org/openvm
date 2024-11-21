@@ -135,6 +135,9 @@ pub enum AxVmExecutor<F: PrimeField32> {
     Fp2AddSubRv32_48(Rc<RefCell<Fp2AddSubChip<F, 6, 16>>>),
     Fp2MulDivRv32_32(Rc<RefCell<Fp2MulDivChip<F, 2, 32>>>),
     Fp2MulDivRv32_48(Rc<RefCell<Fp2MulDivChip<F, 6, 16>>>),
+    // Fp12 for 32-bytes or 48-bytes prime.
+    Fp12MulRv32_32(Rc<RefCell<Fp12MulChip<F, 12, 32>>>),
+    Fp12MulRv32_48(Rc<RefCell<Fp12MulChip<F, 36, 16>>>),
     /// Only for BN254 for now
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
     /// Only for BN254 for now
@@ -182,3 +185,66 @@ impl<F: PrimeField32> AxVmExecutor<F> {
         proof_input
     }
 }
+
+// NOTE[yj]: Debug. delete this.
+// impl<F: PrimeField32> AxVmExecutor<F> {
+//     pub fn executor_name(&self) -> &'static str {
+//         match self {
+//             AxVmExecutor::Phantom(_) => "Phantom",
+//             AxVmExecutor::LoadStore(_) => "LoadStore",
+//             AxVmExecutor::BranchEqual(_) => "BranchEqual",
+//             AxVmExecutor::Jal(_) => "Jal",
+//             AxVmExecutor::FieldArithmetic(_) => "FieldArithmetic",
+//             AxVmExecutor::FieldExtension(_) => "FieldExtension",
+//             AxVmExecutor::PublicValues(_) => "PublicValues",
+//             AxVmExecutor::Poseidon2(_) => "Poseidon2",
+//             AxVmExecutor::FriReducedOpening(_) => "FriReducedOpening",
+//             AxVmExecutor::CastF(_) => "CastF",
+//             AxVmExecutor::BaseAluRv32(_) => "BaseAluRv32",
+//             AxVmExecutor::LessThanRv32(_) => "LessThanRv32",
+//             AxVmExecutor::ShiftRv32(_) => "ShiftRv32",
+//             AxVmExecutor::LoadStoreRv32(_) => "LoadStoreRv32",
+//             AxVmExecutor::LoadSignExtendRv32(_) => "LoadSignExtendRv32",
+//             AxVmExecutor::BranchEqualRv32(_) => "BranchEqualRv32",
+//             AxVmExecutor::BranchLessThanRv32(_) => "BranchLessThanRv32",
+//             AxVmExecutor::JalLuiRv32(_) => "JalLuiRv32",
+//             AxVmExecutor::JalrRv32(_) => "JalrRv32",
+//             AxVmExecutor::AuipcRv32(_) => "AuipcRv32",
+//             AxVmExecutor::MultiplicationRv32(_) => "MultiplicationRv32",
+//             AxVmExecutor::MultiplicationHighRv32(_) => "MultiplicationHighRv32",
+//             AxVmExecutor::DivRemRv32(_) => "DivRemRv32",
+//             AxVmExecutor::HintStoreRv32(_) => "HintStoreRv32",
+//             AxVmExecutor::Keccak256Rv32(_) => "Keccak256Rv32",
+//             AxVmExecutor::BaseAlu256Rv32(_) => "BaseAlu256Rv32",
+//             AxVmExecutor::Shift256Rv32(_) => "Shift256Rv32",
+//             AxVmExecutor::LessThan256Rv32(_) => "LessThan256Rv32",
+//             AxVmExecutor::BranchEqual256Rv32(_) => "BranchEqual256Rv32",
+//             AxVmExecutor::BranchLessThan256Rv32(_) => "BranchLessThan256Rv32",
+//             AxVmExecutor::Multiplication256Rv32(_) => "Multiplication256Rv32",
+//             AxVmExecutor::ModularAddSubRv32_1x32(_) => "ModularAddSubRv32_1x32",
+//             AxVmExecutor::ModularMulDivRv32_1x32(_) => "ModularMulDivRv32_1x32",
+//             AxVmExecutor::ModularAddSubRv32_3x16(_) => "ModularAddSubRv32_3x16",
+//             AxVmExecutor::ModularMulDivRv32_3x16(_) => "ModularMulDivRv32_3x16",
+//             AxVmExecutor::EcAddNeRv32_2x32(_) => "EcAddNeRv32_2x32",
+//             AxVmExecutor::EcDoubleRv32_2x32(_) => "EcDoubleRv32_2x32",
+//             AxVmExecutor::EcAddNeRv32_6x16(_) => "EcAddNeRv32_6x16",
+//             AxVmExecutor::EcDoubleRv32_6x16(_) => "EcDoubleRv32_6x16",
+//             AxVmExecutor::Fp2AddSubRv32_32(_) => "Fp2AddSubRv32_32",
+//             AxVmExecutor::Fp2AddSubRv32_48(_) => "Fp2AddSubRv32_48",
+//             AxVmExecutor::Fp2MulDivRv32_32(_) => "Fp2MulDivRv32_32",
+//             AxVmExecutor::Fp2MulDivRv32_48(_) => "Fp2MulDivRv32_48",
+//             AxVmExecutor::EcLineMul013By013(_) => "EcLineMul013By013",
+//             AxVmExecutor::EcLineMulBy01234(_) => "EcLineMulBy01234",
+//             AxVmExecutor::EcLineMul023By023(_) => "EcLineMul023By023",
+//             AxVmExecutor::EcLineMulBy02345(_) => "EcLineMulBy02345",
+//             AxVmExecutor::MillerDoubleStepRv32_32(_) => "MillerDoubleStepRv32_32",
+//             AxVmExecutor::MillerDoubleStepRv32_48(_) => "MillerDoubleStepRv32_48",
+//             AxVmExecutor::MillerDoubleAndAddStepRv32_32(_) => "MillerDoubleAndAddStepRv32_32",
+//             AxVmExecutor::MillerDoubleAndAddStepRv32_48(_) => "MillerDoubleAndAddStepRv32_48",
+//             AxVmExecutor::EvaluateLineRv32_32(_) => "EvaluateLineRv32_32",
+//             AxVmExecutor::EvaluateLineRv32_48(_) => "EvaluateLineRv32_48",
+//             AxVmExecutor::ModularIsEqualRv32_1x32(_) => "ModularIsEqualRv32_1x32",
+//             AxVmExecutor::ModularIsEqualRv32_3x16(_) => "ModularIsEqualRv32_3x16",
+//         }
+//     }
+// }
