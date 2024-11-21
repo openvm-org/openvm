@@ -22,7 +22,7 @@ use axiom_vm::{
         root::types::RootVmVerifierInput,
     },
 };
-use axvm_benchmarks::utils::build_bench_program;
+use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
         instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
@@ -34,6 +34,7 @@ use axvm_circuit::{
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::hints::Hintable;
 use axvm_transpiler::axvm_platform::bincode;
+use clap::Parser;
 use eyre::Result;
 use metrics::counter;
 use p3_field::{AbstractField, PrimeField32};
@@ -48,16 +49,26 @@ const NUM_CHILDREN_INTERNAL: usize = 2;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli_args = BenchmarkCli::parse();
+    let app_log_blowup = cli_args.app_log_blowup.unwrap_or(2);
+    let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
+    let root_log_blowup = cli_args.root_log_blowup.unwrap_or(2);
+    let internal_log_blowup = cli_args.internal_log_blowup.unwrap_or(2);
+
     let num_segments = 8;
     // Must be larger than RangeTupleCheckerAir.height == 524288
     let segment_len = 1_000_000;
     let axiom_vm_pk = {
         let axiom_vm_config = AxiomVmConfig {
             max_num_user_public_values: NUM_PUBLIC_VALUES,
-            app_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
-            leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
-            internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
-            root_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
+            app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
+            leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(agg_log_blowup),
+            internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(
+                internal_log_blowup,
+            ),
+            root_fri_params: standard_fri_params_with_100_bits_conjectured_security(
+                root_log_blowup,
+            ),
             app_vm_config: VmConfig::rv32im()
                 .with_num_public_values(NUM_PUBLIC_VALUES)
                 .with_max_segment_len(segment_len),

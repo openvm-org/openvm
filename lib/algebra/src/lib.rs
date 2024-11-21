@@ -1,14 +1,25 @@
 #![no_std]
 
 //! Modular arithmetic traits for use with axVM intrinsics.
+extern crate alloc;
+use alloc::vec::Vec;
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+
+/// Field traits
+pub mod field;
+/// Implementation of this library's traits on halo2curves types.
+/// Used for testing and also VM runtime execution.
+/// These should **only** be importable on a host machine.
+#[cfg(all(not(target_os = "zkvm"), feature = "halo2curves"))]
+mod halo2curves;
 
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
@@ -25,6 +36,7 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
+// TODO[jpw]: split this into CustomIntrinsic (for MOD_IDX) + IntegralDomain
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
 ///
@@ -62,6 +74,7 @@ pub trait IntMod:
     /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
+        + Neg<Output = Self>
         + Mul<&'a Self, Output = Self>
         + DivUnsafe<&'a Self, Output = Self>
     where
@@ -85,8 +98,14 @@ pub trait IntMod:
     /// Creates a new IntMod from an instance of Repr.
     fn from_repr(repr: Self::Repr) -> Self;
 
-    /// Creates a new IntMod from an array of bytes.
+    /// Creates a new IntMod from an array of bytes, little endian.
     fn from_le_bytes(bytes: &[u8]) -> Self;
+
+    /// Creates a new IntMod from an array of bytes, big endian.
+    fn from_be_bytes(bytes: &[u8]) -> Self {
+        let vec = bytes.iter().rev().copied().collect::<Vec<_>>();
+        Self::from_le_bytes(&vec)
+    }
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -97,8 +116,13 @@ pub trait IntMod:
     /// Creates a new IntMod from a u64.
     fn from_u64(val: u64) -> Self;
 
-    /// Value of this IntMod as an array of bytes.
+    /// Value of this IntMod as an array of bytes, little endian.
     fn as_le_bytes(&self) -> &[u8];
+
+    /// Value of this IntMod as an array of bytes, big endian.
+    fn as_be_bytes(&self) -> Vec<u8> {
+        self.as_le_bytes().iter().rev().copied().collect::<Vec<_>>()
+    }
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -112,12 +136,20 @@ pub trait IntMod:
     #[cfg(not(target_os = "zkvm"))]
     fn as_biguint(&self) -> BigUint;
 
+    fn neg_assign(&mut self);
+
+    /// Doubles `self` in-place.
+    fn double_assign(&mut self);
+
     /// Doubles this IntMod.
     fn double(&self) -> Self {
         let mut ret = self.clone();
         ret += self;
         ret
     }
+
+    /// Squares `self` in-place.
+    fn square_assign(&mut self);
 
     /// Squares this IntMod.
     fn square(&self) -> Self {
@@ -131,5 +163,14 @@ pub trait IntMod:
         let mut ret = self.square();
         ret *= self;
         ret
+    }
+}
+
+// Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
+pub trait Reduce: Sized {
+    /// Interpret the given bytes as an integer and perform a modular reduction.
+    fn reduce_le_bytes(bytes: &[u8]) -> Self;
+    fn reduce_be_bytes(bytes: &[u8]) -> Self {
+        Self::reduce_le_bytes(&bytes.iter().rev().copied().collect::<Vec<_>>())
     }
 }

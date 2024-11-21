@@ -1,6 +1,9 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 use axvm_algebra::IntMod;
 
 axvm::entry!(main);

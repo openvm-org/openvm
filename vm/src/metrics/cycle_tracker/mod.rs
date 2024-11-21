@@ -22,6 +22,11 @@ impl CycleTracker {
         assert_eq!(stack_top.unwrap(), name, "Stack top does not match name");
     }
 
+    /// Ends the current cycle tracker span.
+    pub fn force_end(&mut self) {
+        self.stack.pop();
+    }
+
     /// Get full name of span with all parent names separated by ";" in flamegraph format
     pub fn get_full_name(&self) -> String {
         self.stack.join(";")

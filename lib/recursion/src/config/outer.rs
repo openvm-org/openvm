@@ -80,7 +80,7 @@ pub(crate) fn new_from_outer_vkv2(
 pub fn new_from_outer_multi_vk(
     vk: &MultiStarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
 ) -> MultiStarkVerificationAdvice<OuterConfig> {
-    let num_challenges_to_sample = vk.num_challenges_to_sample();
+    let num_challenges_to_sample = vk.num_challenges_per_phase();
     let MultiStarkVerifyingKey::<BabyBearPoseidon2OuterConfig> { per_air } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air

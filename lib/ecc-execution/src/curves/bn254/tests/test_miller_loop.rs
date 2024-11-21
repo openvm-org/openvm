@@ -1,9 +1,6 @@
-use axvm_ecc::{
-    curve::bn254::{Fq, Fq2, G1Affine, G2Affine},
-    pairing::MultiMillerLoop,
-};
+use axvm_ecc::pairing::MultiMillerLoop;
 use halo2curves_axiom::{
-    bn256::{G2Prepared, Gt},
+    bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
     pairing::MillerLoopResult,
 };
 
@@ -17,19 +14,14 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
     // Compare against halo2curves implementation
     let g2_prepareds = Q_vec
         .iter()
-        .map(|q| G2Prepared::from(*q.inner()))
+        .map(|q| G2Prepared::from(*q))
         .collect::<Vec<_>>();
-    let terms = P_vec
-        .iter()
-        .map(|p| p.inner())
-        .zip(g2_prepareds.iter())
-        .collect::<Vec<_>>();
+    let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(terms.as_slice());
     let compare_final = compare_miller.final_exponentiation();
 
     // Run the multi-miller loop
-    let bn254 = Bn254;
-    let f = bn254.multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
+    let f = Bn254::multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
 
     let wrapped_f = Gt(f);
     let final_f = wrapped_f.final_exponentiation();

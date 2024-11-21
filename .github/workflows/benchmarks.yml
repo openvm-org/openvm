@@ -40,26 +40,39 @@ jobs:
       - name: Create benchmark matrix from JSON
         id: create-matrix
         run: |
-          if [ ! -f ./.github/workflows/benchmark-config.json ]; then
-            echo "Error: ./.github/workflows/benchmark-config.json not found"
+          if [ ! -f ./ci/benchmark-config.json ]; then
+            echo "Error: ./ci/benchmark-config.json not found"
             exit 1
           fi
-          matrix=$(jq -c '
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            LABELS='${{ toJson(github.event.pull_request.labels) }}'
+            RUN_E2E=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
+          else
+            RUN_E2E=false
+          fi
+
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E '
             [
               .benchmarks[] |
               .name as $name |
+              .e2e_bench as $e2e_bench |
+              select($run_e2e or .e2e_bench != true) |
               .run_params[] |
               {
                 name: $name,
+                e2e_bench: $e2e_bench,
                 instance_type: .instance_type,
                 memory_allocator: .memory_allocator,
                 app_log_blowup: .app_log_blowup,
-                agg_log_blowup: .agg_log_blowup
+                agg_log_blowup: .agg_log_blowup,
+                root_log_blowup: (.root_log_blowup // 0),
+                internal_log_blowup: (.internal_log_blowup // 0),
               }
             ]
-          ' ./.github/workflows/benchmark-config.json)
+          ' ./ci/benchmark-config.json)
           if [ $? -ne 0 ]; then
-            echo "Error: Failed to parse ./.github/workflows/benchmark-config.json"
+            echo "Error: Failed to parse ./ci/benchmark-config.json"
             exit 1
           fi
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
@@ -76,6 +89,8 @@ jobs:
       memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
       app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
       agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
+      root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
+      internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
     secrets: inherit
 
   summarize:
@@ -124,15 +139,39 @@ jobs:
       - name: Load all metadata files from S3
         run: |
           current_sha=$(git rev-parse HEAD)
-          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '.[] | "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' | sort)
-          md_file_list=$(echo "$md_files" | paste -sd "," -)
+          md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+            .[] |
+            select(.e2e_bench != true) |
+            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
+            sort)
+          md_file_list=$(echo -n "$md_files" | paste -sd "," -)
+
+          e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+            .[] |
+            select(.e2e_bench == true) |
+            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
+            sort)
+          e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 
           while read md_file; do
+            if [ -z "$md_file" ]; then
+              continue
+            fi
             echo "Downloading results for benchmark: $md_file"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
           done <<< "$md_files"
 
-          python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
+          SUMMARIZE_ARGS="${md_file_list}"
+          if [[ -n "$e2e_md_files" ]]; then
+            while read e2e_md_file; do
+              echo "Downloading results for benchmark: $e2e_md_file"
+              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
+            done <<< "$e2e_md_files"
+
+            SUMMARIZE_ARGS="${SUMMARIZE_ARGS} --e2e-md-files ${e2e_md_file_list}"
+          fi
+
+          python3 ci/scripts/metric_unify/summarize.py "${SUMMARIZE_ARGS}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
             --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
 
@@ -157,11 +196,9 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      # TODO[stephenh]: remove rm line after backfill
       - name: Update github pages with new bench results
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
-          git rm -f -r=false ${GH_PAGES_PATH}/*.md || true
           mkdir -p ${GH_PAGES_PATH}
           cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md

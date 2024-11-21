@@ -2,16 +2,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm_algebra::{DivUnsafe, IntMod};
-use axvm_ecc::sw::IntModN;
+use axvm_ecc::sw::Secp256k1Coord;
 
 axvm::entry!(main);
 
 pub fn main() {
-    let mut pow = IntModN::MODULUS;
+    let mut pow = Secp256k1Coord::MODULUS;
     pow[0] -= 2;
 
-    let mut a = IntModN::from_u32(1234);
-    let mut res = IntModN::from_u32(1);
+    let mut a = Secp256k1Coord::from_u32(1234);
+    let mut res = Secp256k1Coord::from_u32(1);
     let inv = res.clone().div_unsafe(&a);
 
     for i in 0..32 {
@@ -28,8 +28,8 @@ pub fn main() {
         axvm::process::panic();
     }
 
-    let two = IntModN::from_u32(2);
-    let minus_two = IntModN::from_le_bytes(&pow);
+    let two = Secp256k1Coord::from_u32(2);
+    let minus_two = Secp256k1Coord::from_le_bytes(&pow);
 
     if (res - &minus_two) != (inv + &two) {
         axvm::process::panic();

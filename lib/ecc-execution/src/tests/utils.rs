@@ -1,8 +1,5 @@
-use axvm_ecc::{
-    field::{Field, FieldExtension},
-    point::{AffineCoords, AffinePoint},
-};
-use group::ScalarMul;
+use axvm_ecc::{algebra::field::FieldExtension, AffineCoords, AffinePoint};
+use ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -22,7 +19,7 @@ where
     A1: AffineCoords<Fp>,
     A2: AffineCoords<Fp2>,
     Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
+    Fp2: FieldExtension<Fp>,
 {
     let (P_vec, Q_vec) = rand_seeds
         .iter()
@@ -51,9 +48,9 @@ where
 /// EcPoint structs.
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
-pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize>(
-    a: &[Fr; N],
-    b: &[Fr; N],
+pub fn generate_test_points_generator_scalar<A1, A2, Fp, Fp2, const N: usize>(
+    a: &[i32; N],
+    b: &[i32; N],
 ) -> (
     Vec<A1>,
     Vec<A2>,
@@ -61,23 +58,30 @@ pub fn generate_test_points_generator_scalar<A1, A2, Fr, Fp, Fp2, const N: usize
     Vec<AffinePoint<Fp2>>,
 )
 where
-    A1: AffineCoords<Fp> + ScalarMul<Fr>,
-    A2: AffineCoords<Fp2> + ScalarMul<Fr>,
-    Fr: Field,
+    A1: AffineCoords<Fp>,
+    A2: AffineCoords<Fp2>,
+    // Fr: Field,
     Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
+    Fp2: Field + FieldExtension<Fp>,
 {
     assert!(N % 2 == 0, "Must have even number of P and Q scalars");
-    let mut P_vec = vec![];
-    let mut Q_vec = vec![];
+    let mut P_vec: Vec<A1> = vec![];
+    let mut Q_vec: Vec<A2> = vec![];
     for i in 0..N {
-        let mut p = A1::generator() * a[i].clone();
-        if i % 2 == 1 {
-            p = p.neg();
-        }
-        let q = A2::generator() * b[i].clone();
-        P_vec.push(p);
-        Q_vec.push(q);
+        let p = A1::generator();
+        let p_mul: A1 = if a[i].is_negative() {
+            A1::new(Fp::ONE * p.x(), Fp::ONE.neg() * p.y())
+        } else {
+            A1::new(Fp::ONE * p.x(), Fp::ONE * p.y())
+        };
+        let q = A2::generator();
+        let q_mul: A2 = if b[i].is_negative() {
+            A2::new(Fp2::ONE * q.x(), Fp2::ONE.neg() * q.y())
+        } else {
+            A2::new(Fp2::ONE * q.x(), Fp2::ONE * q.y())
+        };
+        P_vec.push(p_mul);
+        Q_vec.push(q_mul);
     }
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {

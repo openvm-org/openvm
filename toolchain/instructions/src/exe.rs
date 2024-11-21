@@ -7,6 +7,8 @@ use crate::{config::CustomOpConfig, program::Program};
 
 /// Memory image is a map from (address space, address) to word.
 pub type MemoryImage<F> = BTreeMap<(F, F), F>;
+/// Stores the starting address, end address, and name of a set of function.
+pub type FnBounds = BTreeMap<u32, FnBound>;
 
 /// Executable program for AxVM.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -23,6 +25,8 @@ pub struct AxVmExe<F> {
     pub init_memory: MemoryImage<F>,
     /// Custom operations configuration.
     pub custom_op_config: CustomOpConfig,
+    /// Starting + ending bounds for each function.
+    pub fn_bounds: FnBounds,
 }
 
 impl<F> AxVmExe<F> {
@@ -32,6 +36,7 @@ impl<F> AxVmExe<F> {
             pc_start: 0,
             init_memory: BTreeMap::new(),
             custom_op_config: Default::default(),
+            fn_bounds: Default::default(),
         }
     }
     pub fn with_pc_start(mut self, pc_start: u32) -> Self {
@@ -52,4 +57,11 @@ impl<F: Field> From<Program<F>> for AxVmExe<F> {
     fn from(program: Program<F>) -> Self {
         Self::new(program)
     }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct FnBound {
+    pub start: u32,
+    pub end: u32,
+    pub name: String,
 }

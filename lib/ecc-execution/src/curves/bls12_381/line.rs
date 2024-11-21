@@ -1,20 +1,20 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc::{
-    curve::bls12381::{Fq, Fq12, Fq2},
-    field::{Field, FieldExtension},
+    algebra::{field::FieldExtension, Field},
     pairing::{EvaluatedLine, LineMulMType},
-    point::AffinePoint,
+    AffinePoint,
 };
+use halo2curves_axiom::bls12_381::{Fq12, Fq2};
 
 use super::{Bls12_381, BLS12381_XI};
 
-impl LineMulMType<Fq, Fq2, Fq12> for Bls12_381 {
-    fn mul_023_by_023(line_0: EvaluatedLine<Fq, Fq2>, line_1: EvaluatedLine<Fq, Fq2>) -> [Fq2; 5] {
-        let b0 = line_0.b;
-        let c0 = line_0.c;
-        let b1 = line_1.b;
-        let c1 = line_1.c;
+impl LineMulMType<Fq2, Fq12> for Bls12_381 {
+    fn mul_023_by_023(l0: &EvaluatedLine<Fq2>, l1: &EvaluatedLine<Fq2>) -> [Fq2; 5] {
+        let b0 = &l0.b;
+        let c0 = &l0.c;
+        let b1 = &l1.b;
+        let c1 = &l1.c;
 
         // where w⁶ = xi
         // l0 * l1 = c0c1 + (c0b1 + c1b0)w² + (c0 + c1)w³ + (b0b1)w⁴ + (b0 +b1)w⁵ + w⁶
@@ -28,22 +28,24 @@ impl LineMulMType<Fq, Fq2, Fq12> for Bls12_381 {
         [x0, x2, x3, x4, x5]
     }
 
-    fn mul_by_023(f: Fq12, l: EvaluatedLine<Fq, Fq2>) -> Fq12 {
-        Self::mul_by_02345(f, [l.c, l.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO])
+    /// Multiplies a line in 023-form with a Fp12 element to get an Fp12 element
+    fn mul_by_023(f: &Fq12, l: &EvaluatedLine<Fq2>) -> Fq12 {
+        Self::mul_by_02345(f, &[l.c, l.b, Fq2::ONE, Fq2::ZERO, Fq2::ZERO])
     }
 
-    fn mul_by_02345(f: Fq12, x: [Fq2; 5]) -> Fq12 {
-        let x_fp12 = Fq12::from_coeffs([x[0], Fq2::ZERO, x[1], x[2], x[3], x[4]]);
-        f * x_fp12
+    /// Multiplies a line in 02345-form with a Fp12 element to get an Fp12 element
+    fn mul_by_02345(f: &Fq12, x: &[Fq2; 5]) -> Fq12 {
+        let fx = Fq12::from_coeffs([x[0], Fq2::ZERO, x[1], x[2], x[3], x[4]]);
+        f * fx
     }
 }
 
 /// Returns a line function for a tangent line at the point P
 #[allow(non_snake_case)]
-pub fn tangent_line_023<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp, Fp2>
+pub fn tangent_line_023<Fp, Fp2>(P: AffinePoint<Fp>) -> EvaluatedLine<Fp2>
 where
     Fp: Field,
-    Fp2: FieldExtension<BaseField = Fp>,
+    Fp2: FieldExtension<Fp> + Field,
     for<'a> &'a Fp: Add<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Sub<&'a Fp, Output = Fp>,
     for<'a> &'a Fp: Mul<&'a Fp, Output = Fp>,
@@ -69,11 +71,11 @@ where
     let x_squared = &(x * x);
     let x_cubed = &(x_squared * x);
     let y_squared = &(y * y);
-    let three_x_cubed = &(three * x_cubed);
-    let over_two_y_squared = &(two * y_squared).invert().unwrap();
+    let three_x_cubed = three * x_cubed;
+    let two_y_squared = two * y_squared;
 
-    let b = three_x_cubed.neg() * over_two_y_squared;
-    let c = three_x_cubed * over_two_y_squared - &Fp2::ONE;
+    let b = three_x_cubed.clone().neg().div_unsafe(&two_y_squared);
+    let c = three_x_cubed.div_unsafe(&two_y_squared) - &Fp2::ONE;
 
     EvaluatedLine { b, c }
 }

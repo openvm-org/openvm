@@ -385,7 +385,8 @@ dependencies = [
  "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
  "lazy_static",
- "num",
+ "num-bigint 0.4.6",
+ "num-traits",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rng",
@@ -562,6 +563,8 @@ dependencies = [
 name = "axvm-algebra"
 version = "0.1.0"
 dependencies = [
+ "axvm-platform",
+ "halo2curves-axiom 0.7.0",
  "num-bigint-dig",
 ]
 
@@ -685,10 +688,14 @@ dependencies = [
  "axvm",
  "axvm-algebra",
  "axvm-platform",
+ "ecdsa",
+ "elliptic-curve",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
+ "hex-literal",
  "itertools 0.13.0",
- "num",
+ "k256",
+ "num-bigint 0.4.6",
  "num-bigint-dig",
  "rand 0.8.5",
  "strum_macros",
@@ -873,6 +880,7 @@ dependencies = [
  "eyre",
  "num-bigint-dig",
  "p3-baby-bear",
+ "rand 0.8.5",
  "serde",
  "tempfile",
  "test-case",

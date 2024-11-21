@@ -85,6 +85,8 @@ default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
 test-utils = ["axvm-ecc/halo2curves"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
+function-span = []
+# performance features:
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
 jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]

@@ -13,6 +13,7 @@ on:
           - revm_transfer
           - regex
           - base64_json
+          - fib_e2e
       instance_type:
         type: string
         required: false
@@ -31,7 +32,17 @@ on:
       agg_log_blowup:
         type: number
         required: false
-        description: Aggregation level log blowup
+        description: Aggregation (leaf) level log blowup
+        default: 2
+      root_log_blowup:
+        type: number
+        required: false
+        description: Root level log blowup (only for e2e)
+        default: 2
+      internal_log_blowup:
+        type: number
+        required: false
+        description: Internal level log blowup (only for e2e)
         default: 2
   workflow_call:
     inputs:
@@ -57,7 +68,17 @@ on:
       agg_log_blowup:
         type: number
         required: false
-        description: Aggregation level log blowup
+        description: Aggregation (leaf) level log blowup
+        default: 2
+      root_log_blowup:
+        type: number
+        required: false
+        description: Root level log blowup (only for e2e)
+        default: 2
+      internal_log_blowup:
+        type: number
+        required: false
+        description: Internal level log blowup (only for e2e)
         default: 2
 
 env:
@@ -66,6 +87,7 @@ env:
   PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   CMD_ARGS: ""
+  INPUT_ARGS: ""
 
 jobs:
   bench-new:
@@ -74,7 +96,7 @@ jobs:
       - runs-on
       - runner=${{ inputs.instance_type }}
       - run-id=${{ github.run_id }}
-      - tag=bench-${{ inputs.benchmark_name }}
+      - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
     steps:
       ##########################################################################
       # Environment setup                                                      #
@@ -123,12 +145,22 @@ jobs:
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
 
-      - name: Setup halo2
+      - name: Setup e2e (halo2 and arguments)
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
-          if [[ "${{ github.event.pull_request.labels[*].name }}" == *"run-benchmark-e2e"* ]]; then
+          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+            .benchmarks[] |
+            select(.name == $name) |
+            .e2e_bench
+          ' ../../ci/benchmark-config.json)
+          echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
+
+          if [[ "${E2E_BENCH}" == "true" ]]; then
             echo "Adding static-verifier feature flag"
             echo "FEATURE_FLAGS=${FEATURE_FLAGS},static-verifier" >> $GITHUB_ENV
+            ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
+            INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
+            echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
             bash trusted_setup_s3.sh
           fi
 
@@ -144,7 +176,7 @@ jobs:
           MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
           APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
           AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG}" >> $GITHUB_ENV
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
 
       - name: Set working directory
         id: set-working-dir
@@ -153,7 +185,7 @@ jobs:
             .benchmarks[] |
             select(.name == $name) |
             .working_directory
-          ' ./.github/workflows/benchmark-config.json)
+          ' ./ci/benchmark-config.json)
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
@@ -171,7 +203,11 @@ jobs:
       ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
+          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
+          if [[ "${E2E_BENCH}" == "true" ]]; then
+            METRIC_NAME="${METRIC_NAME}-${{ inputs.root_log_blowup }}-${{ inputs.internal_log_blowup }}"
+          fi
+          METRIC_NAME="${METRIC_NAME}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
 
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
@@ -236,32 +272,6 @@ jobs:
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
           s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
-      # TODO[stephenh]: remove this collapse after old PR workflow phased out
-      - name: Collapse previous comment (if exists)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number
-            });
-            for (const comment of comments.data) {
-              if (comment.user.login == "github-actions[bot]" && comment.body.startsWith("<!--${{ inputs.benchmark_name }}-->")) {
-                console.log("collapse comment ", comment.id);
-                const resp = await github.graphql(`
-                  mutation {
-                    minimizeComment(input: {classifier: OUTDATED, subjectId: "${comment.node_id}"}) {
-                      minimizedComment {
-                        isMinimized
-                      }
-                    }
-                  }
-                `);
-              }
-            }
-
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
       ##########################################################################
@@ -308,4 +318,27 @@ jobs:
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
-          git push --force
+
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          ATTEMPT=0
+          SUCCESS=false
+
+          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
+              git fetch origin gh-pages
+              git merge origin/gh-pages --no-edit
+              if git push origin gh-pages; then
+                  SUCCESS=true
+                  break
+              else
+                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."
+                  sleep $RETRY_DELAY
+                  ATTEMPT=$((ATTEMPT + 1))
+              fi
+          done
+
+          if [ "$SUCCESS" = false ]; then
+              echo "PUSH_FAILED"
+              exit 1
+          fi
