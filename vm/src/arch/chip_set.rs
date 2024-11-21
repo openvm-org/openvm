@@ -165,7 +165,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             }
         }
     }
-    /// Return IDs of AIRs which heights won't during execution.
+    /// Return IDs of AIRs whose heights won't change during execution.
     pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
         let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
         let num_const_chip = self

@@ -470,7 +470,16 @@ impl<F: PrimeField32> MemoryController<F> {
 
     /// Return the number of AIRs in the memory controller.
     pub fn num_airs(&self) -> usize {
-        self.air_names().len()
+        let mut num_airs = 1;
+        if self.continuation_enabled() {
+            num_airs += 1;
+        }
+        for n in [2, 4, 8, 16, 32, 64] {
+            if self.mem_config.max_access_adapter_n >= n {
+                num_airs += 1;
+            }
+        }
+        num_airs
     }
 
     pub fn air_names(&self) -> Vec<String> {

@@ -1,10 +1,12 @@
 use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::var_range::VariableRangeCheckerChip;
+use axvm_instructions::program::Program;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
-use super::{ExecutionBus, InstructionExecutor};
+use super::{ExecutionBus, InstructionExecutor, Streams};
 use crate::{
     kernels::public_values::PublicValuesChip,
     system::{
@@ -21,17 +23,17 @@ const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
-pub struct ProcessingBuilder<F: PrimeField32> {
-    system: SystemUnit<F>,
+pub struct ProcessingBuilder<'a, F: PrimeField32> {
+    system: &'a SystemUnit<F>,
     /// Bus indices are in range [0, bus_idx_max)
     bus_idx_max: usize,
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
     /// **before** their dependents.
-    chips: Vec<Box<dyn AnyEnum>>,
+    chips: Vec<&'a dyn AnyEnum>,
 }
 
-impl<F: PrimeField32> ProcessingBuilder<F> {
+impl<'a, F: PrimeField32> ProcessingBuilder<'a, F> {
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
     }
@@ -160,7 +162,17 @@ pub struct SystemUnit<F: PrimeField32> {
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
-impl<F: PrimeField32> SystemUnit<F> {}
+impl<F: PrimeField32> SystemUnit<F> {
+    pub(crate) fn set_program(&mut self, program: Program<F>) {
+        self.program_chip.set_program(program);
+    }
+    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        self.phantom_chip.set_streams(streams.clone());
+    }
+    pub(crate) fn num_airs(&self) -> usize {
+        1 + 1 + 1 + 1 + self.memory_controller.borrow().num_airs() + 1
+    }
+}
 
 /// A helper trait for downcasting types that may be enums.
 pub trait AnyEnum {
