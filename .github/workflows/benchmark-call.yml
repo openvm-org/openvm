@@ -88,6 +88,7 @@ env:
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   CMD_ARGS: ""
   INPUT_ARGS: ""
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 jobs:
   bench-new:
