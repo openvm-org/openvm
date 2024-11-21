@@ -22,7 +22,10 @@ impl FieldExtension<Fp> for Fp2 {
     }
 
     fn embed(c0: Fp) -> Self {
-        Self { c0, c1: Fp::ZERO }
+        Self {
+            c0,
+            c1: <Fp as Field>::ZERO,
+        }
     }
 
     fn frobenius_map(&self, power: usize) -> Self {

@@ -45,6 +45,9 @@ pub trait Field:
     /// The one element of the field, the multiplicative identity.
     const ONE: Self;
 
+    /// Doubles `self` in-place.
+    fn double_assign(&mut self);
+
     /// Square `self` in-place
     fn square_assign(&mut self);
 }

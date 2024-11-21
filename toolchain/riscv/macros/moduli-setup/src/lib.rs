@@ -198,26 +198,28 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 }
                                             }
 
+                                            /// SAFETY: `dst_ptr` must be a raw pointer to `&mut Self`.
+                                            /// It will be written to only at the very end .
                                             #[inline(always)]
-                                            fn add_refs_impl(&self, other: &Self) -> Self {
+                                            unsafe fn add_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
                                                 #[cfg(not(target_os = "zkvm"))]
                                                 {
                                                     let mut res = self.clone();
                                                     res += other;
-                                                    res
+                                                    // BEWARE order of operations: when dst_ptr = other as pointers
+                                                    let dst = unsafe { &mut *dst_ptr };
+                                                    *dst = res;
                                                 }
                                                 #[cfg(target_os = "zkvm")]
                                                 {
-                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                                                     axvm_platform::custom_insn_r!(
                                                         axvm_platform::constants::CUSTOM_1,
                                                         axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
                                                         axvm_platform::constants::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                                        uninit.as_mut_ptr(),
+                                                        dst_ptr,
                                                         self as *const #struct_name,
                                                         other as *const #struct_name
                                                     );
-                                                    unsafe { uninit.assume_init() }
                                                 }
                                             }
 
@@ -392,6 +394,14 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                     }
                                                 }
 
+                                                fn double_assign(&mut self) {
+                                                    unsafe {
+                                                        // SAFETY: we borrow self as &Self and as *mut Self but
+                                                        // the latter will only be written to at the very end.
+                                                        self.add_refs_impl(self, self as *const Self as *mut Self);
+                                                    }
+                                                }
+
                                                 fn square_assign(&mut self) {
                                                     unsafe {
                                                         // SAFETY: we borrow self as &Self and as *mut Self but
@@ -449,7 +459,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                 type Output = #struct_name;
                                                 #[inline(always)]
                                                 fn add(self, other: &'a #struct_name) -> Self::Output {
-                                                    self.add_refs_impl(other)
+                                                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                    unsafe {
+                                                        self.add_refs_impl(other, uninit.as_mut_ptr());
+                                                        uninit.assume_init()
+                                                    }
                                                 }
                                             }
 
