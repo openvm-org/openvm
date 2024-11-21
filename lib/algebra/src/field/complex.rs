@@ -475,6 +475,11 @@ impl<F: Field + IntMod> Field for Complex<F> {
     const ZERO: Self = Self::ZERO;
     const ONE: Self = Self::ONE;
 
+    fn double_assign(&mut self) {
+        Field::double_assign(&mut self.c0);
+        Field::double_assign(&mut self.c1);
+    }
+
     fn square_assign(&mut self) {
         unsafe {
             self.mul_refs_impl(self, self as *const Self as *mut Self);

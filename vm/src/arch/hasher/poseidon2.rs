@@ -1,35 +1,46 @@
-use std::array;
+use std::{
+    array::{self, from_fn},
+    marker::PhantomData,
+};
 
-use ax_poseidon2_air::poseidon2::Poseidon2Air;
-use p3_field::{PrimeField, PrimeField32};
+use ax_poseidon2_air::{p3_poseidon2::ExternalLayerConstants, p3_symmetric::Permutation};
+use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::{
     arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH},
     system::memory::CHUNK,
 };
 
-// TODO: use Poseidon2 struct instead of Poseidon2Air
-pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<{ POSEIDON2_WIDTH }, F> {
+pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<F> {
+    assert_eq!(F::ORDER_U32, BabyBear::ORDER_U32, "F must be BabyBear");
+    let config = vm_poseidon2_config::<BabyBear>();
+    let external_constants = ExternalLayerConstants::new(
+        config.external_constants[..config.rounds_f() / 2].to_vec(),
+        config.external_constants[config.rounds_f() / 2..].to_vec(),
+    );
     Poseidon2Hasher {
-        poseidon2_air: Poseidon2Air::<POSEIDON2_WIDTH, F>::from_config(
-            vm_poseidon2_config(),
-            // `max_constraint_degree` and `bus_index` could be any value.
-            7,
-            0,
-        ),
+        poseidon2: Poseidon2BabyBear::new(external_constants, config.internal_constants),
+        _marker: PhantomData,
     }
 }
 
-pub struct Poseidon2Hasher<const WIDTH: usize, F: Clone> {
-    poseidon2_air: Poseidon2Air<WIDTH, F>,
+/// `F` must be BabyBear. Don't use this for anything performance sensitive.
+pub struct Poseidon2Hasher<F: Clone> {
+    poseidon2: Poseidon2BabyBear<POSEIDON2_WIDTH>,
+    _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField> Hasher<{ CHUNK }, F> for Poseidon2Hasher<{ POSEIDON2_WIDTH }, F> {
+impl<F: PrimeField32> Hasher<{ CHUNK }, F> for Poseidon2Hasher<F> {
     fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
-        let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
-        input_state[..CHUNK].copy_from_slice(lhs);
-        input_state[CHUNK..].copy_from_slice(rhs);
-        let inner_cols = self.poseidon2_air.generate_trace_row(input_state);
-        array::from_fn(|i| inner_cols.io.output[i])
+        let mut state = from_fn(|i| {
+            if i < CHUNK {
+                BabyBear::from_canonical_u32(lhs[i].as_canonical_u32())
+            } else {
+                BabyBear::from_canonical_u32(rhs[i - CHUNK].as_canonical_u32())
+            }
+        });
+        self.poseidon2.permute_mut(&mut state);
+        array::from_fn(|i| F::from_canonical_u32(state[i].as_canonical_u32()))
     }
 }

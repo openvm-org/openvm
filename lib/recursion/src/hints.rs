@@ -12,12 +12,11 @@ use axvm_native_compiler::ir::{
     unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
-use p3_baby_bear::{BabyBear, DiffusionMatrixBabyBear};
+use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_commit::ExtensionMmcs;
 use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use p3_util::log2_strict_usize;
 
@@ -32,8 +31,7 @@ use crate::{
 
 pub type InnerVal = BabyBear;
 pub type InnerChallenge = BinomialExtensionField<InnerVal, 4>;
-pub type InnerPerm =
-    Poseidon2<InnerVal, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBabyBear, 16, 7>;
+pub type InnerPerm = Poseidon2BabyBear<16>;
 pub type InnerHash = PaddingFreeSponge<InnerPerm, 16, 8, 8>;
 pub type InnerDigest = [InnerVal; DIGEST_SIZE];
 pub type InnerCompress = TruncatedPermutation<InnerPerm, 2, 8, 16>;

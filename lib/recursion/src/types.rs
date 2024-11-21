@@ -78,7 +78,7 @@ pub fn new_from_inner_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
 where
     Com<SC>: Into<[C::F; DIGEST_SIZE]>,
 {
-    let num_challenges_to_sample = vk.num_challenges_to_sample();
+    let num_challenges_to_sample = vk.num_challenges_per_phase();
     let MultiStarkVerifyingKey::<SC> { per_air } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air.clone().into_iter().map(new_from_inner_vk).collect(),

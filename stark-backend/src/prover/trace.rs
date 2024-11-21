@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use itertools::{izip, Itertools};
+use p3_challenger::CanObserve;
 use p3_commit::Pcs;
+use p3_field::AbstractExtensionField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
@@ -22,14 +24,15 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(super) fn generate_permutation_traces_and_cumulative_sums<SC: StarkGenericConfig>(
+pub(super) fn generate_permutation_traces_and_exposed_values<SC: StarkGenericConfig>(
     mpk: &MultiStarkProvingKeyView<SC>,
-    challenges: &[Vec<SC::Challenge>],
+    challenger: &mut SC::Challenger,
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
 ) -> (
-    Vec<Option<SC::Challenge>>,
-    Vec<Option<RowMajorMatrix<SC::Challenge>>>,
+    Vec<Vec<SC::Challenge>>,                    // challenges, per phase
+    Vec<Vec<Vec<SC::Challenge>>>,               // exposed values, per air, per phase
+    Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace, per air
 )
 where
     Domain<SC>: Send + Sync,
@@ -38,9 +41,19 @@ where
     SC::Challenge: Send + Sync,
     PcsProof<SC>: Send + Sync,
 {
+    let num_phases = mpk.vk_view().num_phases();
+    if num_phases == 0 {
+        let num_airs = mpk.per_air.len();
+        return (vec![], vec![vec![]; num_airs], vec![None; num_airs]);
+    }
+
+    debug_assert_eq!(num_phases, 1, "expected exactly one phase");
+    let challenges = mpk.vk_view().sample_challenges_for_phase(challenger, 0);
+    debug_assert_eq!(challenges.len(), 2, "Expected exactly two challenges");
+
     let perm_trace_per_air = tracing::info_span!("generate permutation traces").in_scope(|| {
         generate_permutation_trace_per_air(
-            challenges,
+            &challenges.clone().try_into().unwrap(),
             mpk,
             main_views_per_air,
             public_values_per_air,
@@ -48,7 +61,22 @@ where
     });
     let cumulative_sum_per_air = extract_cumulative_sums::<SC>(&perm_trace_per_air);
 
-    (cumulative_sum_per_air, perm_trace_per_air)
+    // Challenger needs to observe what is exposed (cumulative_sums)
+    for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
+        challenger.observe_slice(cumulative_sum.as_base_slice());
+    }
+
+    let challenges_per_phase = vec![challenges];
+    let exposed_values_after_challenge = cumulative_sum_per_air
+        .into_iter()
+        .map(|csum| csum.map_or(vec![], |x| vec![vec![x]]))
+        .collect_vec();
+
+    (
+        challenges_per_phase,
+        exposed_values_after_challenge,
+        perm_trace_per_air,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -63,7 +91,7 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     common_main_prover_data: &'a ProverTraceData<SC>,
     perm_prover_data: &'a Option<ProverTraceData<SC>>,
-    cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
+    exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
 ) -> ProverQuotientData<SC>
 where
     Domain<SC>: Send + Sync,
@@ -76,7 +104,7 @@ where
         domain_per_air,
         cached_mains_pdata_per_air,
         mpk,
-        cumulative_sum_per_air,
+        exposed_values_after_challenge,
         common_main_prover_data,
         perm_prover_data,
     );
@@ -94,7 +122,7 @@ where
 
 /// Returns a list of optional tuples of (permutation trace,cumulative sum) for each AIR.
 fn generate_permutation_trace_per_air<SC: StarkGenericConfig>(
-    challenges: &[Vec<SC::Challenge>],
+    challenges: &[SC::Challenge; 2],
     mpk: &MultiStarkProvingKeyView<SC>,
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
@@ -102,9 +130,6 @@ fn generate_permutation_trace_per_air<SC: StarkGenericConfig>(
 where
     StarkProvingKey<SC>: Send + Sync,
 {
-    // Generate permutation traces
-    let perm_challenges = challenges.first().map(|c| [c[0], c[1]]); // must have 2 challenges
-
     mpk.per_air
         .par_iter()
         .zip_eq(main_views_per_air.par_iter())
@@ -117,7 +142,7 @@ where
                 &preprocessed_trace,
                 main,
                 public_values,
-                perm_challenges,
+                challenges,
                 pk.interaction_chunk_size,
             )
         })
@@ -144,7 +169,7 @@ fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
     domain_per_air: Vec<Domain<SC>>,
     cached_mains_pdata_per_air: &'a [Vec<ProverTraceData<SC>>],
     mpk: &'a MultiStarkProvingKeyView<SC>,
-    cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
+    exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     common_main_prover_data: &'a ProverTraceData<SC>,
     perm_prover_data: &'a Option<ProverTraceData<SC>>,
 ) -> Vec<SingleRapCommittedTraceView<'a, SC>> {
@@ -154,9 +179,8 @@ fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
         domain_per_air,
         cached_mains_pdata_per_air,
         &mpk.per_air,
-        cumulative_sum_per_air,
-    )
-    .map(|(domain, cached_mains_pdata, pk, cumulative_sum)| {
+        exposed_values_after_challenge,
+    ).map(|(domain, cached_mains_pdata, pk, exposed_values)| {
         // The AIR will be treated as the full RAP with virtual columns after this
         let preprocessed = pk.preprocessed_data.as_ref().map(|p| {
             // TODO: currently assuming each chip has it's own preprocessed commitment
@@ -174,30 +198,29 @@ fn create_trace_view_per_air<'a, SC: StarkGenericConfig>(
             common_main_idx += 1;
         }
 
-        // There will be either 0 or 1 after_challenge traces
-        let after_challenge = if let Some(cumulative_sum) = cumulative_sum {
-            let matrix = CommittedSingleMatrixView::new(
-                perm_prover_data
-                    .as_ref()
-                    .expect("AIR uses interactions but no permutation trace commitment")
-                    .data
-                    .as_ref(),
-                after_challenge_idx,
-            );
-            after_challenge_idx += 1;
-            let exposed_values = vec![cumulative_sum];
-            vec![(matrix, exposed_values)]
-        } else {
-            Vec::new()
-        };
+        let after_challenge = exposed_values
+            .into_iter()
+            .map(|exposed_values| {
+                let matrix = CommittedSingleMatrixView::new(
+                    perm_prover_data
+                        .as_ref()
+                        .expect("AIR exposes after_challenge values but has no permutation trace commitment")
+                        .data
+                        .as_ref(),
+                    after_challenge_idx,
+                );
+                after_challenge_idx += 1;
+                (matrix, exposed_values)
+            })
+            .collect();
+
         SingleRapCommittedTraceView {
             domain,
             preprocessed,
             partitioned_main,
             after_challenge,
         }
-    })
-    .collect()
+    }).collect()
 }
 
 /// Prover that commits to a batch of trace matrices, possibly of different heights.

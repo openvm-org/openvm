@@ -1,15 +1,45 @@
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
-use core::ops::{Mul, MulAssign};
+use core::ops::{Mul, MulAssign, Neg};
 
-use axvm_algebra::field::{ComplexConjugate, FieldExtension};
+use axvm_algebra::{
+    field::{ComplexConjugate, FieldExtension},
+    DivAssignUnsafe, DivUnsafe, Field,
+};
 
-use super::{Bls12_381, Fp2};
-#[cfg(not(target_os = "zkvm"))]
-use crate::pairing::PairingIntrinsics;
-use crate::pairing::SexticExtField;
+use super::{Bls12_381, Fp, Fp2};
+use crate::pairing::{fp12_invert_assign, PairingIntrinsics, SexticExtField};
 
 pub type Fp12 = SexticExtField<Fp2>;
+
+impl Fp12 {
+    pub fn invert(&self) -> Self {
+        let mut s = self.clone();
+        fp12_invert_assign::<Fp, Fp2>(&mut s.c, &Bls12_381::XI);
+        s
+    }
+}
+
+impl Field for Fp12 {
+    type SelfRef<'a> = &'a Self;
+    const ZERO: Self = Self::new([Fp2::ZERO; 6]);
+    const ONE: Self = Self::new([
+        Fp2::ONE,
+        Fp2::ZERO,
+        Fp2::ZERO,
+        Fp2::ZERO,
+        Fp2::ZERO,
+        Fp2::ZERO,
+    ]);
+
+    fn double_assign(&mut self) {
+        *self += self.clone();
+    }
+
+    fn square_assign(&mut self) {
+        *self *= self.clone();
+    }
+}
 
 impl FieldExtension<Fp2> for Fp12 {
     const D: usize = 6;
@@ -58,6 +88,7 @@ impl ComplexConjugate for Fp12 {
 }
 
 impl<'a> MulAssign<&'a Fp12> for Fp12 {
+    #[inline(always)]
     fn mul_assign(&mut self, other: &'a Fp12) {
         #[cfg(not(target_os = "zkvm"))]
         {
@@ -76,7 +107,7 @@ impl<'a> MulAssign<&'a Fp12> for Fp12 {
 
 impl<'a> Mul<&'a Fp12> for &'a Fp12 {
     type Output = Fp12;
-
+    #[inline(always)]
     fn mul(self, other: &'a Fp12) -> Self::Output {
         #[cfg(not(target_os = "zkvm"))]
         {
@@ -114,8 +145,58 @@ impl Mul for Fp12 {
 impl<'a> Mul<&'a Fp12> for Fp12 {
     type Output = Self;
     #[inline(always)]
-    fn mul(mut self, other: &'a Fp12) -> Fp12 {
+    fn mul(mut self, other: &'a Fp12) -> Self::Output {
         self *= other;
         self
+    }
+}
+
+impl<'a> DivAssignUnsafe<&'a Fp12> for Fp12 {
+    #[inline(always)]
+    fn div_assign_unsafe(&mut self, other: &'a Fp12) {
+        *self *= other.invert();
+    }
+}
+
+impl<'a> DivUnsafe<&'a Fp12> for &'a Fp12 {
+    type Output = Fp12;
+    #[inline(always)]
+    fn div_unsafe(self, other: &'a Fp12) -> Self::Output {
+        let mut res = self.clone();
+        res.div_assign_unsafe(other);
+        res
+    }
+}
+
+impl DivAssignUnsafe for Fp12 {
+    #[inline(always)]
+    fn div_assign_unsafe(&mut self, other: Self) {
+        *self *= other.invert();
+    }
+}
+
+impl DivUnsafe for Fp12 {
+    type Output = Self;
+    #[inline(always)]
+    fn div_unsafe(mut self, other: Self) -> Self::Output {
+        self.div_assign_unsafe(other);
+        self
+    }
+}
+
+impl<'a> DivUnsafe<&'a Fp12> for Fp12 {
+    type Output = Self;
+    #[inline(always)]
+    fn div_unsafe(mut self, other: &'a Fp12) -> Self::Output {
+        self.div_assign_unsafe(other);
+        self
+    }
+}
+
+impl Neg for Fp12 {
+    type Output = Fp12;
+    #[inline(always)]
+    fn neg(self) -> Self::Output {
+        Self::ZERO - &self
     }
 }
