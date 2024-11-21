@@ -20,21 +20,9 @@ const MEMORY_BUS: MemoryBus = MemoryBus(1);
 const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 const RANGE_CHECKER_BUS: usize = 3;
 
-// PublicValuesChip needs F: PrimeField32 due to Adapter
-pub struct SystemChipset<F: PrimeField32> {
-    // ATTENTION: chip destruction should follow the following field order:
-    pub phantom_chip: PhantomChip<F>,
-    pub program_chip: ProgramChip<F>,
-    pub connector_chip: VmConnectorChip<F>,
-    /// PublicValuesChip is disabled when num_public_values == 0.
-    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
-    pub memory_controller: MemoryControllerRef<F>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-}
-
-/// Builder for chipset extensions. Chipsets always extend an existing system chipset.
-pub struct ChipsetBuilder<F: PrimeField32> {
-    system: SystemChipset<F>,
+/// Builder for processing unit. Processing units extend an existing system unit.
+pub struct ProcessingBuilder<F: PrimeField32> {
+    system: SystemUnit<F>,
     /// Bus indices are in range [0, bus_idx_max)
     bus_idx_max: usize,
     /// Chips that are already included in the chipset and may be used
@@ -43,7 +31,7 @@ pub struct ChipsetBuilder<F: PrimeField32> {
     chips: Vec<Box<dyn AnyEnum>>,
 }
 
-impl<F: PrimeField32> ChipsetBuilder<F> {
+impl<F: PrimeField32> ProcessingBuilder<F> {
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
     }
@@ -66,29 +54,122 @@ impl<F: PrimeField32> ChipsetBuilder<F> {
     }
 }
 
-pub trait ChipsetConfig<F: PrimeField32> {
-    /// This is expected to be an enum to dispatch [`InstructionExecutor`]s.
-    type Executor: InstructionExecutor<F>;
-    /// Should implement `Chip<SC>` but we don't impose a trait bound to avoid the generic `StarkGenericConfig`.
-    /// This is expected to be an enum of chip types.
-    type Chip;
+/// Configuration for a processor extension.
+///
+/// There are two associated types:
+/// - `Executor`: enum for chips that are [`InstructionExecutor`]s.
+/// -
+pub trait ProcessingConfig<F: PrimeField32> {
+    /// Enum of chips that implement [`InstructionExecutor`] for instruction execution.
+    /// `Executor` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
+    /// `StarkGenericConfig` generic parameter.
+    type Executor: InstructionExecutor<F> + AnyEnum;
+    /// Enum of periphery chips that do not implement [`InstructionExecutor`].
+    /// `Periphery` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
+    /// `StarkGenericConfig` generic parameter.
+    type Periphery: AnyEnum;
 
-    fn create_chipset(
+    fn build(
         &self,
-        builder: &mut ChipsetBuilder<F>,
-    ) -> Chipset<Self::Executor, Self::Chip>;
+        builder: &mut ProcessingBuilder<F>,
+    ) -> ProcessingUnit<Self::Executor, Self::Periphery>;
 }
 
-pub struct Chipset<E, C> {
-    /// TODO: usize -> AxVmOpcode(usize)
-    pub executors: FxHashMap<usize, E>,
-    pub chips: Vec<C>,
+#[derive(Clone, Debug)]
+pub struct ProcessingUnit<E, P> {
+    /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
+    instruction_lookup: FxHashMap<AxVmOpcode, ExecutorId>,
+    executors: Vec<E>,
+    periphery: Vec<P>,
+    /// Order of insertion. The reverse of this will be the order the chips are destroyed
+    /// to generate trace.
+    insertion_order: Vec<ChipId>,
+}
+
+type ExecutorId = usize;
+/// TODO: create newtype
+type AxVmOpcode = usize;
+
+#[derive(Clone, Copy, Debug)]
+enum ChipId {
+    Executor(usize),
+    Periphery(usize),
+}
+
+impl<E, P> Default for ProcessingUnit<E, P> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<E, P> ProcessingUnit<E, P> {
+    pub fn new() -> Self {
+        Self {
+            instruction_lookup: FxHashMap::default(),
+            executors: Vec::new(),
+            periphery: Vec::new(),
+            insertion_order: Vec::new(),
+        }
+    }
+
+    /// Inserts an executor with the collection of opcodes that it handles.
+    /// If some executor already owns one of the opcodes, it will be replaced and the old
+    /// executor ID is returned.
+    pub fn add_executor(
+        &mut self,
+        executor: E,
+        opcodes: impl IntoIterator<Item = AxVmOpcode>,
+    ) -> Option<ExecutorId> {
+        let id = self.executors.len();
+        self.executors.push(executor);
+        self.insertion_order.push(ChipId::Executor(id));
+        for opcode in opcodes {
+            if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
+                return Some(old_id);
+            }
+        }
+        None
+    }
+
+    pub fn add_periphery_chip(&mut self, periphery_chip: P) {
+        let id = self.periphery.len();
+        self.periphery.push(periphery_chip);
+        self.insertion_order.push(ChipId::Periphery(id));
+    }
+
+    pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&E> {
+        let id = self.instruction_lookup.get(&opcode)?;
+        self.executors.get(*id)
+    }
+
+    pub fn get_mut_executor(&mut self, opcode: AxVmOpcode) -> Option<&mut E> {
+        let id = self.instruction_lookup.get(&opcode)?;
+        self.executors.get_mut(*id)
+    }
+}
+
+// PublicValuesChip needs F: PrimeField32 due to Adapter
+pub struct SystemUnit<F: PrimeField32> {
+    // ATTENTION: chip destruction should follow the following field order:
+    pub phantom_chip: PhantomChip<F>,
+    pub program_chip: ProgramChip<F>,
+    pub connector_chip: VmConnectorChip<F>,
+    /// PublicValuesChip is disabled when num_public_values == 0.
+    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
+    pub memory_controller: MemoryControllerRef<F>,
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
 /// A helper trait for downcasting types that may be enums.
 pub trait AnyEnum {
     /// Recursively "unwraps" enum and casts to `Any` for downcasting.
     fn as_any_kind(&self) -> &dyn Any;
+}
+
+impl AnyEnum for () {
+    fn as_any_kind(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]
