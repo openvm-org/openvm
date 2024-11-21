@@ -72,7 +72,8 @@ pub struct ExprBuilder {
 
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
-    has_dummy_flag: bool,
+    // The chips without any flags need a setup flag.
+    has_setup_flag: bool,
 }
 
 impl ExprBuilder {
@@ -95,7 +96,7 @@ impl ExprBuilder {
             computes: vec![],
             output_indices: vec![],
             finalized: false,
-            has_dummy_flag: false,
+            has_setup_flag: false,
         }
     }
 
@@ -109,7 +110,7 @@ impl ExprBuilder {
         // setup the dummy flag
         if self.num_flags == 0 {
             self.new_flag();
-            self.has_dummy_flag = true;
+            self.has_setup_flag = true;
         }
     }
 
@@ -135,9 +136,9 @@ impl ExprBuilder {
         self.num_flags - 1
     }
 
-    // Number of real (not dummy) flags.
+    // Number of flags for ops, not including the setup flag.
     pub fn num_op_flags(&self) -> usize {
-        if self.has_dummy_flag {
+        if self.has_setup_flag {
             0
         } else {
             self.num_flags
@@ -361,11 +362,9 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         assert_eq!(self.num_variables, self.constraints.len());
 
         let mut flags = flags.clone();
-        if !self.builder.has_dummy_flag {
-            println!("no dummy flag");
+        if !self.builder.has_setup_flag {
             assert!(flags.len() == self.builder.num_flags);
         } else {
-            println!("dummy flag");
             // Just one dummy flag.
             assert!(self.builder.num_flags == 1);
             assert!(flags.is_empty());
