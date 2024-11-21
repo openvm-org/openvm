@@ -52,8 +52,6 @@ jobs:
             RUN_E2E=false
           fi
 
-          echo "please"
-
           matrix=$(jq -c --argjson run_e2e $RUN_E2E '
             [
               .benchmarks[] |
@@ -79,24 +77,24 @@ jobs:
           fi
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
-  benchmark:
-    needs: create-matrix
-    strategy:
-      matrix:
-        benchmark_run: ${{fromJson(needs.create-matrix.outputs.matrix)}}
-    uses: ./.github/workflows/benchmark-call.yml
-    with:
-      benchmark_name: ${{ matrix.benchmark_run.name }}
-      instance_type: ${{ matrix.benchmark_run.instance_type }}
-      memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
-      app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
-      agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
-      root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
-      internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
-    secrets: inherit
+  # benchmark:
+  #   needs: create-matrix
+  #   strategy:
+  #     matrix:
+  #       benchmark_run: ${{fromJson(needs.create-matrix.outputs.matrix)}}
+  #   uses: ./.github/workflows/benchmark-call.yml
+  #   with:
+  #     benchmark_name: ${{ matrix.benchmark_run.name }}
+  #     instance_type: ${{ matrix.benchmark_run.instance_type }}
+  #     memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
+  #     app_log_blowup: ${{ matrix.benchmark_run.app_log_blowup }}
+  #     agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
+  #     root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
+  #     internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
+  #   secrets: inherit
 
   summarize:
-    needs: [create-matrix, benchmark]
+    needs: [create-matrix]
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
@@ -160,14 +158,14 @@ jobs:
               continue
             fi
             echo "Downloading results for benchmark: $md_file"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/71b32d7ad75603d9f51da36ead25ec3ecd7c7c17-${md_file}" "${md_file}"
           done <<< "$md_files"
 
           E2E_ARGS=""
           if [[ -n "$e2e_md_files" ]]; then
             while read e2e_md_file; do
               echo "Downloading results for benchmark: $e2e_md_file"
-              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
+              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/71b32d7ad75603d9f51da36ead25ec3ecd7c7c17-${e2e_md_file}" "${e2e_md_file}"
             done <<< "$e2e_md_files"
             E2E_ARGS="--e2e-md-files \"${e2e_md_file_list}\""
           fi
