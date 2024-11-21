@@ -48,8 +48,15 @@ fn test_bls12381_frobenius() {
     let mut rng = StdRng::seed_from_u64(15);
     let pow = 2;
     let fq = Fq12::random(&mut rng);
-    // let fq_frob = fq.frobenius_map().pow([pow as u64]);
-    let fq_frob = fq.pow_vartime(MODULUS).pow_vartime([pow as u64]);
+    let fq_frob = fq.frobenius_map();
+    // fq_frob.c0.c0.conjugate();
+    // fq_frob.c0.c1.conjugate();
+    // fq_frob.c0.c2.conjugate();
+    // fq_frob.c1.c0.conjugate();
+    // fq_frob.c1.c1.conjugate();
+    // fq_frob.c1.c2.conjugate();
+    // fq_frob.frobenius_map();
+    // let fq_frob = fq.pow_vartime(MODULUS).pow_vartime([pow as u64]);
 
     let fp = convert_bls12381_halo2_fq12_to_fp12(fq);
     let fp_frob = fp.frobenius_map(pow);
