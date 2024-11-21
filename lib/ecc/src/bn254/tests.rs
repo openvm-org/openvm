@@ -37,7 +37,7 @@ fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
 #[test]
 fn test_bn254_frobenius() {
     let mut rng = StdRng::seed_from_u64(15);
-    for pow in 0..4 {
+    for pow in 0..12 {
         let fq = Fq12::random(&mut rng);
         let fq_frob = fq.frobenius_map(pow);
 

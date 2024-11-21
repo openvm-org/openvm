@@ -58,6 +58,7 @@ impl FieldExtension<Fp2> for Fp12 {
     }
 
     fn frobenius_map(&self, power: usize) -> Self {
+        // We assume that the frobenius map power is < 12
         if power != 1 {
             panic!("BLS12-381 frobenius map power must be 1");
         }
