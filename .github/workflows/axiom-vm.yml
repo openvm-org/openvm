@@ -1,4 +1,4 @@
-name: Axiom VM SDK Tests
+name: axVM SDK Tests
 
 on:
   push:
