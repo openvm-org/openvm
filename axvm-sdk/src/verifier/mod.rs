@@ -2,7 +2,7 @@ use axvm_circuit::arch::VmConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use internal::types::InternalVmVerifierPvs;
 
-use crate::{config::AxiomVmConfig, verifier::common::types::VmVerifierPvs};
+use crate::{config::AxVmSdkConfig, verifier::common::types::VmVerifierPvs};
 
 pub mod common;
 pub mod internal;
@@ -12,7 +12,7 @@ pub(crate) mod utils;
 
 const SBOX_SIZE: usize = 7;
 
-impl AxiomVmConfig {
+impl AxVmSdkConfig {
     pub fn leaf_vm_config(&self) -> VmConfig {
         VmConfig::aggregation(
             VmVerifierPvs::<u8>::width(),

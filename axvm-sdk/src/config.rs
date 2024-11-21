@@ -24,7 +24,7 @@ use crate::{
 type SC = BabyBearPoseidon2Config;
 
 #[derive(Clone, Debug)]
-pub struct AxiomVmConfig {
+pub struct AxVmSdkConfig {
     pub max_num_user_public_values: usize,
     pub app_fri_params: FriParameters,
     pub leaf_fri_params: FriParameters,
@@ -35,7 +35,7 @@ pub struct AxiomVmConfig {
 }
 
 // TODO: separate the Agg VM part out.
-pub struct AxiomVmProvingKey {
+pub struct AxVmSdkProvingKey {
     pub app_vm_pk: VmProvingKey<SC>,
 
     pub leaf_vm_pk: VmProvingKey<SC>,
@@ -48,8 +48,8 @@ pub struct AxiomVmProvingKey {
     pub root_committed_exe: Arc<AxVmCommittedExe<OuterSC>>,
 }
 
-impl AxiomVmProvingKey {
-    pub fn keygen(config: AxiomVmConfig) -> Self {
+impl AxVmSdkProvingKey {
+    pub fn keygen(config: AxVmSdkConfig) -> Self {
         let leaf_vm_config = config.leaf_vm_config();
         let internal_vm_config = config.internal_vm_config();
         let root_vm_config = config.root_verifier_vm_config();

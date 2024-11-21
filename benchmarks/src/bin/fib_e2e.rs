@@ -15,13 +15,6 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axiom_vm::{
-    config::{AxiomVmConfig, AxiomVmProvingKey},
-    verifier::{
-        internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
-        root::types::RootVmVerifierInput,
-    },
-};
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
@@ -33,6 +26,13 @@ use axvm_circuit::{
 };
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::hints::Hintable;
+use axvm_sdk::{
+    config::{AxVmSdkConfig, AxVmSdkProvingKey},
+    verifier::{
+        internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
+        root::types::RootVmVerifierInput,
+    },
+};
 use axvm_transpiler::axvm_platform::bincode;
 use clap::Parser;
 use eyre::Result;
@@ -58,8 +58,8 @@ async fn main() -> Result<()> {
     let num_segments = 8;
     // Must be larger than RangeTupleCheckerAir.height == 524288
     let segment_len = 1_000_000;
-    let axiom_vm_pk = {
-        let axiom_vm_config = AxiomVmConfig {
+    let axvm_sdk_pk = {
+        let axvm_sdk_config = AxVmSdkConfig {
             max_num_user_public_values: NUM_PUBLIC_VALUES,
             app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
             leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(agg_log_blowup),
@@ -77,10 +77,10 @@ async fn main() -> Result<()> {
                 ..Default::default()
             },
         };
-        AxiomVmProvingKey::keygen(axiom_vm_config)
+        AxVmSdkProvingKey::keygen(axvm_sdk_config)
     };
 
-    let app_committed_exe = generate_fib_exe(axiom_vm_pk.app_vm_pk.fri_params);
+    let app_committed_exe = generate_fib_exe(axvm_sdk_pk.app_vm_pk.fri_params);
 
     let n = 800_000u64;
     let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
             group = "fibonacci_continuation_program"
         )
         .in_scope(|| {
-            let mut vm_config = axiom_vm_pk.app_vm_pk.vm_config.clone();
+            let mut vm_config = axvm_sdk_pk.app_vm_pk.vm_config.clone();
             vm_config.collect_metrics = true;
             let vm = VmExecutor::new(vm_config);
             let execution_results = vm
@@ -101,10 +101,10 @@ async fn main() -> Result<()> {
                 .unwrap();
             assert_eq!(execution_results.len(), num_segments);
             let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.app_vm_pk.clone(),
+                axvm_sdk_pk.app_vm_pk.clone(),
                 app_committed_exe.clone(),
             );
-            counter!("fri.log_blowup").absolute(axiom_vm_pk.app_vm_pk.fri_params.log_blowup as u64);
+            counter!("fri.log_blowup").absolute(axvm_sdk_pk.app_vm_pk.fri_params.log_blowup as u64);
             ContinuationVmProver::prove(&app_prover, vec![app_input])
         });
 
@@ -112,8 +112,8 @@ async fn main() -> Result<()> {
             let leaf_inputs =
                 LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proofs, NUM_CHILDREN_LEAF);
             let leaf_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.leaf_vm_pk.clone(),
-                axiom_vm_pk.leaf_committed_exe.clone(),
+                axvm_sdk_pk.leaf_vm_pk.clone(),
+                axvm_sdk_pk.leaf_committed_exe.clone(),
             );
             leaf_inputs
                 .into_iter()
@@ -127,15 +127,15 @@ async fn main() -> Result<()> {
         });
         let final_internal_proof = {
             let internal_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-                axiom_vm_pk.internal_vm_pk,
-                axiom_vm_pk.internal_committed_exe.clone(),
+                axvm_sdk_pk.internal_vm_pk,
+                axvm_sdk_pk.internal_committed_exe.clone(),
             );
             let mut internal_node_idx = 0;
             let mut internal_node_height = 0;
             let mut proofs = leaf_proofs;
             while proofs.len() > 1 {
                 let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-                    axiom_vm_pk
+                    axvm_sdk_pk
                         .internal_committed_exe
                         .committed_program
                         .prover_data
@@ -169,8 +169,8 @@ async fn main() -> Result<()> {
         #[allow(unused_variables)]
         let root_proof = info_span!("root verifier", group = "root_verifier").in_scope(move || {
             let root_prover = VmLocalProver::<OuterSC, BabyBearPoseidon2OuterEngine>::new(
-                axiom_vm_pk.root_vm_pk.clone(),
-                axiom_vm_pk.root_committed_exe.clone(),
+                axvm_sdk_pk.root_vm_pk.clone(),
+                axvm_sdk_pk.root_committed_exe.clone(),
             );
             let root_input = RootVmVerifierInput {
                 proofs: vec![final_internal_proof],

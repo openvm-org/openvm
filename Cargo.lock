@@ -524,23 +524,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axiom-vm"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "ax-poseidon2-air",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-native-compiler",
- "axvm-recursion",
- "derivative",
- "p3-baby-bear",
- "serde",
- "serde_json",
- "static_assertions",
-]
-
-[[package]]
 name = "axvm"
 version = "0.1.0"
 dependencies = [
@@ -569,11 +552,11 @@ name = "axvm-benchmarks"
 version = "0.1.0"
 dependencies = [
  "ax-stark-sdk",
- "axiom-vm",
  "axvm-build",
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
+ "axvm-sdk",
  "axvm-transpiler",
  "clap",
  "criterion",
@@ -852,6 +835,23 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ax-poseidon2-air",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "derivative",
+ "p3-baby-bear",
+ "serde",
+ "serde_json",
+ "static_assertions",
 ]
 
 [[package]]
