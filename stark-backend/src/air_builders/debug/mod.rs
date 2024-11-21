@@ -3,10 +3,10 @@ use p3_air::{
 };
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{PartitionedAirBuilder, ViewPair};
 use crate::{
+    config::{StarkGenericConfig, Val},
     interaction::{Interaction, InteractionBuilder, InteractionType},
     rap::PermutationAirBuilderWithExposedValues,
 };

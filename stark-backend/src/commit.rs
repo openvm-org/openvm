@@ -1,7 +1,6 @@
-use p3_uni_stark::StarkGenericConfig;
 use serde::{Deserialize, Serialize};
 
-use crate::config::PcsProverData;
+use crate::config::{PcsProverData, StarkGenericConfig};
 
 /// In a multi-matrix system, we record a pointer from each matrix to the commitment its stored in
 /// as well as the index of the matrix within that commitment.

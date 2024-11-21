@@ -9,9 +9,8 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::StarkGenericConfig,
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    p3_uni_stark::Val,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,

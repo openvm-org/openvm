@@ -3,11 +3,10 @@ use std::fmt::Debug;
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_commit::{Pcs, PolynomialSpace};
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::config::{PcsProof, PcsProverData};
+use crate::config::{Domain, PcsProof, PcsProverData, StarkGenericConfig};
 
 pub struct OpeningProver<'pcs, SC: StarkGenericConfig> {
     pcs: &'pcs SC::Pcs,

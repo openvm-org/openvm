@@ -4,12 +4,11 @@ use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 pub use super::trace::{ProverTraceData, TraceCommitter};
 use crate::{
-    config::Com,
+    config::{Com, StarkGenericConfig, Val},
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     prover::opener::OpeningProof,
     rap::AnyRap,

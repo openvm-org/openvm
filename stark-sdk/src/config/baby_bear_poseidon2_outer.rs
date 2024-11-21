@@ -1,5 +1,6 @@
 use std::any::type_name;
 
+use ax_stark_backend::config::StarkConfig;
 use ff::PrimeField;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, FFBn254Fr, Poseidon2Bn254};
@@ -11,7 +12,6 @@ use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_poseidon2::ExternalLayerConstants;
 use p3_symmetric::{CryptographicPermutation, MultiField32PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::StarkConfig;
 use zkhash::{
     ark_ff::{BigInteger, PrimeField as _},
     fields::bn256::FpBN256 as ark_FpBN256,

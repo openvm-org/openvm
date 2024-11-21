@@ -2,10 +2,10 @@ use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use tracing::instrument;
 
 use crate::{
+    config::{Domain, StarkGenericConfig},
     keygen::{types::MultiStarkVerifyingKey, view::MultiStarkVerifyingKeyView},
     prover::{opener::AdjacentOpenedValues, types::Proof},
     verifier::constraints::verify_single_rap_constraints,

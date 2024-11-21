@@ -10,12 +10,11 @@ use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
     air_builders::debug::check_constraints::{check_constraints, check_logup},
-    config::{Com, PcsProof, PcsProverData},
+    config::{Domain, StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
         metrics::trace_metrics,
@@ -77,14 +76,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         challenger: &mut SC::Challenger,
         mpk: &'a MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Proof<SC> {
         assert!(mpk.validate(&proof_input), "Invalid proof input");
         let pcs = self.config.pcs();
 
@@ -251,14 +243,7 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
     quotient_data: ProverQuotientData<SC>,
     domain_per_air: Vec<Domain<SC>>,
     public_values_per_air: Vec<Vec<Val<SC>>>,
-) -> Proof<SC>
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+) -> Proof<SC> {
     // Observe quotient commitment
     challenger.observe(quotient_data.commit.clone());
 

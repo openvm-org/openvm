@@ -165,6 +165,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use ax_stark_backend::config::{Domain, StarkGenericConfig, Val};
     use ax_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
@@ -173,7 +174,6 @@ pub(crate) mod tests {
     use axvm_native_compiler::asm::AsmBuilder;
     use p3_commit::{Pcs, PolynomialSpace};
     use p3_field::PrimeField;
-    use p3_uni_stark::{Domain, StarkGenericConfig, Val};
     use rand::{thread_rng, Rng};
 
     use super::*;

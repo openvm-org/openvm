@@ -5,7 +5,7 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::{Com, PcsProof, PcsProverData},
+    config::StarkGenericConfig,
     keygen::types::MultiStarkVerifyingKey,
     prover::types::{Proof, ProofInput},
     utils::disable_debug_builder,
@@ -22,7 +22,6 @@ use ax_stark_sdk::{
     },
     engine::StarkEngine,
 };
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -37,14 +36,7 @@ pub fn prove<SC: StarkGenericConfig, E: StarkEngine<SC>>(
     Arc<DummyInteractionAir>,
     Proof<SC>,
     ProverBenchmarks,
-)
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+) {
     let mut chip =
         DummyInteractionChip::new_with_partition(engine.config().pcs(), trace[0].1.len(), false, 0);
     let (count, fields): (Vec<_>, Vec<_>) = trace.into_iter().unzip();

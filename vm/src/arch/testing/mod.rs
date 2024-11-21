@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{StarkGenericConfig, Val},
     engine::VerificationData,
     prover::types::AirProofInput,
     verifier::VerificationError,
@@ -321,14 +321,7 @@ where
     pub fn test<E: StarkEngine<SC>, P: Fn() -> E>(
         &self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerificationError>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Result<VerificationData<SC>, VerificationError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         engine_provider().run_test_impl(self.air_proof_inputs.clone())
     }
