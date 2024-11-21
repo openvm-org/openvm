@@ -148,15 +148,21 @@ jobs:
       - name: Setup e2e (halo2 and arguments)
         working-directory: lib/recursion # We only ever run halo2 for recursion
         run: |
-          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
-            .benchmarks[] |
+          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" \
+          --arg instance_type "${{ inputs.instance_type }}" \
+          --arg memory_allocator "${{ inputs.memory_allocator }}" \
+          --argjson app_log_blowup "${{ inputs.app_log_blowup }}" \
+          --argjson agg_log_blowup "${{ inputs.agg_log_blowup }}" \
+          --argjson root_log_blowup "${{ inputs.root_log_blowup }}" \
+          --argjson internal_log_blowup "${{ inputs.internal_log_blowup }}" \
+          '.benchmarks[] |
             select(.name == $name) |
-            select(.instance_type == ${{ inputs.instance_type }}) |
-            select(.memory_allocator == ${{ inputs.memory_allocator }}) |
-            select(.app_log_blowup == ${{ inputs.app_log_blowup }}) |
-            select(.agg_log_blowup == ${{ inputs.agg_log_blowup }}) |
-            select((.root_log_blowup // 0) == ${{ inputs.root_log_blowup }}) |
-            select((.internal_log_blowup // 0) == ${{ inputs.internal_log_blowup }}) |
+            select(.run_params[] | .instance_type == $instance_type) |
+            select(.run_params[] | .memory_allocator == $memory_allocator) |
+            select(.run_params[] | .app_log_blowup == $app_log_blowup) |
+            select(.run_params[] | .agg_log_blowup == $agg_log_blowup) |
+            select(.run_params[] | (.root_log_blowup // 0) == $root_log_blowup) |
+            select(.run_params[] | (.internal_log_blowup // 0) == $internal_log_blowup) |
             .e2e_bench
           ' ../../ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
