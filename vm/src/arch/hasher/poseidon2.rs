@@ -4,19 +4,17 @@ use ax_poseidon2_air::poseidon2::Poseidon2Air;
 use p3_field::{PrimeField, PrimeField32};
 
 use crate::{
-    arch::{
-        hasher::Hasher, vm_poseidon2_config, DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-        POSEIDON2_WIDTH,
-    },
+    arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH},
     system::memory::CHUNK,
 };
 
+// TODO: use Poseidon2 struct instead of Poseidon2Air
 pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<{ POSEIDON2_WIDTH }, F> {
     Poseidon2Hasher {
         poseidon2_air: Poseidon2Air::<POSEIDON2_WIDTH, F>::from_config(
             vm_poseidon2_config(),
             // `max_constraint_degree` and `bus_index` could be any value.
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            7,
             0,
         ),
     }

@@ -1,5 +1,6 @@
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 
+use ax_circuit_primitives::var_range::VariableRangeCheckerChip;
 use p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
@@ -8,7 +9,8 @@ use crate::{
     kernels::public_values::PublicValuesChip,
     system::{
         connector::VmConnectorChip,
-        memory::{merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryControllerRef},
+        memory::{offline_checker::MemoryBus, MemoryControllerRef},
+        phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
     },
 };
@@ -17,19 +19,20 @@ const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
 const MEMORY_BUS: MemoryBus = MemoryBus(1);
 const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 const RANGE_CHECKER_BUS: usize = 3;
-const MEMORY_MERKLE_BUS: MemoryMerkleBus = MemoryMerkleBus(4);
-const POSEIDON2_DIRECT_BUS: usize = 6;
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 pub struct SystemChipset<F: PrimeField32> {
     // ATTENTION: chip destruction should follow the following field order:
+    pub phantom_chip: PhantomChip<F>,
     pub program_chip: ProgramChip<F>,
     pub connector_chip: VmConnectorChip<F>,
     /// PublicValuesChip is disabled when num_public_values == 0.
     pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
     pub memory_controller: MemoryControllerRef<F>,
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
+/// Builder for chipset extensions. Chipsets always extend an existing system chipset.
 pub struct ChipsetBuilder<F: PrimeField32> {
     system: SystemChipset<F>,
     /// Bus indices are in range [0, bus_idx_max)
