@@ -11,7 +11,10 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -121,8 +124,8 @@ impl<
         };
 
         // Address spaces
-        let d = AB::F::from_canonical_usize(1);
-        let e = AB::F::from_canonical_usize(2);
+        let d = AB::F::from_canonical_u32(RV32_REGISTER_AS);
+        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
 
         // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
@@ -315,8 +318,8 @@ impl<
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let mut rs_vals = [0; NUM_READS];
         let rs_records: [_; NUM_READS] = from_fn(|i| {

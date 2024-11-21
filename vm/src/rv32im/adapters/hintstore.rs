@@ -9,7 +9,10 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -143,7 +146,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
         // read rs1
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rs1_ptr,
+                ),
                 local_cols.rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -183,7 +189,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::TWO, mem_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), mem_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -200,8 +206,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
                     AB::Expr::ZERO,
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
-                    AB::Expr::ONE,
-                    AB::Expr::TWO,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
                 ExecutionState {
@@ -241,8 +247,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         Self::ReadRecord,
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
         assert!(self.range_checker_chip.range_max_bits() >= 16);
 
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
