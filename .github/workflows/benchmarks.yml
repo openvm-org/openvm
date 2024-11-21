@@ -153,12 +153,18 @@ jobs:
             sort)
           e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 
-          while read md_file && [ -n "$md_file" ]; do
+          while read md_file; do
+            if [ -z "$md_file" ]; then
+              continue
+            fi
             echo "Downloading results for benchmark: $md_file"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
           done <<< "$md_files"
 
-          while read e2e_md_file && [ -n "$e2e_md_file" ]; do
+          while read e2e_md_file; do
+            if [ -z "$e2e_md_file" ]; then
+              continue
+            fi
             echo "Downloading results for benchmark: $e2e_md_file"
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
           done <<< "$e2e_md_files"
