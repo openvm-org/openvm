@@ -130,7 +130,18 @@ impl<N: Field> Hash for SymbolicVar<N> {
 
 impl<N: Field> PartialEq for SymbolicVar<N> {
     fn eq(&self, other: &Self) -> bool {
-        self.digest() == other.digest()
+        if self.digest() != other.digest() {
+            return false;
+        }
+        match (self, other) {
+            (SymbolicVar::Const(a, _), SymbolicVar::Const(b, _)) => a == b,
+            (SymbolicVar::Val(a, _), SymbolicVar::Val(b, _)) => a == b,
+            (SymbolicVar::Add(a, b, _), SymbolicVar::Add(c, d, _)) => a == c && b == d,
+            (SymbolicVar::Mul(a, b, _), SymbolicVar::Mul(c, d, _)) => a == c && b == d,
+            (SymbolicVar::Sub(a, b, _), SymbolicVar::Sub(c, d, _)) => a == c && b == d,
+            (SymbolicVar::Neg(a, _), SymbolicVar::Neg(b, _)) => a == b,
+            _ => false,
+        }
     }
 }
 
@@ -146,7 +157,19 @@ impl<F: Field> Hash for SymbolicFelt<F> {
 
 impl<F: Field> PartialEq for SymbolicFelt<F> {
     fn eq(&self, other: &Self) -> bool {
-        self.digest() == other.digest()
+        if self.digest() != other.digest() {
+            return false;
+        }
+        match (self, other) {
+            (SymbolicFelt::Const(a, _), SymbolicFelt::Const(b, _)) => a == b,
+            (SymbolicFelt::Val(a, _), SymbolicFelt::Val(b, _)) => a == b,
+            (SymbolicFelt::Add(a, b, _), SymbolicFelt::Add(c, d, _)) => a == c && b == d,
+            (SymbolicFelt::Mul(a, b, _), SymbolicFelt::Mul(c, d, _)) => a == c && b == d,
+            (SymbolicFelt::Sub(a, b, _), SymbolicFelt::Sub(c, d, _)) => a == c && b == d,
+            (SymbolicFelt::Div(a, b, _), SymbolicFelt::Div(c, d, _)) => a == c && b == d,
+            (SymbolicFelt::Neg(a, _), SymbolicFelt::Neg(b, _)) => a == b,
+            _ => false,
+        }
     }
 }
 
@@ -162,7 +185,20 @@ impl<F: Field, EF: Field> Hash for SymbolicExt<F, EF> {
 
 impl<F: Field, EF: Field> PartialEq for SymbolicExt<F, EF> {
     fn eq(&self, other: &Self) -> bool {
-        self.digest() == other.digest()
+        if self.digest() != other.digest() {
+            return false;
+        }
+        match (self, other) {
+            (SymbolicExt::Const(a, _), SymbolicExt::Const(b, _)) => a == b,
+            (SymbolicExt::Base(a, _), SymbolicExt::Base(b, _)) => a == b,
+            (SymbolicExt::Val(a, _), SymbolicExt::Val(b, _)) => a == b,
+            (SymbolicExt::Add(a, b, _), SymbolicExt::Add(c, d, _)) => a == c && b == d,
+            (SymbolicExt::Mul(a, b, _), SymbolicExt::Mul(c, d, _)) => a == c && b == d,
+            (SymbolicExt::Sub(a, b, _), SymbolicExt::Sub(c, d, _)) => a == c && b == d,
+            (SymbolicExt::Div(a, b, _), SymbolicExt::Div(c, d, _)) => a == c && b == d,
+            (SymbolicExt::Neg(a, _), SymbolicExt::Neg(b, _)) => a == b,
+            _ => false,
+        }
     }
 }
 
