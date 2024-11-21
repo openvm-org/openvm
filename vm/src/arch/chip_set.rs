@@ -864,6 +864,7 @@ impl VmConfig {
                 execution_bus,
                 program_bus,
                 memory_controller.clone(),
+                POSEIDON2_DIRECT_BUS,
                 offset,
             )));
             for opcode in range {

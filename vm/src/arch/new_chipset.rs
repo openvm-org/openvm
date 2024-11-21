@@ -3,17 +3,22 @@ use std::{any::Any, cell::RefCell, rc::Rc};
 use p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
-use super::InstructionExecutor;
+use super::{ExecutionBus, InstructionExecutor};
 use crate::{
     kernels::public_values::PublicValuesChip,
-    system::{connector::VmConnectorChip, memory::MemoryControllerRef, program::ProgramChip},
+    system::{
+        connector::VmConnectorChip,
+        memory::{merkle::MemoryMerkleBus, offline_checker::MemoryBus, MemoryControllerRef},
+        program::{ProgramBus, ProgramChip},
+    },
 };
 
-/// A helper trait for downcasting types that may be enums.
-pub trait AnyEnum {
-    /// Recursively "unwraps" enum and casts to `Any` for downcasting.
-    fn as_any_kind(&self) -> &dyn Any;
-}
+const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
+const MEMORY_BUS: MemoryBus = MemoryBus(1);
+const PROGRAM_BUS: ProgramBus = ProgramBus(2);
+const RANGE_CHECKER_BUS: usize = 3;
+const MEMORY_MERKLE_BUS: MemoryMerkleBus = MemoryMerkleBus(4);
+const POSEIDON2_DIRECT_BUS: usize = 6;
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 pub struct SystemChipset<F: PrimeField32> {
@@ -75,6 +80,12 @@ pub struct Chipset<E, C> {
     /// TODO: usize -> AxVmOpcode(usize)
     pub executors: FxHashMap<usize, E>,
     pub chips: Vec<C>,
+}
+
+/// A helper trait for downcasting types that may be enums.
+pub trait AnyEnum {
+    /// Recursively "unwraps" enum and casts to `Any` for downcasting.
+    fn as_any_kind(&self) -> &dyn Any;
 }
 
 #[cfg(test)]

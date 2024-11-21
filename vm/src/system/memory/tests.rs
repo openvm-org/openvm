@@ -33,7 +33,7 @@ use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRec
 use crate::{
     arch::{
         testing::memory::gen_pointer, ExecutionBus, MemoryConfig, EXECUTION_BUS, MEMORY_BUS,
-        MEMORY_MERKLE_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+        MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
@@ -293,6 +293,7 @@ fn test_memory_controller_persistent() {
         ExecutionBus(EXECUTION_BUS),
         ProgramBus(READ_INSTRUCTION_BUS),
         Rc::new(RefCell::new(dummy_memory_controller)),
+        POSEIDON2_DIRECT_BUS,
         0,
     );
 

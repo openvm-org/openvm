@@ -26,7 +26,7 @@ pub struct Poseidon2VmAir<T> {
     pub inner: Poseidon2Air<WIDTH, T>,
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub direct: bool, // Whether direct interactions are enabled.
+    pub direct_bus: Option<usize>, // Whether direct interactions are enabled.
 
     pub(super) offset: usize,
 }
