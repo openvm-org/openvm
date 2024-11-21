@@ -163,6 +163,8 @@ jobs:
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
           done <<< "$e2e_md_files"
 
+          echo "a test"
+
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --e2e-md-files ${e2e_md_file_list} \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
