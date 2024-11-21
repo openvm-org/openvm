@@ -107,7 +107,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
-        direct_bus: usize,
+        direct_bus_idx: usize,
         offset: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
@@ -116,7 +116,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             execution_bus,
             program_bus,
             memory_controller.borrow().memory_bridge(),
-            direct_bus,
+            direct_bus_idx,
             offset,
         );
         Self {

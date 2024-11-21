@@ -2,17 +2,20 @@ use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use axvm_instructions::{
-    instruction::Instruction, program::Program, PublishOpcode, SystemOpcode, UsizeOpcode,
+    instruction::Instruction, program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode,
 };
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
-use strum::EnumDiscriminants;
+use strum::{EnumDiscriminants, IntoEnumIterator};
 
 use super::{
-    ExecutionBus, ExecutionState, InstructionExecutor, Streams, SystemConfig, MEMORY_MERKLE_BUS,
+    vm_poseidon2_config, ExecutionBus, ExecutionState, InstructionExecutor, Streams, SystemConfig,
+    MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
 };
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -180,6 +183,7 @@ impl<E, P> VmInventory<E, P> {
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 /// The minimum collection of chips that any VM must have.
 pub struct InternalSystem<F: PrimeField32> {
+    pub config: SystemConfig,
     // ATTENTION: chip destruction should follow the following field order:
     /// Contains:
     /// - PhantomChip
@@ -193,6 +197,10 @@ pub struct InternalSystem<F: PrimeField32> {
     pub memory_controller: MemoryControllerRef<F>,
     // RangeCheckerChip **must** be the last chip to have trace generation called on
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+
+    poseidon2_chip_idx: Option<ExecutorId>,
+    /// System buses use indices [0, bus_idx_max)
+    bus_idx_max: usize,
 }
 
 #[derive(ChipUsageGetter, Chip)]
@@ -262,15 +270,22 @@ impl<F: PrimeField32> InternalSystem<F> {
                 .add_executor(chip.into(), [PublishOpcode::default_offset()])
                 .unwrap();
         }
-        // TODO: need to handle Poseidon2
 
-        Self {
+        let mut system = Self {
+            config,
             inventory,
             program_chip,
             connector_chip,
             memory_controller,
             range_checker_chip: range_checker,
+            poseidon2_chip_idx: None,
+            bus_idx_max,
+        };
+        if config.continuation_enabled {
+            system.add_poseidon2_chip(config.max_constraint_degree);
         }
+
+        system
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
@@ -285,8 +300,42 @@ impl<F: PrimeField32> InternalSystem<F> {
         3 + self.memory_controller.borrow().num_airs() + self.inventory.num_airs()
     }
 
+    pub fn poseidon2_chip(&self) -> Option<&Poseidon2Chip<F>> {
+        let idx = self.poseidon2_chip_idx?;
+        let ex_chip = self.inventory.executors().get(idx)?;
+        match ex_chip {
+            SystemExecutor::Poseidon2(chip) => Some(chip),
+            _ => None,
+        }
+    }
+
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
+    }
+
+    // TODO[jpw]: this will be cleaner once poseidon2 hasher and poseidon2 direct are separated
+    /// Poseidon2 chip is a special case because it is needed for persistent memory.
+    pub(crate) fn add_poseidon2_chip(&mut self, max_constraint_degree: usize) {
+        if self.poseidon2_chip().is_some() {
+            return;
+        }
+        let direct_bus_idx = self.bus_idx_max;
+        self.bus_idx_max += 1;
+        let chip = Poseidon2Chip::from_poseidon2_config(
+            vm_poseidon2_config(),
+            max_constraint_degree.min(SBOX_DEGREE),
+            EXECUTION_BUS,
+            PROGRAM_BUS,
+            self.memory_controller.clone(),
+            direct_bus_idx,
+            Poseidon2Opcode::default_offset(),
+        );
+        self.inventory
+            .add_executor(
+                chip.into(),
+                Poseidon2Opcode::iter().map(|local_opcode| local_opcode.with_default_offset()),
+            )
+            .unwrap();
     }
 }
 
