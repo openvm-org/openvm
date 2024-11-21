@@ -52,6 +52,8 @@ jobs:
             RUN_E2E=false
           fi
 
+          echo "please"
+
           matrix=$(jq -c --argjson run_e2e $RUN_E2E '
             [
               .benchmarks[] |
