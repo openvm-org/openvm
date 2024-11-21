@@ -37,8 +37,8 @@ const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
-pub struct ProcessingBuilder<'a, F: PrimeField32> {
-    system: &'a SystemUnit<F>,
+pub struct VmExtensionBuilder<'a, F: PrimeField32> {
+    system: &'a InternalSystem<F>,
     /// Bus indices are in range [0, bus_idx_max)
     bus_idx_max: usize,
     /// Chips that are already included in the chipset and may be used
@@ -47,7 +47,7 @@ pub struct ProcessingBuilder<'a, F: PrimeField32> {
     chips: Vec<&'a dyn AnyEnum>,
 }
 
-impl<'a, F: PrimeField32> ProcessingBuilder<'a, F> {
+impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
     }
@@ -75,7 +75,7 @@ impl<'a, F: PrimeField32> ProcessingBuilder<'a, F> {
 /// There are two associated types:
 /// - `Executor`: enum for chips that are [`InstructionExecutor`]s.
 /// -
-pub trait ProcessingConfig<F: PrimeField32> {
+pub trait VmExtension<F: PrimeField32> {
     /// Enum of chips that implement [`InstructionExecutor`] for instruction execution.
     /// `Executor` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
     /// `StarkGenericConfig` generic parameter.
@@ -87,12 +87,12 @@ pub trait ProcessingConfig<F: PrimeField32> {
 
     fn build(
         &self,
-        builder: &mut ProcessingBuilder<F>,
-    ) -> ProcessingUnit<Self::Executor, Self::Periphery>;
+        builder: &mut VmExtensionBuilder<F>,
+    ) -> VmInventory<Self::Executor, Self::Periphery>;
 }
 
 #[derive(Clone, Debug)]
-pub struct ProcessingUnit<E, P> {
+pub struct VmInventory<E, P> {
     /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
     instruction_lookup: FxHashMap<AxVmOpcode, ExecutorId>,
     executors: Vec<E>,
@@ -112,13 +112,13 @@ enum ChipId {
     Periphery(usize),
 }
 
-impl<E, P> Default for ProcessingUnit<E, P> {
+impl<E, P> Default for VmInventory<E, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E, P> ProcessingUnit<E, P> {
+impl<E, P> VmInventory<E, P> {
     pub fn new() -> Self {
         Self {
             instruction_lookup: FxHashMap::default(),
@@ -178,13 +178,14 @@ impl<E, P> ProcessingUnit<E, P> {
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
-pub struct SystemUnit<F: PrimeField32> {
+/// The minimum collection of chips that any VM must have.
+pub struct InternalSystem<F: PrimeField32> {
     // ATTENTION: chip destruction should follow the following field order:
     /// Contains:
     /// - PhantomChip
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
-    pub processing: ProcessingUnit<SystemExecutor<F>, ()>,
+    pub inventory: VmInventory<SystemExecutor<F>, ()>,
     // The following don't execute instructions, they are the backbone of the system
     pub program_chip: ProgramChip<F>,
     pub connector_chip: VmConnectorChip<F>,
@@ -204,7 +205,7 @@ pub enum SystemExecutor<F: PrimeField32> {
     Poseidon2(Poseidon2Chip<F>),
 }
 
-impl<F: PrimeField32> SystemUnit<F> {
+impl<F: PrimeField32> InternalSystem<F> {
     /// **If** public values chip exists, then its internal index is 1.
     const PV_CHIP_IDX: ExecutorId = 1;
 
@@ -233,7 +234,7 @@ impl<F: PrimeField32> SystemUnit<F> {
         let program_chip = ProgramChip::default();
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
-        let mut processing = ProcessingUnit::new();
+        let mut inventory = VmInventory::new();
 
         let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
         let phantom_chip = PhantomChip::new(
@@ -242,7 +243,7 @@ impl<F: PrimeField32> SystemUnit<F> {
             memory_controller.clone(),
             phantom_opcode,
         );
-        processing
+        inventory
             .add_executor(phantom_chip.into(), [phantom_opcode])
             .unwrap();
 
@@ -257,14 +258,14 @@ impl<F: PrimeField32> SystemUnit<F> {
                 ),
                 memory_controller.clone(),
             );
-            processing
+            inventory
                 .add_executor(chip.into(), [PublishOpcode::default_offset()])
                 .unwrap();
         }
         // TODO: need to handle Poseidon2
 
         Self {
-            processing,
+            inventory,
             program_chip,
             connector_chip,
             memory_controller,
@@ -273,7 +274,7 @@ impl<F: PrimeField32> SystemUnit<F> {
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
-        let ex_chip = self.processing.executors().get(Self::PV_CHIP_IDX)?;
+        let ex_chip = self.inventory.executors().get(Self::PV_CHIP_IDX)?;
         match ex_chip {
             SystemExecutor::PublicValues(chip) => Some(chip),
             _ => None,
@@ -281,7 +282,7 @@ impl<F: PrimeField32> SystemUnit<F> {
     }
 
     pub fn num_airs(&self) -> usize {
-        3 + self.memory_controller.borrow().num_airs() + self.processing.num_airs()
+        3 + self.memory_controller.borrow().num_airs() + self.inventory.num_airs()
     }
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
