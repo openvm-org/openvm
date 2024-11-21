@@ -156,7 +156,7 @@ pub fn outer_perm() -> Perm {
     let mut round_constants = bn254_poseidon2_rc3();
     let internal_end = (ROUNDS_F / 2) + ROUNDS_P;
     let terminal = round_constants.split_off(internal_end);
-    let internal_round_constants = round_constants.split_off(ROUNDS_P);
+    let internal_round_constants = round_constants.split_off(ROUNDS_F / 2);
     let internal_round_constants = internal_round_constants
         .into_iter()
         .map(|vec| vec[0])
