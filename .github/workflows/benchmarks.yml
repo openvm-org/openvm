@@ -161,18 +161,18 @@ jobs:
             s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
           done <<< "$md_files"
 
-          E2E_ARGS=""
+          SUMMARIZE_ARGS="${md_file_list}"
           if [[ -n "$e2e_md_files" ]]; then
             while read e2e_md_file; do
               echo "Downloading results for benchmark: $e2e_md_file"
               s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
             done <<< "$e2e_md_files"
 
-            E2E_ARGS="--e2e-md-files ${e2e_md_file_list}"
+            SUMMARIZE_ARGS="${SUMMARIZE_ARGS} --e2e-md-files ${e2e_md_file_list}"
           fi
           echo "${md_file_list} ${E2E_ARGS}"
 
-          python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" "${E2E_ARGS}" \
+          python3 ci/scripts/metric_unify/summarize.py "${SUMMARIZE_ARGS}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
             --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
 
