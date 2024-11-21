@@ -144,14 +144,14 @@ jobs:
             select(.e2e_bench != true) |
             "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
-          md_file_list=$(echo "$md_files" | paste -sd "," -)
+          md_file_list=$(echo -n "$md_files" | paste -sd "," -)
 
           e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench == true) |
             "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
-          e2e_md_file_list=$(echo "$e2e_md_files" | paste -sd "," -)
+          e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 
           while read md_file; do
             echo "Downloading results for benchmark: $md_file"
