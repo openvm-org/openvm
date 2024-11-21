@@ -170,7 +170,6 @@ jobs:
 
             SUMMARIZE_ARGS="${SUMMARIZE_ARGS} --e2e-md-files ${e2e_md_file_list}"
           fi
-          echo "${md_file_list} ${E2E_ARGS}"
 
           python3 ci/scripts/metric_unify/summarize.py "${SUMMARIZE_ARGS}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
