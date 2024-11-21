@@ -1,6 +1,7 @@
 extern crate alloc;
 extern crate proc_macro;
 
+use itertools::multiunzip;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, Fields};
@@ -49,7 +50,52 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             }
             .into()
         }
-        Data::Enum(_) => unimplemented!("Enums are not supported"),
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
+                multiunzip(variants.iter().map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    let execute_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as crate::arch::InstructionExecutor<F>>::execute(x, instruction, from_state)
+                    };
+                    let get_opcode_name_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as crate::arch::InstructionExecutor<F>>::get_opcode_name(x, opcode)
+                    };
+
+                    (execute_arm, get_opcode_name_arm)
+                }));
+            quote! {
+                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics {
+                    fn execute(
+                        &mut self,
+                        instruction: axvm_instructions::instruction::Instruction<F>,
+                        from_state: crate::arch::ExecutionState<u32>,
+                    ) -> crate::arch::Result<crate::arch::ExecutionState<u32>> {
+                        match self {
+                            #(#execute_arms,)*
+                        }
+                    }
+
+                    fn get_opcode_name(&self, opcode: usize) -> String {
+                        match self {
+                            #(#get_opcode_name_arms,)*
+                        }
+                    }
+                }
+            }
+            .into()
+        }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
 }

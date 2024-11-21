@@ -35,7 +35,6 @@ strum.workspace = true
 tiny-keccak.workspace = true
 num-bigint-dig = { workspace = true, features = ["std"] }
 num-traits.workspace = true
-enum_dispatch.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 strum_macros.workspace = true
