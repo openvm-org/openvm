@@ -47,8 +47,7 @@ impl ModularAddSubCoreAir {
         let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
         let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
         x6.save();
-        let mut builder = builder.borrow().clone();
-        builder.finalize();
+        let builder = builder.borrow().clone();
 
         let expr = FieldExpr::new(builder, range_bus);
         Self { expr, offset }

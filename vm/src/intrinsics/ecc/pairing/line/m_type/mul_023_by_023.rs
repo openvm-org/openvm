@@ -1,9 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
-    bigint::check_carry_mod_to_zero::CheckCarryModToZeroSubAir, var_range::VariableRangeCheckerBus,
-};
+use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_ecc_primitives::{
     field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr},
     field_extension::Fp2,
@@ -76,12 +74,6 @@ pub fn mul_023_by_023_expr(
     config.check_valid();
     let builder = ExprBuilder::new(config.clone(), range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
-    let subair = CheckCarryModToZeroSubAir::new(
-        config.modulus,
-        config.limb_bits,
-        range_bus.index,
-        range_bus.range_max_bits,
-    );
 
     let mut b0 = Fp2::new(builder.clone()); // x2
     let mut c0 = Fp2::new(builder.clone()); // x3
@@ -99,11 +91,6 @@ pub fn mul_023_by_023_expr(
 
     [l0, l2, l3, l4, l5].map(|mut l| l.save_output());
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
-    FieldExpr {
-        builder,
-        check_carry_mod_to_zero: subair,
-        range_bus,
-    }
+    let builder = builder.borrow().clone();
+    FieldExpr::new(builder, range_bus)
 }

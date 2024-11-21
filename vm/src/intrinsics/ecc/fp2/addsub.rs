@@ -69,8 +69,7 @@ pub fn fp2_addsub_expr(
     let mut z = Fp2::select(is_add_flag, &add, &diff);
     z.save_output();
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     (FieldExpr::new(builder, range_bus), is_add_flag, is_sub_flag)
 }
 

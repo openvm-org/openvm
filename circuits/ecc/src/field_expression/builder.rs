@@ -204,6 +204,8 @@ pub struct FieldExpr {
 
 impl FieldExpr {
     pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+        let mut builder = builder;
+        builder.finalize();
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
@@ -263,9 +265,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
-        println!("flags: {:?}", flags.len());
         let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
-        println!("is_setup: {:?}", is_setup);
 
         {
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {

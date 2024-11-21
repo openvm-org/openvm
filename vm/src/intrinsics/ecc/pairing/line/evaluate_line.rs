@@ -93,7 +93,6 @@ pub fn evaluate_line_expr(
     b.save_output();
     c.save_output();
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     FieldExpr::new(builder, range_bus)
 }

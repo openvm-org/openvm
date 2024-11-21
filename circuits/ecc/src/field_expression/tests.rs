@@ -33,8 +33,7 @@ fn test_add() {
     let x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -69,8 +68,7 @@ fn test_div() {
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
 
@@ -111,8 +109,7 @@ fn test_auto_carry_mul() {
     x4.save();
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -154,8 +151,7 @@ fn test_auto_carry_intmul() {
     x4.save();
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -206,8 +202,7 @@ fn test_auto_carry_add() {
     // But x5 is var(1) implies x4 was saved as var(0).
     assert_eq!(x5.expr, SymbolicExpr::Var(1));
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
 
     let expr = FieldExpr::new(builder, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
@@ -248,8 +243,7 @@ fn make_addsub_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
     let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
     let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
     x6.save();
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     builder
 }
 
