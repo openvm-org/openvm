@@ -14,7 +14,7 @@ use ax_circuit_primitives::{
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -352,9 +352,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             ..
         } = *instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(
-            e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_MEMORY_AS
-        );
+        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
