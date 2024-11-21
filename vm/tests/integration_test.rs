@@ -12,8 +12,8 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, ExitCode, MemoryConfig,
-        SingleSegmentVmExecutor, VirtualMachine, VmConfig,
+        hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+        ExecutorName, ExitCode, MemoryConfig, SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak256::utils::keccak256,
     prover::{local::VmLocalProver, types::VmProvingKey, SingleSegmentVmProver},
@@ -366,16 +366,18 @@ fn test_vm_1_persistent() {
             merkle_air_proof_input.raw.public_values[..8],
             merkle_air_proof_input.raw.public_values[8..]
         );
+        let mut digest = [BabyBear::ZERO; CHUNK];
+        let compression = vm_poseidon2_hasher();
+        for _ in 0..15 {
+            digest = compression.compress(&digest, &digest);
+        }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
-            // so the height of the tree is 1 + 16 - 3 = 14.
-            [
-                1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
-                350327606
-            ]
-            .map(BabyBear::from_canonical_u32)
+            // 15 times. We use 15 because addr_space_max_bits = 1 and pointer_max_bits = 16,
+            // so the height of the tree is 1 + 16 - 3 = 14. The leaf also must be hashed once
+            // with padding for security.
+            digest
         );
     }
 

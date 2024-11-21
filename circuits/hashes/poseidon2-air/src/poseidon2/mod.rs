@@ -116,7 +116,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             internal_constants: internal_round_constants_f,
             ext_mds_matrix: MDS_MAT_4,
             int_diag_m1_matrix: p3_int_diag_f,
-            reduction_factor: F::from_wrapped_u64(1u64 << 32).inverse(),
+            reduction_factor: F::ONE,
         }
     }
 }
