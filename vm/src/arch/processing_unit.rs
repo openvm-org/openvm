@@ -160,6 +160,8 @@ pub struct SystemUnit<F: PrimeField32> {
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
+impl<F: PrimeField32> SystemUnit<F> {}
+
 /// A helper trait for downcasting types that may be enums.
 pub trait AnyEnum {
     /// Recursively "unwraps" enum and casts to `Any` for downcasting.

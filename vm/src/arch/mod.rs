@@ -5,10 +5,9 @@ mod execution;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 /// Traits and builders to compose collections of chips into a virtual machine.
-mod new_chipset;
-/// Definitions of ProcessedInstruction types for use in integration API
-mod processed_instructions; // rename to chipset once stable. Note: chipset is one word.
+mod processing_unit;
 
+// delete once processing_unit is stable
 mod chip_set;
 mod config;
 
@@ -29,7 +28,6 @@ pub use chips::*;
 pub use config::*;
 pub use execution::*;
 pub use integration_api::*;
-pub use new_chipset::*;
-pub use processed_instructions::*;
+pub use processing_unit::*;
 pub use segment::*;
 pub use vm::*;

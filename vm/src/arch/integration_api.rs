@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
+use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     air_builders::{
@@ -16,7 +17,7 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
-use super::{ExecutionState, InstructionExecutor, MinimalInstruction, Result};
+use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -369,6 +370,10 @@ where
     }
 }
 
+// =================================================================================================
+// Concrete adapter interfaces
+// =================================================================================================
+
 /// The most common adapter interface.
 /// Performs `NUM_READS` batch reads of size `READ_SIZE` and
 /// `NUM_WRITES` batch writes of size `WRITE_SIZE`.
@@ -492,6 +497,28 @@ impl<T> VmAdapterInterface<T> for DynAdapterInterface<T> {
 /// Newtype to implement `From`.
 #[derive(Clone, Debug, Default)]
 pub struct DynArray<T>(pub Vec<T>);
+
+// =================================================================================================
+// Definitions of ProcessedInstruction types for use in integration API
+// =================================================================================================
+
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct MinimalInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+}
+
+// This ProcessedInstruction is used by rv32_jalr and rv32_rdwrite
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct ImmInstruction<T> {
+    pub is_valid: T,
+    /// Absolute opcode number
+    pub opcode: T,
+    pub immediate: T,
+}
 
 // =================================================================================================
 // Conversions between adapter interfaces
@@ -1210,6 +1237,43 @@ mod conversions {
                 to_pc: ctx.to_pc,
                 writes: ctx.writes.to_vec().into(),
             }
+        }
+    }
+
+    impl<T> From<MinimalInstruction<T>> for DynArray<T> {
+        fn from(m: MinimalInstruction<T>) -> Self {
+            Self(vec![m.is_valid, m.opcode])
+        }
+    }
+
+    impl<T> From<DynArray<T>> for MinimalInstruction<T> {
+        fn from(m: DynArray<T>) -> Self {
+            let mut m = m.0.into_iter();
+            MinimalInstruction {
+                is_valid: m.next().unwrap(),
+                opcode: m.next().unwrap(),
+            }
+        }
+    }
+
+    impl<T> From<DynArray<T>> for ImmInstruction<T> {
+        fn from(m: DynArray<T>) -> Self {
+            let mut m = m.0.into_iter();
+            ImmInstruction {
+                is_valid: m.next().unwrap(),
+                opcode: m.next().unwrap(),
+                immediate: m.next().unwrap(),
+            }
+        }
+    }
+
+    impl<T> From<ImmInstruction<T>> for DynArray<T> {
+        fn from(instruction: ImmInstruction<T>) -> Self {
+            DynArray::from(vec![
+                instruction.is_valid,
+                instruction.opcode,
+                instruction.immediate,
+            ])
         }
     }
 }
