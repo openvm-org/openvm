@@ -1,19 +1,33 @@
 use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 
-use ax_circuit_primitives::var_range::VariableRangeCheckerChip;
-use axvm_instructions::program::Program;
+use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use axvm_instructions::{
+    instruction::Instruction, program::Program, PublishOpcode, SystemOpcode, UsizeOpcode,
+};
+use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use strum::EnumDiscriminants;
 
-use super::{ExecutionBus, InstructionExecutor, Streams};
+use super::{
+    ExecutionBus, ExecutionState, InstructionExecutor, Streams, SystemConfig, MEMORY_MERKLE_BUS,
+};
 use crate::{
-    kernels::public_values::PublicValuesChip,
+    intrinsics::hashes::poseidon2::Poseidon2Chip,
+    kernels::{
+        adapters::native_adapter::NativeAdapterChip,
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
+    },
     system::{
         connector::VmConnectorChip,
-        memory::{offline_checker::MemoryBus, MemoryControllerRef},
+        memory::{
+            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
+            MemoryControllerRef, CHUNK,
+        },
         phantom::PhantomChip,
-        program::{ProgramBus, ProgramChip},
+        program::{ExecutionError, ProgramBus, ProgramChip},
     },
 };
 
@@ -117,6 +131,7 @@ impl<E, P> ProcessingUnit<E, P> {
     /// Inserts an executor with the collection of opcodes that it handles.
     /// If some executor already owns one of the opcodes, it will be replaced and the old
     /// executor ID is returned.
+    #[must_use]
     pub fn add_executor(
         &mut self,
         executor: E,
@@ -148,29 +163,129 @@ impl<E, P> ProcessingUnit<E, P> {
         let id = self.instruction_lookup.get(&opcode)?;
         self.executors.get_mut(*id)
     }
+
+    pub fn executors(&self) -> &[E] {
+        &self.executors
+    }
+
+    pub fn periphery(&self) -> &[P] {
+        &self.periphery
+    }
+
+    pub fn num_airs(&self) -> usize {
+        self.executors.len() + self.periphery.len()
+    }
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 pub struct SystemUnit<F: PrimeField32> {
     // ATTENTION: chip destruction should follow the following field order:
-    pub phantom_chip: PhantomChip<F>,
+    /// Contains:
+    /// - PhantomChip
+    /// - PublicValuesChip if continuations disabled
+    /// - Poseidon2Chip if continuations enabled
+    pub processing: ProcessingUnit<SystemExecutor<F>, ()>,
+    // The following don't execute instructions, they are the backbone of the system
     pub program_chip: ProgramChip<F>,
     pub connector_chip: VmConnectorChip<F>,
     /// PublicValuesChip is disabled when num_public_values == 0.
-    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
     pub memory_controller: MemoryControllerRef<F>,
+    // RangeCheckerChip **must** be the last chip to have trace generation called on
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
 }
 
+#[derive(ChipUsageGetter, Chip)]
+#[enum_dispatch(InstructionExecutor<F>)]
+pub enum SystemExecutor<F: PrimeField32> {
+    Phantom(PhantomChip<F>),
+    PublicValues(PublicValuesChip<F>),
+    // The poseidon2 with direct compression interactions
+    // TODO: make this periphery after it is separated from hasher chip
+    Poseidon2(Poseidon2Chip<F>),
+}
+
 impl<F: PrimeField32> SystemUnit<F> {
+    /// **If** public values chip exists, then its internal index is 1.
+    const PV_CHIP_IDX: ExecutorId = 1;
+
+    pub fn new(config: SystemConfig) -> Self {
+        let range_bus =
+            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
+        let mut bus_idx_max = RANGE_CHECKER_BUS;
+
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let memory_controller = if config.continuation_enabled {
+            bus_idx_max += 1;
+            Rc::new(RefCell::new(MemoryController::with_persistent_memory(
+                MEMORY_BUS,
+                config.memory_config,
+                range_checker.clone(),
+                MemoryMerkleBus(bus_idx_max - 1),
+                Equipartition::<F, CHUNK>::new(),
+            )))
+        } else {
+            Rc::new(RefCell::new(MemoryController::with_volatile_memory(
+                MEMORY_BUS,
+                config.memory_config,
+                range_checker.clone(),
+            )))
+        };
+        let program_chip = ProgramChip::default();
+        let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
+
+        let mut processing = ProcessingUnit::new();
+
+        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
+        let phantom_chip = PhantomChip::new(
+            EXECUTION_BUS,
+            PROGRAM_BUS,
+            memory_controller.clone(),
+            phantom_opcode,
+        );
+        processing
+            .add_executor(phantom_chip.into(), [phantom_opcode])
+            .unwrap();
+
+        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        if !config.continuation_enabled && config.num_public_values > 0 {
+            let chip = PublicValuesChip::new(
+                NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_controller.clone()),
+                PublicValuesCoreChip::new(
+                    config.num_public_values,
+                    PublishOpcode::default_offset(),
+                    config.max_constraint_degree as u32,
+                ),
+                memory_controller.clone(),
+            );
+            processing
+                .add_executor(chip.into(), [PublishOpcode::default_offset()])
+                .unwrap();
+        }
+        // TODO: need to handle Poseidon2
+
+        Self {
+            processing,
+            program_chip,
+            connector_chip,
+            memory_controller,
+            range_checker_chip: range_checker,
+        }
+    }
+
+    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
+        let ex_chip = self.processing.executors().get(Self::PV_CHIP_IDX)?;
+        match ex_chip {
+            SystemExecutor::PublicValues(chip) => Some(chip),
+            _ => None,
+        }
+    }
+
+    pub fn num_airs(&self) -> usize {
+        3 + self.memory_controller.borrow().num_airs() + self.processing.num_airs()
+    }
+
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
-    }
-    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.phantom_chip.set_streams(streams.clone());
-    }
-    pub(crate) fn num_airs(&self) -> usize {
-        1 + 1 + 1 + 1 + self.memory_controller.borrow().num_airs() + 1
     }
 }
 

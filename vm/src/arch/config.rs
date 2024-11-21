@@ -53,7 +53,7 @@ impl Default for MemoryConfig {
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
     pub max_constraint_degree: usize,
