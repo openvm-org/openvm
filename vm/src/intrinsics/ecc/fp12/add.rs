@@ -16,7 +16,6 @@ pub fn fp12_add_expr(config: ExprBuilderConfig, range_bus: VariableRangeCheckerB
     let mut res = x.add(&mut y);
     res.save_output();
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     FieldExpr::new(builder, range_bus)
 }

@@ -20,7 +20,6 @@ pub fn fp12_mul_expr(
     let mut res = x.mul(&mut y, xi);
     res.save_output();
 
-    let mut builder = builder.borrow().clone();
-    builder.finalize();
+    let builder = builder.borrow().clone();
     FieldExpr::new(builder, range_bus)
 }
