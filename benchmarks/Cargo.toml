@@ -22,7 +22,6 @@ tempfile.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 hex.workspace = true
-num-bigint-dig.workspace = true
 tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [dev-dependencies]

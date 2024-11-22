@@ -1,6 +1,5 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use core::str::FromStr;
 
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
@@ -14,7 +13,6 @@ use axvm_recursion::testing_utils::inner::build_verification_program;
 use axvm_transpiler::axvm_platform::bincode;
 use clap::Parser;
 use eyre::Result;
-use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use tracing::info_span;
@@ -28,15 +26,8 @@ fn main() -> Result<()> {
     let exe = AxVmExe::<BabyBear>::from(elf.clone());
     let vm_config = VmConfig::rv32im()
         .add_executor(ExecutorName::Keccak256Rv32)
-        .add_modular_support(
-            exe.custom_op_config
-                .intrinsics
-                .field_arithmetic
-                .primes
-                .iter()
-                .map(|s| BigUint::from_str(s).unwrap())
-                .collect(),
-        );
+        .add_modular_support(exe.custom_op_config.primes())
+        .add_canonical_ec_curves(); // TODO: update sw_setup macros and read it from elf.
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata =
@@ -44,7 +35,7 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                let msg = (0..255u8).collect::<Vec<_>>();
+                let msg = (0..1u8).collect::<Vec<_>>();
                 let input = bincode::serde::encode_to_vec(msg, bincode::config::standard())?;
                 bench_from_exe(
                     engine,

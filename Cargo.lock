@@ -563,7 +563,6 @@ dependencies = [
  "eyre",
  "hex",
  "metrics",
- "num-bigint-dig",
  "p3-baby-bear",
  "p3-field",
  "pprof",

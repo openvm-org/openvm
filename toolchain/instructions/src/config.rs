@@ -1,3 +1,6 @@
+use core::str::FromStr;
+
+use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
 
 /// Struct to store the configuration parameters for custom enabled opcodes.
@@ -7,6 +10,17 @@ pub struct CustomOpConfig {
     /// Configuration parameters for custom opcodes used in intrinsics.
     pub intrinsics: IntrinsicsOpConfig,
     // In the future, we will add config for kernel opcodes.
+}
+
+impl CustomOpConfig {
+    pub fn primes(&self) -> Vec<BigUint> {
+        self.intrinsics
+            .field_arithmetic
+            .primes
+            .iter()
+            .map(|s| BigUint::from_str(s).unwrap())
+            .collect()
+    }
 }
 
 /// Configuration parameters for the intrinsics opcodes.
