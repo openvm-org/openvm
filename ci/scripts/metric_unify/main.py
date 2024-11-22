@@ -73,6 +73,7 @@ class MetricDb:
         # Dict label_keys_tuple => Dict[label_values_tuple => List[Metric]]
         self.dict_by_label_types = {}
         with open(metrics_file, 'r') as f:
+            print(f.read())
             data = json.load(f)
 
         # Process counters
