@@ -49,10 +49,10 @@ const PUBLIC_VALUES_AIR_ID: usize = 2;
 /// Merkle AIR commits start/final memory states.
 const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
-const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
-const MEMORY_BUS: MemoryBus = MemoryBus(1);
-const PROGRAM_BUS: ProgramBus = ProgramBus(2);
-const RANGE_CHECKER_BUS: usize = 3;
+pub const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
+pub const MEMORY_BUS: MemoryBus = MemoryBus(1);
+pub const PROGRAM_BUS: ProgramBus = ProgramBus(2);
+pub const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmExtensionBuilder<'a, F: PrimeField32> {

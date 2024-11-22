@@ -39,6 +39,7 @@ use crate::{
     },
 };
 pub mod execution;
+pub mod extensions;
 pub mod memory;
 pub mod program;
 pub mod test_adapter;
