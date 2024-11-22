@@ -23,14 +23,7 @@ fn convert_bn254_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
 
 fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
     Fp12 {
-        c: [
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c0),
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c1),
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c2),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c0),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c1),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c2),
-        ],
+        c: x.to_coeffs().map(convert_bn254_halo2_fq2_to_fp2),
     }
 }
 

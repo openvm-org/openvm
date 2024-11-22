@@ -23,14 +23,7 @@ fn convert_bls12381_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
 
 fn convert_bls12381_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
     Fp12 {
-        c: [
-            convert_bls12381_halo2_fq2_to_fp2(x.c0.c0),
-            convert_bls12381_halo2_fq2_to_fp2(x.c0.c1),
-            convert_bls12381_halo2_fq2_to_fp2(x.c0.c2),
-            convert_bls12381_halo2_fq2_to_fp2(x.c1.c0),
-            convert_bls12381_halo2_fq2_to_fp2(x.c1.c1),
-            convert_bls12381_halo2_fq2_to_fp2(x.c1.c2),
-        ],
+        c: x.to_coeffs().map(convert_bls12381_halo2_fq2_to_fp2),
     }
 }
 
@@ -38,19 +31,7 @@ fn convert_bls12381_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
 fn test_bls12381_frobenius_coeffs() {
     #[allow(clippy::needless_range_loop)]
     for i in 0..12 {
-        // println!("[");
         for j in 0..5 {
-            // let x = FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1]);
-            // print!("Fp2 {{ c0: Bls12_381Fp(hex!(\"");
-            // for b in x.c0.to_bytes() {
-            //     print!("{:02x}", b);
-            // }
-            // println!("\")),\n  c1: Bls12_381Fp(hex!(\"");
-            // for b in x.c1.to_bytes() {
-            //     print!("{:02x}", b);
-            // }
-            // println!("\")) }},");
-
             assert_eq!(
                 Bls12_381::FROBENIUS_COEFFS[i][j],
                 convert_bls12381_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1])),
@@ -59,7 +40,6 @@ fn test_bls12381_frobenius_coeffs() {
                 j
             )
         }
-        // println!("], ");
     }
 }
 
