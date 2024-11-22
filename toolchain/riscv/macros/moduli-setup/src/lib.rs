@@ -76,6 +76,8 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                     &format!("AXIOM_SERIALIZED_MODULUS_{}", struct_name),
                                     span.into(),
                                 );
+                                let setup_function =
+                                    syn::Ident::new(&format!("setup_{}", struct_name), span.into());
                                 let serialized_len = serialized_modulus.len();
 
                                 let module_name = format_ident!("algebra_impl_{}", mod_idx);
@@ -660,6 +662,54 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                                     res = res * &base + Self::from_le_bytes(chunk);
                                                 }
                                                 res
+                                            }
+                                        }
+
+                                        pub fn #setup_function() {
+                                            #[cfg(target_os = "zkvm")]
+                                            {
+                                                let mut ptr = 0;
+                                                assert_eq!(#serialized_name[ptr], 1);
+                                                ptr += 1;
+                                                assert_eq!(#serialized_name[ptr], #mod_idx as u8);
+                                                ptr += 1;
+                                                assert_eq!(#serialized_name[ptr..ptr+4].iter().rev().fold(0, |acc, &x| acc * 256 + x as usize), #limbs);
+                                                ptr += 4;
+                                                let remaining = &#serialized_name[ptr..];
+
+                                                // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
+                                                // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
+                                                let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                                                axvm_platform::custom_insn_r!(
+                                                    axvm_platform::constants::CUSTOM_1,
+                                                    axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                    axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                                                        + #mod_idx
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    remaining.as_ptr(),
+                                                    "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                                                );
+                                                axvm_platform::custom_insn_r!(
+                                                    axvm_platform::constants::CUSTOM_1,
+                                                    axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                    axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                                                        + #mod_idx
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    remaining.as_ptr(),
+                                                    "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
+                                                );
+                                                axvm_platform::custom_insn_r!(
+                                                    axvm_platform::constants::CUSTOM_1,
+                                                    axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                                                    axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                                                        + #mod_idx
+                                                            * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                                    uninit.as_mut_ptr(),
+                                                    remaining.as_ptr(),
+                                                    "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
+                                                );
                                             }
                                         }
                                     },

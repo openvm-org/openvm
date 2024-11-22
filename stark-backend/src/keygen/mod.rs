@@ -3,11 +3,11 @@ use std::sync::Arc;
 use itertools::Itertools;
 use p3_field::AbstractExtensionField;
 use p3_matrix::Matrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
     air_builders::symbolic::{get_symbolic_builder, SymbolicRapBuilder},
+    config::{StarkGenericConfig, Val},
     keygen::types::{
         MultiStarkProvingKey, ProverOnlySinglePreprocessedData, StarkProvingKey, StarkVerifyingKey,
         TraceWidth, VerifierSinglePreprocessedData,

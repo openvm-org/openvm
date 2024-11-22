@@ -4,10 +4,12 @@
 use std::any::{type_name, Any};
 
 use p3_air::{BaseAir, PermutationAirBuilder};
-use p3_uni_stark::{StarkGenericConfig, Val};
 
-use crate::air_builders::{
-    debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
+use crate::{
+    air_builders::{
+        debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
+    },
+    config::{StarkGenericConfig, Val},
 };
 
 /// An AIR with 0 or more public values.

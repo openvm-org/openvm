@@ -3,7 +3,7 @@ use std::{fs::read, path::PathBuf, str::FromStr, time::Instant};
 use anstyle::*;
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        config::{StarkGenericConfig, Val},
         p3_field::PrimeField32,
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
@@ -126,11 +126,6 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     let exe = exe.into();
     // 1. Generate proving key from config.

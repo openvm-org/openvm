@@ -153,7 +153,7 @@ def main():
         outputs.append(generate_row(md_file, ["leaf_aggregation"], {}, args.gh_pages_link))
     write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
-    if args.e2e_md_files is not None:
+    if args.e2e_md_files and args.e2e_md_files.strip():
         outputs = []
         md_files = args.e2e_md_files.split(',')
         for md_file in md_files:

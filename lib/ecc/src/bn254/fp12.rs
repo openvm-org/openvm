@@ -57,8 +57,25 @@ impl FieldExtension<Fp2> for Fp12 {
         Self::new([c0, Fp2::ZERO, Fp2::ZERO, Fp2::ZERO, Fp2::ZERO, Fp2::ZERO])
     }
 
-    fn frobenius_map(&self, _power: usize) -> Self {
-        todo!()
+    /// We assume that the frobenius map power is < 12
+    fn frobenius_map(&self, power: usize) -> Self {
+        if power & 1 != 0 {
+            let c0 = self.c[0].clone().conjugate();
+            let c1 = self.c[1].clone().conjugate() * &Bn254::FROBENIUS_COEFFS[power][0];
+            let c2 = self.c[2].clone().conjugate() * &Bn254::FROBENIUS_COEFFS[power][1];
+            let c3 = self.c[3].clone().conjugate() * &Bn254::FROBENIUS_COEFFS[power][2];
+            let c4 = self.c[4].clone().conjugate() * &Bn254::FROBENIUS_COEFFS[power][3];
+            let c5 = self.c[5].clone().conjugate() * &Bn254::FROBENIUS_COEFFS[power][4];
+            Self::new([c0, c1, c2, c3, c4, c5])
+        } else {
+            let c0 = self.c[0].clone();
+            let c1 = &self.c[1] * &Bn254::FROBENIUS_COEFFS[power][0];
+            let c2 = &self.c[2] * &Bn254::FROBENIUS_COEFFS[power][1];
+            let c3 = &self.c[3] * &Bn254::FROBENIUS_COEFFS[power][2];
+            let c4 = &self.c[4] * &Bn254::FROBENIUS_COEFFS[power][3];
+            let c5 = &self.c[5] * &Bn254::FROBENIUS_COEFFS[power][4];
+            Self::new([c0, c1, c2, c3, c4, c5])
+        }
     }
 
     fn mul_base(&self, rhs: &Fp2) -> Self {

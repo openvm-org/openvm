@@ -3,10 +3,10 @@ use p3_air::BaseAir;
 use p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair, Matrix};
 use p3_maybe_rayon::prelude::*;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     air_builders::debug::DebugConstraintBuilder,
+    config::{StarkGenericConfig, Val},
     interaction::{
         debug::{generate_logical_interactions, LogicalInteractions},
         InteractionType, SymbolicInteraction,

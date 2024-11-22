@@ -10,13 +10,12 @@ use p3_matrix::{
     Matrix,
 };
 use p3_maybe_rayon::prelude::*;
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
     commit::CommittedSingleMatrixView,
-    config::{Com, PcsProof, PcsProverData},
+    config::{Com, Domain, PcsProverData, StarkGenericConfig, Val},
     interaction::trace::generate_permutation_trace,
     keygen::{types::StarkProvingKey, view::MultiStarkProvingKeyView},
     prover::quotient::{helper::QuotientVkDataHelper, ProverQuotientData, QuotientCommitter},
@@ -33,14 +32,7 @@ pub(super) fn generate_permutation_traces_and_exposed_values<SC: StarkGenericCon
     Vec<Vec<SC::Challenge>>,                    // challenges, per phase
     Vec<Vec<Vec<SC::Challenge>>>,               // exposed values, per air, per phase
     Vec<Option<RowMajorMatrix<SC::Challenge>>>, // permutation trace, per air
-)
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+) {
     let num_phases = mpk.vk_view().num_phases();
     if num_phases == 0 {
         let num_airs = mpk.per_air.len();
@@ -92,14 +84,7 @@ pub(super) fn commit_quotient_traces<'a, SC: StarkGenericConfig>(
     common_main_prover_data: &'a ProverTraceData<SC>,
     perm_prover_data: &'a Option<ProverTraceData<SC>>,
     exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
-) -> ProverQuotientData<SC>
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+) -> ProverQuotientData<SC> {
     let trace_views = create_trace_view_per_air(
         domain_per_air,
         cached_mains_pdata_per_air,

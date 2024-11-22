@@ -41,10 +41,12 @@ impl ModularAddSubCoreAir {
         let x1 = ExprBuilder::new_input(builder.clone());
         let x2 = ExprBuilder::new_input(builder.clone());
         let x3 = x1.clone() + x2.clone();
-        let x4 = x1 - x2;
+        let x4 = x1.clone() - x2.clone();
         let is_add_flag = builder.borrow_mut().new_flag();
-        let mut x5 = FieldVariable::select(is_add_flag, &x3, &x4);
-        x5.save();
+        let is_sub_flag = builder.borrow_mut().new_flag();
+        let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
+        let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
+        x6.save();
         let builder = builder.borrow().clone();
 
         let expr = FieldExpr::new(builder, range_bus);
@@ -84,15 +86,21 @@ where
         } = self.expr.load_vars(local);
         assert_eq!(inputs.len(), 2);
         assert_eq!(vars.len(), 1);
-        assert_eq!(flags.len(), 1);
+        assert_eq!(flags.len(), 2);
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
         let writes: Vec<AB::Expr> = vars[0].iter().map(|x| (*x).into()).collect();
-        // flag = 1 means add (opcode = 0), flag = 0 means sub (opcode = 1)
-        let expected_opcode = AB::Expr::ONE - flags[0];
+
+        let local_opcode_idx = flags[0]
+            * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::ADD as usize)
+            + flags[1] * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SUB as usize)
+            + (AB::Expr::ONE - flags[0] - flags[1])
+                * AB::Expr::from_canonical_usize(
+                    Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+                );
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
-            opcode: expected_opcode + AB::Expr::from_canonical_usize(self.offset),
+            opcode: local_opcode_idx + AB::Expr::from_canonical_usize(self.offset),
         };
 
         let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
@@ -126,6 +134,7 @@ pub struct ModularAddSubCoreRecord {
     pub x: BigUint,
     pub y: BigUint,
     pub is_add_flag: bool,
+    pub is_sub_flag: bool,
 }
 
 impl<F: PrimeField32, I> VmCoreChip<F, I> for ModularAddSubCoreChip
@@ -165,13 +174,18 @@ where
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
         let is_add_flag = match local_opcode {
             Rv32ModularArithmeticOpcode::ADD => true,
-            Rv32ModularArithmeticOpcode::SUB => false,
+            Rv32ModularArithmeticOpcode::SUB | Rv32ModularArithmeticOpcode::SETUP_ADDSUB => false,
+            _ => panic!("Unsupported opcode: {:?}", local_opcode),
+        };
+        let is_sub_flag = match local_opcode {
+            Rv32ModularArithmeticOpcode::SUB => true,
+            Rv32ModularArithmeticOpcode::ADD | Rv32ModularArithmeticOpcode::SETUP_ADDSUB => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),
         };
 
         let vars = self.air.expr.execute(
             vec![x_biguint.clone(), y_biguint.clone()],
-            vec![is_add_flag],
+            vec![is_add_flag, is_sub_flag],
         );
         assert_eq!(vars.len(), 1);
         let z_biguint = vars[0].clone();
@@ -188,6 +202,7 @@ where
                 x: x_biguint,
                 y: y_biguint,
                 is_add_flag,
+                is_sub_flag,
             },
         ))
     }
@@ -201,7 +216,7 @@ where
             (
                 &self.range_checker,
                 vec![record.x, record.y],
-                vec![record.is_add_flag],
+                vec![record.is_add_flag, record.is_sub_flag],
             ),
             row_slice,
         );

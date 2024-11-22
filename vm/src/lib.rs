@@ -1,3 +1,5 @@
+extern crate self as axvm_circuit;
+
 pub use ax_circuit_derive as circuit_derive;
 pub use axvm_circuit_derive as derive;
 

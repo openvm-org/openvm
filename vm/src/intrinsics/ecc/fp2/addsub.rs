@@ -36,13 +36,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Self {
-        let (expr, flag_id) =
+        let (expr, is_add_flag, is_sub_flag) =
             fp2_addsub_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![Fp2Opcode::ADD as usize, Fp2Opcode::SUB as usize],
-            vec![flag_id],
+            vec![is_add_flag, is_sub_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2AddSub",
         );
@@ -53,7 +53,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 pub fn fp2_addsub_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, usize) {
+) -> (FieldExpr, usize, usize) {
     config.check_valid();
     let builder = ExprBuilder::new(config, range_bus.range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
@@ -63,12 +63,14 @@ pub fn fp2_addsub_expr(
     let add = x.add(&mut y);
     let sub = x.sub(&mut y);
 
-    let flag = builder.borrow_mut().new_flag();
-    let mut z = Fp2::select(flag, &add, &sub);
+    let is_add_flag = builder.borrow_mut().new_flag();
+    let is_sub_flag = builder.borrow_mut().new_flag();
+    let diff = Fp2::select(is_sub_flag, &sub, &x);
+    let mut z = Fp2::select(is_add_flag, &add, &diff);
     z.save_output();
 
     let builder = builder.borrow().clone();
-    (FieldExpr::new(builder, range_bus), flag)
+    (FieldExpr::new(builder, range_bus), is_add_flag, is_sub_flag)
 }
 
 #[cfg(test)]
@@ -136,7 +138,7 @@ mod tests {
             .0
             .core
             .expr()
-            .execute_with_output(inputs.to_vec(), vec![true]);
+            .execute_with_output(inputs.to_vec(), vec![true, false]);
         assert_eq!(r_sum.len(), 2);
         assert_eq!(r_sum[0], expected_sum[0]);
         assert_eq!(r_sum[1], expected_sum[1]);
@@ -146,7 +148,7 @@ mod tests {
             .0
             .core
             .expr()
-            .execute_with_output(inputs.to_vec(), vec![false]);
+            .execute_with_output(inputs.to_vec(), vec![false, true]);
         assert_eq!(r_sub.len(), 2);
         assert_eq!(r_sub[0], expected_sub[0]);
         assert_eq!(r_sub[1], expected_sub[1]);

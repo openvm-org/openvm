@@ -1,6 +1,11 @@
 use std::{panic::catch_unwind, sync::Arc};
 
-use ax_stark_backend::{prover::types::AirProofInput, utils::disable_debug_builder, Chip};
+use ax_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    prover::types::AirProofInput,
+    utils::disable_debug_builder,
+    Chip,
+};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -19,7 +24,6 @@ use ax_stark_sdk::{
 use axvm_circuit::{arch::VmConfig, utils::gen_vm_program_test_proof_input};
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,

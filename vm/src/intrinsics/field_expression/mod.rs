@@ -52,6 +52,10 @@ impl FieldExpressionCoreAir {
         self.expr.builder.num_variables
     }
 
+    pub fn num_op_flags(&self) -> usize {
+        self.expr.builder.num_op_flags()
+    }
+
     pub fn num_flags(&self) -> usize {
         self.expr.builder.num_flags
     }
@@ -210,7 +214,7 @@ where
 
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_index = opcode - self.air.offset;
-        let mut flags = vec![false; self.air.num_flags()];
+        let mut flags = vec![false; self.air.num_op_flags()];
         self.air
             .opcode_flag_idx
             .iter()

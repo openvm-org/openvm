@@ -4,7 +4,6 @@ use itertools::Itertools;
 use p3_commit::PolynomialSpace;
 use p3_field::{AbstractExtensionField, AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use super::error::VerificationError;
@@ -13,6 +12,7 @@ use crate::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::{GenericVerifierConstraintFolder, VerifierConstraintFolder},
     },
+    config::{Domain, StarkGenericConfig, Val},
     prover::opener::AdjacentOpenedValues,
 };
 

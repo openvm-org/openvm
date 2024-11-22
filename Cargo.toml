@@ -31,7 +31,7 @@ members = [
     "lib/ecc-constants",
     "lib/ecc-execution",
     "lib/recursion",
-    "axiom-vm",
+    "axvm-sdk",
     "benchmarks",
 ]
 resolver = "2"
@@ -73,7 +73,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
-axiom-vm = { path = "axiom-vm", default-features = false }
+axvm-sdk = { path = "axvm-sdk", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }

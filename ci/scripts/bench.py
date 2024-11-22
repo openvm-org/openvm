@@ -69,9 +69,6 @@ def bench():
     feature_flags = ["bench-metrics", "parallel", "function-span"] + ([args.features] if args.features else []) + [args.memory_allocator]
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
-    if args.instance_type and 'x86' in args.instance_type:
-        feature_flags.append('nightly-features')
-
     run_cargo_command(args.bench_name, feature_flags, args.app_log_blowup, args.agg_log_blowup, args.root_log_blowup, args.internal_log_blowup, args.instance_type, args.memory_allocator)
 
 

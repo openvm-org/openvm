@@ -4,7 +4,10 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use p3_air::BaseAir;
 use p3_field::{Field, PrimeField32};
 
@@ -150,8 +153,8 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     )> {
         let Instruction { a, b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let mut rs_vals = [0; NUM_READS];
         let rs_records: [_; NUM_READS] = from_fn(|i| {

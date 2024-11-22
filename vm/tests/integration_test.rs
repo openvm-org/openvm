@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ax_stark_backend::{engine::StarkEngine, p3_uni_stark::StarkGenericConfig};
+use ax_stark_backend::{config::StarkGenericConfig, engine::StarkEngine};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},

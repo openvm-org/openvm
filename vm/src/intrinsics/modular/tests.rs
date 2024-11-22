@@ -1,5 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
+use ark_ff::Zero;
 use ax_circuit_primitives::{
     bigint::utils::{
         big_uint_mod_inverse, big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
@@ -35,6 +36,9 @@ const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
 type F = BabyBear;
+
+const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
+const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
 
 #[test]
 fn test_coord_addsub() {
@@ -77,9 +81,9 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
-    let mut all_ops = vec![];
-    let mut all_a = vec![];
-    let mut all_b = vec![];
+    let mut all_ops = vec![ADD_LOCAL + 2]; // setup
+    let mut all_a = vec![modulus.clone()];
+    let mut all_b = vec![BigUint::zero()];
 
     // First loop: generate all random test data.
     for _ in 0..num_tests {
@@ -92,7 +96,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
             .collect();
         let mut b = BigUint::new(b_digits.clone());
 
-        let op = rng.gen_range(0..2); // 0 for add, 1 for sub
+        let op = rng.gen_range(0..2) + ADD_LOCAL; // 0 for add, 1 for sub
         a %= &modulus;
         b %= &modulus;
 
@@ -101,16 +105,20 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         all_b.push(b);
     }
     // Second loop: actually run the tests.
-    for i in 0..num_tests {
+    for i in 0..=num_tests {
         let op = all_ops[i];
         let a = all_a[i].clone();
         let b = all_b[i].clone();
-        assert!(a < modulus);
-        assert!(b < modulus);
-        let expected_answer = if op == 0 {
-            (&a + &b) % &modulus
-        } else {
-            (&a + &modulus - &b) % &modulus
+        if i > 0 {
+            // if not setup
+            assert!(a < modulus);
+            assert!(b < modulus);
+        }
+        let expected_answer = match op - ADD_LOCAL {
+            0 => (&a + &b) % &modulus,
+            1 => (&a + &modulus - &b) % &modulus,
+            2 => a.clone(),
+            _ => panic!(),
         };
 
         // Write to memories
@@ -201,9 +209,9 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
     let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
     let mut rng = create_seeded_rng();
     let num_tests = 50;
-    let mut all_ops = vec![];
-    let mut all_a = vec![];
-    let mut all_b = vec![];
+    let mut all_ops = vec![MUL_LOCAL + 2];
+    let mut all_a = vec![modulus.clone()];
+    let mut all_b = vec![BigUint::zero()];
 
     // First loop: generate all random test data.
     for _ in 0..num_tests {
@@ -217,7 +225,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         let mut b = BigUint::new(b_digits.clone());
 
         // let op = rng.gen_range(2..4); // 2 for mul, 3 for div
-        let op = 2;
+        let op = MUL_LOCAL;
         a %= &modulus;
         b %= &modulus;
 
@@ -226,16 +234,20 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         all_b.push(b);
     }
     // Second loop: actually run the tests.
-    for i in 0..num_tests {
+    for i in 0..=num_tests {
         let op = all_ops[i];
         let a = all_a[i].clone();
         let b = all_b[i].clone();
-        assert!(a < modulus);
-        assert!(b < modulus);
-        let expected_answer = if op == 2 {
-            (&a * &b) % &modulus
-        } else {
-            (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus
+        if i > 0 {
+            // if not setup
+            assert!(a < modulus);
+            assert!(b < modulus);
+        }
+        let expected_answer = match op - MUL_LOCAL {
+            0 => (&a * &b) % &modulus,
+            1 => (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus,
+            2 => a.clone(),
+            _ => panic!(),
         };
 
         // Write to memories
@@ -307,6 +319,24 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
         tester.memory_controller(),
     );
 
+    {
+        let vec = big_uint_to_limbs(&modulus, LIMB_BITS);
+        let modulus_limbs: [F; TOTAL_LIMBS] = std::array::from_fn(|i| {
+            if i < vec.len() {
+                F::from_canonical_usize(vec[i])
+            } else {
+                F::ZERO
+            }
+        });
+
+        let setup_instruction = rv32_write_heap_default::<TOTAL_LIMBS>(
+            &mut tester,
+            vec![modulus_limbs],
+            vec![[F::ZERO; TOTAL_LIMBS]],
+            opcode_offset + Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize,
+        );
+        tester.execute(&mut chip, setup_instruction);
+    }
     for _ in 0..num_tests {
         let b = generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(&modulus, &mut rng);
         let c = if rng.gen_bool(0.5) {

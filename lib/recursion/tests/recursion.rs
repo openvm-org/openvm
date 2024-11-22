@@ -1,3 +1,4 @@
+use ax_stark_backend::config::{Domain, StarkGenericConfig};
 use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
@@ -8,7 +9,6 @@ use axvm_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
-use p3_uni_stark::{Domain, StarkGenericConfig};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;

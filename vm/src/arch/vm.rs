@@ -3,7 +3,7 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
@@ -388,14 +388,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Proof<SC> {
         tracing::info_span!("prove_segment", segment = 0)
             .in_scope(|| self.engine.prove(pk, proof_input))
     }
@@ -404,14 +397,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         results: VmExecutorResult<SC>,
-    ) -> Vec<Proof<SC>>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Vec<Proof<SC>> {
         #[cfg(feature = "bench-metrics")]
         metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results

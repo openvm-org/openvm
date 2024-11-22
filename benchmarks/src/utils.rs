@@ -2,7 +2,7 @@ use std::{fs::read, path::PathBuf, time::Instant};
 
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        config::{StarkGenericConfig, Val},
         engine::VerificationData,
     },
     engine::{StarkFriEngine, VerificationDataWithFriParams},
@@ -73,11 +73,6 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     let exe = exe.into();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).

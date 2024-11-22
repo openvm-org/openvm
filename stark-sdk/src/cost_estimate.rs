@@ -1,8 +1,10 @@
 use std::{marker::PhantomData, ops::Add};
 
-use ax_stark_backend::keygen::types::StarkVerifyingKey;
+use ax_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    keygen::types::StarkVerifyingKey,
+};
 use p3_field::AbstractExtensionField;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use crate::config::FriParameters;
 

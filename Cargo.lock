@@ -366,7 +366,6 @@ dependencies = [
  "p3-merkle-tree",
  "p3-poseidon2",
  "p3-symmetric",
- "p3-uni-stark",
  "p3-util",
  "parking_lot",
  "rand 0.8.5",
@@ -435,7 +434,6 @@ dependencies = [
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
- "p3-uni-stark",
  "p3-util",
  "rand 0.8.5",
  "test-case",
@@ -513,7 +511,6 @@ dependencies = [
  "p3-poseidon",
  "p3-poseidon2",
  "p3-symmetric",
- "p3-uni-stark",
  "p3-util",
  "rand 0.8.5",
  "serde",
@@ -524,23 +521,6 @@ dependencies = [
  "tracing-forest",
  "tracing-subscriber",
  "zkhash",
-]
-
-[[package]]
-name = "axiom-vm"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "ax-poseidon2-air",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-native-compiler",
- "axvm-recursion",
- "derivative",
- "p3-baby-bear",
- "serde",
- "serde_json",
- "static_assertions",
 ]
 
 [[package]]
@@ -572,11 +552,11 @@ name = "axvm-benchmarks"
 version = "0.1.0"
 dependencies = [
  "ax-stark-sdk",
- "axiom-vm",
  "axvm-build",
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
+ "axvm-sdk",
  "axvm-transpiler",
  "clap",
  "criterion",
@@ -628,7 +608,6 @@ dependencies = [
  "derive-new",
  "derive_more 1.0.0",
  "enum-utils",
- "enum_dispatch",
  "eyre",
  "getset",
  "halo2curves-axiom 0.7.0",
@@ -676,6 +655,7 @@ dependencies = [
 name = "axvm-circuit-derive"
 version = "0.1.0"
 dependencies = [
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -849,7 +829,6 @@ dependencies = [
  "p3-merkle-tree",
  "p3-poseidon2",
  "p3-symmetric",
- "p3-uni-stark",
  "p3-util",
  "rand 0.8.5",
  "serde",
@@ -857,6 +836,23 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ax-poseidon2-air",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "derivative",
+ "p3-baby-bear",
+ "serde",
+ "serde_json",
+ "static_assertions",
 ]
 
 [[package]]
@@ -1833,18 +1829,6 @@ checksum = "d49be08bad6e4ca87b2b8e74146987d4e5cb3b7512efa50ef505b51a22227ee1"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "enum_dispatch"
-version = "0.3.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
-dependencies = [
- "once_cell",
- "proc-macro2",
- "quote",
- "syn 2.0.87",
 ]
 
 [[package]]
