@@ -1,6 +1,6 @@
 use axvm_algebra::{field::FieldExtension, IntMod};
 use group::ff::Field;
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6};
+use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6, FROBENIUS_COEFF_FQ12_C1};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
@@ -31,6 +31,22 @@ fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
             convert_bn254_halo2_fq2_to_fp2(x.c1.c1),
             convert_bn254_halo2_fq2_to_fp2(x.c1.c2),
         ],
+    }
+}
+
+#[test]
+fn test_bn254_frobenius_coeffs() {
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..12 {
+        for j in 0..5 {
+            assert_eq!(
+                Bn254::FROBENIUS_COEFFS[i][j],
+                convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1])),
+                "FROBENIUS_COEFFS[{}][{}] failed",
+                i,
+                j
+            )
+        }
     }
 }
 
