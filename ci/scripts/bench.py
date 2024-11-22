@@ -45,7 +45,7 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, r
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
     # Run the subprocess with the updated environment
-    subprocess.run(command, check=False, env=env)
+    subprocess.run(command, env=env)
 
     print(f"Output metrics written to {git_root}/{output_path}")
 
