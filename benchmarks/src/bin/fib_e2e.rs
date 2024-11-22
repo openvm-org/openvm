@@ -23,8 +23,8 @@ use axvm_circuit::{
     prover::{local::VmLocalProver, ContinuationVmProver, SingleSegmentVmProver},
     system::program::trace::AxVmCommittedExe,
 };
-use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::hints::Hintable;
+use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
+use axvm_recursion::{hints::Hintable, witness::Witnessable};
 use axvm_sdk::{
     config::AxVmSdkConfig,
     keygen::AxVmSdkProvingKey,
@@ -166,8 +166,7 @@ async fn main() -> Result<()> {
             }
             proofs.pop().unwrap()
         };
-        #[allow(unused_variables)]
-        let root_proof = info_span!("root verifier", group = "root_verifier").in_scope(move || {
+        let root_proof = info_span!("root verifier", group = "root_verifier").in_scope(|| {
             let root_prover = RootVerifierLocalProver::new(axvm_sdk_pk.root_verifier_pk.clone());
             let root_input = RootVmVerifierInput {
                 proofs: vec![final_internal_proof],
@@ -177,6 +176,16 @@ async fn main() -> Result<()> {
             bench_root_verifier_prover(&root_prover, input.clone());
             SingleSegmentVmProver::prove(&root_prover, input)
         });
+        #[allow(unused_variables)]
+        let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
+            .in_scope(|| {
+                let static_verifier = axvm_sdk_pk
+                    .root_verifier_pk
+                    .keygen_static_verifier(23, root_proof.clone());
+                let mut witness = Witness::default();
+                root_proof.write(&mut witness);
+                static_verifier.prove(witness)
+            });
     });
 
     Ok(())

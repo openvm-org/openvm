@@ -278,7 +278,10 @@ mod static_verifier {
         dummy_internal_proof: Proof<SC>,
         root_proot: &Proof<BabyBearPoseidon2OuterConfig>,
     ) {
-        let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_internal_proof);
+        // Here we intend to use a dummy root proof to generate a static verifier circuit in order
+        // to test if the static verifier circuit can handle a different root proof.
+        let dummy_root_proof = root_verifier_pk.generate_dummy_root_proof(dummy_internal_proof);
+        let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_root_proof);
         let mut witness = Witness::default();
         root_proot.write(&mut witness);
         // Here the proof is verified inside.

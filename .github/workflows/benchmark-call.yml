@@ -96,6 +96,7 @@ jobs:
       - runs-on
       - runner=${{ inputs.instance_type }}
       - run-id=${{ github.run_id }}
+      - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
     steps:
       ##########################################################################
@@ -173,7 +174,6 @@ jobs:
             ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
-            bash trusted_setup_s3.sh
           fi
 
       - name: Set BIN_NAME and CMD_ARGS
@@ -201,6 +201,9 @@ jobs:
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
+          if [[ "${E2E_BENCH}" == "true" ]]; then
+            bash ./lib/recursion/trusted_setup_s3.sh
+          fi
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #

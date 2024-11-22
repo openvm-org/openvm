@@ -37,19 +37,18 @@ impl RootVerifierProvingKey {
     pub fn keygen_static_verifier(
         &self,
         halo2_k: usize,
-        dummy_internal_proof: Proof<SC>,
+        root_proof: Proof<OuterSC>,
     ) -> Halo2VerifierCircuit {
-        let dummy_root_proof = self.generate_dummy_root_proof(dummy_internal_proof);
         let mut witness = Witness::default();
-        dummy_root_proof.write(&mut witness);
-        let dsl_operations = build_static_verifier_operations(self, &dummy_root_proof);
+        root_proof.write(&mut witness);
+        let dsl_operations = build_static_verifier_operations(self, &root_proof);
         Halo2VerifierCircuit {
             pinning: Halo2Prover::keygen(halo2_k, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
         }
     }
 
-    fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<OuterSC> {
+    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<OuterSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
         let num_public_values =
