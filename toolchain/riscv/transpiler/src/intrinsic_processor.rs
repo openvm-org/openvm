@@ -199,19 +199,28 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                     let base_funct7 = (dec_insn.funct7 as u8) % COMPLEX_EXT_FIELD_MAX_KINDS;
                     let global_opcode = match ComplexExtFieldBaseFunct7::from_repr(base_funct7) {
                         Some(ComplexExtFieldBaseFunct7::Add) => {
+                            println!("Fp2::ADD");
                             Fp2Opcode::ADD as usize + Fp2Opcode::default_offset()
                         }
                         Some(ComplexExtFieldBaseFunct7::Sub) => {
+                            println!("Fp2::SUB");
                             Fp2Opcode::SUB as usize + Fp2Opcode::default_offset()
                         }
                         Some(ComplexExtFieldBaseFunct7::Mul) => {
+                            println!("Fp2::MUL");
                             Fp2Opcode::MUL as usize + Fp2Opcode::default_offset()
                         }
                         Some(ComplexExtFieldBaseFunct7::Div) => {
+                            println!("Fp2::DIV");
                             Fp2Opcode::DIV as usize + Fp2Opcode::default_offset()
                         }
                         _ => unimplemented!(),
                     };
+                    println!(
+                        "Fp2Opcode: global_opcode {}, Fp2Opcode::COUNT: {}",
+                        global_opcode,
+                        Fp2Opcode::COUNT
+                    );
                     assert!(Fp2Opcode::COUNT <= COMPLEX_EXT_FIELD_MAX_KINDS as usize);
                     let complex_idx_shift = ((dec_insn.funct7 as u8) / COMPLEX_EXT_FIELD_MAX_KINDS)
                         as usize

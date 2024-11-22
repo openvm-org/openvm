@@ -27,8 +27,37 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
+    use axvm_circuit::arch::{EcCurve, PairingCurve};
+    use axvm_ecc_constants::BN254;
 
     use super::*;
+
+    #[test]
+    fn test_bn254_fp12_mul() -> Result<()> {
+        let elf = build_example_program("bn254_fp12_mul")?;
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_pairing_support(vec![PairingCurve::Bn254])
+                .add_ecc_support(vec![EcCurve::Bn254])
+                .add_modular_support(vec![BN254.MODULUS.clone()])
+                .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+        );
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(2);
+        let f0 = Fq12::random(&mut rng);
+        let f1 = Fq12::random(&mut rng);
+        let r = f0 * f1;
+
+        let io = [f0, f1, r]
+            .into_iter()
+            .flat_map(|fp12| fp12.to_coeffs())
+            .flat_map(|fp2| fp2.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        executor.execute(elf, vec![io])?;
+        Ok(())
+    }
 
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
@@ -112,9 +141,10 @@ mod bn254 {
         let elf = build_example_program("bn254_miller_loop")?;
         let executor = VmExecutor::<F>::new(
             VmConfig::rv32im()
-                .add_canonical_pairing_curves()
-                .add_canonical_modulus()
-                .add_canonical_ec_curves(),
+                .add_pairing_support(vec![PairingCurve::Bn254])
+                .add_ecc_support(vec![EcCurve::Bn254])
+                .add_modular_support(vec![BN254.MODULUS.clone()])
+                .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
         );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(256);
@@ -135,6 +165,7 @@ mod bn254 {
         let io1 = [q.x, q.y]
             .into_iter()
             .chain(f.to_coeffs())
+            .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();

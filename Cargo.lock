@@ -871,6 +871,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",
+ "axvm-ecc-constants",
  "axvm-transpiler",
  "eyre",
  "num-bigint-dig",

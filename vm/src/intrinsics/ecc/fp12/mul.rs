@@ -34,8 +34,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
-        offset: usize,
         xi: [isize; 2],
+        offset: usize,
     ) -> Self {
         let expr = fp12_mul_expr(config, memory_controller.borrow().range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
@@ -123,8 +123,8 @@ mod tests {
             adapter,
             tester.memory_controller(),
             config,
+            BN254.XI,
             Fp12Opcode::default_offset(),
-            [9, 1],
         );
         // assert_eq!(
         //     chip.0.core.expr().builder.num_variables,

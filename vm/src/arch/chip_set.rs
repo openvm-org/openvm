@@ -1165,6 +1165,61 @@ impl VmConfig {
                 _ => unreachable!("Unsupported executor"),
             }
         }
+        println!("pairing fp12 op executor tuple - start");
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_pairing_fp12_op_executor_tuple(&self.supported_pairing_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&global_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            println!("pairing fp12 op executor tuple - match");
+            match executor {
+                ExecutorName::Fp12MulRv32_32 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        BN254.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::Fp12MulRv32_48 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        BLS12381.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
+            }
+        }
 
         for (local_range, executor, class_offset, modulus) in
             gen_modular_executor_tuple(self.supported_modulus.clone())
@@ -1312,6 +1367,7 @@ impl VmConfig {
             }
         }
 
+        println!("fp2 executor tuple - start");
         for (local_opcode_idx, class_offset, executor, modulus) in
             gen_fp2_modular_executor_tuple(&self.supported_complex_ext, &self.supported_modulus)
         {
@@ -1329,6 +1385,7 @@ impl VmConfig {
                 num_limbs: 48,
                 limb_bits: 8,
             };
+            println!("fp2 executor tuple - match");
             match executor {
                 ExecutorName::Fp2AddSubRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
@@ -1343,6 +1400,10 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
+                    println!(
+                        "fp2 executor tuple - inserted addsub32, class_offset: {}",
+                        class_offset
+                    );
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
                 ExecutorName::Fp2MulDivRv32_32 => {
@@ -1373,6 +1434,7 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
+                    println!("fp2 executor tuple - inserted addsub48");
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
                 ExecutorName::Fp2MulDivRv32_48 => {
@@ -1386,60 +1448,6 @@ impl VmConfig {
                         memory_controller.clone(),
                         config48,
                         class_offset,
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
-            }
-        }
-
-        for (local_opcode_idx, class_offset, executor, modulus) in
-            gen_fp12_modular_executor_tuple(&self.supported_complex_ext, &self.supported_modulus)
-        {
-            let global_opcode_idx = local_opcode_idx + class_offset;
-            if executors.contains_key(&global_opcode_idx) {
-                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
-            }
-            let config32 = ExprBuilderConfig {
-                modulus: modulus.clone(),
-                num_limbs: 32,
-                limb_bits: 8,
-            };
-            let config48 = ExprBuilderConfig {
-                modulus,
-                num_limbs: 48,
-                limb_bits: 8,
-            };
-            match executor {
-                ExecutorName::Fp12MulRv32_32 => {
-                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config32,
-                        class_offset,
-                        [9, 1],
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::Fp12MulRv32_48 => {
-                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config48,
-                        class_offset,
-                        [1, 1],
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
@@ -1522,6 +1530,7 @@ fn gen_ec_executor_tuple(
 fn gen_pairing_executor_tuple(
     supported_pairing_curves: &[PairingCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    println!("pairing executor tuple");
     supported_pairing_curves
         .iter()
         .flat_map(|curve| {
@@ -1595,6 +1604,38 @@ fn gen_pairing_executor_tuple(
                         curve.prime(),
                     ),
                 ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
+}
+
+fn gen_pairing_fp12_op_executor_tuple(
+    supported_pairing_curves: &[PairingCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    println!("pairing fp12 op executor tuple");
+    supported_pairing_curves
+        .iter()
+        .flat_map(|curve| {
+            let bytes = curve.prime().bits().div_ceil(8);
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+            if bytes <= 32 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_32,
+                    curve.prime(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_48,
+                    curve.prime(),
+                )]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }
@@ -1736,37 +1777,6 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                 ]
-            } else {
-                panic!("modulus {:?} is too large", modulus);
-            }
-        })
-        .collect()
-}
-
-fn gen_fp12_modular_executor_tuple(
-    supported_complex_ext: &[usize],
-    supported_modulus: &[BigUint],
-) -> Vec<(usize, usize, ExecutorName, BigUint)> {
-    supported_complex_ext
-        .iter()
-        .flat_map(|&modulus_idx| {
-            let modulus = &supported_modulus[modulus_idx];
-            let bytes = modulus.bits().div_ceil(8);
-            let class_offset = Fp2Opcode::default_offset() + modulus_idx * Fp2Opcode::COUNT;
-            if bytes <= 32 {
-                vec![(
-                    Fp12Opcode::MUL as usize,
-                    class_offset,
-                    ExecutorName::Fp12MulRv32_32,
-                    modulus.clone(),
-                )]
-            } else if bytes <= 48 {
-                vec![(
-                    Fp12Opcode::MUL as usize,
-                    class_offset,
-                    ExecutorName::Fp12MulRv32_48,
-                    modulus.clone(),
-                )]
             } else {
                 panic!("modulus {:?} is too large", modulus);
             }
