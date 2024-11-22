@@ -10,7 +10,7 @@ revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-
 revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-features = false }
 k256 = { version = "0.13.4", default-features = false }
 rand_core = { version = "0.6.4", default-features = false }
-rand_chacha = "0.3"
+rand_chacha = { version = "0.3", default-features = false }
 
 [features]
 default = []
