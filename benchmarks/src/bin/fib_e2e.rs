@@ -185,10 +185,7 @@ async fn main() -> Result<()> {
 fn generate_fib_exe(app_fri_params: FriParameters) -> Arc<AxVmCommittedExe<SC>> {
     let elf = build_bench_program("fibonacci").unwrap();
     let mut exe: AxVmExe<_> = elf.into();
-    println!(
-        "Program size: {}",
-        exe.program.instructions_and_debug_infos.len()
-    );
+    println!("Program size: {}", exe.program.len());
     println!("Init memory size: {}", exe.init_memory.len());
     exe.program.max_num_public_values = NUM_PUBLIC_VALUES;
 

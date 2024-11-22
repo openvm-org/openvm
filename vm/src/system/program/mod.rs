@@ -119,10 +119,7 @@ impl<F: PrimeField64> ProgramChip<F> {
     pub fn set_program(&mut self, mut program: Program<F>) {
         let true_program_length = program.len();
         while !program.len().is_power_of_two() {
-            program.instructions_and_debug_infos.insert(
-                program.pc_base + program.len() as u32 * program.step,
-                (padding_instruction(), None),
-            );
+            program.push_instruction(padding_instruction());
         }
         self.true_program_length = true_program_length;
         self.execution_frequencies = vec![0; program.len()];
@@ -151,14 +148,12 @@ impl<F: PrimeField64> ProgramChip<F> {
         let pc_index = self.get_pc_index(pc)?;
         self.execution_frequencies[pc_index] += 1;
         self.program
-            .instructions_and_debug_infos
-            .get(&pc)
-            .cloned()
+            .get_instruction_and_debug_info(pc_index)
             .ok_or(ExecutionError::PcNotFound(
                 pc,
                 self.program.step,
                 self.program.pc_base,
-                self.program.instructions_and_debug_infos.len(),
+                self.program.len(),
             ))
     }
 }
