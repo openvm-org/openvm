@@ -6,6 +6,7 @@ extern crate alloc;
 use core::hint::black_box;
 
 use axvm::{intrinsics::keccak256, io::read_vec};
+use axvm_algebra::IntMod;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use rand_chacha::ChaCha8Rng;
 use rand_core::SeedableRng;
@@ -13,6 +14,11 @@ use revm_precompile::secp256k1::ec_recover_run;
 use revm_primitives::alloy_primitives::Bytes;
 
 axvm::entry!(main);
+
+axvm::moduli_setup! {
+    Secp256k1Coord = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
+    Secp256k1Scalar = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141";
+}
 
 pub fn main() {
     let msg = read_vec();

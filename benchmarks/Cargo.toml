@@ -16,11 +16,13 @@ axvm-recursion = { workspace = true, features = ["test-utils"] }
 ax-stark-sdk.workspace = true
 clap = { version = "4.5.9", features = ["derive", "env"] }
 p3-field.workspace = true
+p3-baby-bear.workspace = true
 eyre.workspace = true
 tempfile.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 hex.workspace = true
+num-bigint-dig.workspace = true
 tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [dev-dependencies]
