@@ -66,6 +66,7 @@ class Metric:
 class MetricDb:
     def __init__(self, metrics_file):
         print(f"Loading metrics from {metrics_file}")
+        import os
         print(os.path.isfile(metrics_file))
         # Dict[labels => List[Metric]]
         self.flat_dict = {}
