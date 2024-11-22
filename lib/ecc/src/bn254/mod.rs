@@ -16,6 +16,43 @@ mod tests;
 
 pub struct Bn254;
 
+impl Bn254 {
+    pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "0100000000000000000000000000000000000000000000000000000000000000"
+            )),
+            c1: Bn254Fp(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        },
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "3d556f175795e3990c33c3c210c38cb743b159f53cec0b4cf711794f9847b32f"
+            )),
+            c1: Bn254Fp(hex!(
+                "a2cb0f641cd56516ce9d7c0b1d2aae3294075ad78bcca44b20aeeb6150e5c916"
+            )),
+        },
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "48fd7c60e544bde43d6e96bb9f068fc2b0ccace0e7d96d5e29a031e1724e6430"
+            )),
+            c1: Bn254Fp(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        },
+    ];
+    pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
+        c0: Bn254Fp(hex!(
+            "e4bbdd0c2936b629bb30f162e133bacb31a9d1b6f9645366253570bea500f8dd"
+        )),
+        c1: Bn254Fp(hex!(
+            "a1d77ce45ffe77c707affd117826d1db6d16bd27bb7edc6b2c87200285defecc"
+        )),
+    };
+}
+
 moduli_setup! {
     Bn254Fp = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
 }

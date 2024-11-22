@@ -58,20 +58,6 @@ fn test_bn254_frobenius() {
 }
 
 #[test]
-fn test_bn254_frobenius() {
-    let mut rng = StdRng::seed_from_u64(15);
-    for pow in 0..4 {
-        let fq = Fq12::random(&mut rng);
-        let fq_frob = fq.frobenius_map(pow);
-
-        let fp = convert_bn254_halo2_fq12_to_fp12(fq);
-        let fp_frob = fp.frobenius_map(pow);
-
-        assert_eq!(fp_frob, convert_bn254_halo2_fq12_to_fp12(fq_frob));
-    }
-}
-
-#[test]
 fn test_fp12_invert() {
     let mut rng = StdRng::seed_from_u64(15);
     let fq = Fq12::random(&mut rng);
