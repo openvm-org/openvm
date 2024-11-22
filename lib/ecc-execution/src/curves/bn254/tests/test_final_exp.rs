@@ -14,7 +14,7 @@ use crate::curves::bn254::Bn254;
 #[allow(non_snake_case)]
 fn test_bn254_final_exp_hint() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-        generate_test_points_generator_scalar::<2>(&[3, -6], &[8, 4]);
+        generate_test_points_generator_scalar::<2>(&[3, 6], &[8, 4]);
 
     let f = Bn254::multi_miller_loop(&P_ecpoints, &Q_ecpoints);
     let (c, u) = Bn254::final_exp_hint(&f);
@@ -41,7 +41,7 @@ fn test_bn254_assert_final_exp_is_one_scalar_ones() {
 #[test]
 #[allow(non_snake_case)]
 fn test_bn254_assert_final_exp_is_one_scalar_other() {
-    assert_final_exp_one(&[5, 2], &[-10, 25]);
+    assert_final_exp_one(&[5, 2], &[10, 25]);
 }
 
 #[allow(non_snake_case)]
@@ -93,7 +93,7 @@ pub fn generate_test_points_generator_scalar<const N: usize>(
         //     A1::new(p_a * p.x(), p_a * p.y())
         // };
         if i % 2 == 1 {
-            p = -p;
+            p.y = -p.y;
         }
         let q_b = Fq::from_raw([b[i].unsigned_abs() as u64, 0, 0, 0]);
         let mut q = G2Affine::generator();

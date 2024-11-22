@@ -33,7 +33,7 @@ fn test_bls12_381_final_exp_hint() {
 #[test]
 #[allow(non_snake_case)]
 fn test_bls12_381_assert_final_exp_is_one_scalar_ones() {
-    assert_final_exp_one(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
+    assert_final_exp_one(&[Fr::from(1), Fr::from(2)], &[Fr::from(2), Fr::from(1)]);
 }
 
 #[test]
