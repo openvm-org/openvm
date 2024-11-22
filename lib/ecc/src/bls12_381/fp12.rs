@@ -60,7 +60,7 @@ impl FieldExtension<Fp2> for Fp12 {
     /// We assume that the frobenius map power is < 12
     fn frobenius_map(&self, power: usize) -> Self {
         if power & 1 != 0 {
-            let c0 = self.c[0].clone();
+            let c0 = self.c[0].clone().conjugate();
             let c1 = self.c[1].clone().conjugate() * &Bls12_381::FROBENIUS_COEFFS[power][0];
             let c2 = self.c[2].clone().conjugate() * &Bls12_381::FROBENIUS_COEFFS[power][1];
             let c3 = self.c[3].clone().conjugate() * &Bls12_381::FROBENIUS_COEFFS[power][2];
