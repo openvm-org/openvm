@@ -79,7 +79,7 @@ impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
     }
 
     pub fn system_base(&self) -> &SystemBase<F> {
-        &self.system
+        self.system
     }
 
     pub fn new_bus(&mut self) -> usize {
@@ -387,24 +387,6 @@ where
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.base.program_chip.set_program(program);
-    }
-
-    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        todo!()
-        // for chip in self.chips.iter_mut() {
-        //     if let AxVmChip::Executor(chip) = chip {
-        //         match chip {
-        //             AxVmExecutor::LoadStore(chip) => {
-        //                 chip.borrow_mut().core.set_streams(streams.clone())
-        //             }
-        //             AxVmExecutor::HintStoreRv32(chip) => {
-        //                 chip.borrow_mut().core.set_streams(streams.clone())
-        //             }
-        //             AxVmExecutor::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
-        //             _ => {}
-        //         }
-        //     }
-        // }
     }
 
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
