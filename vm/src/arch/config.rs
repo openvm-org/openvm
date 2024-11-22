@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
@@ -10,9 +10,11 @@ use derive_new::new;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
+use super::{AnyEnum, InstructionExecutor, Streams, VmChipComplex};
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -27,6 +29,16 @@ pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
+}
+
+pub trait VmGenericConfig<F: PrimeField32> {
+    type Executor: InstructionExecutor<F> + AnyEnum;
+    type Periphery: AnyEnum;
+
+    fn create_chip_complex(
+        &self,
+        streams: Arc<Mutex<Streams<F>>>,
+    ) -> VmChipComplex<F, Self::Executor, Self::Periphery>;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]

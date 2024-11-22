@@ -1,16 +1,17 @@
 /// Instruction execution and machine chip traits and enum variants
 mod chips;
+mod config;
 /// Execution bus and interface
 mod execution;
 /// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
+mod new_segment;
 
-// delete once processing_unit is stable
+// delete once extensions is stable
 mod chip_set;
-mod config;
-
+// delete once new_segment is stable
 #[macro_use]
 mod segment;
 

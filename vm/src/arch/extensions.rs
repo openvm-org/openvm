@@ -298,7 +298,7 @@ pub enum SystemPeriphery<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> SystemComplex<F> {
-    pub fn new(config: SystemConfig) -> Self {
+    pub fn new(config: SystemConfig, streams: Arc<Mutex<Streams<F>>>) -> Self {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let mut bus_idx_max = RANGE_CHECKER_BUS;
@@ -359,7 +359,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip.into());
         }
-        let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
@@ -454,6 +453,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     pub fn num_airs(&self) -> usize {
         3 + self.base.memory_controller.borrow().num_airs() + self.inventory.num_airs()
+    }
+
+    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
+        &self.base.memory_controller
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>>
