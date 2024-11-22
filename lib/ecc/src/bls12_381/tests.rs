@@ -36,32 +36,19 @@ fn convert_bls12381_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
 
 #[test]
 fn test_bls12381_frobenius() {
-    const MODULUS: [u64; 6] = [
-        0xb9fe_ffff_ffff_aaab,
-        0x1eab_fffe_b153_ffff,
-        0x6730_d2a0_f6b0_f624,
-        0x6477_4b84_f385_12bf,
-        0x4b1b_a7b6_434b_acd7,
-        0x1a01_11ea_397f_e69a,
-    ];
-
     let mut rng = StdRng::seed_from_u64(15);
-    let pow = 2;
-    let fq = Fq12::random(&mut rng);
-    let fq_frob = fq.frobenius_map();
-    // fq_frob.c0.c0.conjugate();
-    // fq_frob.c0.c1.conjugate();
-    // fq_frob.c0.c2.conjugate();
-    // fq_frob.c1.c0.conjugate();
-    // fq_frob.c1.c1.conjugate();
-    // fq_frob.c1.c2.conjugate();
-    // fq_frob.frobenius_map();
-    // let fq_frob = fq.pow_vartime(MODULUS).pow_vartime([pow as u64]);
+    for pow in 0..12 {
+        let fq = Fq12::random(&mut rng);
+        let mut fq_frob = fq;
+        for _ in 0..pow {
+            fq_frob = fq_frob.frobenius_map();
+        }
 
-    let fp = convert_bls12381_halo2_fq12_to_fp12(fq);
-    let fp_frob = fp.frobenius_map(pow);
+        let fp = convert_bls12381_halo2_fq12_to_fp12(fq);
+        let fp_frob = fp.frobenius_map(pow);
 
-    assert_eq!(fp_frob, convert_bls12381_halo2_fq12_to_fp12(fq_frob));
+        assert_eq!(fp_frob, convert_bls12381_halo2_fq12_to_fp12(fq_frob));
+    }
 }
 
 #[test]
