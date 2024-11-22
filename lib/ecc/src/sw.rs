@@ -75,3 +75,8 @@ impl IntrinsicCurve for Secp256k1 {
     type Scalar = Secp256k1Scalar;
     type Point = Secp256k1Point;
 }
+
+pub fn setup_moduli() {
+    setup_Secp256k1Coord();
+    setup_Secp256k1Scalar();
+}

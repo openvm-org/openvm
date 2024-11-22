@@ -2,10 +2,14 @@
 
 extern crate proc_macro;
 
+use std::sync::atomic::AtomicUsize;
+
 use axvm_macros_common::{string_to_bytes, Stmts};
 use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{parse_macro_input, Stmt};
+
+static MOD_IDX: AtomicUsize = AtomicUsize::new(0);
 
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -21,7 +25,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
     let Stmts { stmts } = parse_macro_input!(input as Stmts);
 
     let mut output = Vec::new();
-    let mut mod_idx = 0usize;
 
     let mut moduli = Vec::new();
 
@@ -37,6 +40,8 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                         if let syn::Expr::Lit(lit) = &*assign.right {
                             if let syn::Lit::Str(str_lit) = &lit.lit {
                                 let struct_name = syn::Ident::new(&struct_name, span.into());
+                                let mod_idx =
+                                    MOD_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
                                 let modulus_bytes = string_to_bytes(&str_lit.value());
                                 let mut limbs = modulus_bytes.len();
@@ -665,6 +670,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                             }
                                         }
 
+                                        #[allow(non_snake_case)]
                                         pub fn #setup_function() {
                                             #[cfg(target_os = "zkvm")]
                                             {
@@ -716,7 +722,6 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                 );
 
                                 moduli.push(modulus_bytes);
-                                mod_idx += 1;
 
                                 Ok(result)
                             } else {

@@ -2,7 +2,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-use alloc::vec::Vec;
 
 use axvm_algebra::IntMod;
 
@@ -10,6 +9,9 @@ axvm::entry!(main);
 axvm::moduli_setup! {
     bls12381 = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787";
     Mod1e18 = "1000000000000000003";
+}
+
+axvm::moduli_setup! {
     Mersenne61 = "0x1fffffffffffffff";
 }
 
