@@ -162,6 +162,37 @@ impl<E, P> VmInventory<E, P> {
         }
     }
 
+    pub fn transmute<E2, P2>(self) -> VmInventory<E2, P2>
+    where
+        E: Into<E2>,
+        P: Into<P2>,
+    {
+        VmInventory {
+            instruction_lookup: self.instruction_lookup,
+            executors: self.executors.into_iter().map(|e| e.into()).collect(),
+            periphery: self.periphery.into_iter().map(|p| p.into()).collect(),
+            insertion_order: self.insertion_order,
+        }
+    }
+
+    /// Append `other` to current inventory. This means `self` comes earlier in the dependency chain.
+    pub fn append(&mut self, mut other: VmInventory<E, P>) {
+        let num_executors = self.executors.len();
+        let num_periphery = self.periphery.len();
+        for (_, id) in other.instruction_lookup.iter_mut() {
+            *id += num_executors;
+        }
+        for chip_id in other.insertion_order.iter_mut() {
+            match chip_id {
+                ChipId::Executor(id) => *id += num_executors,
+                ChipId::Periphery(id) => *id += num_periphery,
+            }
+        }
+        self.executors.append(&mut other.executors);
+        self.periphery.append(&mut other.periphery);
+        self.insertion_order.append(&mut other.insertion_order);
+    }
+
     /// Inserts an executor with the collection of opcodes that it handles.
     /// If some executor already owns one of the opcodes, it will be replaced and the old
     /// executor ID is returned.
@@ -343,19 +374,18 @@ impl<F: PrimeField32> SystemComplex<F> {
     }
 }
 
-impl<F, E, P> VmChipComplex<F, E, P>
-where
-    F: PrimeField32,
-    E: AnyEnum,
-    P: AnyEnum,
-{
+impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// **If** public values chip exists, then its executor index is 0.
     const PV_EXECUTOR_IDX: ExecutorId = 0;
     /// **If** internal poseidon2 chip exists, then its periphery index is 0.
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     // @dev: Remember to update self.bus_idx_max after dropping this!
-    pub fn extension_builder(&self) -> VmExtensionBuilder<F> {
+    pub fn extension_builder(&self) -> VmExtensionBuilder<F>
+    where
+        E: AnyEnum,
+        P: AnyEnum,
+    {
         let mut builder = VmExtensionBuilder::new(&self.base, self.bus_idx_max);
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
@@ -368,16 +398,57 @@ where
         builder
     }
 
+    pub fn extend<E3, P3, Ext>(mut self, config: Ext) -> VmChipComplex<F, E3, P3>
+    where
+        Ext: VmExtension<F>,
+        E: Into<E3> + AnyEnum,
+        P: Into<P3> + AnyEnum,
+        Ext::Executor: Into<E3>,
+        Ext::Periphery: Into<P3>,
+    {
+        let mut builder = self.extension_builder();
+        let inventory_ext = config.build(&mut builder);
+        self.bus_idx_max = builder.bus_idx_max;
+        let mut ext_complex = self.transmute();
+        ext_complex.append(inventory_ext.transmute());
+        ext_complex
+    }
+
+    pub fn transmute<E2, P2>(self) -> VmChipComplex<F, E2, P2>
+    where
+        E: Into<E2>,
+        P: Into<P2>,
+    {
+        VmChipComplex {
+            config: self.config,
+            base: self.base,
+            inventory: self.inventory.transmute(),
+            bus_idx_max: self.bus_idx_max,
+        }
+    }
+
+    /// Appends `other` to the current inventory.
+    /// This means `self` comes earlier in the dependency chain.
+    pub fn append(&mut self, other: VmInventory<E, P>) {
+        self.inventory.append(other);
+    }
+
     pub fn num_airs(&self) -> usize {
         3 + self.base.memory_controller.borrow().num_airs() + self.inventory.num_airs()
     }
 
-    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
+    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>>
+    where
+        E: AnyEnum,
+    {
         let chip = self.inventory.executors().get(Self::PV_EXECUTOR_IDX)?;
         chip.as_any_kind().downcast_ref()
     }
 
-    pub fn poseidon2_chip(&self) -> Option<&Poseidon2Chip<F>> {
+    pub fn poseidon2_chip(&self) -> Option<&Poseidon2Chip<F>>
+    where
+        P: AnyEnum,
+    {
         let chip = self
             .inventory
             .periphery()
@@ -395,8 +466,8 @@ where
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        E: Chip<SC>,
-        P: Chip<SC>,
+        E: Chip<SC> + AnyEnum,
+        P: Chip<SC> + AnyEnum,
     {
         let has_pv_chip = self.public_values_chip().is_some();
         // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
