@@ -6,7 +6,9 @@ use rand::{rngs::StdRng, SeedableRng};
 use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::Bn254,
-    pairing::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign, PairingIntrinsics},
+    pairing::{
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
+    },
 };
 
 fn convert_bn254_halo2_fq_to_fp(x: Fq) -> Fp {
@@ -144,4 +146,9 @@ fn test_fp_one() {
     let fp_one = Fp::ONE;
     let fq_one = Fq::ONE;
     assert_eq!(fp_one, convert_bn254_halo2_fq_to_fp(fq_one));
+}
+
+#[test]
+fn test_bn254_miller_loop() {
+    // let f = Bn254::multi_miller_loop(P, Q);
 }

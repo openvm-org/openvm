@@ -21,7 +21,10 @@ mod bn254 {
 
     use ax_ecc_execution::{
         axvm_ecc::{
-            halo2curves::bn256::{Fq12, Fq2, G1Affine, G2Affine},
+            halo2curves::{
+                bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine},
+                ff::Field,
+            },
             pairing::MillerStep,
             AffineCoords,
         },
@@ -147,12 +150,18 @@ mod bn254 {
                 .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
         );
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(256);
-        let S = G1Affine::random(&mut rng);
-        let Q = G2Affine::random(&mut rng);
+        // let mut rng = rand::rngs::StdRng::seed_from_u64(256);
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
 
-        let s = AffinePoint::new(S.x(), S.y());
-        let q = AffinePoint::new(Q.x(), Q.y());
+        let s = AffinePoint::new(
+            Fq::from_raw([4, 0, 0, 0]) * S.x(),
+            Fq::from_raw([12, 0, 0, 0]).neg() * S.y(),
+        );
+        let q = AffinePoint::new(
+            Fq2::new(Fq::from_raw([6, 0, 0, 0]).neg(), Fq::ZERO) * Q.x(),
+            Fq2::new(Fq::from_raw([2, 0, 0, 0]), Fq::ZERO) * Q.y(),
+        );
 
         // Test miller_loop
         let f = Bn254::multi_miller_loop(&[s.clone()], &[q.clone()]);

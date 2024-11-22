@@ -166,8 +166,8 @@ impl MultiMillerLoop for Bn254 {
         Q_acc = Q_out_double;
 
         let lines_iter = izip!(lines_2S.iter(), xy_fracs.iter());
-        for (line_2S, (x_over_y, y_inv)) in lines_iter {
-            let line = line_2S.evaluate(&(*x_over_y, *y_inv));
+        for (line_2S, xy_frac) in lines_iter {
+            let line = line_2S.evaluate(xy_frac);
             initial_lines.push(line);
         }
 

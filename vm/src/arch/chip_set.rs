@@ -1165,7 +1165,7 @@ impl VmConfig {
                 _ => unreachable!("Unsupported executor"),
             }
         }
-        println!("pairing fp12 op executor tuple - start");
+
         for (local_opcode_idx, class_offset, executor, modulus) in
             gen_pairing_fp12_op_executor_tuple(&self.supported_pairing_curves)
         {
@@ -1183,7 +1183,6 @@ impl VmConfig {
                 num_limbs: 48,
                 limb_bits: 8,
             };
-            println!("pairing fp12 op executor tuple - match");
             match executor {
                 ExecutorName::Fp12MulRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp12MulChip::new(
@@ -1367,7 +1366,6 @@ impl VmConfig {
             }
         }
 
-        println!("fp2 executor tuple - start");
         for (local_opcode_idx, class_offset, executor, modulus) in
             gen_fp2_modular_executor_tuple(&self.supported_complex_ext, &self.supported_modulus)
         {
@@ -1385,7 +1383,6 @@ impl VmConfig {
                 num_limbs: 48,
                 limb_bits: 8,
             };
-            println!("fp2 executor tuple - match");
             match executor {
                 ExecutorName::Fp2AddSubRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp2AddSubChip::new(
@@ -1400,10 +1397,6 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    println!(
-                        "fp2 executor tuple - inserted addsub32, class_offset: {}",
-                        class_offset
-                    );
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
                 ExecutorName::Fp2MulDivRv32_32 => {
@@ -1434,7 +1427,6 @@ impl VmConfig {
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
-                    println!("fp2 executor tuple - inserted addsub48");
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
                 ExecutorName::Fp2MulDivRv32_48 => {
@@ -1530,7 +1522,6 @@ fn gen_ec_executor_tuple(
 fn gen_pairing_executor_tuple(
     supported_pairing_curves: &[PairingCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
-    println!("pairing executor tuple");
     supported_pairing_curves
         .iter()
         .flat_map(|curve| {
@@ -1614,7 +1605,6 @@ fn gen_pairing_executor_tuple(
 fn gen_pairing_fp12_op_executor_tuple(
     supported_pairing_curves: &[PairingCurve],
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
-    println!("pairing fp12 op executor tuple");
     supported_pairing_curves
         .iter()
         .flat_map(|curve| {

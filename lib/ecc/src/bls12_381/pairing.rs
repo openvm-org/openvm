@@ -185,7 +185,7 @@ impl MultiMillerLoop for Bls12_381 {
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = Self::mul_023_by_023(&line0, &line1);
+                let prod = Self::mul_023_by_023(line0, line1);
                 f = Self::mul_by_02345(&f, &prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");

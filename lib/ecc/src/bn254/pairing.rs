@@ -188,7 +188,7 @@ impl MultiMillerLoop for Bn254 {
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = Self::mul_013_by_013(&line0, &line1);
+                let prod = Self::mul_013_by_013(line0, line1);
                 f = Self::mul_by_01234(&f, &prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");
@@ -256,7 +256,7 @@ impl MultiMillerLoop for Bn254 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q1_vec.iter())
-            .map(|(Q_acc, q1)| Self::miller_add_step(&Q_acc, &q1))
+            .map(|(Q_acc, q1)| Self::miller_add_step(Q_acc, q1))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
@@ -270,7 +270,7 @@ impl MultiMillerLoop for Bn254 {
             .iter()
             .map(|Q| {
                 // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to the identity mapping
-                let x = &Q.x * &x_to_q_sq_minus_1_over_3;
+                let x = &Q.x * x_to_q_sq_minus_1_over_3;
                 AffinePoint { x, y: Q.y.clone() }
             })
             .collect::<Vec<_>>();
@@ -278,7 +278,7 @@ impl MultiMillerLoop for Bn254 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(q2_vec.iter())
-            .map(|(Q_acc, q2)| Self::miller_add_step(&Q_acc, &q2))
+            .map(|(Q_acc, q2)| Self::miller_add_step(Q_acc, q2))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
