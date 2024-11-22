@@ -57,6 +57,7 @@ const RANGE_CHECKER_BUS: usize = 3;
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmExtensionBuilder<'a, F: PrimeField32> {
     system: &'a SystemBase<F>,
+    streams: &'a Arc<Mutex<Streams<F>>>,
     /// Bus indices are in range [0, bus_idx_max)
     bus_idx_max: usize,
     /// Chips that are already included in the chipset and may be used
@@ -66,9 +67,14 @@ pub struct VmExtensionBuilder<'a, F: PrimeField32> {
 }
 
 impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
-    pub fn new(system: &'a SystemBase<F>, bus_idx_max: usize) -> Self {
+    pub fn new(
+        system: &'a SystemBase<F>,
+        streams: &'a Arc<Mutex<Streams<F>>>,
+        bus_idx_max: usize,
+    ) -> Self {
         Self {
             system,
+            streams,
             bus_idx_max,
             chips: Vec::new(),
         }
@@ -97,6 +103,11 @@ impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
             .iter()
             .filter_map(|c| c.as_any_kind().downcast_ref())
             .collect()
+    }
+
+    /// Shareable streams. Clone to get a shared mutable reference.
+    pub fn streams(&self) -> &Arc<Mutex<Streams<F>>> {
+        self.streams
     }
 
     fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
@@ -255,6 +266,7 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     /// - Poseidon2Chip if continuations enabled
     pub inventory: VmInventory<E, P>,
 
+    streams: Arc<Mutex<Streams<F>>>,
     /// System buses use indices [0, bus_idx_max)
     bus_idx_max: usize,
 }
@@ -347,13 +359,15 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip.into());
         }
+        let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
-        let phantom_chip = PhantomChip::new(
+        let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
             PROGRAM_BUS,
             memory_controller.clone(),
             phantom_opcode,
         );
+        phantom_chip.set_streams(streams.clone());
         inventory
             .add_executor(phantom_chip.into(), [phantom_opcode])
             .unwrap();
@@ -370,6 +384,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             base,
             inventory,
             bus_idx_max,
+            streams,
         }
     }
 }
@@ -386,7 +401,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder = VmExtensionBuilder::new(&self.base, self.bus_idx_max);
+        let mut builder = VmExtensionBuilder::new(&self.base, &self.streams, self.bus_idx_max);
         // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
@@ -427,6 +442,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             base: self.base,
             inventory: self.inventory.transmute(),
             bus_idx_max: self.bus_idx_max,
+            streams: self.streams,
         }
     }
 
