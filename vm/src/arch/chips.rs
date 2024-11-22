@@ -12,7 +12,6 @@ use ax_stark_backend::{
 };
 use axvm_instructions::instruction::Instruction;
 use derive_more::From;
-use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use serde::{Deserialize, Serialize};
@@ -20,6 +19,7 @@ use strum::EnumDiscriminants;
 
 use crate::{
     arch::ExecutionState,
+    derive::InstructionExecutor,
     intrinsics::{
         ecc::{
             fp12::Fp12MulChip,
@@ -47,7 +47,6 @@ use crate::{
     system::{phantom::PhantomChip, program::ExecutionError},
 };
 
-#[enum_dispatch]
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
@@ -78,10 +77,9 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(EnumDiscriminants, ChipUsageGetter, Chip)]
+#[derive(EnumDiscriminants, ChipUsageGetter, Chip, InstructionExecutor, From)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
-#[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     // Native kernel:

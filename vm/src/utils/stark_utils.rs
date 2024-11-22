@@ -1,6 +1,6 @@
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        config::{StarkGenericConfig, Val},
         verifier::VerificationError,
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
@@ -107,11 +107,6 @@ pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
 ) -> ExecuteAndProveResult<SC>
 where
     Val<SC>: PrimeField32,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     let span = tracing::info_span!("execute_and_prove_program").entered();
     let test_proof_input = gen_vm_program_test_proof_input(program, input_stream, config);

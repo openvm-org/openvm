@@ -1,9 +1,8 @@
 use itertools::Itertools;
 use p3_challenger::FieldChallenger;
-use p3_uni_stark::StarkGenericConfig;
 
 use crate::{
-    config::Com,
+    config::{Com, StarkGenericConfig},
     keygen::types::{
         MultiStarkProvingKey, MultiStarkVerifyingKey, StarkProvingKey, StarkVerifyingKey,
     },
@@ -48,24 +47,24 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'_, SC> {
             })
             .collect()
     }
+
     /// Returns all non-empty preprocessed commits.
     pub fn flattened_preprocessed_commits(&self) -> Vec<Com<SC>> {
         self.preprocessed_commits().into_iter().flatten().collect()
     }
-    /// Returns challenges of each phase.
-    pub fn sample_challenges(&self, challenger: &mut SC::Challenger) -> Vec<Vec<SC::Challenge>> {
-        // Generate 2 permutation challenges
-        let num_challenges_to_sample = self.num_challenges_to_sample();
-        assert!(num_challenges_to_sample.len() <= 1);
-        num_challenges_to_sample
-            .iter()
-            .map(|&num_challenges| {
-                (0..num_challenges)
-                    .map(|_| challenger.sample_ext_element::<SC::Challenge>())
-                    .collect_vec()
-            })
+
+    /// Samples the required number of challenges in the given phase and returns them.
+    pub fn sample_challenges_for_phase(
+        &self,
+        challenger: &mut SC::Challenger,
+        phase_idx: usize,
+    ) -> Vec<SC::Challenge> {
+        let num_challenges = self.num_challenges_in_phase(phase_idx);
+        (0..num_challenges)
+            .map(|_| challenger.sample_ext_element::<SC::Challenge>())
             .collect()
     }
+
     pub fn num_phases(&self) -> usize {
         self.per_air
             .iter()
@@ -79,22 +78,21 @@ impl<SC: StarkGenericConfig> MultiStarkVerifyingKeyView<'_, SC> {
             .max()
             .unwrap_or(0)
     }
-    pub fn num_challenges_to_sample(&self) -> Vec<usize> {
+
+    pub fn num_challenges_per_phase(&self) -> Vec<usize> {
         let num_phases = self.num_phases();
         (0..num_phases)
-            .map(|phase_idx| {
-                self.per_air
-                    .iter()
-                    .map(|vk| {
-                        *vk.params
-                            .num_challenges_to_sample
-                            .get(phase_idx)
-                            .unwrap_or(&0)
-                    })
-                    .max()
-                    .unwrap_or_else(|| panic!("No challenges used in challenge phase {phase_idx}"))
-            })
+            .map(|phase_idx| self.num_challenges_in_phase(phase_idx))
             .collect()
+    }
+
+    pub fn num_challenges_in_phase(&self, phase_idx: usize) -> usize {
+        self.per_air
+            .iter()
+            .flat_map(|vk| vk.params.num_challenges_to_sample.get(phase_idx))
+            .copied()
+            .max()
+            .unwrap_or_else(|| panic!("No challenges used in challenge phase {phase_idx}"))
     }
 }
 

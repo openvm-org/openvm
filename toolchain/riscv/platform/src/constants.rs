@@ -67,6 +67,7 @@ pub enum ModArithBaseFunct7 {
     MulMod,
     DivMod,
     IsEqMod,
+    SetupMod,
 }
 
 pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;

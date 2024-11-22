@@ -12,7 +12,10 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -225,7 +228,7 @@ impl<
         ))) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::ONE, ptr),
+                    MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -261,7 +264,7 @@ impl<
         let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
-        let e = AB::F::from_canonical_usize(2);
+        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -307,7 +310,7 @@ impl<
                         .get(1)
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -370,8 +373,8 @@ impl<
     )> {
         let Instruction { a, b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         // Read register values
         let mut rs_vals = [0; NUM_READS];

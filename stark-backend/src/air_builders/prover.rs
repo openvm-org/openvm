@@ -4,7 +4,6 @@ use p3_air::{
 };
 use p3_field::AbstractField;
 use p3_matrix::Matrix;
-use p3_uni_stark::{PackedChallenge, PackedVal, StarkGenericConfig, Val};
 
 use super::{
     symbolic::{
@@ -14,6 +13,7 @@ use super::{
     PartitionedAirBuilder, ViewPair,
 };
 use crate::{
+    config::{PackedChallenge, PackedVal, StarkGenericConfig, Val},
     interaction::{Interaction, InteractionBuilder, InteractionType},
     rap::PermutationAirBuilderWithExposedValues,
 };

@@ -1,5 +1,5 @@
 [package]
-name = "axiom-vm"
+name = "axvm-sdk"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -22,5 +22,6 @@ async-trait.workspace = true
 
 [features]
 default = ["parallel"]
+#static-verifier = ["axvm-recursion/static-verifier"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]

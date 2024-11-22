@@ -1,6 +1,6 @@
 use axvm_algebra::{field::FieldExtension, IntMod};
 use group::ff::Field;
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6};
+use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6, FROBENIUS_COEFF_FQ12_C1};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
@@ -23,14 +23,37 @@ fn convert_bn254_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
 
 fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
     Fp12 {
-        c: [
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c0),
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c1),
-            convert_bn254_halo2_fq2_to_fp2(x.c0.c2),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c0),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c1),
-            convert_bn254_halo2_fq2_to_fp2(x.c1.c2),
-        ],
+        c: x.to_coeffs().map(convert_bn254_halo2_fq2_to_fp2),
+    }
+}
+
+#[test]
+fn test_bn254_frobenius_coeffs() {
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..12 {
+        for j in 0..5 {
+            assert_eq!(
+                Bn254::FROBENIUS_COEFFS[i][j],
+                convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1])),
+                "FROBENIUS_COEFFS[{}][{}] failed",
+                i,
+                j
+            )
+        }
+    }
+}
+
+#[test]
+fn test_bn254_frobenius() {
+    let mut rng = StdRng::seed_from_u64(15);
+    for pow in 0..12 {
+        let fq = Fq12::random(&mut rng);
+        let fq_frob = fq.frobenius_map(pow);
+
+        let fp = convert_bn254_halo2_fq12_to_fp12(fq);
+        let fp_frob = fp.frobenius_map(pow);
+
+        assert_eq!(fp_frob, convert_bn254_halo2_fq12_to_fp12(fq_frob));
     }
 }
 

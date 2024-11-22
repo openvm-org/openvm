@@ -1,6 +1,6 @@
 use ax_stark_backend::{
     air_builders::symbolic::symbolic_expression::SymbolicExpression,
-    config::Com,
+    config::{Com, StarkGenericConfig, Val},
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     prover::types::Proof,
 };
@@ -8,7 +8,6 @@ use axvm_native_compiler::{
     asm::AsmConfig,
     ir::{Config, DIGEST_SIZE},
 };
-use p3_uni_stark::{StarkGenericConfig, Val};
 use p3_util::log2_strict_usize;
 
 use crate::{
@@ -78,7 +77,7 @@ pub fn new_from_inner_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
 where
     Com<SC>: Into<[C::F; DIGEST_SIZE]>,
 {
-    let num_challenges_to_sample = vk.num_challenges_to_sample();
+    let num_challenges_to_sample = vk.num_challenges_per_phase();
     let MultiStarkVerifyingKey::<SC> { per_air } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air.clone().into_iter().map(new_from_inner_vk).collect(),

@@ -2,7 +2,7 @@ use std::{fs::read, path::PathBuf, time::Instant};
 
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+        config::{StarkGenericConfig, Val},
         engine::VerificationData,
     },
     engine::{StarkFriEngine, VerificationDataWithFriParams},
@@ -23,9 +23,17 @@ pub struct BenchmarkCli {
     #[arg(short, long, alias = "app_log_blowup")]
     pub app_log_blowup: Option<usize>,
 
-    /// Aggregation level log blowup, default set by the benchmark
+    /// Aggregation (leaf) level log blowup, default set by the benchmark
     #[arg(short, long, alias = "agg_log_blowup")]
     pub agg_log_blowup: Option<usize>,
+
+    /// Root level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "root_log_blowup")]
+    pub root_log_blowup: Option<usize>,
+
+    /// Internal level log blowup, default set by the benchmark
+    #[arg(short, long, alias = "internal_log_blowup")]
+    pub internal_log_blowup: Option<usize>,
 }
 
 fn get_programs_dir() -> PathBuf {
@@ -65,11 +73,6 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
 {
     let exe = exe.into();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).

@@ -7,7 +7,7 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::not;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -153,7 +153,10 @@ impl Rv32RdWriteAdapterAir {
         };
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rd_ptr),
+                MemoryAddress::new(
+                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rd_ptr,
+                ),
                 ctx.writes[0].clone(),
                 timestamp,
                 &local_cols.rd_aux_cols,
@@ -171,7 +174,7 @@ impl Rv32RdWriteAdapterAir {
                     local_cols.rd_ptr.into(),
                     AB::Expr::ZERO,
                     ctx.instruction.immediate,
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::ZERO,
                     f,
                 ],
@@ -251,7 +254,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         Self::ReadRecord,
     )> {
         let d = instruction.d;
-        debug_assert_eq!(d.as_canonical_u32(), 1);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         Ok(([], ()))
     }

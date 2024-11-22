@@ -6,7 +6,7 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -107,7 +107,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local.rs1_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -116,7 +116,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local.rs2_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), local.rs2_ptr),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -130,8 +130,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
                     local.rs1_ptr.into(),
                     local.rs2_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::ONE,
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                 ],
                 local.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
@@ -162,8 +162,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
     )> {
         let Instruction { a, b, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 1);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a);
         let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, b);

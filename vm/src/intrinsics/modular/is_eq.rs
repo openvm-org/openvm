@@ -30,6 +30,7 @@ use crate::arch::{
 #[derive(AlignedBorrow)]
 pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub is_valid: T,
+    pub is_setup: T,
     pub b: [T; READ_LIMBS],
     pub c: [T; READ_LIMBS],
     pub cmp_result: T,
@@ -114,6 +115,8 @@ where
         let cols: &ModularIsEqualCoreCols<_, READ_LIMBS> = local_core.borrow();
 
         builder.assert_bool(cols.is_valid);
+        builder.assert_bool(cols.is_setup);
+        builder.when(cols.is_setup).assert_one(cols.is_valid);
         builder.assert_bool(cols.cmp_result);
 
         // Constrain that either b == c or b != c, depending on the value of cmp_result.
@@ -121,7 +124,7 @@ where
             x: cols.b.map(Into::into),
             y: cols.c.map(Into::into),
             out: cols.cmp_result.into(),
-            condition: cols.is_valid.into(),
+            condition: cols.is_valid - cols.is_setup,
         };
         self.subair.eval(builder, (eq_subair_io, cols.eq_marker));
 
@@ -133,6 +136,8 @@ where
         // * When c_lt_mark = 1 the sum of all lt_marker[i] must be 1
         // * When c_lt_mark = 2 the sum of lt_marker[i] * (lt_marker[i] - 1) must be 2.
         //   Additionally, the sum of all lt_marker[i] must be 3.
+        //
+        // All this doesn't apply when is_setup.
         let lt_marker_sum = cols
             .lt_marker
             .iter()
@@ -143,16 +148,16 @@ where
             .fold(AB::Expr::ZERO, |acc, x| acc + (*x) * (*x - AB::F::ONE));
 
         builder
-            .when(cols.is_valid)
+            .when(cols.is_valid - cols.is_setup)
             .assert_bool(cols.c_lt_mark - AB::F::ONE);
 
         builder
-            .when(cols.is_valid)
+            .when(cols.is_valid - cols.is_setup)
             .when_ne(cols.c_lt_mark, AB::F::from_canonical_u8(2))
             .assert_one(lt_marker_sum.clone());
 
         builder
-            .when(cols.is_valid)
+            .when(cols.is_valid - cols.is_setup)
             .when_ne(cols.c_lt_mark, AB::F::ONE)
             .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(3));
         builder.when_ne(cols.c_lt_mark, AB::F::ONE).assert_eq(
@@ -203,11 +208,13 @@ where
                 cols.b_lt_diff - AB::Expr::ONE,
                 cols.c_lt_diff - AB::Expr::ONE,
             )
-            .eval(builder, cols.is_valid);
+            .eval(builder, cols.is_valid - cols.is_setup);
 
-        let expected_opcode = AB::Expr::from_canonical_usize(
-            Rv32ModularArithmeticOpcode::IS_EQ as usize + self.offset,
-        );
+        let expected_opcode = AB::Expr::from_canonical_usize(self.offset)
+            + cols.is_setup
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
+            + (AB::Expr::ONE - cols.is_setup)
+                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
@@ -226,6 +233,7 @@ where
 
 #[derive(Clone, Debug)]
 pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
+    pub is_setup: bool,
     pub b: [T; READ_LIMBS],
     pub c: [T; READ_LIMBS],
     pub cmp_result: T,
@@ -276,7 +284,7 @@ where
     #[allow(clippy::type_complexity)]
     fn execute_instruction(
         &self,
-        _instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
@@ -285,13 +293,19 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.air.modulus_limbs);
         let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.air.modulus_limbs);
+        let is_setup = instruction.opcode - self.air.offset
+            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
-        assert!(b_cmp, "{:?} >= {:?}", b, self.air.modulus_limbs);
+        if !is_setup {
+            assert!(b_cmp, "{:?} >= {:?}", b, self.air.modulus_limbs);
+        }
         assert!(c_cmp, "{:?} >= {:?}", c, self.air.modulus_limbs);
-        self.bitwise_lookup_chip.request_range(
-            self.air.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1,
-            self.air.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1,
-        );
+        if !is_setup {
+            self.bitwise_lookup_chip.request_range(
+                self.air.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1,
+                self.air.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1,
+            );
+        }
 
         let mut eq_marker = [F::ZERO; READ_LIMBS];
         let mut cmp_result = F::ZERO;
@@ -304,6 +318,7 @@ where
 
         let output = AdapterRuntimeContext::without_pc([writes]);
         let record = ModularIsEqualCoreRecord {
+            is_setup,
             b: data[0],
             c: data[1],
             cmp_result,
@@ -325,14 +340,17 @@ where
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
         let row_slice: &mut ModularIsEqualCoreCols<_, READ_LIMBS> = row_slice.borrow_mut();
         row_slice.is_valid = F::ONE;
+        row_slice.is_setup = F::from_bool(record.is_setup);
         row_slice.b = record.b;
         row_slice.c = record.c;
         row_slice.cmp_result = record.cmp_result;
 
         row_slice.eq_marker = record.eq_marker;
 
-        row_slice.b_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.b_diff_idx])
-            - record.b[record.b_diff_idx];
+        if !record.is_setup {
+            row_slice.b_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.b_diff_idx])
+                - record.b[record.b_diff_idx];
+        }
         row_slice.c_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.c_diff_idx])
             - record.c[record.c_diff_idx];
         row_slice.c_lt_mark = if record.b_diff_idx == record.c_diff_idx {

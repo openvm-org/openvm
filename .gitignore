@@ -12,9 +12,9 @@ Cargo.lock
 **/leaf
 **/internal
 
-!axiom-vm/src/verifier/leaf
-!axiom-vm/src/verifier/internal
-!axiom-vm/src/verifier/root
+!axvm-sdk/src/verifier/leaf
+!axvm-sdk/src/verifier/internal
+!axvm-sdk/src/verifier/root
 
 .cache/
 rustc-*

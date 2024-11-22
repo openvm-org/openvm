@@ -40,6 +40,7 @@ pub struct Poseidon2Air<const WIDTH: usize, F> {
     pub ext_mds_matrix: [[F; 4]; 4],
     /// The internal linear layers consist of multiplying by matrix of all 1s + diag(int_diag_m1_matrix)
     pub int_diag_m1_matrix: [F; WIDTH],
+    /// Sometimes the constants are tuned with a reduction factor corresponding to montgomery reduction.
     pub reduction_factor: F,
     // Maximum constraint degree for the AIR. Must be 3, 5, or 7.
     pub max_constraint_degree: usize,

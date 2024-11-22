@@ -12,7 +12,10 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -203,7 +206,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         // read rs1
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rs1_ptr,
+                ),
                 local_cols.rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -249,7 +255,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
             + local_cols.mem_ptr_limbs[1] * AB::F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
 
         // read_as is 2 for loads and 1 for stores
-        let read_as = select::<AB::Expr>(is_load.clone(), local_cols.mem_as, AB::Expr::ONE);
+        let read_as = select::<AB::Expr>(
+            is_load.clone(),
+            local_cols.mem_as,
+            AB::F::from_canonical_u32(RV32_REGISTER_AS),
+        );
 
         // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
         // Note: shift_amount is expected to have degree 2, thus we can't put it in the select clause
@@ -270,7 +280,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
         // write_as is 1 for loads and 2 for stores
-        let write_as = select::<AB::Expr>(is_load.clone(), AB::Expr::ONE, local_cols.mem_as);
+        let write_as = select::<AB::Expr>(
+            is_load.clone(),
+            AB::F::from_canonical_u32(RV32_REGISTER_AS),
+            local_cols.mem_as,
+        );
 
         // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
         let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
@@ -295,7 +309,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                     local_cols.rd_rs2_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.imm.into(),
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     local_cols.mem_as.into(),
                 ],
                 local_cols.from_state,
@@ -337,8 +351,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             e,
             ..
         } = *instruction;
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert!(e.as_canonical_u32() != 0);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);

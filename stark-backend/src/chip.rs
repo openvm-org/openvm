@@ -1,8 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use p3_uni_stark::StarkGenericConfig;
-
-use crate::{prover::types::AirProofInput, rap::AnyRap};
+use crate::{config::StarkGenericConfig, prover::types::AirProofInput, rap::AnyRap};
 
 /// A chip is a stateful struct that stores the state necessary to
 /// generate the trace of an AIR. This trait is for proving purposes

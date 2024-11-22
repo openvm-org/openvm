@@ -471,18 +471,28 @@ impl SymbolicExpr {
             SymbolicExpr::Select(flag_id, lhs, rhs) => {
                 let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
                 let right = rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
-                assert_eq!(left.num_limbs(), right.num_limbs());
-                assert_eq!(left.max_overflow_bits(), right.max_overflow_bits());
-                assert_eq!(left.limb_max_abs(), right.limb_max_abs());
+                let num_limbs = max(left.num_limbs(), right.num_limbs());
                 let flag = flags[*flag_id];
                 let mut res = vec![];
-                for i in 0..left.num_limbs() {
+                for i in 0..num_limbs {
                     res.push(
-                        left.limb(i).clone() * flag.into()
-                            + right.limb(i).clone() * (AB::Expr::ONE - flag.into()),
+                        (if i < left.num_limbs() {
+                            left.limb(i).clone()
+                        } else {
+                            AB::Expr::ZERO
+                        }) * flag.into()
+                            + (if i < right.num_limbs() {
+                                right.limb(i).clone()
+                            } else {
+                                AB::Expr::ZERO
+                            }) * (AB::Expr::ONE - flag.into()),
                     );
                 }
-                OverflowInt::from_computed_limbs(res, left.limb_max_abs(), left.max_overflow_bits())
+                OverflowInt::from_computed_limbs(
+                    res,
+                    max(left.limb_max_abs(), right.limb_max_abs()),
+                    max(left.max_overflow_bits(), right.max_overflow_bits()),
+                )
             }
             SymbolicExpr::Div(_, _) => unreachable!(), // Division is not allowed in constraints.
         }

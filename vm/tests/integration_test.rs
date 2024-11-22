@@ -1,19 +1,19 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ax_stark_backend::{engine::StarkEngine, p3_uni_stark::StarkGenericConfig};
+use ax_stark_backend::{config::StarkGenericConfig, engine::StarkEngine};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        FriParameters,
+        setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, ExitCode, MemoryConfig,
-        SingleSegmentVmExecutor, VirtualMachine, VmConfig,
+        hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+        ExecutorName, ExitCode, MemoryConfig, SingleSegmentVmExecutor, VirtualMachine, VmConfig,
     },
     intrinsics::hashes::keccak256::utils::keccak256,
     prover::{local::VmLocalProver, types::VmProvingKey, SingleSegmentVmProver},
@@ -233,8 +233,11 @@ fn test_vm_1_optional_air() {
 
 #[test]
 fn test_vm_public_values() {
+    setup_tracing();
+    let num_public_values = 100;
     let vm_config = VmConfig {
-        num_public_values: 3,
+        num_public_values,
+        collect_metrics: true,
         ..Default::default()
     };
     let engine =
@@ -256,7 +259,11 @@ fn test_vm_public_values() {
         let exe_result = vm.execute(program, vec![]).unwrap();
         assert_eq!(
             exe_result.public_values,
-            vec![None, None, Some(BabyBear::from_canonical_u32(12))]
+            [
+                vec![None, None, Some(BabyBear::from_canonical_u32(12))],
+                vec![None; num_public_values - 3]
+            ]
+            .concat(),
         );
         let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
         engine
@@ -359,16 +366,18 @@ fn test_vm_1_persistent() {
             merkle_air_proof_input.raw.public_values[..8],
             merkle_air_proof_input.raw.public_values[8..]
         );
+        let mut digest = [BabyBear::ZERO; CHUNK];
+        let compression = vm_poseidon2_hasher();
+        for _ in 0..15 {
+            digest = compression.compress(&digest, &digest);
+        }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // 13 times. We use 13 because addr_space_max_bits = 1 and pointer_max_bits = 16,
-            // so the height of the tree is 1 + 16 - 3 = 14.
-            [
-                1860730809, 952766590, 1529251869, 978208824, 173743442, 1495326235, 1188286360,
-                350327606
-            ]
-            .map(BabyBear::from_canonical_u32)
+            // 15 times. We use 15 because addr_space_max_bits = 1 and pointer_max_bits = 16,
+            // so the height of the tree is 1 + 16 - 3 = 14. The leaf also must be hashed once
+            // with padding for security.
+            digest
         );
     }
 

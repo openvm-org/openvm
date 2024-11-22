@@ -43,7 +43,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         = (
         OverflowInt<AB::Expr>,
         CheckCarryToZeroCols<AB::Var>,
-        AB::Var,
+        AB::Expr,
     )
     where
         AB::Var: 'a,
@@ -56,14 +56,14 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         (expr, cols, is_valid): (
             OverflowInt<AB::Expr>,
             CheckCarryToZeroCols<AB::Var>,
-            AB::Var,
+            AB::Expr,
         ),
     ) where
         AB::Var: 'a,
         AB::Expr: 'a,
     {
         assert_eq!(expr.limbs.len(), cols.carries.len());
-        builder.assert_bool(is_valid);
+        builder.assert_bool(is_valid.clone());
         let (carry_min_value_abs, carry_abs_bits) =
             get_carry_max_abs_and_bits(expr.max_overflow_bits, self.limb_bits);
         // 1. Constrain the limbs size of carries.
@@ -74,7 +74,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
                 self.decomp,
                 carry_abs_bits,
                 carry + AB::F::from_canonical_usize(carry_min_value_abs),
-                is_valid,
+                is_valid.clone(),
             );
         }
 

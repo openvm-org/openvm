@@ -4,25 +4,14 @@ use ax_stark_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkEngine, StarkFriEngine},
 };
-use axiom_vm::{
-    commit::AppExecutionCommit,
-    config::{AxiomVmConfig, AxiomVmProvingKey},
-    verifier::{
-        common::types::VmVerifierPvs,
-        internal::types::InternalVmVerifierInput,
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::{RootVmVerifierInput, RootVmVerifierPvs},
-    },
-};
 use axvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor, VmConfig,
-        VmExecutor, PUBLIC_VALUES_AIR_ID,
+        VmExecutor,
     },
     prover::{local::VmLocalProver, SingleSegmentVmProver},
     system::{
@@ -32,16 +21,27 @@ use axvm_circuit::{
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::{hints::Hintable, types::InnerConfig};
+use axvm_sdk::{
+    commit::AppExecutionCommit,
+    config::AxVmSdkConfig,
+    keygen::AxVmSdkProvingKey,
+    prover::RootVerifierLocalProver,
+    verifier::{
+        common::types::VmVerifierPvs,
+        internal::types::InternalVmVerifierInput,
+        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
+        root::types::{RootVmVerifierInput, RootVmVerifierPvs},
+    },
+};
 use p3_baby_bear::BabyBear;
 
 type SC = BabyBearPoseidon2Config;
-type OuterSC = BabyBearPoseidon2OuterConfig;
 type C = InnerConfig;
 type F = BabyBear;
 #[test]
 fn test_1() {
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
-    let axiom_vm_config = AxiomVmConfig {
+    let axvm_sdk_config = AxVmSdkConfig {
         max_num_user_public_values: 16,
         app_fri_params: fri_params,
         leaf_fri_params: fri_params,
@@ -63,9 +63,9 @@ fn test_1() {
             ..Default::default()
         },
     };
-    let max_num_user_public_values = axiom_vm_config.max_num_user_public_values;
-    let axiom_vm_pk = AxiomVmProvingKey::keygen(axiom_vm_config);
-    let app_engine = BabyBearPoseidon2Engine::new(axiom_vm_pk.app_vm_pk.fri_params);
+    let max_num_user_public_values = axvm_sdk_config.max_num_user_public_values;
+    let axvm_sdk_pk = AxVmSdkProvingKey::keygen(axvm_sdk_config);
+    let app_engine = BabyBearPoseidon2Engine::new(axvm_sdk_pk.app_vm_pk.fri_params);
 
     let mut program = {
         let n = 200;
@@ -90,7 +90,7 @@ fn test_1() {
     let expected_program_commit: [F; DIGEST_SIZE] =
         committed_exe.committed_program.prover_data.commit.into();
 
-    let app_vm = VmExecutor::new(axiom_vm_pk.app_vm_pk.vm_config.clone());
+    let app_vm = VmExecutor::new(axvm_sdk_pk.app_vm_pk.vm_config.clone());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(committed_exe.clone(), vec![])
         .unwrap();
@@ -107,16 +107,16 @@ fn test_1() {
     let mut app_vm_seg_proofs: Vec<_> = app_vm_result
         .per_segment
         .into_iter()
-        .map(|proof_input| app_engine.prove(&axiom_vm_pk.app_vm_pk.vm_pk, proof_input))
+        .map(|proof_input| app_engine.prove(&axvm_sdk_pk.app_vm_pk.vm_pk, proof_input))
         .collect();
 
     let last_proof = app_vm_seg_proofs.pop().unwrap();
-    let leaf_vm = SingleSegmentVmExecutor::new(axiom_vm_pk.leaf_vm_pk.vm_config.clone());
+    let leaf_vm = SingleSegmentVmExecutor::new(axvm_sdk_pk.leaf_vm_pk.vm_config.clone());
 
     let run_leaf_verifier =
         |verifier_input: LeafVmVerifierInput<SC>| -> Result<Vec<F>, ExecutionError> {
             let exe_result = leaf_vm.execute(
-                axiom_vm_pk.leaf_committed_exe.exe.clone(),
+                axvm_sdk_pk.leaf_committed_exe.exe.clone(),
                 verifier_input.write_to_stream(),
             )?;
             let runtime_pvs: Vec<_> = exe_result
@@ -187,10 +187,10 @@ fn test_1() {
     }
 
     let leaf_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-        axiom_vm_pk.leaf_vm_pk.clone(),
-        axiom_vm_pk.leaf_committed_exe.clone(),
+        axvm_sdk_pk.leaf_vm_pk.clone(),
+        axvm_sdk_pk.leaf_committed_exe.clone(),
     );
-    let internal_commit: [F; DIGEST_SIZE] = axiom_vm_pk
+    let internal_commit: [F; DIGEST_SIZE] = axvm_sdk_pk
         .internal_committed_exe
         .get_program_commit()
         .into();
@@ -214,8 +214,8 @@ fn test_1() {
     ];
 
     let internal_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
-        axiom_vm_pk.internal_vm_pk.clone(),
-        axiom_vm_pk.internal_committed_exe.clone(),
+        axvm_sdk_pk.internal_vm_pk.clone(),
+        axvm_sdk_pk.internal_committed_exe.clone(),
     );
     let internal_proofs = vec![SingleSegmentVmProver::prove(
         &internal_prover,
@@ -226,14 +226,11 @@ fn test_1() {
         .write(),
     )];
 
-    let root_prover = VmLocalProver::<OuterSC, BabyBearPoseidon2OuterEngine>::new(
-        axiom_vm_pk.root_vm_pk.clone(),
-        axiom_vm_pk.root_committed_exe.clone(),
-    );
+    let root_prover = RootVerifierLocalProver::new(axvm_sdk_pk.root_verifier_pk.clone());
     let app_exe_commit = AppExecutionCommit::compute(
-        &axiom_vm_pk.app_vm_pk.vm_config,
+        &axvm_sdk_pk.app_vm_pk.vm_config,
         &committed_exe,
-        &axiom_vm_pk.leaf_committed_exe,
+        &axvm_sdk_pk.leaf_committed_exe,
     );
 
     let root_proof = SingleSegmentVmProver::prove(
@@ -244,8 +241,10 @@ fn test_1() {
         }
         .write(),
     );
+    let air_id_perm = axvm_sdk_pk.root_verifier_pk.air_id_permutation();
+    let special_air_ids = air_id_perm.get_special_air_ids();
     let root_pvs = RootVmVerifierPvs::from_flatten(
-        root_proof.per_air[PUBLIC_VALUES_AIR_ID]
+        root_proof.per_air[special_air_ids.public_values_air_id]
             .public_values
             .clone(),
     );

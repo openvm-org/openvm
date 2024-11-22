@@ -29,7 +29,6 @@ lazy_static.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-p3-uni-stark = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-challenger = { workspace = true }
 p3-dft = { workspace = true }

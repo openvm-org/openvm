@@ -7,7 +7,10 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::not;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -142,7 +145,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local.rs1_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -160,7 +163,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::ONE, local.rd_ptr),
+                MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local.writes_aux,
@@ -174,7 +177,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
                     local.rs2.into(),
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     local.rs2_as.into(),
                 ],
                 local.from_state,
@@ -213,8 +216,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
     )> {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert!(e.as_canonical_u32() <= 1);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_IMM_AS || e.as_canonical_u32() == RV32_REGISTER_AS
+        );
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
         let (rs2, rs2_data, rs2_imm) = if e.is_zero() {

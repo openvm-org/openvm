@@ -3,7 +3,7 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
@@ -247,7 +247,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
         let heights = segment.chip_set.current_trace_heights();
@@ -267,7 +267,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -388,14 +388,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Proof<SC> {
         tracing::info_span!("prove_segment", segment = 0)
             .in_scope(|| self.engine.prove(pk, proof_input))
     }
@@ -404,14 +397,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         results: VmExecutorResult<SC>,
-    ) -> Vec<Proof<SC>>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Vec<Proof<SC>> {
         #[cfg(feature = "bench-metrics")]
         metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results
