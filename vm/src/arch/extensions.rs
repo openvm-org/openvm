@@ -387,6 +387,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         P: AnyEnum,
     {
         let mut builder = VmExtensionBuilder::new(&self.base, self.bus_idx_max);
+        // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
             builder.add_chip(chip);
@@ -398,6 +399,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         builder
     }
 
+    /// Extend the chip complex with a new extension.
+    /// A new chip complex with different type generics is returned with the combined inventory.
     pub fn extend<E3, P3, Ext>(mut self, config: &Ext) -> VmChipComplex<F, E3, P3>
     where
         Ext: VmExtension<F>,
