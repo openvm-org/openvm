@@ -17,7 +17,7 @@ pub struct Bls12_381;
 mod tests;
 
 moduli_setup! {
-    Bls12_381Fp = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
+    Bls12_381Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
 }
 
 pub type Fp = Bls12_381Fp;
