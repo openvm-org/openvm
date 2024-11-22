@@ -37,6 +37,7 @@ class MdTableRow:
         self.group = group
         self.log_blowup = log_blowup
         self.cells = cells
+        print(self.cells)
         assert(len(self.cells) == COLS_PER_SECTION - 1)
     def __str__(self):
         return f"{self.group}-{self.log_blowup.val}-{self.cells}"
