@@ -58,6 +58,7 @@ impl FieldExtension<Fp2> for Fp12 {
     }
 
     fn frobenius_map(&self, power: usize) -> Self {
+        // We assume that the frobenius map power is < 12
         let mut c0 = self.c[0].clone();
         let mut c1 = self.c[1].clone();
         let mut c2 = self.c[2].clone();
