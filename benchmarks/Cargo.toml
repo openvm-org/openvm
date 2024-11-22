@@ -23,6 +23,9 @@ metrics.workspace = true
 tracing.workspace = true
 hex.workspace = true
 tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
+rand_chacha = { version = "0.3", default-features = false }
+k256 = { workspace = true, features = ["ecdsa"] }
+tiny-keccak.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
