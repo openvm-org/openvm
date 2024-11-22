@@ -38,7 +38,6 @@ pub trait AffineCoords<F: Field>: Clone {
     /// Returns the generator point of the elliptic curve.
     fn generator() -> Self;
 }
-<<<<<<< HEAD:lib/ecc-execution/src/common/point.rs
 
 pub trait ScalarMul<Fr: Field> {
     /// Scalar multiplication of an elliptic curve point by a scalar.
@@ -63,5 +62,3 @@ pub trait EccBinOps<F: Field>: AffineCoords<F> {
     /// Adds two elliptic curve points.
     fn add_uneq(&self, other: &Self) -> Self;
 }
-=======
->>>>>>> fb24f40ddede44c91b4012eb499c84d7bbda7acc:lib/ecc/src/point/mod.rs

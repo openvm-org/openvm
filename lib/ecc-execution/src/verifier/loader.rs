@@ -2,11 +2,10 @@
 
 use std::{fmt::Debug, marker::PhantomData};
 
-use ax_ecc_lib::ec_msm::msm_axvm_C;
+use axvm_ecc::{pairing::MultiMillerLoop, point::EccBinOps};
 use halo2curves_axiom::{
     ff::PrimeField,
     group::{Group, ScalarMul},
-    pairing::{MillerLoopResult, MultiMillerLoop},
     CurveAffine,
 };
 use lazy_static::lazy_static;
@@ -20,7 +19,6 @@ use snark_verifier_sdk::snark_verifier::{
 };
 
 use super::traits::{AxVmEcPoint, AxVmScalar};
-use crate::common::EccBinOps;
 
 lazy_static! {
     /// NativeLoader instance for [`LoadedEcPoint::loader`] and
