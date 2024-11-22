@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ax_stark_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof},
@@ -11,7 +11,7 @@ use axvm_circuit::{
             exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
             UsizeOpcode,
         },
-        SingleSegmentVmExecutor, VmConfig,
+        ExecutorName, SingleSegmentVmExecutor, VmConfig,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
@@ -62,13 +62,23 @@ pub(super) fn dummy_internal_proof(
     SingleSegmentVmProver::prove(&internal_prover, internal_input.write())
 }
 
-pub(super) fn dummy_leaf_proof(
+pub fn dummy_leaf_proof(
+    leaf_vm_pk: VmProvingKey<SC>,
+    app_vm_pk: &VmProvingKey<SC>,
+    overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
+) -> Proof<SC> {
+    let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_executor_heights);
+    dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
+}
+
+#[allow(dead_code)]
+pub(super) fn dummy_leaf_proof_riscv_app_vm(
     leaf_vm_pk: VmProvingKey<SC>,
     num_public_values: usize,
     app_fri_params: FriParameters,
 ) -> Proof<SC> {
     let app_vm_pk = dummy_riscv_app_vm_pk(num_public_values, app_fri_params);
-    let app_proof = dummy_app_proof_impl(app_vm_pk.clone());
+    let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), None);
     dummy_leaf_proof_impl(leaf_vm_pk, &app_vm_pk, &app_proof)
 }
 
@@ -109,16 +119,19 @@ fn dummy_riscv_app_vm_pk(num_public_values: usize, fri_params: FriParameters) ->
     }
 }
 
-fn dummy_app_proof_impl(mut app_vm_pk: VmProvingKey<SC>) -> ContinuationVmProof<SC> {
+fn dummy_app_proof_impl(
+    mut app_vm_pk: VmProvingKey<SC>,
+    overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
+) -> ContinuationVmProof<SC> {
     // Enforce each AIR to have at least 1 row.
-    app_vm_pk.vm_config.overridden_executor_heights = Some(
+    app_vm_pk.vm_config.overridden_executor_heights = overridden_executor_heights.or(Some(
         app_vm_pk
             .vm_config
             .executors
             .iter()
             .map(|executor| (*executor, 1))
             .collect(),
-    );
+    ));
     let fri_params = app_vm_pk.fri_params;
     let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
         app_vm_pk,

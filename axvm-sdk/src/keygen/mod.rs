@@ -132,11 +132,7 @@ impl AxVmSdkProvingKey {
         ));
 
         let internal_proof = {
-            let leaf_proof = dummy_leaf_proof(
-                leaf_vm_pk.clone(),
-                config.max_num_user_public_values,
-                config.app_fri_params,
-            );
+            let leaf_proof = dummy_leaf_proof(leaf_vm_pk.clone(), &app_vm_pk, None);
             dummy_internal_proof(
                 internal_vm_pk.clone(),
                 internal_committed_exe.clone(),
