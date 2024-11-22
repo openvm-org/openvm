@@ -398,7 +398,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         builder
     }
 
-    pub fn extend<E3, P3, Ext>(mut self, config: Ext) -> VmChipComplex<F, E3, P3>
+    pub fn extend<E3, P3, Ext>(mut self, config: &Ext) -> VmChipComplex<F, E3, P3>
     where
         Ext: VmExtension<F>,
         E: Into<E3> + AnyEnum,
