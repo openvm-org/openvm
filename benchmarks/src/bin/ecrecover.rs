@@ -79,8 +79,6 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                let msg = (0..1u8).collect::<Vec<_>>();
-                let input = bincode::serde::encode_to_vec(msg, bincode::config::standard())?;
                 bench_from_exe(engine, vm_config, elf, input_stream)
             })?;
 
