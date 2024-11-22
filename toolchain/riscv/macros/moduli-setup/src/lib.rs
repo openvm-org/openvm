@@ -78,7 +78,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                                         .chain(modulus_bytes.iter().copied())
                                         .collect::<Vec<_>>();
                                 let serialized_name = syn::Ident::new(
-                                    &format!("AXIOM_SERIALIZED_MODULUS_{}", struct_name),
+                                    &format!("AXIOM_SERIALIZED_MODULUS_{}", mod_idx),
                                     span.into(),
                                 );
                                 let setup_function =
