@@ -8,12 +8,10 @@ use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
-    Chip,
 };
 use axvm_instructions::instruction::Instruction;
 use derive_more::From;
 use p3_field::PrimeField32;
-use p3_matrix::Matrix;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
@@ -168,15 +166,6 @@ impl<F: PrimeField32> AxVmExecutor<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let height = height.next_power_of_two();
-        let mut proof_input = self.generate_air_proof_input();
-        let main = proof_input.raw.common_main.as_mut().unwrap();
-        assert!(
-            height >= main.height(),
-            "Overridden height must be greater than or equal to the used height"
-        );
-        // Assumption: an all-0 row is a valid dummy row for all chips.
-        main.pad_to_height(height, F::ZERO);
-        proof_input
+        super::generate_air_proof_input(self, Some(height))
     }
 }

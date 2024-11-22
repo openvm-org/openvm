@@ -3,15 +3,23 @@ use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
+use ax_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+    prover::types::{AirProofInput, CommittedTraceData, ProofInput},
+    Chip, ChipUsageGetter,
+};
 use axvm_circuit_derive::AnyEnum;
 use axvm_instructions::{
     program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
 };
 use derive_more::derive::From;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
+use p3_matrix::Matrix;
+use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
-use super::{vm_poseidon2_config, ExecutionBus, InstructionExecutor, SystemConfig};
+use super::{vm_poseidon2_config, ExecutionBus, InstructionExecutor, Streams, SystemConfig};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::{
@@ -22,12 +30,24 @@ use crate::{
         connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK,
+            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
     },
 };
+
+// TODO: Make these public after chip_set.rs is removed
+const PROGRAM_AIR_ID: usize = 0;
+/// ProgramAir is the first AIR so its cached trace should be the first main trace.
+const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
+const CONNECTOR_AIR_ID: usize = 1;
+/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
+/// continuations is enabled.
+const PUBLIC_VALUES_AIR_ID: usize = 2;
+/// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
+/// Merkle AIR commits start/final memory states.
+const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
 const MEMORY_BUS: MemoryBus = MemoryBus(1);
@@ -120,7 +140,7 @@ type ExecutorId = usize;
 /// TODO: create newtype
 type AxVmOpcode = usize;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChipId {
     Executor(usize),
     Periphery(usize),
@@ -224,8 +244,8 @@ pub struct SystemBase<F> {
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemExecutor<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
     PublicValues(PublicValuesChip<F>),
+    Phantom(PhantomChip<F>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -261,20 +281,9 @@ impl<F: PrimeField32> SystemComplex<F> {
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
         let mut inventory = VmInventory::new();
-
-        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
-        let phantom_chip = PhantomChip::new(
-            EXECUTION_BUS,
-            PROGRAM_BUS,
-            memory_controller.clone(),
-            phantom_opcode,
-        );
-        inventory
-            .add_executor(phantom_chip.into(), [phantom_opcode])
-            .unwrap();
-
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if !config.continuation_enabled && config.num_public_values > 0 {
+            assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
             let chip = PublicValuesChip::new(
                 NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_controller.clone()),
                 PublicValuesCoreChip::new(
@@ -289,6 +298,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 .unwrap();
         }
         if config.continuation_enabled {
+            assert_eq!(inventory.periphery().len(), Self::POSEIDON2_PERIPHERY_IDX);
             // Add direct poseidon2 chip for persistent memory.
             // This is **not** an instruction executor.
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
@@ -306,6 +316,16 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip.into());
         }
+        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
+        let phantom_chip = PhantomChip::new(
+            EXECUTION_BUS,
+            PROGRAM_BUS,
+            memory_controller.clone(),
+            phantom_opcode,
+        );
+        inventory
+            .add_executor(phantom_chip.into(), [phantom_opcode])
+            .unwrap();
 
         let base = SystemBase {
             program_chip,
@@ -329,8 +349,8 @@ where
     E: AnyEnum,
     P: AnyEnum,
 {
-    /// **If** public values chip exists, then its executor index is 1.
-    const PV_EXECUTOR_IDX: ExecutorId = 1;
+    /// **If** public values chip exists, then its executor index is 0.
+    const PV_EXECUTOR_IDX: ExecutorId = 0;
     /// **If** internal poseidon2 chip exists, then its periphery index is 0.
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
@@ -368,6 +388,168 @@ where
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.base.program_chip.set_program(program);
     }
+
+    pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
+        todo!()
+        // for chip in self.chips.iter_mut() {
+        //     if let AxVmChip::Executor(chip) = chip {
+        //         match chip {
+        //             AxVmExecutor::LoadStore(chip) => {
+        //                 chip.borrow_mut().core.set_streams(streams.clone())
+        //             }
+        //             AxVmExecutor::HintStoreRv32(chip) => {
+        //                 chip.borrow_mut().core.set_streams(streams.clone())
+        //             }
+        //             AxVmExecutor::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
+        //             _ => {}
+        //         }
+        //     }
+        // }
+    }
+
+    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+        mut self,
+        cached_program: Option<CommittedTraceData<SC>>,
+    ) -> ProofInput<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+        E: Chip<SC>,
+        P: Chip<SC>,
+    {
+        let has_pv_chip = self.public_values_chip().is_some();
+        // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
+        let mut builder = VmProofInputBuilder::new();
+        let SystemBase {
+            range_checker_chip,
+            memory_controller,
+            connector_chip,
+            program_chip,
+        } = self.base;
+        // System: Program Chip
+        debug_assert_eq!(builder.curr_air_id, PROGRAM_AIR_ID);
+        builder.add_air_proof_input(program_chip.generate_air_proof_input(cached_program));
+        // System: Connector Chip
+        debug_assert_eq!(builder.curr_air_id, CONNECTOR_AIR_ID);
+        builder.add_air_proof_input(connector_chip.generate_air_proof_input());
+
+        // Go through all chips in inventory in reverse order they were added (to resolve dependencies)
+        // Important Note: for air_id ordering reasons, we want to generate_air_proof_input for
+        // public values and memory chips **last** but include them into the `builder` **first**.
+        let mut public_values_input = None;
+        let mut insertion_order = self.inventory.insertion_order;
+        insertion_order.reverse();
+        let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
+        for chip_id in insertion_order {
+            let height = None;
+            // let height = self.overridden_executor_heights.as_ref().and_then(
+            //     |overridden_heights| {
+            //         let executor_name: ExecutorName = (&executor).into();
+            //         overridden_heights.get(&executor_name).copied()
+            //     },
+            // );
+            let air_proof_input = match chip_id {
+                ChipId::Executor(id) => {
+                    let chip = self.inventory.executors.pop().unwrap();
+                    assert_eq!(id, self.inventory.executors.len());
+                    generate_air_proof_input(chip, height)
+                }
+                ChipId::Periphery(id) => {
+                    let chip = self.inventory.periphery.pop().unwrap();
+                    assert_eq!(id, self.inventory.periphery.len());
+                    generate_air_proof_input(chip, height)
+                }
+            };
+            if has_pv_chip && chip_id == ChipId::Executor(Self::PV_EXECUTOR_IDX) {
+                public_values_input = Some(air_proof_input);
+            } else {
+                non_sys_inputs.push(air_proof_input);
+            }
+        }
+
+        if let Some(input) = public_values_input {
+            debug_assert_eq!(builder.curr_air_id, PUBLIC_VALUES_AIR_ID);
+            builder.add_air_proof_input(input);
+        }
+        // System: Memory Controller
+        {
+            // memory
+            let memory_controller = Rc::try_unwrap(memory_controller)
+                .expect("other chips still hold a reference to memory chip")
+                .into_inner();
+
+            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+            for air_proof_input in air_proof_inputs {
+                builder.add_air_proof_input(air_proof_input);
+            }
+        }
+        // Non-system chips
+        non_sys_inputs
+            .into_iter()
+            .for_each(|input| builder.add_air_proof_input(input));
+        // System: Range Checker Chip
+        builder.add_air_proof_input(range_checker_chip.generate_air_proof_input());
+
+        builder.build()
+    }
+}
+
+struct VmProofInputBuilder<SC: StarkGenericConfig> {
+    curr_air_id: usize,
+    proof_input_per_air: Vec<(usize, AirProofInput<SC>)>,
+}
+
+impl<SC: StarkGenericConfig> VmProofInputBuilder<SC> {
+    fn new() -> Self {
+        Self {
+            curr_air_id: 0,
+            proof_input_per_air: vec![],
+        }
+    }
+    /// Adds air proof input if one of the main trace matrices is non-empty.
+    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was added or not.
+    fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
+        let h = if !air_proof_input.raw.cached_mains.is_empty() {
+            air_proof_input.raw.cached_mains[0].height()
+        } else {
+            air_proof_input
+                .raw
+                .common_main
+                .as_ref()
+                .map(|trace| trace.height())
+                .unwrap()
+        };
+        if h > 0 {
+            self.proof_input_per_air
+                .push((self.curr_air_id, air_proof_input));
+        }
+        self.curr_air_id += 1;
+    }
+
+    fn build(self) -> ProofInput<SC> {
+        ProofInput {
+            per_air: self.proof_input_per_air,
+        }
+    }
+}
+
+/// Generates an AIR proof input of the chip with the given height, if any.
+///
+/// Assumption: an all-0 row is a valid dummy row for `chip`.
+pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
+    chip: C,
+    height: Option<usize>,
+) -> AirProofInput<SC> {
+    let mut proof_input = chip.generate_air_proof_input();
+    if let Some(height) = height {
+        let height = height.next_power_of_two();
+        let main = proof_input.raw.common_main.as_mut().unwrap();
+        assert!(
+            height >= main.height(),
+            "Overridden height must be greater than or equal to the used height"
+        );
+        main.pad_to_height(height, AbstractField::ZERO);
+    }
+    proof_input
 }
 
 /// A helper trait for downcasting types that may be enums.
