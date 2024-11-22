@@ -31,6 +31,7 @@ members = [
     "lib/ecc-constants",
     "lib/ecc-execution",
     "lib/recursion",
+    "lib/verifier",
     "axvm-sdk",
     "benchmarks",
 ]

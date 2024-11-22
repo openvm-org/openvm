@@ -412,7 +412,7 @@ dependencies = [
  "p3-matrix",
  "p3-util",
  "rand 0.8.5",
- "sha3",
+ "sha3 0.10.8",
  "tracing",
 ]
 
@@ -438,6 +438,26 @@ dependencies = [
  "rand 0.8.5",
  "test-case",
  "zkhash",
+]
+
+[[package]]
+name = "ax-snark-verifier"
+version = "0.1.0"
+dependencies = [
+ "axvm-ecc",
+ "axvm-ecc-constants",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rng",
+ "snark-verifier 0.1.7",
+ "subtle",
 ]
 
 [[package]]
@@ -1046,12 +1066,28 @@ dependencies = [
 
 [[package]]
 name = "block-buffer"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
+dependencies = [
+ "block-padding",
+ "generic-array",
+]
+
+[[package]]
+name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
 ]
+
+[[package]]
+name = "block-padding"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "bls12_381"
@@ -1672,7 +1708,7 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer",
+ "block-buffer 0.10.4",
  "const-oid",
  "crypto-common",
  "subtle",
@@ -2137,7 +2173,7 @@ version = "0.1.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a23c779b38253fe1538102da44ad5bd5378495a61d2c4ee18d64eaa61ae5995"
 dependencies = [
- "halo2_proofs",
+ "halo2_proofs 0.1.0",
 ]
 
 [[package]]
@@ -2157,7 +2193,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rustc-hash 1.1.0",
- "sha3",
+ "sha3 0.10.8",
  "tracing",
 ]
 
@@ -2168,6 +2204,7 @@ source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.4.1-git#2fe81
 dependencies = [
  "getset",
  "halo2-axiom",
+ "halo2_proofs 0.3.0",
  "itertools 0.11.0",
  "log",
  "num-bigint 0.4.6",
@@ -2212,6 +2249,47 @@ dependencies = [
  "pasta_curves 0.4.1",
  "rand_core 0.6.4",
  "rayon",
+]
+
+[[package]]
+name = "halo2_proofs"
+version = "0.3.0"
+source = "git+https://github.com/privacy-scaling-explorations/halo2.git?tag=v0.3.0#73408a140737d8336490452193b21f5a7a94e7de"
+dependencies = [
+ "blake2b_simd",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "halo2curves 0.6.1",
+ "rand_chacha",
+ "rand_core 0.6.4",
+ "rayon",
+ "sha3 0.9.1",
+ "tracing",
+]
+
+[[package]]
+name = "halo2curves"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db81d01d0bbfec9f624d7590fc6929ee2537a64ec1e080d8f8c9e2d2da291405"
+dependencies = [
+ "blake2b_simd",
+ "ff 0.13.0",
+ "group 0.13.0",
+ "hex",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "pairing 0.23.0",
+ "pasta_curves 0.5.1",
+ "paste",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rayon",
+ "serde",
+ "serde_arrays",
+ "static_assertions",
+ "subtle",
 ]
 
 [[package]]
@@ -3136,6 +3214,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b410bbe7e14ab526a0e86877eb47c6996a2bd7746f027ba551028c925390e4e9"
 
 [[package]]
+name = "opaque-debug"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3195,7 +3279,7 @@ version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=9b267c4#9b267c411cc8965c709b27d7b0ef81e225603c59"
 dependencies = [
  "ff 0.13.0",
- "halo2curves",
+ "halo2curves 0.7.0",
  "num-bigint 0.4.6",
  "p3-field",
  "p3-poseidon2",
@@ -4421,6 +4505,18 @@ dependencies = [
 
 [[package]]
 name = "sha3"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
+dependencies = [
+ "block-buffer 0.9.0",
+ "digest 0.9.0",
+ "keccak",
+ "opaque-debug",
+]
+
+[[package]]
+name = "sha3"
 version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
@@ -4474,6 +4570,24 @@ checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
 
 [[package]]
 name = "snark-verifier"
+version = "0.1.7"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.1.7-git#4b733e0ca8be017954b111f359bcf8622c5b7c66"
+dependencies = [
+ "halo2-base",
+ "halo2-ecc",
+ "hex",
+ "itertools 0.11.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "pairing 0.23.0",
+ "rand 0.8.5",
+ "serde",
+]
+
+[[package]]
+name = "snark-verifier"
 version = "0.1.8"
 source = "git+https://github.com/axiom-crypto/snark-verifier?branch=chore%2Fruint-pin#f847c0179659b27e4b6b3992ce1bc00505c52628"
 dependencies = [
@@ -4490,7 +4604,7 @@ dependencies = [
  "revm",
  "ruint",
  "serde",
- "sha3",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -4513,7 +4627,7 @@ dependencies = [
  "rand_chacha",
  "serde",
  "serde_json",
- "snark-verifier",
+ "snark-verifier 0.1.8",
 ]
 
 [[package]]
@@ -5613,6 +5727,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2",
- "sha3",
+ "sha3 0.10.8",
  "subtle",
 ]
