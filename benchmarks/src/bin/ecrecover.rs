@@ -27,8 +27,8 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                let n = 100_000u64;
-                let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
+                let msg = (0..255u8).collect::<Vec<_>>();
+                let input = bincode::serde::encode_to_vec(msg, bincode::config::standard())?;
                 bench_from_exe(
                     engine,
                     VmConfig::rv32im(),
