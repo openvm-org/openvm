@@ -12,7 +12,10 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use itertools::izip;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -257,7 +260,7 @@ impl<
         for (ptr, val, aux) in izip!(ptrs, vals, auxs) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::ONE, ptr),
+                    MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -287,7 +290,7 @@ impl<
         let rs1_val_f: AB::Expr = abstract_compose(cols.rs1_val);
         let rs2_val_f: AB::Expr = abstract_compose(cols.rs2_val);
 
-        let e = AB::F::from_canonical_usize(2);
+        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
         // Reads from heap
         for (i, (read, aux)) in zip(ctx.reads.0, &cols.reads1_aux).enumerate() {
             self.memory_bridge
@@ -338,7 +341,7 @@ impl<
                     cols.rd_ptr.into(),
                     cols.rs1_ptr.into(),
                     cols.rs2_ptr.into(),
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
@@ -407,8 +410,8 @@ impl<
     )> {
         let Instruction { a, b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), 1);
-        debug_assert_eq!(e.as_canonical_u32(), 2);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let (rs1_record, rs1_val) = read_rv32_register(memory, d, b);
         let (rs2_record, rs2_val) = read_rv32_register(memory, d, c);

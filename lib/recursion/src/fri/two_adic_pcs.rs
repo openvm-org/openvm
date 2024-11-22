@@ -177,7 +177,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                             let z: Ext<C::F, C::EF> = builder.get(&mat_points, l);
                             let ps_at_z = builder.get(&mat_values, l);
 
-                            builder.cycle_tracker_start("single-mat-reduced-opening");
+                            builder.cycle_tracker_start("single-reduced-opening-eval");
 
                             if builder.flags.static_only {
                                 builder.range(0, ps_at_z.len()).for_each(|t, builder| {
@@ -189,7 +189,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                     builder.assign(&cur_alpha_pow, cur_alpha_pow * alpha);
                                 });
                             } else {
-                                let mat_ro = builder.fri_mat_reduced_opening(
+                                let mat_ro = builder.fri_single_reduced_opening_eval(
                                     alpha,
                                     cur_alpha_pow,
                                     &mat_opening,
@@ -198,7 +198,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                                 builder.assign(&cur_ro, cur_ro + (mat_ro / (z - x)));
                             }
 
-                            builder.cycle_tracker_end("single-mat-reduced-opening");
+                            builder.cycle_tracker_end("single-reduced-opening-eval");
                         });
 
                         builder.set_value(&ro, log_height, cur_ro);
@@ -312,6 +312,7 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
+    use ax_stark_backend::config::{StarkGenericConfig, Val};
     use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use axvm_circuit::arch::instructions::program::Program;
     use axvm_native_compiler::{
@@ -323,7 +324,6 @@ pub mod tests {
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
     use p3_matrix::dense::RowMajorMatrix;
-    use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::rngs::OsRng;
 
     use crate::{

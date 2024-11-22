@@ -274,7 +274,7 @@ impl VmConfig {
         .add_executor(ExecutorName::FieldArithmetic)
         .add_executor(ExecutorName::FieldExtension)
         .add_executor(ExecutorName::Poseidon2)
-        .add_executor(ExecutorName::FriMatOpening)
+        .add_executor(ExecutorName::FriReducedOpening)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {
@@ -326,7 +326,7 @@ impl EcCurve {
 }
 
 // TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, FromRepr, EnumCount)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,

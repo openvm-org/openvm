@@ -6,24 +6,22 @@ use std::{
 use itertools::{izip, multiunzip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
-use p3_field::AbstractExtensionField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
-use p3_uni_stark::{Domain, StarkGenericConfig, Val};
 use tracing::instrument;
 
 use crate::{
     air_builders::debug::check_constraints::{check_constraints, check_logup},
-    config::{Com, PcsProof, PcsProverData},
+    config::{Domain, StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, view::MultiStarkProvingKeyView},
     prover::{
         metrics::trace_metrics,
         opener::OpeningProver,
         quotient::ProverQuotientData,
         trace::{
-            commit_quotient_traces, generate_permutation_traces_and_cumulative_sums,
+            commit_quotient_traces, generate_permutation_traces_and_exposed_values,
             ProverTraceData, TraceCommitter,
         },
         types::{AirProofData, Commitments, Proof, ProofInput},
@@ -78,14 +76,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         challenger: &mut SC::Challenger,
         mpk: &'a MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Proof<SC> {
         assert!(mpk.validate(&proof_input), "Invalid proof input");
         let pcs = self.config.pcs();
 
@@ -146,10 +137,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect();
         challenger.observe_slice(&main_trace_commitments);
 
-        // TODO: this is not needed if there are no interactions. Number of challenge rounds should be specified in proving key
-        // Generate permutation challenges
-        let challenges = mpk.vk_view().sample_challenges(challenger);
-
         let mut common_main_idx = 0;
         let mut degree_per_air = Vec::with_capacity(num_air);
         let mut main_views_per_air = Vec::with_capacity(num_air);
@@ -168,10 +155,10 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             .collect();
 
         // TODO[zach]: Use trait for this.
-        let (cumulative_sum_per_air, perm_trace_per_air) =
-            generate_permutation_traces_and_cumulative_sums(
+        let (challenges, exposed_values_after_challenge, perm_trace_per_air) =
+            generate_permutation_traces_and_exposed_values(
                 &mpk,
-                &challenges,
+                challenger,
                 &main_views_per_air,
                 &pvs_per_air,
             );
@@ -183,7 +170,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             &main_views_per_air,
             &pvs_per_air,
             &perm_trace_per_air,
-            &cumulative_sum_per_air,
+            &exposed_values_after_challenge,
             &challenges,
         );
 
@@ -192,10 +179,6 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
         let perm_prover_data = tracing::info_span!("commit to permutation traces")
             .in_scope(|| commit_perm_traces::<SC>(pcs, perm_trace_per_air, &domain_per_air));
 
-        // Challenger needs to observe permutation_exposed_values (aka cumulative_sums)
-        for cumulative_sum in cumulative_sum_per_air.iter().flatten() {
-            challenger.observe_slice(cumulative_sum.as_base_slice());
-        }
         // Challenger observes commitment if exists
         if let Some(data) = &perm_prover_data {
             challenger.observe(data.commit.clone());
@@ -215,7 +198,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             &cached_mains_pdata_per_air,
             &common_main_prover_data,
             &perm_prover_data,
-            cumulative_sum_per_air.clone(),
+            exposed_values_after_challenge.clone(),
         );
 
         let main_prover_data: Vec<_> = cached_mains_pdata_per_air
@@ -229,14 +212,14 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             mpk,
             &main_prover_data,
             perm_prover_data,
-            cumulative_sum_per_air,
+            exposed_values_after_challenge,
             quotient_data,
             domain_per_air,
             pvs_per_air,
         )
     }
 }
-//
+
 /// Proves general RAPs after all traces have been committed.
 /// Soundness depends on `challenger` having already observed
 /// public values, exposed values after challenge, and all
@@ -256,18 +239,11 @@ fn prove_raps_with_committed_traces<'a, SC: StarkGenericConfig>(
     mpk: MultiStarkProvingKeyView<SC>,
     main_prover_data: &[ProverTraceData<SC>],
     perm_prover_data: Option<ProverTraceData<SC>>,
-    cumulative_sum_per_air: Vec<Option<SC::Challenge>>,
+    exposed_values_after_challenge: Vec<Vec<Vec<SC::Challenge>>>,
     quotient_data: ProverQuotientData<SC>,
     domain_per_air: Vec<Domain<SC>>,
     public_values_per_air: Vec<Vec<Val<SC>>>,
-) -> Proof<SC>
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+) -> Proof<SC> {
     // Observe quotient commitment
     challenger.observe(quotient_data.commit.clone());
 
@@ -354,17 +330,6 @@ where
         .map(|domain| domain.size())
         .collect_vec();
 
-    let exposed_values_after_challenge = cumulative_sum_per_air
-        .into_iter()
-        .map(|csum| {
-            if let Some(csum) = csum {
-                vec![vec![csum]]
-            } else {
-                vec![]
-            }
-        })
-        .collect_vec();
-
     tracing::info!("{}", trace_metrics(&mpk.per_air, &degrees));
     #[cfg(feature = "bench-metrics")]
     trace_metrics(&mpk.per_air, &degrees).emit();
@@ -419,7 +384,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
     main_views_per_air: &[Vec<RowMajorMatrixView<'_, Val<SC>>>],
     public_values_per_air: &[Vec<Val<SC>>],
     perm_trace_per_air: &[Option<RowMajorMatrix<SC::Challenge>>],
-    cumulative_sum_per_air: &[Option<SC::Challenge>],
+    exposed_values_after_challenge: &[Vec<Vec<SC::Challenge>>],
     challenges: &[Vec<SC::Challenge>],
 ) {
     USE_DEBUG_BUILDER.with(|debug| {
@@ -430,10 +395,10 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                 main_views_per_air,
                 public_values_per_air,
                 perm_trace_per_air,
-                cumulative_sum_per_air
+                exposed_values_after_challenge
             )
             .map(
-                |(rap, pk, main, public_values, perm_trace, cumulative_sum)| {
+                |(rap, pk, main, public_values, perm_trace, exposed_values_after_challenge)| {
                     let preprocessed_trace = pk
                         .preprocessed_data
                         .as_ref()
@@ -446,7 +411,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                         &perm_trace.iter().map(|m| m.as_view()).collect_vec(),
                         challenges,
                         public_values,
-                        cumulative_sum.map(|c| vec![c]).as_slice(),
+                        exposed_values_after_challenge,
                     );
                     preprocessed_trace
                 },

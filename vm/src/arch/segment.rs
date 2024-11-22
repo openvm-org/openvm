@@ -1,14 +1,15 @@
-use std::{collections::BTreeMap, ops::DerefMut, sync::Arc};
+use std::{ops::DerefMut, sync::Arc};
 
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, ProofInput},
-    ChipUsageGetter,
 };
-use axvm_instructions::{instruction::DebugInfo, program::Program};
+#[cfg(feature = "function-span")]
+use axvm_instructions::exe::FnBound;
+use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use itertools::{zip_eq, Itertools};
+use itertools::izip;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
@@ -23,16 +24,25 @@ use crate::{
     },
 };
 
+/// Check segment every 100 instructions.
+const SEGMENT_CHECK_INTERVAL: usize = 100;
+
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
     pub chip_set: VmChipSet<F>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
+    /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
-    /// Collected metrics for this segment alone.
-    /// Only collected when `config.collect_metrics` is true.
     pub(crate) collected_metrics: VmMetrics,
+
+    #[allow(dead_code)]
+    pub(crate) fn_bounds: FnBounds,
+
+    pub air_names: Vec<String>,
+    pub const_height_air_ids: Vec<usize>,
+    pub since_last_segment_check: usize,
 }
 
 pub struct ExecutionSegmentState {
@@ -76,6 +86,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         program: Program<F>,
         streams: Arc<Mutex<Streams<F>>>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
+        fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.set_streams(streams);
@@ -87,13 +98,19 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 .borrow_mut()
                 .set_initial_memory(initial_memory);
         }
+        let air_names = chip_set.air_names();
+        let const_height_air_ids = chip_set.const_height_air_ids();
 
         Self {
             config,
             chip_set,
             final_memory: None,
-            collected_metrics: Default::default(),
             cycle_tracker: CycleTracker::new(),
+            collected_metrics: Default::default(),
+            fn_bounds,
+            air_names,
+            const_height_air_ids,
+            since_last_segment_check: 0,
         }
     }
 
@@ -107,6 +124,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         let collect_metrics = self.config.collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
+
+        // Cycle span by function if function start/end addresses are available
+        #[cfg(feature = "function-span")]
+        let mut current_fn = FnBound::default();
 
         self.chip_set
             .connector_chip
@@ -130,7 +151,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             let prev_trace_cells = if collect_metrics {
                 self.current_trace_cells()
             } else {
-                BTreeMap::new()
+                vec![]
             };
 
             if opcode == SystemOpcode::TERMINATE.with_default_offset() {
@@ -139,12 +160,6 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                     ExecutionState::new(pc, timestamp),
                     Some(instruction.c.as_canonical_u32()),
                 );
-                if collect_metrics {
-                    self.update_chip_metrics();
-                    #[cfg(feature = "bench-metrics")]
-                    metrics::counter!("total_cells_used")
-                        .absolute(self.current_trace_cells().into_values().sum::<usize>() as u64);
-                }
                 break;
             }
 
@@ -166,15 +181,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                         return Err(ExecutionError::Fail(pc));
                     }
                     PhantomInstruction::CtStart => {
-                        self.update_chip_metrics();
                         // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.start(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
                     }
                     PhantomInstruction::CtEnd => {
-                        self.update_chip_metrics();
                         // hack to remove "CT-" prefix
+                        #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.end(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
@@ -183,6 +198,21 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             }
             prev_backtrace = trace;
+
+            #[cfg(feature = "function-span")]
+            if !self.fn_bounds.is_empty() && (pc < current_fn.start || pc > current_fn.end) {
+                current_fn = self
+                    .fn_bounds
+                    .range(..=pc)
+                    .next_back()
+                    .map(|(_, func)| (*func).clone())
+                    .unwrap();
+                if pc == current_fn.start {
+                    self.cycle_tracker.start(current_fn.name.clone());
+                } else {
+                    self.cycle_tracker.force_end();
+                }
+            };
 
             let mut opcode_name = None;
             if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {
@@ -210,8 +240,9 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 self.cycle_tracker.increment_opcode(&key);
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
-                for (air_name, now_value) in &now_trace_cells {
-                    let prev_value = prev_trace_cells.get(air_name).unwrap_or(&0);
+                for (air_name, now_value, &prev_value) in
+                    izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
+                {
                     if prev_value != now_value {
                         let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
                         #[cfg(feature = "bench-metrics")]
@@ -229,23 +260,30 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 break;
             }
         }
-
-        if collect_metrics {
-            self.update_chip_metrics();
-            #[cfg(feature = "bench-metrics")]
-            self.collected_metrics.emit();
-        }
-
         // Finalize memory.
-        let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
-        self.final_memory = if self.config.continuation_enabled {
-            let poseidon_chip =
-                find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
-            let mut hasher = poseidon_chip.borrow_mut();
-            memory_controller.finalize(Some(hasher.deref_mut()))
-        } else {
-            memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
-        };
+        {
+            let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
+            self.final_memory = if self.config.continuation_enabled {
+                let poseidon_chip =
+                    find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
+                let mut hasher = poseidon_chip.borrow_mut();
+                memory_controller.finalize(Some(hasher.deref_mut()))
+            } else {
+                memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
+            };
+        }
+        if collect_metrics {
+            self.collected_metrics.chip_heights =
+                izip!(self.air_names.clone(), self.current_trace_heights()).collect();
+            #[cfg(feature = "bench-metrics")]
+            {
+                self.collected_metrics.emit();
+                if did_terminate {
+                    metrics::counter!("total_cells_used")
+                        .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
+                }
+            }
+        }
 
         Ok(ExecutionSegmentState {
             pc,
@@ -268,61 +306,37 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ///
     /// Default config: switch if any runtime chip height exceeds 1<<20 - 100
     fn should_segment(&mut self) -> bool {
-        for chip in self.chip_set.chips.iter() {
-            if chip.current_trace_height() > self.config.max_segment_len {
-                tracing::info!(
-                    "Should segment because chip {} has height {}",
-                    chip.air_name(),
-                    chip.current_trace_height()
-                );
-                return true;
+        // Avoid checking segment too often.
+        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
+            self.since_last_segment_check += 1;
+            return false;
+        }
+        self.since_last_segment_check = 0;
+        let heights = self.current_trace_heights();
+        let mut const_height_idx = 0;
+        for (i, (air_name, height)) in izip!(&self.air_names, heights).enumerate() {
+            if const_height_idx >= self.const_height_air_ids.len()
+                || self.const_height_air_ids[const_height_idx] != i
+            {
+                if height > self.config.max_segment_len {
+                    tracing::info!(
+                        "Should segment because chip {} has height {}",
+                        air_name,
+                        height
+                    );
+                    return true;
+                }
+                const_height_idx += 1;
             }
         }
-        let memory_controller = self.chip_set.memory_controller.borrow();
-        for (height, air_name) in memory_controller
-            .current_trace_heights()
-            .into_iter()
-            .zip_eq(memory_controller.air_names())
-        {
-            if height > self.config.max_segment_len {
-                tracing::info!(
-                    "Should segment because air {} has height {}",
-                    air_name,
-                    height
-                );
-                return true;
-            }
-        }
+
         false
     }
 
-    fn current_trace_cells(&self) -> BTreeMap<String, usize> {
+    pub fn current_trace_cells(&self) -> Vec<usize> {
         self.chip_set.current_trace_cells()
     }
-
-    pub(crate) fn update_chip_metrics(&mut self) {
-        self.collected_metrics.chip_heights = self.chip_heights();
-    }
-
-    fn chip_heights(&self) -> BTreeMap<String, usize> {
-        let mut metrics = BTreeMap::new();
-        // TODO: more systematic handling of system chips: Program, Memory, Connector
-        metrics.insert(
-            "ProgramChip".into(),
-            self.chip_set.program_chip.true_program_length,
-        );
-        for (air_name, height) in zip_eq(
-            self.chip_set.memory_controller.borrow().air_names(),
-            self.chip_set
-                .memory_controller
-                .borrow()
-                .current_trace_heights(),
-        ) {
-            metrics.insert(format!("Memory {air_name}"), height);
-        }
-        for chip in self.chip_set.chips.iter() {
-            metrics.insert(chip.air_name(), chip.current_trace_height());
-        }
-        metrics
+    pub fn current_trace_heights(&self) -> Vec<usize> {
+        self.chip_set.current_trace_heights()
     }
 }

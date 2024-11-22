@@ -1,6 +1,5 @@
-use p3_uni_stark::StarkGenericConfig;
-
 use crate::{
+    config::StarkGenericConfig,
     keygen::types::{MultiStarkProvingKey, StarkProvingKey},
     prover::quotient::QuotientVKData,
 };

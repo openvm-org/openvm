@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     iter,
     ops::{Range, RangeInclusive},
     rc::Rc,
@@ -23,8 +23,9 @@ use ax_stark_backend::{
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{program::Program, *};
-use itertools::zip_eq;
 use num_bigint_dig::BigUint;
+use num_traits::Zero;
+use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
@@ -42,7 +43,7 @@ use crate::{
                 EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
             },
-            sw::{EcAddNeChip, EcDoubleChip},
+            weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
@@ -66,7 +67,7 @@ use crate::{
         castf::{CastFChip, CastFCoreChip},
         field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
         field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
-        fri::FriMatOpeningChip,
+        fri::FriReducedOpeningChip,
         jal::{JalCoreChip, KernelJalChip},
         loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
@@ -84,7 +85,7 @@ use crate::{
         connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
+            MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK, MERKLE_AIR_OFFSET,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -109,12 +110,14 @@ pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// using persistent memory.
 pub const PUBLIC_VALUES_AIR_ID: usize = 2;
+/// AIR ID of the Memory Boundary AIR.
+pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
 /// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 pub struct VmChipSet<F: PrimeField32> {
-    pub executors: BTreeMap<usize, AxVmExecutor<F>>,
+    pub executors: HashMap<usize, AxVmExecutor<F>>,
 
     // ATTENTION: chip destruction should follow the following field order:
     pub program_chip: ProgramChip<F>,
@@ -128,24 +131,6 @@ pub struct VmChipSet<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> VmChipSet<F> {
-    /// Returns the AIR ID of the given executor if it exists.
-    pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
-        let mut air_id = PUBLIC_VALUES_AIR_ID;
-        if self.public_values_chip.is_some() {
-            air_id += 1;
-        }
-        air_id += self.memory_controller.borrow().air_names().len();
-        for chip in &self.chips {
-            if let AxVmChip::Executor(chip) = chip {
-                let name: ExecutorName = chip.into();
-                if name == executor {
-                    return Some(air_id);
-                }
-            }
-            air_id += 1
-        }
-        None
-    }
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
     }
@@ -165,16 +150,86 @@ impl<F: PrimeField32> VmChipSet<F> {
             }
         }
     }
-    pub(crate) fn current_trace_cells(&self) -> BTreeMap<String, usize> {
-        iter::once(get_name_and_cells(&self.program_chip))
-            .chain([get_name_and_cells(&self.connector_chip)])
-            .chain(self.public_values_chip.as_ref().map(get_name_and_cells))
-            .chain(zip_eq(
-                self.memory_controller.borrow().air_names(),
-                self.memory_controller.borrow().current_trace_cells(),
-            ))
-            .chain(self.chips.iter().map(get_name_and_cells))
-            .chain([get_name_and_cells(&self.range_checker_chip)])
+    /// Returns the AIR ID of the given executor if it exists.
+    pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
+        self.executor_to_air_id_mapping().get(&executor).copied()
+    }
+    /// Return mapping from executor name to AIR ID.
+    pub fn executor_to_air_id_mapping(&self) -> BTreeMap<ExecutorName, usize> {
+        let mut air_id = PUBLIC_VALUES_AIR_ID;
+        if self.public_values_chip.is_some() {
+            air_id += 1;
+        }
+        air_id += self.memory_controller.borrow().air_names().len();
+        self.chips
+            .iter()
+            .flat_map(|chip| {
+                let ret = if let AxVmChip::Executor(chip) = chip {
+                    let name: ExecutorName = chip.into();
+                    Some((name, air_id))
+                } else {
+                    None
+                };
+                air_id += 1;
+                ret
+            })
+            .collect()
+    }
+    /// Return IDs of AIRs which heights won't during execution.
+    pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
+        let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
+        let num_const_chip = self
+            .chips
+            .iter()
+            .filter(|chip| !matches!(chip, AxVmChip::Executor(_)))
+            .count();
+        let num_air = self.num_airs();
+        // Const chips are always in the end.
+        // +1 is for RangeChecker.
+        ret.extend((num_air - (num_const_chip + 1))..num_air);
+        ret
+    }
+    /// Return the number of AIRs in the chip set.
+    /// Careful: this costs more than O(1) due to bad implementation.
+    pub(crate) fn num_airs(&self) -> usize {
+        self.air_names().len()
+    }
+    /// Return air names of all chips in order.
+    pub(crate) fn air_names(&self) -> Vec<String> {
+        iter::once(self.program_chip.air_name())
+            .chain([self.connector_chip.air_name()])
+            .chain(self.public_values_chip.as_ref().map(|c| c.air_name()))
+            .chain(self.memory_controller.borrow().air_names())
+            .chain(self.chips.iter().map(|c| c.air_name()))
+            .chain([self.range_checker_chip.air_name()])
+            .collect()
+    }
+    /// Return trace heights of all chips in order.
+    pub(crate) fn current_trace_heights(&self) -> Vec<usize> {
+        iter::once(self.program_chip.current_trace_height())
+            .chain([self.connector_chip.current_trace_height()])
+            .chain(
+                self.public_values_chip
+                    .as_ref()
+                    .map(|c| c.current_trace_height()),
+            )
+            .chain(self.memory_controller.borrow().current_trace_heights())
+            .chain(self.chips.iter().map(|c| c.current_trace_height()))
+            .chain([self.range_checker_chip.current_trace_height()])
+            .collect()
+    }
+    /// Return trace cells of all chips in order.
+    pub(crate) fn current_trace_cells(&self) -> Vec<usize> {
+        iter::once(self.program_chip.current_trace_cells())
+            .chain([self.connector_chip.current_trace_cells()])
+            .chain(
+                self.public_values_chip
+                    .as_ref()
+                    .map(|c| c.current_trace_cells()),
+            )
+            .chain(self.memory_controller.borrow().current_trace_cells())
+            .chain(self.chips.iter().map(|c| c.current_trace_cells()))
+            .chain([self.range_checker_chip.current_trace_cells()])
             .collect()
     }
     pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
@@ -264,6 +319,24 @@ impl<F: PrimeField32> VmChipSet<F> {
 }
 
 impl VmConfig {
+    /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
+    pub fn memory_boundary_air_id(&self) -> usize {
+        assert!(
+            !self.continuation_enabled,
+            "Memory boundary AIR is not enabled in continuation mode"
+        );
+        let mut ret = PUBLIC_VALUES_AIR_ID;
+        if self.num_public_values > 0 {
+            ret += 1;
+        }
+        ret += BOUNDARY_AIR_OFFSET;
+        ret
+    }
+    /// Return mapping from executor name to AIR ID.
+    pub fn executor_to_air_id_mapping(&self) -> BTreeMap<ExecutorName, usize> {
+        self.create_chip_set::<BabyBear>()
+            .executor_to_air_id_mapping()
+    }
     pub fn create_chip_set<F: PrimeField32>(&self) -> VmChipSet<F> {
         let execution_bus = ExecutionBus(EXECUTION_BUS);
         let program_bus = ProgramBus(READ_INSTRUCTION_BUS);
@@ -291,7 +364,7 @@ impl VmConfig {
         };
         let program_chip = ProgramChip::default();
 
-        let mut executors: BTreeMap<usize, AxVmExecutor<F>> = BTreeMap::new();
+        let mut executors: HashMap<usize, AxVmExecutor<F>> = HashMap::new();
 
         // Use BTreeSet to ensure deterministic order.
         // NOTE: The order of entries in `chips` must be a linear extension of the dependency DAG.
@@ -311,7 +384,7 @@ impl VmConfig {
             let (range, offset) = default_executor_range(ExecutorName::PublicValues);
             let chip = Rc::new(RefCell::new(PublicValuesChip::new(
                 NativeAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
-                PublicValuesCoreChip::new(self.num_public_values, offset),
+                PublicValuesCoreChip::new(self.num_public_values, offset, 2),
                 memory_controller.clone(),
             )));
             for opcode in range {
@@ -444,8 +517,8 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
-                ExecutorName::FriMatOpening => {
-                    let chip = Rc::new(RefCell::new(FriMatOpeningChip::new(
+                ExecutorName::FriReducedOpening => {
+                    let chip = Rc::new(RefCell::new(FriReducedOpeningChip::new(
                         memory_controller.clone(),
                         execution_bus,
                         program_bus,
@@ -875,6 +948,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config32,
                         class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
@@ -905,70 +979,7 @@ impl VmConfig {
                         memory_controller.clone(),
                         config48,
                         class_offset,
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::EcLineMul013By013 => {
-                    let chip = Rc::new(RefCell::new(EcLineMul013By013Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config32,
-                        BN254.XI,
-                        class_offset,
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::EcLineMul023By023 => {
-                    let chip = Rc::new(RefCell::new(EcLineMul023By023Chip::new(
-                        Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config48,
-                        BLS12381.XI,
-                        class_offset,
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::EcLineMulBy01234 => {
-                    let chip = Rc::new(RefCell::new(EcLineMulBy01234Chip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config32,
-                        BN254.XI,
-                        class_offset,
-                    )));
-                    executors.insert(global_opcode_idx, chip.clone().into());
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::EcLineMulBy02345 => {
-                    let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
-                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            bitwise_lookup_chip.clone(),
-                        ),
-                        memory_controller.clone(),
-                        config48,
-                        BLS12381.XI,
-                        class_offset,
+                        BigUint::zero(),
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
@@ -1081,6 +1092,70 @@ impl VmConfig {
                         ),
                         memory_controller.clone(),
                         config48,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::EcLineMul013By013 => {
+                    let chip = Rc::new(RefCell::new(EcLineMul013By013Chip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 4, 10, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        BN254.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::EcLineMul023By023 => {
+                    let chip = Rc::new(RefCell::new(EcLineMul023By023Chip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 30, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        BLS12381.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::EcLineMulBy01234 => {
+                    let chip = Rc::new(RefCell::new(EcLineMulBy01234Chip::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        BN254.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::EcLineMulBy02345 => {
+                    let chip = Rc::new(RefCell::new(EcLineMulBy02345Chip::new(
+                        Rv32VecHeapTwoReadsAdapterChip::<F, 36, 30, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        BLS12381.XI,
                         class_offset,
                     )));
                     executors.insert(global_opcode_idx, chip.clone().into());
@@ -1394,9 +1469,10 @@ fn gen_pairing_executor_tuple(
 ) -> Vec<(usize, usize, ExecutorName, BigUint)> {
     supported_pairing_curves
         .iter()
-        .enumerate()
-        .flat_map(|(i, curve)| {
-            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
+        .flat_map(|curve| {
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
             let bytes = curve.prime().bits().div_ceil(8);
             if bytes <= 32 {
                 vec![
@@ -1418,6 +1494,18 @@ fn gen_pairing_executor_tuple(
                         ExecutorName::EvaluateLineRv32_32,
                         curve.prime(),
                     ),
+                    (
+                        PairingOpcode::MUL_013_BY_013 as usize,
+                        pairing_class_offset,
+                        ExecutorName::EcLineMul013By013,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MUL_BY_01234 as usize,
+                        pairing_class_offset,
+                        ExecutorName::EcLineMulBy01234,
+                        curve.prime(),
+                    ),
                 ]
             } else if bytes <= 48 {
                 vec![
@@ -1437,6 +1525,18 @@ fn gen_pairing_executor_tuple(
                         PairingOpcode::EVALUATE_LINE as usize,
                         pairing_class_offset,
                         ExecutorName::EvaluateLineRv32_48,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MUL_023_BY_023 as usize,
+                        pairing_class_offset,
+                        ExecutorName::EcLineMul023By023,
+                        curve.prime(),
+                    ),
+                    (
+                        PairingOpcode::MUL_BY_02345 as usize,
+                        pairing_class_offset,
+                        ExecutorName::EcLineMulBy02345,
                         curve.prime(),
                     ),
                 ]
@@ -1464,21 +1564,21 @@ fn gen_modular_executor_tuple(
                 res.extend([
                     (
                         Rv32ModularArithmeticOpcode::ADD as usize
-                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize),
                         ExecutorName::ModularAddSubRv32_1x32,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::MUL as usize
-                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize),
                         ExecutorName::ModularMulDivRv32_1x32,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize),
                         ExecutorName::ModularIsEqualRv32_1x32,
                         class_offset,
                         modulus,
@@ -1488,21 +1588,21 @@ fn gen_modular_executor_tuple(
                 res.extend([
                     (
                         Rv32ModularArithmeticOpcode::ADD as usize
-                            ..=(Rv32ModularArithmeticOpcode::SUB as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize),
                         ExecutorName::ModularAddSubRv32_3x16,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::MUL as usize
-                            ..=(Rv32ModularArithmeticOpcode::DIV as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize),
                         ExecutorName::ModularMulDivRv32_3x16,
                         class_offset,
                         modulus.clone(),
                     ),
                     (
                         Rv32ModularArithmeticOpcode::IS_EQ as usize
-                            ..=(Rv32ModularArithmeticOpcode::IS_EQ as usize),
+                            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize),
                         ExecutorName::ModularIsEqualRv32_3x16,
                         class_offset,
                         modulus,
@@ -1642,7 +1742,7 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32KeccakOpcode::COUNT,
             Rv32KeccakOpcode::default_offset(),
         ),
-        ExecutorName::FriMatOpening => (
+        ExecutorName::FriReducedOpening => (
             FriOpcode::default_offset(),
             FriOpcode::COUNT,
             FriOpcode::default_offset(),
@@ -1796,8 +1896,4 @@ impl<SC: StarkGenericConfig> ChipSetProofInputBuilder<SC> {
             per_air: self.proof_input_per_air,
         }
     }
-}
-
-fn get_name_and_cells(chip: &impl ChipUsageGetter) -> (String, usize) {
-    (chip.air_name(), chip.current_trace_cells())
 }

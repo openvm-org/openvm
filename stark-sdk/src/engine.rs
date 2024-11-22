@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 pub use ax_stark_backend::engine::StarkEngine;
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{StarkGenericConfig, Val},
     engine::VerificationData,
     prover::types::AirProofInput,
     rap::AnyRap,
@@ -33,27 +33,13 @@ impl<SC: StarkGenericConfig> ProofInputForTest<SC> {
     pub fn run_test(
         self,
         engine: &impl StarkFriEngine<SC>,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         engine.run_test(self.per_air)
     }
 }
 
 /// Stark engine using Fri.
-pub trait StarkFriEngine<SC: StarkGenericConfig>: StarkEngine<SC> + Sized
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+pub trait StarkFriEngine<SC: StarkGenericConfig>: StarkEngine<SC> + Sized {
     fn new(fri_parameters: FriParameters) -> Self;
     fn fri_params(&self) -> FriParameters;
     fn run_test(

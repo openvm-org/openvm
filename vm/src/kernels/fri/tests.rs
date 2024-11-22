@@ -2,7 +2,7 @@ use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError
 use ax_stark_sdk::utils::create_seeded_rng;
 use axvm_instructions::{
     instruction::Instruction,
-    FriOpcode::{self, FRI_MAT_OPENING},
+    FriOpcode::{self, FRI_REDUCED_OPENING},
     UsizeOpcode,
 };
 use itertools::Itertools;
@@ -14,7 +14,7 @@ use crate::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     kernels::{
         field_extension::FieldExtension,
-        fri::{elem_to_ext, FriMatOpeningChip, FriMatOpeningCols, EXT_DEG},
+        fri::{elem_to_ext, FriReducedOpeningChip, FriReducedOpeningCols, EXT_DEG},
     },
 };
 
@@ -45,7 +45,7 @@ fn fri_mat_opening_air_test() {
     let offset = FriOpcode::default_offset();
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FriMatOpeningChip::new(
+    let mut chip = FriReducedOpeningChip::new(
         tester.memory_controller(),
         tester.execution_bus(),
         tester.program_bus(),
@@ -114,7 +114,7 @@ fn fri_mat_opening_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                (FRI_MAT_OPENING as usize) + offset,
+                (FRI_REDUCED_OPENING as usize) + offset,
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,
@@ -142,7 +142,7 @@ fn fri_mat_opening_air_test() {
         // TODO: better way to modify existing traces in tester
         let trace = tester.air_proof_inputs[2].raw.common_main.as_mut().unwrap();
         let old_trace = trace.clone();
-        for width in 0..FriMatOpeningCols::<BabyBear>::width()
+        for width in 0..FriReducedOpeningCols::<BabyBear>::width()
         /* num operands */
         {
             let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));

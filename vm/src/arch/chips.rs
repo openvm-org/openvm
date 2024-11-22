@@ -3,7 +3,6 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
-    var_range::VariableRangeCheckerChip,
 };
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -13,7 +12,6 @@ use ax_stark_backend::{
 };
 use axvm_instructions::instruction::Instruction;
 use derive_more::From;
-use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use serde::{Deserialize, Serialize};
@@ -21,6 +19,7 @@ use strum::EnumDiscriminants;
 
 use crate::{
     arch::ExecutionState,
+    derive::InstructionExecutor,
     intrinsics::{
         ecc::{
             fp2::{Fp2AddSubChip, Fp2MulDivChip},
@@ -29,7 +28,7 @@ use crate::{
                 EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
                 MillerDoubleStepChip,
             },
-            sw::{EcAddNeChip, EcDoubleChip},
+            weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
@@ -40,14 +39,13 @@ use crate::{
     },
     kernels::{
         branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip, fri::FriMatOpeningChip, jal::KernelJalChip,
+        field_extension::FieldExtensionChip, fri::FriReducedOpeningChip, jal::KernelJalChip,
         loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
     system::{phantom::PhantomChip, program::ExecutionError},
 };
 
-#[enum_dispatch]
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
@@ -78,10 +76,9 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
-#[derive(EnumDiscriminants, ChipUsageGetter, Chip)]
+#[derive(EnumDiscriminants, ChipUsageGetter, Chip, InstructionExecutor, From)]
 #[strum_discriminants(derive(Serialize, Deserialize, Ord, PartialOrd))]
 #[strum_discriminants(name(ExecutorName))]
-#[enum_dispatch(InstructionExecutor<F>)]
 pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     // Native kernel:
@@ -92,7 +89,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
     FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    FriMatOpening(Rc<RefCell<FriMatOpeningChip<F>>>),
+    FriReducedOpening(Rc<RefCell<FriReducedOpeningChip<F>>>),
     CastF(Rc<RefCell<CastFChip<F>>>),
     // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
@@ -156,8 +153,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
 /// each chip. Change of the order may cause break changes of VKs.
 #[derive(From, ChipUsageGetter, Chip)]
 pub enum AxVmChip<F: PrimeField32> {
-    // Lookup tables that are not executors:
-    RangeChecker(Arc<VariableRangeCheckerChip>),
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // Instruction Executors

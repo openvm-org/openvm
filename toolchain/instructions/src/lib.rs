@@ -135,9 +135,9 @@ pub enum Poseidon2Opcode {
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum FriOpcode {
-    /// In FRI verifier's commit phase opening, the reduced opening of the polynomial evaluations
-    /// for a single matrix.
-    FRI_MAT_OPENING,
+    /// In FRI pcs opening verification, the reduced opening polynomial is computed one evaluation
+    /// per column polynomial, per opening point
+    FRI_REDUCED_OPENING,
 }
 
 // =================================================================================================
@@ -354,9 +354,12 @@ pub struct Rv32Mul256Opcode(pub MulOpcode);
 pub enum Rv32ModularArithmeticOpcode {
     ADD,
     SUB,
+    SETUP_ADDSUB,
     MUL,
     DIV,
+    SETUP_MULDIV,
     IS_EQ,
+    SETUP_ISEQ,
 }
 
 // to be deleted and replaced by Rv32SwOpcode

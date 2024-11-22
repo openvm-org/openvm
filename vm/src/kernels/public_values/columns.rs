@@ -6,19 +6,19 @@ pub(crate) struct PublicValuesCoreColsView<'a, T, R> {
     pub value: R,
     /// The index of the public value to publish.
     pub index: R,
-    pub custom_pv_flags: Vec<R>,
+    pub custom_pv_vars: Vec<R>,
     pub(crate) _marker: PhantomData<&'a T>,
 }
 
 impl<T, R> PublicValuesCoreColsView<'_, T, R> {
     pub(crate) fn width(&self) -> usize {
-        3 + self.custom_pv_flags.len()
+        3 + self.custom_pv_vars.len()
     }
     #[allow(dead_code)]
     pub(crate) fn flatten(self) -> Vec<R> {
         [self.is_valid, self.value, self.index]
             .into_iter()
-            .chain(self.custom_pv_flags)
+            .chain(self.custom_pv_vars)
             .collect()
     }
 }
@@ -28,7 +28,7 @@ impl<'a, T> PublicValuesCoreColsView<'a, T, &'a T> {
             is_valid: &arr[0],
             value: &arr[1],
             index: &arr[2],
-            custom_pv_flags: arr[3..].iter().collect(),
+            custom_pv_vars: arr[3..].iter().collect(),
             _marker: Default::default(),
         }
     }
@@ -43,7 +43,7 @@ impl<'a, T> PublicValuesCoreColsView<'a, T, &'a mut T> {
             is_valid,
             value,
             index,
-            custom_pv_flags: rest.iter_mut().collect(),
+            custom_pv_vars: rest.iter_mut().collect(),
             _marker: Default::default(),
         }
     }

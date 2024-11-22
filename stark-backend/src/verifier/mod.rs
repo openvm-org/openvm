@@ -2,10 +2,10 @@ use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
-use p3_uni_stark::{Domain, StarkGenericConfig};
 use tracing::instrument;
 
 use crate::{
+    config::{Domain, StarkGenericConfig},
     keygen::{types::MultiStarkVerifyingKey, view::MultiStarkVerifyingKeyView},
     prover::{opener::AdjacentOpenedValues, types::Proof},
     verifier::constraints::verify_single_rap_constraints,
@@ -96,7 +96,7 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
 
         let mut challenges = Vec::new();
         for (phase_idx, (&num_to_sample, commit)) in mvk
-            .num_challenges_to_sample()
+            .num_challenges_per_phase()
             .iter()
             .zip_eq(&proof.commitments.after_challenge)
             .enumerate()

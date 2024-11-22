@@ -5,12 +5,11 @@ use std::sync::Arc;
 
 use derivative::Derivative;
 use p3_matrix::dense::RowMajorMatrix;
-use p3_uni_stark::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     air_builders::symbolic::SymbolicConstraints,
-    config::{Com, PcsProverData},
+    config::{Com, PcsProverData, StarkGenericConfig, Val},
 };
 
 /// Widths of different parts of trace matrix
@@ -136,8 +135,8 @@ impl<SC: StarkGenericConfig> MultiStarkProvingKey<SC> {
     }
 }
 impl<SC: StarkGenericConfig> MultiStarkVerifyingKey<SC> {
-    pub fn num_challenges_to_sample(&self) -> Vec<usize> {
-        self.full_view().num_challenges_to_sample()
+    pub fn num_challenges_per_phase(&self) -> Vec<usize> {
+        self.full_view().num_challenges_per_phase()
     }
 }
 

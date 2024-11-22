@@ -17,7 +17,7 @@ use ax_stark_backend::{
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use p3_air::{AirBuilder, BaseAir};
-use p3_field::{Field, PrimeField64};
+use p3_field::{AbstractField, Field, PrimeField64};
 
 use super::{FieldVariable, SymbolicExpr};
 
@@ -40,12 +40,15 @@ pub struct ExprBuilder {
     pub prime: BigUint,
     // Same value, but we need BigInt for computing the quotient.
     pub prime_bigint: BigInt,
+    pub prime_limbs: Vec<usize>,
 
     pub num_input: usize,
     pub num_flags: usize,
 
     // This should be equal to number of constraints, but declare it to be explicit.
     pub num_variables: usize,
+
+    pub constants: Vec<(BigUint, Vec<usize>)>, // value and limbs
 
     /// The number of bits in a canonical representation of a limb.
     pub limb_bits: usize,
@@ -66,25 +69,48 @@ pub struct ExprBuilder {
     pub computes: Vec<SymbolicExpr>,
 
     pub output_indices: Vec<usize>,
+
+    /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
+    finalized: bool,
+    // The chips without any flags need a setup flag.
+    has_setup_flag: bool,
 }
 
 impl ExprBuilder {
     pub fn new(config: ExprBuilderConfig, range_checker_bits: usize) -> Self {
         let prime_bigint = BigInt::from_biguint(Sign::Plus, config.modulus.clone());
         Self {
-            prime: config.modulus,
+            prime: config.modulus.clone(),
             prime_bigint,
+            prime_limbs: big_uint_to_limbs(&config.modulus, config.limb_bits),
             num_input: 0,
             num_flags: 0,
             limb_bits: config.limb_bits,
             num_limbs: config.num_limbs,
             range_checker_bits,
             num_variables: 0,
+            constants: vec![],
             q_limbs: vec![],
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
             output_indices: vec![],
+            finalized: false,
+            has_setup_flag: false,
+        }
+    }
+
+    pub fn is_finalized(&self) -> bool {
+        self.finalized
+    }
+
+    pub fn finalize(&mut self) {
+        self.finalized = true;
+
+        // setup the dummy flag
+        if self.num_flags == 0 {
+            self.new_flag();
+            self.has_setup_flag = true;
         }
     }
 
@@ -110,6 +136,15 @@ impl ExprBuilder {
         self.num_flags - 1
     }
 
+    // Number of flags for ops, not including the setup flag.
+    pub fn num_op_flags(&self) -> usize {
+        if self.has_setup_flag {
+            0
+        } else {
+            self.num_flags
+        }
+    }
+
     // Below functions are used when adding variables and constraints manually, need to be careful.
     // Number of variables, constraints and computes should be consistent,
     // so there should be same number of calls to the new_var, add_constraint and add_compute.
@@ -124,6 +159,26 @@ impl ExprBuilder {
             self.num_variables - 1,
             SymbolicExpr::Var(self.num_variables - 1),
         )
+    }
+
+    pub fn new_const(builder: Rc<RefCell<ExprBuilder>>, value: BigUint) -> FieldVariable {
+        let mut borrowed = builder.borrow_mut();
+        let index = borrowed.constants.len();
+        let limbs = big_uint_to_limbs(&value, borrowed.limb_bits);
+        let num_limbs = limbs.len();
+        let range_checker_bits = borrowed.range_checker_bits;
+        let limb_bits = borrowed.limb_bits;
+        borrowed.constants.push((value.clone(), limbs));
+        drop(borrowed);
+
+        FieldVariable {
+            expr: SymbolicExpr::Const(index, value, num_limbs),
+            builder,
+            limb_max_abs: (1 << limb_bits) - 1,
+            max_overflow_bits: limb_bits,
+            expr_limbs: num_limbs,
+            range_checker_bits,
+        }
     }
 
     pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
@@ -150,6 +205,8 @@ pub struct FieldExpr {
 
 impl FieldExpr {
     pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+        let mut builder = builder;
+        builder.finalize();
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
@@ -176,6 +233,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
 impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
+        assert!(self.builder.is_finalized());
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
             + self.builder.carry_limbs.iter().sum::<usize>()
@@ -198,6 +256,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         AB::Var: 'a,
         AB::Expr: 'a,
     {
+        assert!(self.builder.is_finalized());
         let FieldExprCols {
             is_valid,
             inputs,
@@ -206,14 +265,49 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             carry_limbs,
             flags,
         } = self.load_vars(local);
+
+        let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
+
+        {
+            for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
+                let lhs = if i < inputs[0].len() {
+                    inputs[0][i].into()
+                } else {
+                    AB::Expr::ZERO
+                };
+                let rhs = if i < self.builder.prime_limbs.len() {
+                    AB::Expr::from_canonical_usize(self.builder.prime_limbs[i])
+                } else {
+                    AB::Expr::ZERO
+                };
+                builder.when(is_setup.clone()).assert_eq(lhs, rhs);
+            }
+        }
+
         let inputs = load_overflow::<AB>(inputs, self.limb_bits);
         let vars = load_overflow::<AB>(vars, self.limb_bits);
+        let constants: Vec<_> = self
+            .constants
+            .iter()
+            .map(|(_, limbs)| {
+                let limbs_expr: Vec<_> = limbs
+                    .iter()
+                    .map(|limb| AB::Expr::from_canonical_usize(*limb))
+                    .collect();
+                OverflowInt::from_canonical_unsigned_limbs(limbs_expr, self.limb_bits)
+            })
+            .collect();
+
+        // TODO: turn back on once we also support this in ecc and everywhere
+        // builder.when_first_row().assert_one(is_setup);
 
         for flag in flags.iter() {
             builder.assert_bool(*flag);
         }
+        builder.assert_bool(is_setup);
         for i in 0..self.constraints.len() {
-            let expr = self.constraints[i].evaluate_overflow_expr::<AB>(&inputs, &vars, &flags);
+            let expr = self.constraints[i]
+                .evaluate_overflow_expr::<AB>(&inputs, &vars, &constants, &flags);
             self.check_carry_mod_to_zero.eval(
                 builder,
                 (
@@ -222,13 +316,13 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
                         carries: carry_limbs[i].clone(),
                         quotient: q_limbs[i].clone(),
                     },
-                    is_valid,
+                    is_valid.into(),
                 ),
-            )
+            );
         }
 
         for var in vars.iter() {
-            for limb in var.limbs.iter() {
+            for limb in var.limbs().iter() {
                 range_check(
                     builder,
                     self.range_bus.index,
@@ -262,11 +356,22 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         (range_checker, inputs, flags): (&'a VariableRangeCheckerChip, Vec<BigUint>, Vec<bool>),
         sub_row: &'a mut [F],
     ) {
+        assert!(self.builder.is_finalized());
         assert_eq!(inputs.len(), self.num_input);
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
-        let limb_bits = self.limb_bits;
 
+        let mut flags = flags.clone();
+        if !self.builder.has_setup_flag {
+            assert!(flags.len() == self.builder.num_flags);
+        } else {
+            // Just one dummy flag.
+            assert!(self.builder.num_flags == 1);
+            assert!(flags.is_empty());
+            flags.push(true);
+        }
+
+        let limb_bits = self.limb_bits;
         let mut vars = vec![BigUint::zero(); self.num_variables];
 
         // BigInt type is required for computing the quotient.
@@ -277,13 +382,23 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         let mut vars_bigint = vec![BigInt::zero(); self.num_variables];
 
         // OverflowInt type is required for computing the carries.
-        let input_overflow = input_bigint
+        let input_overflow = inputs
             .iter()
-            .map(|x| to_overflow_int(x, self.num_limbs, self.limb_bits))
+            .map(|x| OverflowInt::<isize>::from_biguint(x, self.limb_bits, Some(self.num_limbs)))
             .collect::<Vec<_>>();
-        let zero = OverflowInt::<isize>::from_vec(vec![0], limb_bits);
+        let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
-        let prime_overflow = to_overflow_int(&self.prime_bigint, self.num_limbs, self.limb_bits);
+        let prime_overflow =
+            OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, Some(self.num_limbs));
+
+        let constants: Vec<_> = self
+            .constants
+            .iter()
+            .map(|(_, limbs)| {
+                let limbs_isize: Vec<_> = limbs.iter().map(|i| *i as isize).collect();
+                OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits)
+            })
+            .collect();
 
         let mut all_q = vec![];
         let mut all_carry = vec![];
@@ -291,7 +406,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);
             vars[i] = r.clone();
             vars_bigint[i] = BigInt::from_biguint(Sign::Plus, r);
-            vars_overflow[i] = to_overflow_int(&vars_bigint[i], self.num_limbs, self.limb_bits);
+            vars_overflow[i] =
+                OverflowInt::<isize>::from_biguint(&vars[i], self.limb_bits, Some(self.num_limbs));
         }
         // We need to have all variables computed first because, e.g. constraints[2] might need variables[3].
         for i in 0..self.constraints.len() {
@@ -306,21 +422,18 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             for &q in q_limbs.iter() {
                 range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
             }
-            let q_overflow = OverflowInt {
-                limbs: q_limbs.clone(),
-                max_overflow_bits: limb_bits + 1, // q can be negative, so this is the constraint we have when range check.
-                limb_max_abs: (1 << limb_bits),
-            };
+            let q_overflow = OverflowInt::from_canonical_signed_limbs(q_limbs.clone(), limb_bits);
             // compute carries of (expr - q * p)
             let expr = self.constraints[i].evaluate_overflow_isize(
                 &input_overflow,
                 &vars_overflow,
+                &constants,
                 &flags,
             );
             let expr = expr - q_overflow * prime_overflow.clone();
             let carries = expr.calculate_carries(limb_bits);
             assert_eq!(carries.len(), self.carry_limbs[i]); // If this fails, the carry limbs estimate is wrong.
-            let max_overflow_bits = expr.max_overflow_bits;
+            let max_overflow_bits = expr.max_overflow_bits();
             let (carry_min_abs, carry_bits) =
                 get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);
             for &carry in carries.iter() {
@@ -330,18 +443,18 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             all_carry.push(vec_isize_to_f::<F>(carries));
         }
         for var in vars_overflow.iter() {
-            for limb in var.limbs.iter() {
+            for limb in var.limbs().iter() {
                 range_checker.add_count(*limb as u32, limb_bits);
             }
         }
 
         let input_limbs = input_overflow
             .iter()
-            .map(|x| vec_isize_to_f::<F>(x.limbs.clone()))
+            .map(|x| vec_isize_to_f::<F>(x.limbs().to_vec()))
             .collect::<Vec<_>>();
         let vars_limbs = vars_overflow
             .iter()
-            .map(|x| vec_isize_to_f::<F>(x.limbs.clone()))
+            .map(|x| vec_isize_to_f::<F>(x.limbs().to_vec()))
             .collect::<Vec<_>>();
 
         // TODO: avoid all these copies and directly allocate
@@ -369,6 +482,7 @@ impl FieldExpr {
     }
 
     pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+        assert!(self.builder.is_finalized());
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {
             let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);
@@ -387,6 +501,7 @@ impl FieldExpr {
     }
 
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
+        assert!(self.builder.is_finalized());
         let is_valid = arr[0].clone();
         let mut idx = 1;
         let mut inputs = vec![];
@@ -427,14 +542,10 @@ fn load_overflow<AB: AirBuilder>(
 ) -> Vec<OverflowInt<AB::Expr>> {
     let mut result = vec![];
     for x in arr.into_iter() {
-        result.push(OverflowInt::<AB::Expr>::from_var_vec::<AB, AB::Var>(
-            x, limb_bits,
+        let limbs: Vec<AB::Expr> = x.iter().map(|x| (*x).into()).collect();
+        result.push(OverflowInt::<AB::Expr>::from_canonical_unsigned_limbs(
+            limbs, limb_bits,
         ));
     }
     result
-}
-
-fn to_overflow_int(x: &BigInt, num_limbs: usize, limb_bits: usize) -> OverflowInt<isize> {
-    let x_limbs = big_int_to_num_limbs(x, limb_bits, num_limbs);
-    OverflowInt::from_vec(x_limbs, limb_bits)
 }

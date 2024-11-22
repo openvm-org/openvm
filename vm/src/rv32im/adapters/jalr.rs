@@ -7,7 +7,7 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::not;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 
@@ -120,7 +120,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rs1_ptr,
+                ),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -129,7 +132,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rd_ptr),
+                MemoryAddress::new(
+                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rd_ptr,
+                ),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
@@ -148,7 +154,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     ctx.instruction.immediate,
-                    AB::Expr::ONE,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::ZERO,
                     write_count.into(),
                 ],
@@ -188,7 +194,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         Self::ReadRecord,
     )> {
         let Instruction { b, d, .. } = *instruction;
-        debug_assert_eq!(d.as_canonical_u32(), 1);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 

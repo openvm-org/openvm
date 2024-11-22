@@ -1,7 +1,8 @@
 use std::fs::{self, File};
 
 use ax_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, prover::types::Proof, verifier::VerificationError,
+    config::StarkGenericConfig, keygen::types::MultiStarkVerifyingKey, prover::types::Proof,
+    verifier::VerificationError,
 };
 use ax_stark_sdk::{
     config::{
@@ -11,7 +12,6 @@ use ax_stark_sdk::{
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngineWithHashInstrumentation,
 };
-use p3_uni_stark::StarkGenericConfig;
 use p3_util::log2_ceil_usize;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};

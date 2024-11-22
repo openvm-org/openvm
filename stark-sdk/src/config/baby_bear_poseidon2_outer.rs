@@ -1,17 +1,17 @@
 use std::any::type_name;
 
+use ax_stark_backend::config::StarkConfig;
 use ff::PrimeField;
 use p3_baby_bear::BabyBear;
-use p3_bn254_fr::{Bn254Fr, DiffusionMatrixBN254, FFBn254Fr};
+use p3_bn254_fr::{Bn254Fr, FFBn254Fr, Poseidon2Bn254};
 use p3_challenger::MultiField32Challenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
-use p3_poseidon2::{Poseidon2, Poseidon2ExternalMatrixGeneral};
+use p3_poseidon2::ExternalLayerConstants;
 use p3_symmetric::{CryptographicPermutation, MultiField32PaddingFreeSponge, TruncatedPermutation};
-use p3_uni_stark::StarkConfig;
 use zkhash::{
     ark_ff::{BigInteger, PrimeField as _},
     fields::bn256::FpBN256 as ark_FpBN256,
@@ -35,7 +35,7 @@ const DIGEST_WIDTH: usize = 1;
 /// A configuration for  recursion.
 type Val = BabyBear;
 type Challenge = BinomialExtensionField<Val, 4>;
-type Perm = Poseidon2<Bn254Fr, Poseidon2ExternalMatrixGeneral, DiffusionMatrixBN254, WIDTH, 5>;
+type Perm = Poseidon2Bn254<WIDTH>;
 type Hash<P> = MultiField32PaddingFreeSponge<Val, Bn254Fr, P, WIDTH, RATE, DIGEST_WIDTH>;
 type Compress<P> = TruncatedPermutation<P, 2, 1, WIDTH>;
 type ValMmcs<P> = MerkleTreeMmcs<BabyBear, Bn254Fr, Hash<P>, Compress<P>, 1>;
@@ -154,21 +154,17 @@ pub fn outer_perm() -> Perm {
     const ROUNDS_F: usize = 8;
     const ROUNDS_P: usize = 56;
     let mut round_constants = bn254_poseidon2_rc3();
-    let internal_start = ROUNDS_F / 2;
     let internal_end = (ROUNDS_F / 2) + ROUNDS_P;
-    let internal_round_constants = round_constants
-        .drain(internal_start..internal_end)
+    let terminal = round_constants.split_off(internal_end);
+    let internal_round_constants = round_constants.split_off(ROUNDS_F / 2);
+    let internal_round_constants = internal_round_constants
+        .into_iter()
         .map(|vec| vec[0])
         .collect::<Vec<_>>();
-    let external_round_constants = round_constants;
-    Perm::new(
-        ROUNDS_F,
-        external_round_constants,
-        Poseidon2ExternalMatrixGeneral,
-        ROUNDS_P,
-        internal_round_constants,
-        DiffusionMatrixBN254,
-    )
+    let initial = round_constants;
+
+    let external_round_constants = ExternalLayerConstants::new(initial, terminal);
+    Perm::new(external_round_constants, internal_round_constants)
 }
 
 fn bn254_from_ark_ff(input: ark_FpBN256) -> Bn254Fr {

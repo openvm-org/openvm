@@ -212,6 +212,7 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
+    use ax_stark_backend::config::{StarkGenericConfig, Val};
     use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
@@ -224,7 +225,6 @@ mod tests {
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, CanSample};
     use p3_field::AbstractField;
-    use p3_uni_stark::{StarkGenericConfig, Val};
     use rand::Rng;
 
     use super::DuplexChallengerVariable;

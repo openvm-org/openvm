@@ -26,7 +26,6 @@ p3-baby-bear = { workspace = true }
 p3-maybe-rayon = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
-p3-uni-stark = { workspace = true }
 zkhash = { workspace = true }
 snark-verifier-sdk = { workspace = true, features = [
     "loader_evm",
@@ -60,3 +59,4 @@ test-utils = ["axvm-circuit/test-utils"]
 bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
+nightly-features = ["axvm-circuit/nightly-features"]

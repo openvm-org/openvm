@@ -31,7 +31,7 @@ pub fn generate_permutation_trace<F, EF>(
     preprocessed: &Option<RowMajorMatrixView<F>>,
     partitioned_main: &[RowMajorMatrixView<F>],
     public_values: &[F],
-    permutation_randomness: Option<[EF; 2]>,
+    permutation_randomness: &[EF; 2],
     interaction_chunk_size: usize,
 ) -> Option<RowMajorMatrix<EF>>
 where
@@ -41,7 +41,7 @@ where
     if all_interactions.is_empty() {
         return None;
     }
-    let [alpha, beta] = permutation_randomness.expect("Not enough permutation challenges");
+    let &[alpha, beta] = permutation_randomness;
 
     let alphas = generate_rlc_elements(alpha, all_interactions);
     let betas = generate_betas(beta, all_interactions);

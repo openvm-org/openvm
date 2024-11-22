@@ -3,7 +3,7 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
@@ -92,6 +92,7 @@ impl<F: PrimeField32> VmExecutor<F> {
             exe.program.clone(),
             streams.clone(),
             Some(memory_image_to_equipartition(exe.init_memory)),
+            exe.fn_bounds.clone(),
         );
         let mut pc = exe.pc_start;
 
@@ -128,6 +129,7 @@ impl<F: PrimeField32> VmExecutor<F> {
                 exe.program.clone(),
                 streams.clone(),
                 Some(final_memory),
+                exe.fn_bounds.clone(),
             );
             segment.cycle_tracker = cycle_tracker;
         }
@@ -221,6 +223,14 @@ pub struct SingleSegmentVmExecutor<F: PrimeField32> {
     _marker: PhantomData<F>,
 }
 
+/// Execution result of a single segment VM execution.
+pub struct SingleSegmentVmExecutionResult<F: PrimeField32> {
+    /// All user public values
+    pub public_values: Vec<Option<F>>,
+    /// Heights of each AIR
+    pub heights: Vec<usize>,
+}
+
 impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn new(config: VmConfig) -> Self {
         assert!(
@@ -237,23 +247,27 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: Vec<Vec<F>>,
-    ) -> Result<Vec<Option<F>>, ExecutionError> {
+        input: impl Into<VecDeque<Vec<F>>>,
+    ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
-        let pvs = if let Some(pv_chip) = segment.chip_set.public_values_chip {
+        let heights = segment.chip_set.current_trace_heights();
+        let public_values = if let Some(pv_chip) = segment.chip_set.public_values_chip {
             let borrowed_pv_chip = RefCell::borrow(&pv_chip);
             borrowed_pv_chip.core.get_custom_public_values()
         } else {
             vec![]
         };
-        Ok(pvs)
+        Ok(SingleSegmentVmExecutionResult {
+            public_values,
+            heights,
+        })
     }
 
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -276,6 +290,7 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
                 hint_stream: VecDeque::new(),
             })),
             None,
+            exe.fn_bounds,
         );
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
@@ -373,14 +388,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
-    ) -> Proof<SC>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Proof<SC> {
         tracing::info_span!("prove_segment", segment = 0)
             .in_scope(|| self.engine.prove(pk, proof_input))
     }
@@ -389,14 +397,7 @@ where
         &self,
         pk: &MultiStarkProvingKey<SC>,
         results: VmExecutorResult<SC>,
-    ) -> Vec<Proof<SC>>
-    where
-        Domain<SC>: Send + Sync,
-        PcsProverData<SC>: Send + Sync,
-        Com<SC>: Send + Sync,
-        SC::Challenge: Send + Sync,
-        PcsProof<SC>: Send + Sync,
-    {
+    ) -> Vec<Proof<SC>> {
         #[cfg(feature = "bench-metrics")]
         metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
         results

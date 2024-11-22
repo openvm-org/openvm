@@ -7,9 +7,9 @@ pub mod trace;
 pub mod tests;
 
 use lazy_static::lazy_static;
-use p3_baby_bear::{BabyBear, BabyBearDiffusionMatrixParameters};
+use p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
 use p3_field::{AbstractField, PrimeField32};
-use p3_monty_31::DiffusionMatrixParameters;
+use p3_monty_31::InternalLayerBaseParameters;
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};
 
@@ -35,6 +35,7 @@ impl<const WIDTH: usize, F: Clone> Poseidon2Config<WIDTH, F> {
 /// [ 1 2 3 1 ]
 /// [ 1 1 2 3 ]
 /// [ 3 1 1 2 ].
+/// <https://github.com/plonky3/Plonky3/blob/64370174ba932beee44307c3003e1d787c101bb6/poseidon2/src/external.rs#L43>
 pub const MDS_MAT_4: [[u32; 4]; 4] = [[2, 3, 1, 1], [1, 2, 3, 1], [1, 1, 2, 3], [3, 1, 1, 2]];
 // Multiply a 4-element vector x by
 // [ 5 7 1 3 ]
@@ -107,7 +108,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()))
             .collect();
 
-        let p3_int_diag_f = BabyBearDiffusionMatrixParameters::INTERNAL_DIAG_MONTY
+        let p3_int_diag_f = BabyBearInternalLayerParameters::INTERNAL_DIAG_MONTY
             .map(|babybear| F::from_canonical_u32(babybear.as_canonical_u32()));
 
         Self {
@@ -115,7 +116,7 @@ impl<F: PrimeField32> Poseidon2Config<16, F> {
             internal_constants: internal_round_constants_f,
             ext_mds_matrix: MDS_MAT_4,
             int_diag_m1_matrix: p3_int_diag_f,
-            reduction_factor: F::from_wrapped_u64(1u64 << 32).inverse(),
+            reduction_factor: F::ONE,
         }
     }
 }

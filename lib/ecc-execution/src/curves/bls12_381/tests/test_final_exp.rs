@@ -1,12 +1,12 @@
 use axvm_ecc::{
-    curve::bls12381::{Fq, Fq2, G1Affine, G2Affine},
-    field::ExpBigInt,
+    halo2curves_shims::ExpBigInt,
     pairing::{FinalExp, MultiMillerLoop},
-    point::{AffineCoords, AffinePoint},
+    AffinePoint,
 };
-use halo2curves_axiom::bls12_381::Fr;
+use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
-use num::{BigInt, Num};
+use num_bigint::{BigUint, Sign};
+use num_traits::Num;
 
 use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
 
@@ -14,18 +14,18 @@ use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
 #[allow(non_snake_case)]
 fn test_bls12_381_final_exp_hint() {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) =
-        // generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
-        generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
+        generate_test_points_bls12_381(&[Fr::from(3), Fr::from(6)], &[Fr::from(8), Fr::from(4)]);
+    // generate_test_points_bls12_381(&[Fr::from(1), Fr::from(1)], &[Fr::from(1), Fr::from(1)]);
 
-    let bls12_381 = Bls12_381;
-    let f = bls12_381.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
-    let (c, s) = bls12_381.final_exp_hint(f);
+    let f = Bls12_381::multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+    let (c, s) = Bls12_381::final_exp_hint(&f);
 
-    let q = BigInt::from_str_radix(
+    let q = BigUint::from_str_radix(
         "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         16,
     ).unwrap();
-    let c_qt = c.exp_bigint(q) * c.exp_bigint(SEED_NEG.clone());
+    let c_qt = c.exp_bigint(Sign::Plus, q) * c.exp_bigint(Sign::Plus, SEED_NEG.clone());
+    // let c_qt = c.exp_bigint(q) * c.exp_bigint(SEED_NEG.clone());
 
     assert_eq!(f * s, c_qt);
 }
@@ -45,9 +45,8 @@ fn test_bls12_381_assert_final_exp_is_one_scalar_other() {
 #[allow(non_snake_case)]
 fn assert_final_exp_one(a: &[Fr; 2], b: &[Fr; 2]) {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) = generate_test_points_bls12_381(a, b);
-    let bls12_381 = Bls12_381;
-    let f = bls12_381.multi_miller_loop(&P_ecpoints, &Q_ecpoints);
-    bls12_381.assert_final_exp_is_one(f, &P_ecpoints, &Q_ecpoints);
+    let f = Bls12_381::multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+    Bls12_381::assert_final_exp_is_one(&f, &P_ecpoints, &Q_ecpoints);
 }
 
 #[allow(non_snake_case)]
@@ -67,7 +66,7 @@ fn generate_test_points_bls12_381(
         let p = G1Affine::generator() * a[i];
         let mut p = G1Affine::from(p);
         if i % 2 == 1 {
-            p = p.neg();
+            p.y = -p.y;
         }
         let q = G2Affine::generator() * b[i];
         let q = G2Affine::from(q);
@@ -77,8 +76,8 @@ fn generate_test_points_bls12_381(
     let (P_ecpoints, Q_ecpoints) = izip!(P_vec.clone(), Q_vec.clone())
         .map(|(P, Q)| {
             (
-                AffinePoint { x: P.x(), y: P.y() },
-                AffinePoint { x: Q.x(), y: Q.y() },
+                AffinePoint { x: P.x, y: P.y },
+                AffinePoint { x: Q.x, y: Q.y },
             )
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();

@@ -6,7 +6,6 @@ use std::{
 use p3_field::{AbstractField, ExtensionField, Field};
 use p3_matrix::Matrix;
 use p3_maybe_rayon::prelude::join;
-use p3_uni_stark::{StarkGenericConfig, Val};
 
 use super::{
     symbolic::{
@@ -15,6 +14,7 @@ use super::{
     },
     ViewPair,
 };
+use crate::config::{StarkGenericConfig, Val};
 
 pub type VerifierConstraintFolder<'a, SC> = GenericVerifierConstraintFolder<
     'a,

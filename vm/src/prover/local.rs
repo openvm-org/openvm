@@ -2,7 +2,7 @@ use std::{collections::VecDeque, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use ax_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig, Val},
+    config::{StarkGenericConfig, Val},
     prover::types::Proof,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
@@ -19,27 +19,13 @@ use crate::{
     },
 };
 
-pub struct VmLocalProver<SC: StarkGenericConfig, E: StarkFriEngine<SC>>
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+pub struct VmLocalProver<SC: StarkGenericConfig, E: StarkFriEngine<SC>> {
     pub pk: VmProvingKey<SC>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
     _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> VmLocalProver<SC, E>
-where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
-{
+impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> VmLocalProver<SC, E> {
     pub fn new(pk: VmProvingKey<SC>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
         Self {
             pk,
@@ -52,11 +38,6 @@ where
 impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
     for VmLocalProver<SC, E>
 where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
     Val<SC>: PrimeField32,
 {
     fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> ContinuationVmProof<SC> {
@@ -85,11 +66,6 @@ impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> AsyncContinuationVmProver<SC
     for VmLocalProver<SC, E>
 where
     VmLocalProver<SC, E>: Send + Sync,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
     Val<SC>: PrimeField32,
 {
     async fn prove(
@@ -103,11 +79,6 @@ where
 impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> SingleSegmentVmProver<SC>
     for VmLocalProver<SC, E>
 where
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
     Val<SC>: PrimeField32,
 {
     fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> Proof<SC> {
@@ -127,11 +98,6 @@ impl<SC: StarkGenericConfig, E: StarkFriEngine<SC>> AsyncSingleSegmentVmProver<S
     for VmLocalProver<SC, E>
 where
     VmLocalProver<SC, E>: Send + Sync,
-    Domain<SC>: Send + Sync,
-    PcsProverData<SC>: Send + Sync,
-    Com<SC>: Send + Sync,
-    SC::Challenge: Send + Sync,
-    PcsProof<SC>: Send + Sync,
     Val<SC>: PrimeField32,
 {
     async fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>> + Send + Sync) -> Proof<SC> {
