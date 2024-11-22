@@ -22,6 +22,7 @@ use crate::{
     arch::ExecutionState,
     intrinsics::{
         ecc::{
+            fp12::Fp12MulChip,
             fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
                 EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,

@@ -36,6 +36,7 @@ use crate::{
     arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
         ecc::{
+            fp12::Fp12MulChip,
             fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
                 EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
@@ -1365,6 +1366,60 @@ impl VmConfig {
             }
         }
 
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_fp12_modular_executor_tuple(&self.supported_complex_ext, &self.supported_modulus)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&global_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            match executor {
+                ExecutorName::Fp12MulRv32_32 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        class_offset,
+                        [9, 1],
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::Fp12MulRv32_48 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        class_offset,
+                        [1, 1],
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
+            }
+        }
+
         if Arc::strong_count(&bitwise_lookup_chip) > 1 {
             chips.push(AxVmChip::BitwiseOperationLookup(bitwise_lookup_chip));
         }
@@ -1653,6 +1708,37 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                 ]
+            } else {
+                panic!("modulus {:?} is too large", modulus);
+            }
+        })
+        .collect()
+}
+
+fn gen_fp12_modular_executor_tuple(
+    supported_complex_ext: &[usize],
+    supported_modulus: &[BigUint],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_complex_ext
+        .iter()
+        .flat_map(|&modulus_idx| {
+            let modulus = &supported_modulus[modulus_idx];
+            let bytes = modulus.bits().div_ceil(8);
+            let class_offset = Fp2Opcode::default_offset() + modulus_idx * Fp2Opcode::COUNT;
+            if bytes <= 32 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    class_offset,
+                    ExecutorName::Fp12MulRv32_32,
+                    modulus.clone(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    class_offset,
+                    ExecutorName::Fp12MulRv32_48,
+                    modulus.clone(),
+                )]
             } else {
                 panic!("modulus {:?} is too large", modulus);
             }
