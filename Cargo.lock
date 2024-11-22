@@ -630,6 +630,7 @@ dependencies = [
  "enum-utils",
  "enum_dispatch",
  "eyre",
+ "getset",
  "halo2curves-axiom 0.7.0",
  "hex",
  "hex-literal",

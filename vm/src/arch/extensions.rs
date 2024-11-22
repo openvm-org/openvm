@@ -9,6 +9,7 @@ use axvm_instructions::{
 };
 use derive_more::derive::From;
 use enum_dispatch::enum_dispatch;
+use getset::Getters;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
@@ -42,7 +43,7 @@ const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmExtensionBuilder<'a, F: PrimeField32> {
-    system: &'a InternalSystem<F>,
+    system: &'a SystemBase<F>,
     /// Bus indices are in range [0, bus_idx_max)
     bus_idx_max: usize,
     /// Chips that are already included in the chipset and may be used
@@ -52,8 +53,20 @@ pub struct VmExtensionBuilder<'a, F: PrimeField32> {
 }
 
 impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
+    pub fn new(system: &'a SystemBase<F>, bus_idx_max: usize) -> Self {
+        Self {
+            system,
+            bus_idx_max,
+            chips: Vec::new(),
+        }
+    }
+
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
+    }
+
+    pub fn system_base(&self) -> &SystemBase<F> {
+        &self.system
     }
 
     pub fn new_bus(&mut self) -> usize {
@@ -71,6 +84,10 @@ impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
             .iter()
             .filter_map(|c| c.as_any_kind().downcast_ref())
             .collect()
+    }
+
+    fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
+        self.chips.push(chip);
     }
 }
 
@@ -186,13 +203,7 @@ impl<E, P> VmInventory<E, P> {
 pub struct VmChipComplex<F: PrimeField32, E, P> {
     pub config: SystemConfig,
     // ATTENTION: chip destruction should follow the **reverse** of the following field order:
-
-    // The following don't execute instructions, they are the backbone of the system
-    // RangeCheckerChip **must** be the last chip to have trace generation called on
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-    pub memory_controller: MemoryControllerRef<F>,
-    pub connector_chip: VmConnectorChip<F>,
-    pub program_chip: ProgramChip<F>,
+    pub base: SystemBase<F>,
     /// Extendable collection of chips for executing instructions.
     /// System ensures it contains:
     /// - PhantomChip
@@ -204,7 +215,19 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     bus_idx_max: usize,
 }
 
-pub type InternalSystem<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
+/// The base [VmChipComplex] with only system chips.
+pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
+
+/// Base system chips.
+/// The following don't execute instructions, but are essential
+/// for the VM architecture.
+pub struct SystemBase<F> {
+    // RangeCheckerChip **must** be the last chip to have trace generation called on
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub memory_controller: MemoryControllerRef<F>,
+    pub connector_chip: VmConnectorChip<F>,
+    pub program_chip: ProgramChip<F>,
+}
 
 #[derive(ChipUsageGetter, Chip)]
 #[enum_dispatch(InstructionExecutor<F>)]
@@ -222,7 +245,7 @@ pub enum SystemPeriphery<F: PrimeField32> {
     Poseidon2(Poseidon2Chip<F>),
 }
 
-impl<F: PrimeField32> InternalSystem<F> {
+impl<F: PrimeField32> SystemComplex<F> {
     pub fn new(config: SystemConfig) -> Self {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
@@ -295,13 +318,17 @@ impl<F: PrimeField32> InternalSystem<F> {
             inventory.add_periphery_chip(chip.into());
         }
 
-        Self {
-            config,
-            inventory,
+        let base = SystemBase {
             program_chip,
             connector_chip,
             memory_controller,
             range_checker_chip: range_checker,
+        };
+
+        Self {
+            config,
+            base,
+            inventory,
             bus_idx_max,
         }
     }
@@ -318,8 +345,22 @@ where
     /// **If** internal poseidon2 chip exists, then its periphery index is 0.
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
+    // @dev: Remember to update self.bus_idx_max after dropping this!
+    pub fn extension_builder(&self) -> VmExtensionBuilder<F, E, P> {
+        let mut builder = VmExtensionBuilder::new(&self.base, self.bus_idx_max);
+        builder.add_chip(&self.base.range_checker_chip.clone());
+        for chip in self.inventory.executors() {
+            builder.add_chip(chip);
+        }
+        for chip in self.inventory.periphery() {
+            builder.add_chip(chip);
+        }
+
+        builder
+    }
+
     pub fn num_airs(&self) -> usize {
-        3 + self.memory_controller.borrow().num_airs() + self.inventory.num_airs()
+        3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
