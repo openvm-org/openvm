@@ -7,6 +7,7 @@ use axvm_instructions::{
     instruction::Instruction, program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode,
     UsizeOpcode,
 };
+use derive_more::derive::From;
 use enum_dispatch::enum_dispatch;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
@@ -182,41 +183,46 @@ impl<E, P> VmInventory<E, P> {
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 /// The minimum collection of chips that any VM must have.
-pub struct InternalSystem<F: PrimeField32> {
+pub struct VmChipComplex<F: PrimeField32, E, P> {
     pub config: SystemConfig,
-    // ATTENTION: chip destruction should follow the following field order:
-    /// Contains:
+    // ATTENTION: chip destruction should follow the **reverse** of the following field order:
+
+    // The following don't execute instructions, they are the backbone of the system
+    // RangeCheckerChip **must** be the last chip to have trace generation called on
+    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub memory_controller: MemoryControllerRef<F>,
+    pub connector_chip: VmConnectorChip<F>,
+    pub program_chip: ProgramChip<F>,
+    /// Extendable collection of chips for executing instructions.
+    /// System ensures it contains:
     /// - PhantomChip
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
-    pub inventory: VmInventory<SystemExecutor<F>, ()>,
-    // The following don't execute instructions, they are the backbone of the system
-    pub program_chip: ProgramChip<F>,
-    pub connector_chip: VmConnectorChip<F>,
-    /// PublicValuesChip is disabled when num_public_values == 0.
-    pub memory_controller: MemoryControllerRef<F>,
-    // RangeCheckerChip **must** be the last chip to have trace generation called on
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
+    pub inventory: VmInventory<E, P>,
 
-    poseidon2_chip_idx: Option<ExecutorId>,
     /// System buses use indices [0, bus_idx_max)
     bus_idx_max: usize,
 }
+
+pub type InternalSystem<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<F>>;
 
 #[derive(ChipUsageGetter, Chip)]
 #[enum_dispatch(InstructionExecutor<F>)]
 pub enum SystemExecutor<F: PrimeField32> {
     Phantom(PhantomChip<F>),
     PublicValues(PublicValuesChip<F>),
-    // The poseidon2 with direct compression interactions
-    // TODO: make this periphery after it is separated from hasher chip
+}
+
+#[derive(ChipUsageGetter, Chip, From)]
+pub enum SystemPeriphery<F: PrimeField32> {
+    /// Range checker chip.
+    /// **Warning**: this is not included in the inventory because it is used by all system chips.
+    RangeChecker(Arc<VariableRangeCheckerChip>),
+    /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2Chip<F>),
 }
 
 impl<F: PrimeField32> InternalSystem<F> {
-    /// **If** public values chip exists, then its internal index is 1.
-    const PV_CHIP_IDX: ExecutorId = 1;
-
     pub fn new(config: SystemConfig) -> Self {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
@@ -270,72 +276,67 @@ impl<F: PrimeField32> InternalSystem<F> {
                 .add_executor(chip.into(), [PublishOpcode::default_offset()])
                 .unwrap();
         }
+        if config.continuation_enabled {
+            // Add direct poseidon2 chip for persistent memory.
+            // This is **not** an instruction executor.
+            // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
+            // special handling when that happens
+            let direct_bus_idx = bus_idx_max;
+            bus_idx_max += 1;
+            let chip = Poseidon2Chip::from_poseidon2_config(
+                vm_poseidon2_config(),
+                config.max_constraint_degree.min(SBOX_DEGREE),
+                EXECUTION_BUS,
+                PROGRAM_BUS,
+                memory_controller.clone(),
+                direct_bus_idx,
+                Poseidon2Opcode::default_offset(),
+            );
+            inventory.add_periphery_chip(chip.into());
+        }
 
-        let mut system = Self {
+        Self {
             config,
             inventory,
             program_chip,
             connector_chip,
             memory_controller,
             range_checker_chip: range_checker,
-            poseidon2_chip_idx: None,
             bus_idx_max,
-        };
-        if config.continuation_enabled {
-            system.add_poseidon2_chip(config.max_constraint_degree);
-        }
-
-        system
-    }
-
-    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
-        let ex_chip = self.inventory.executors().get(Self::PV_CHIP_IDX)?;
-        match ex_chip {
-            SystemExecutor::PublicValues(chip) => Some(chip),
-            _ => None,
         }
     }
+}
+
+impl<F, E, P> VmChipComplex<F, E, P>
+where
+    F: PrimeField32,
+    E: AnyEnum,
+    P: AnyEnum,
+{
+    /// **If** public values chip exists, then its executor index is 1.
+    const PV_EXECUTOR_IDX: ExecutorId = 1;
+    /// **If** internal poseidon2 chip exists, then its periphery index is 0.
+    const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     pub fn num_airs(&self) -> usize {
         3 + self.memory_controller.borrow().num_airs() + self.inventory.num_airs()
     }
 
+    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
+        let chip = self.inventory.executors().get(Self::PV_EXECUTOR_IDX)?;
+        chip.as_any_kind().downcast_ref()
+    }
+
     pub fn poseidon2_chip(&self) -> Option<&Poseidon2Chip<F>> {
-        let idx = self.poseidon2_chip_idx?;
-        let ex_chip = self.inventory.executors().get(idx)?;
-        match ex_chip {
-            SystemExecutor::Poseidon2(chip) => Some(chip),
-            _ => None,
-        }
+        let chip = self
+            .inventory
+            .periphery()
+            .get(Self::POSEIDON2_PERIPHERY_IDX)?;
+        chip.as_any_kind().downcast_ref()
     }
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.program_chip.set_program(program);
-    }
-
-    // TODO[jpw]: this will be cleaner once poseidon2 hasher and poseidon2 direct are separated
-    /// Poseidon2 chip is a special case because it is needed for persistent memory.
-    pub(crate) fn add_poseidon2_chip(&mut self, max_constraint_degree: usize) {
-        if self.poseidon2_chip().is_some() {
-            return;
-        }
-        let direct_bus_idx = self.bus_idx_max;
-        self.bus_idx_max += 1;
-        let chip = Poseidon2Chip::from_poseidon2_config(
-            vm_poseidon2_config(),
-            max_constraint_degree.min(SBOX_DEGREE),
-            EXECUTION_BUS,
-            PROGRAM_BUS,
-            self.memory_controller.clone(),
-            direct_bus_idx,
-            Poseidon2Opcode::default_offset(),
-        );
-        self.inventory
-            .add_executor(
-                chip.into(),
-                Poseidon2Opcode::iter().map(|local_opcode| local_opcode.with_default_offset()),
-            )
-            .unwrap();
     }
 }
 
