@@ -1,0 +1,23 @@
+[package]
+name = "ax-snark-verifier"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+axvm-ecc = { workspace = true, features = ["halo2curves"] }
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.7-git", default-features = false, features = ["halo2-pse"] }
+ff = { workspace = true }
+halo2curves-axiom = { workspace = true }
+itertools.workspace = true
+rand_core = "0.6.4"
+num-bigint = { workspace = true, features = ["std"] }
+num-traits.workspace = true
+rand.workspace = true
+lazy_static.workspace = true
+group = "0.13.0"
+
+[dev-dependencies]
+rng = "0.1.0"
+subtle = "2.6.1"
+axvm-ecc-constants = { workspace = true }
