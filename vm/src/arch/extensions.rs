@@ -3,22 +3,15 @@ use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
+use axvm_circuit_derive::AnyEnum;
 use axvm_instructions::{
-    instruction::Instruction, program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode,
+    program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
 };
 use derive_more::derive::From;
-use enum_dispatch::enum_dispatch;
-use getset::Getters;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
-use strum::{EnumDiscriminants, IntoEnumIterator};
 
-use super::{
-    vm_poseidon2_config, ExecutionBus, ExecutionState, InstructionExecutor, Streams, SystemConfig,
-    MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
-};
+use super::{vm_poseidon2_config, ExecutionBus, InstructionExecutor, SystemConfig};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::{
@@ -32,7 +25,7 @@ use crate::{
             MemoryControllerRef, CHUNK,
         },
         phantom::PhantomChip,
-        program::{ExecutionError, ProgramBus, ProgramChip},
+        program::{ProgramBus, ProgramChip},
     },
 };
 
@@ -229,18 +222,14 @@ pub struct SystemBase<F> {
     pub program_chip: ProgramChip<F>,
 }
 
-#[derive(ChipUsageGetter, Chip)]
-#[enum_dispatch(InstructionExecutor<F>)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemExecutor<F: PrimeField32> {
     Phantom(PhantomChip<F>),
     PublicValues(PublicValuesChip<F>),
 }
 
-#[derive(ChipUsageGetter, Chip, From)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemPeriphery<F: PrimeField32> {
-    /// Range checker chip.
-    /// **Warning**: this is not included in the inventory because it is used by all system chips.
-    RangeChecker(Arc<VariableRangeCheckerChip>),
     /// Poseidon2 chip with direct compression interactions
     Poseidon2(Poseidon2Chip<F>),
 }
@@ -346,9 +335,9 @@ where
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     // @dev: Remember to update self.bus_idx_max after dropping this!
-    pub fn extension_builder(&self) -> VmExtensionBuilder<F, E, P> {
+    pub fn extension_builder(&self) -> VmExtensionBuilder<F> {
         let mut builder = VmExtensionBuilder::new(&self.base, self.bus_idx_max);
-        builder.add_chip(&self.base.range_checker_chip.clone());
+        builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
             builder.add_chip(chip);
         }
@@ -360,7 +349,7 @@ where
     }
 
     pub fn num_airs(&self) -> usize {
-        3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
+        3 + self.base.memory_controller.borrow().num_airs() + self.inventory.num_airs()
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>> {
@@ -377,7 +366,7 @@ where
     }
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
-        self.program_chip.set_program(program);
+        self.base.program_chip.set_program(program);
     }
 }
 
@@ -393,11 +382,18 @@ impl AnyEnum for () {
     }
 }
 
+impl AnyEnum for Arc<VariableRangeCheckerChip> {
+    fn as_any_kind(&self) -> &dyn Any {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[allow(dead_code)]
+    #[derive(Copy, Clone)]
     enum EnumA {
         A(u8),
         B(u32),
@@ -405,6 +401,13 @@ mod tests {
 
     enum EnumB {
         C(u64),
+        D(EnumA),
+    }
+
+    #[derive(AnyEnum)]
+    enum EnumC {
+        C(u64),
+        #[any_enum]
         D(EnumA),
     }
 
@@ -436,5 +439,11 @@ mod tests {
         assert_eq!(b.as_any_kind().downcast_ref::<u8>(), Some(&1));
         let c = EnumB::C(3);
         assert_eq!(c.as_any_kind().downcast_ref::<u64>(), Some(&3));
+        let d = EnumC::D(a);
+        assert!(d.as_any_kind().downcast_ref::<u64>().is_none());
+        assert!(d.as_any_kind().downcast_ref::<EnumA>().is_none());
+        assert_eq!(d.as_any_kind().downcast_ref::<u8>(), Some(&1));
+        let e = EnumC::C(3);
+        assert_eq!(e.as_any_kind().downcast_ref::<u64>(), Some(&3));
     }
 }

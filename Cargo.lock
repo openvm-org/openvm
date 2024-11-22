@@ -337,7 +337,7 @@ dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -658,7 +658,7 @@ dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -717,7 +717,7 @@ dependencies = [
  "quote",
  "strum",
  "strum_macros",
- "syn 1.0.109",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -780,7 +780,7 @@ dependencies = [
  "p3-field",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.87",
 ]
 
 [[package]]

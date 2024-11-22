@@ -8,7 +8,7 @@ description = "Procedural macros for axVM native compiler."
 proc-macro = true
 
 [dependencies]
-syn = { version = "1.0", features = ["parsing"] }
+syn = { version = "2.0", features = ["parsing"] }
 quote = "1.0"
 proc-macro2 = "1.0"
 
