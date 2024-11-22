@@ -74,6 +74,7 @@ class MetricDb:
         self.dict_by_label_types = {}
         with open(metrics_file, 'r') as f:
             print(f.read())
+        with open(metrics_file, 'r') as f:
             data = json.load(f)
 
         # Process counters
