@@ -4,6 +4,7 @@ use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+    ChipUsageGetter,
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
@@ -32,8 +33,8 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
 }
 
 pub trait VmGenericConfig<F: PrimeField32> {
-    type Executor: InstructionExecutor<F> + AnyEnum;
-    type Periphery: AnyEnum;
+    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Periphery: AnyEnum + ChipUsageGetter;
 
     fn create_chip_complex(
         &self,

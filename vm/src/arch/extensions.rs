@@ -1,10 +1,4 @@
-use std::{
-    any::Any,
-    cell::RefCell,
-    iter::{self, once},
-    rc::Rc,
-    sync::{Arc, OnceLock},
-};
+use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
@@ -149,7 +143,7 @@ pub struct VmInventory<E, P> {
     /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
     instruction_lookup: FxHashMap<AxVmOpcode, ExecutorId>,
     executors: Vec<E>,
-    periphery: Vec<P>,
+    pub(super) periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
     insertion_order: Vec<ChipId>,
@@ -255,8 +249,8 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get(*id)
     }
 
-    pub fn get_mut_executor(&mut self, opcode: AxVmOpcode) -> Option<&mut E> {
-        let id = self.instruction_lookup.get(&opcode)?;
+    pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut E> {
+        let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
     }
 
@@ -280,15 +274,13 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     #[getset(get = "pub")]
     config: SystemConfig,
     // ATTENTION: chip destruction should follow the **reverse** of the following field order:
-    #[getset(get = "pub")]
-    base: SystemBase<F>,
+    pub base: SystemBase<F>,
     /// Extendable collection of chips for executing instructions.
     /// System ensures it contains:
     /// - PhantomChip
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
-    #[getset(get = "pub")]
-    inventory: VmInventory<E, P>,
+    pub inventory: VmInventory<E, P>,
 
     streams: Arc<Mutex<Streams<F>>>,
     /// System buses use indices [0, bus_idx_max)
@@ -436,9 +428,9 @@ impl<F: PrimeField32> SystemComplex<F> {
 
 impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// **If** public values chip exists, then its executor index is 0.
-    const PV_EXECUTOR_IDX: ExecutorId = 0;
+    pub(super) const PV_EXECUTOR_IDX: ExecutorId = 0;
     /// **If** internal poseidon2 chip exists, then its periphery index is 0.
-    const POSEIDON2_PERIPHERY_IDX: usize = 0;
+    pub(super) const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     // @dev: Remember to update self.bus_idx_max after dropping this!
     pub fn inventory_builder(&self) -> VmInventoryBuilder<F>
@@ -501,12 +493,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         &self.base.program_chip
     }
 
-    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
-        &self.base.memory_controller
+    pub fn program_chip_mut(&mut self) -> &mut ProgramChip<F> {
+        &mut self.base.program_chip
     }
 
     pub fn connector_chip(&self) -> &VmConnectorChip<F> {
         &self.base.connector_chip
+    }
+
+    pub fn connector_chip_mut(&mut self) -> &mut VmConnectorChip<F> {
+        &mut self.base.connector_chip
+    }
+
+    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
+        &self.base.memory_controller
     }
 
     pub fn range_checker_chip(&self) -> &Arc<VariableRangeCheckerChip> {
@@ -527,9 +527,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     {
         let chip = self
             .inventory
-            .periphery()
+            .periphery
             .get(Self::POSEIDON2_PERIPHERY_IDX)?;
         chip.as_any_kind().downcast_ref()
+    }
+
+    pub fn poseidon2_chip_mut(&mut self) -> Option<&mut Poseidon2Chip<F>>
+    where
+        P: AnyEnum,
+    {
+        let chip = self
+            .inventory
+            .periphery
+            .get_mut(Self::POSEIDON2_PERIPHERY_IDX)?;
+        chip.as_any_kind_mut().downcast_mut()
     }
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
@@ -797,16 +808,17 @@ pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
 pub trait AnyEnum {
     /// Recursively "unwraps" enum and casts to `Any` for downcasting.
     fn as_any_kind(&self) -> &dyn Any;
-}
 
-impl AnyEnum for () {
-    fn as_any_kind(&self) -> &dyn Any {
-        self
-    }
+    /// Recursively "unwraps" enum and casts to `Any` for downcasting.
+    fn as_any_kind_mut(&mut self) -> &mut dyn Any;
 }
 
 impl AnyEnum for Arc<VariableRangeCheckerChip> {
     fn as_any_kind(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_kind_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
@@ -877,6 +889,13 @@ mod tests {
                 EnumA::B(b) => b,
             }
         }
+
+        fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+            match self {
+                EnumA::A(a) => a,
+                EnumA::B(b) => b,
+            }
+        }
     }
 
     impl AnyEnum for EnumB {
@@ -884,6 +903,13 @@ mod tests {
             match self {
                 EnumB::C(c) => c,
                 EnumB::D(d) => d.as_any_kind(),
+            }
+        }
+
+        fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+            match self {
+                EnumB::C(c) => c,
+                EnumB::D(d) => d.as_any_kind_mut(),
             }
         }
     }

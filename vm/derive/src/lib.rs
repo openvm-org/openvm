@@ -143,26 +143,38 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field, is_enum)
                 })
                 .collect::<Vec<_>>();
-            let arms: Vec<_> =
+            let (arms, arms_mut): (Vec<_>, Vec<_>) =
                 variants.iter().map(|(variant_name, field, is_enum)| {
                     let field_ty = &field.ty;
 
                     if *is_enum {
                         // Call the inner trait impl
-                        quote! {
+                        (quote! {
                             #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::AnyEnum>::as_any_kind(x)
-                        }
+                        },
+                        quote! {
+                            #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::AnyEnum>::as_any_kind_mut(x)
+                        })
                     } else {
+                        (quote! {
+                            #name::#variant_name(x) => x
+                        },
                         quote! {
                             #name::#variant_name(x) => x
-                        }
+                        })
                     }
-                }).collect();
+                }).unzip();
             quote! {
                 impl #impl_generics ::axvm_circuit::arch::AnyEnum for #name #ty_generics {
                     fn as_any_kind(&self) -> &dyn Any {
                         match self {
                             #(#arms,)*
+                        }
+                    }
+
+                    fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+                        match self {
+                            #(#arms_mut,)*
                         }
                     }
                 }

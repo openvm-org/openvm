@@ -1,19 +1,19 @@
-use std::{ops::DerefMut, sync::Arc};
+use std::sync::Arc;
 
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, ProofInput},
+    Chip,
 };
 #[cfg(feature = "function-span")]
 use axvm_instructions::exe::FnBound;
 use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use itertools::izip;
 use p3_field::PrimeField32;
 use parking_lot::Mutex;
 
-use super::{Streams, VmChipComplex, VmGenericConfig};
+use super::{AnyEnum, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
@@ -88,14 +88,19 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         }
     }
 
+    pub fn system_config(&self) -> &SystemConfig {
+        self.chip_complex.config()
+    }
+
     /// Stopping is triggered by should_segment()
     pub fn execute_from_pc(
         &mut self,
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
-        let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
+        let mut timestamp = self.chip_complex.memory_controller().borrow().timestamp();
 
-        let collect_metrics = self.config.collect_metrics;
+        #[cfg(feature = "bench-metrics")]
+        let collect_metrics = self.system_config().collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
 
@@ -103,14 +108,15 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         #[cfg(feature = "function-span")]
         let mut current_fn = FnBound::default();
 
-        self.chip_set
-            .connector_chip
+        self.chip_complex
+            .connector_chip_mut()
             .begin(ExecutionState::new(pc, timestamp));
 
         let mut did_terminate = false;
 
         loop {
-            let (instruction, debug_info) = self.chip_set.program_chip.get_instruction(pc)?;
+            let (instruction, debug_info) =
+                self.chip_complex.program_chip_mut().get_instruction(pc)?;
             tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
@@ -122,6 +128,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
             );
 
             let opcode = instruction.opcode;
+            #[cfg(feature = "bench-metrics")]
             let prev_trace_cells = if collect_metrics {
                 self.current_trace_cells()
             } else {
@@ -130,7 +137,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
 
             if opcode == SystemOpcode::TERMINATE.with_default_offset() {
                 did_terminate = true;
-                self.chip_set.connector_chip.end(
+                self.chip_complex.connector_chip_mut().end(
                     ExecutionState::new(pc, timestamp),
                     Some(instruction.c.as_canonical_u32()),
                 );
@@ -188,14 +195,16 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 }
             };
 
+            #[cfg(feature = "bench-metrics")]
             let mut opcode_name = None;
-            if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {
+            if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;
                 assert!(next_state.timestamp > timestamp);
+                #[cfg(feature = "bench-metrics")]
                 if collect_metrics {
                     opcode_name = Some(executor.get_opcode_name(opcode));
                 }
@@ -205,12 +214,12 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 return Err(ExecutionError::DisabledOperation(pc, opcode));
             };
 
+            #[cfg(feature = "bench-metrics")]
             if collect_metrics {
                 let now_trace_cells = self.current_trace_cells();
 
                 let opcode_name = opcode_name.unwrap_or(opcode.to_string());
                 let key = (dsl_instr.clone(), opcode_name.clone());
-                #[cfg(feature = "bench-metrics")]
                 self.cycle_tracker.increment_opcode(&key);
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
@@ -219,7 +228,6 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 {
                     if prev_value != now_value {
                         let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
-                        #[cfg(feature = "bench-metrics")]
                         self.cycle_tracker
                             .increment_cells_used(&key, now_value - prev_value);
                         *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
@@ -228,34 +236,41 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 }
             }
             if self.should_segment() {
-                self.chip_set
-                    .connector_chip
+                self.chip_complex
+                    .connector_chip_mut()
                     .end(ExecutionState::new(pc, timestamp), None);
                 break;
             }
         }
         // Finalize memory.
         {
-            let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
-            self.final_memory = if self.config.continuation_enabled {
-                let poseidon_chip =
-                    find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
-                let mut hasher = poseidon_chip.borrow_mut();
-                memory_controller.finalize(Some(hasher.deref_mut()))
+            // Need some partial borrows, so code is ugly:
+            let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
+            self.final_memory = if self.system_config().continuation_enabled {
+                let chip = self
+                    .chip_complex
+                    .inventory
+                    .periphery
+                    .get_mut(VmChipComplex::<F, VmConfig::Executor, VmConfig::Periphery>::POSEIDON2_PERIPHERY_IDX)
+                    .expect("Poseidon2 chip required for persistent memory");
+                let hasher: &mut Poseidon2Chip<F> = chip
+                    .as_any_kind_mut()
+                    .downcast_mut()
+                    .expect("Poseidon2 chip required for persistent memory");
+                memory_controller.finalize(Some(hasher))
             } else {
                 memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
             };
         }
+        #[cfg(feature = "bench-metrics")]
         if collect_metrics {
             self.collected_metrics.chip_heights =
                 izip!(self.air_names.clone(), self.current_trace_heights()).collect();
-            #[cfg(feature = "bench-metrics")]
-            {
-                self.collected_metrics.emit();
-                if did_terminate {
-                    metrics::counter!("total_cells_used")
-                        .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-                }
+
+            self.collected_metrics.emit();
+            if did_terminate {
+                metrics::counter!("total_cells_used")
+                    .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
             }
         }
 
@@ -272,8 +287,10 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VmConfig::Executor: Chip<SC>,
+        VmConfig::Periphery: Chip<SC>,
     {
-        self.chip_set.generate_proof_input(cached_program)
+        self.chip_complex.generate_proof_input(cached_program)
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
@@ -288,14 +305,14 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         self.since_last_segment_check = 0;
         let heights = self.current_trace_heights();
         let mut const_height_idx = 0;
-        for (i, (air_name, height)) in izip!(&self.air_names, heights).enumerate() {
+        for (i, height) in heights.into_iter().enumerate() {
             if const_height_idx >= self.const_height_air_ids.len()
                 || self.const_height_air_ids[const_height_idx] != i
             {
-                if height > self.config.max_segment_len {
+                if height > self.chip_complex.config().max_segment_len {
                     tracing::info!(
                         "Should segment because chip {} has height {}",
-                        air_name,
+                        self.air_names[i],
                         height
                     );
                     return true;
@@ -308,9 +325,9 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {
-        self.chip_set.current_trace_cells()
+        self.chip_complex.current_trace_cells()
     }
     pub fn current_trace_heights(&self) -> Vec<usize> {
-        self.chip_set.current_trace_heights()
+        self.chip_complex.current_trace_heights()
     }
 }
