@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 use crate::{
     arch::{
         extensions::{EXECUTION_BUS, PROGRAM_BUS},
-        SystemBase, SystemComplex, SystemConfig, VmExtensionBuilder, VmInventory,
+        SystemBase, SystemComplex, SystemConfig, VmInventory, VmInventoryBuilder,
     },
     rv32im::{adapters::Rv32BaseAluAdapterChip, Rv32BaseAluChip},
 };

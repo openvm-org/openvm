@@ -55,7 +55,7 @@ pub const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 pub const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
-pub struct VmExtensionBuilder<'a, F: PrimeField32> {
+pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system: &'a SystemBase<F>,
     streams: &'a Arc<Mutex<Streams<F>>>,
     /// Bus indices are in range [0, bus_idx_max)
@@ -66,7 +66,7 @@ pub struct VmExtensionBuilder<'a, F: PrimeField32> {
     chips: Vec<&'a dyn AnyEnum>,
 }
 
-impl<'a, F: PrimeField32> VmExtensionBuilder<'a, F> {
+impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn new(
         system: &'a SystemBase<F>,
         streams: &'a Arc<Mutex<Streams<F>>>,
@@ -132,7 +132,7 @@ pub trait VmExtension<F: PrimeField32> {
 
     fn build(
         &self,
-        builder: &mut VmExtensionBuilder<F>,
+        builder: &mut VmInventoryBuilder<F>,
     ) -> VmInventory<Self::Executor, Self::Periphery>;
 }
 
@@ -395,12 +395,12 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     // @dev: Remember to update self.bus_idx_max after dropping this!
-    pub fn extension_builder(&self) -> VmExtensionBuilder<F>
+    pub fn extension_builder(&self) -> VmInventoryBuilder<F>
     where
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder = VmExtensionBuilder::new(&self.base, &self.streams, self.bus_idx_max);
+        let mut builder = VmInventoryBuilder::new(&self.base, &self.streams, self.bus_idx_max);
         // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
