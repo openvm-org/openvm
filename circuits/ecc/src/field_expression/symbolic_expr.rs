@@ -507,8 +507,8 @@ impl SymbolicExpr {
         prime: &BigUint,
     ) -> BigUint {
         match self {
-            SymbolicExpr::Input(i) => inputs[*i].clone(),
-            SymbolicExpr::Var(i) => variables[*i].clone(),
+            SymbolicExpr::Input(i) => inputs[*i].clone() % prime,
+            SymbolicExpr::Var(i) => variables[*i].clone() % prime,
             SymbolicExpr::Const(_, val, _) => val.clone(),
             SymbolicExpr::Add(lhs, rhs) => {
                 (lhs.compute(inputs, variables, flags, prime)
