@@ -11,8 +11,8 @@ type F = BabyBear;
 
 #[test]
 fn test_rv32i() {
-    let system_complex = SystemComplex::<F>::new(SystemConfig::default(), Default::default());
-    let builder = system_complex.extension_builder();
+    let system_complex = SystemComplex::<F>::new(SystemConfig::default());
+    let builder = system_complex.inventory_builder();
     let execution_bus = builder.system_base().execution_bus();
     let program_bus = builder.system_base().program_bus();
 

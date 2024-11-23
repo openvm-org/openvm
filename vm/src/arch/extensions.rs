@@ -1,4 +1,9 @@
-use std::{any::Any, cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    any::Any,
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, OnceLock},
+};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
@@ -157,6 +162,12 @@ enum ChipId {
     Periphery(usize),
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum VmInventoryError {
+    #[error("Opcode {opcode} already owned by executor id {id}")]
+    ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+}
+
 impl<E, P> Default for VmInventory<E, P> {
     fn default() -> Self {
         Self::new()
@@ -207,21 +218,27 @@ impl<E, P> VmInventory<E, P> {
     /// Inserts an executor with the collection of opcodes that it handles.
     /// If some executor already owns one of the opcodes, it will be replaced and the old
     /// executor ID is returned.
-    #[must_use]
     pub fn add_executor(
         &mut self,
         executor: E,
         opcodes: impl IntoIterator<Item = AxVmOpcode>,
-    ) -> Option<ExecutorId> {
+    ) -> Result<(), VmInventoryError> {
+        let opcodes: Vec<_> = opcodes.into_iter().collect();
+        for opcode in &opcodes {
+            if let Some(id) = self.instruction_lookup.get(opcode) {
+                return Err(VmInventoryError::ExecutorExists {
+                    opcode: *opcode,
+                    id: *id,
+                });
+            }
+        }
         let id = self.executors.len();
         self.executors.push(executor);
         self.insertion_order.push(ChipId::Executor(id));
         for opcode in opcodes {
-            if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
-                return Some(old_id);
-            }
+            self.instruction_lookup.insert(opcode, id);
         }
-        None
+        Ok(())
     }
 
     pub fn add_periphery_chip(&mut self, periphery_chip: P) {
@@ -318,7 +335,7 @@ pub enum SystemPeriphery<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> SystemComplex<F> {
-    pub fn new(config: SystemConfig, streams: Arc<Mutex<Streams<F>>>) -> Self {
+    pub fn new(config: SystemConfig) -> Self {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let mut bus_idx_max = RANGE_CHECKER_BUS;
@@ -379,6 +396,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip.into());
         }
+        let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
@@ -416,7 +434,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     const POSEIDON2_PERIPHERY_IDX: usize = 0;
 
     // @dev: Remember to update self.bus_idx_max after dropping this!
-    pub fn extension_builder(&self) -> VmInventoryBuilder<F>
+    pub fn inventory_builder(&self) -> VmInventoryBuilder<F>
     where
         E: AnyEnum,
         P: AnyEnum,
@@ -444,7 +462,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         Ext::Executor: Into<E3>,
         Ext::Periphery: Into<P3>,
     {
-        let mut builder = self.extension_builder();
+        let mut builder = self.inventory_builder();
         let inventory_ext = config.build(&mut builder);
         self.bus_idx_max = builder.bus_idx_max;
         let mut ext_complex = self.transmute();
@@ -501,6 +519,11 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     pub(crate) fn set_program(&mut self, program: Program<F>) {
         self.base.program_chip.set_program(program);
+    }
+
+    /// Warning: this sets the stream in all chips which have a shared mutable reference to the streams.
+    pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
+        *self.streams.lock() = streams;
     }
 
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
