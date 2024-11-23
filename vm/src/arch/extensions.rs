@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     cell::RefCell,
+    iter::{self, once},
     rc::Rc,
     sync::{Arc, OnceLock},
 };
@@ -12,6 +13,7 @@ use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
+    rap::AnyRap,
     Chip, ChipUsageGetter,
 };
 use axvm_circuit_derive::AnyEnum;
@@ -19,6 +21,7 @@ use axvm_instructions::{
     program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
 };
 use derive_more::derive::From;
+use getset::Getters;
 use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
@@ -58,6 +61,27 @@ const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
 const MEMORY_BUS: MemoryBus = MemoryBus(1);
 const PROGRAM_BUS: ProgramBus = ProgramBus(2);
 const RANGE_CHECKER_BUS: usize = 3;
+
+/// Configuration for a processor extension.
+///
+/// There are two associated types:
+/// - `Executor`: enum for chips that are [`InstructionExecutor`]s.
+/// -
+pub trait VmExtension<F: PrimeField32> {
+    /// Enum of chips that implement [`InstructionExecutor`] for instruction execution.
+    /// `Executor` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
+    /// `StarkGenericConfig` generic parameter.
+    type Executor: InstructionExecutor<F> + AnyEnum;
+    /// Enum of periphery chips that do not implement [`InstructionExecutor`].
+    /// `Periphery` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
+    /// `StarkGenericConfig` generic parameter.
+    type Periphery: AnyEnum;
+
+    fn build(
+        &self,
+        builder: &mut VmInventoryBuilder<F>,
+    ) -> VmInventory<Self::Executor, Self::Periphery>;
+}
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
@@ -118,27 +142,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
         self.chips.push(chip);
     }
-}
-
-/// Configuration for a processor extension.
-///
-/// There are two associated types:
-/// - `Executor`: enum for chips that are [`InstructionExecutor`]s.
-/// -
-pub trait VmExtension<F: PrimeField32> {
-    /// Enum of chips that implement [`InstructionExecutor`] for instruction execution.
-    /// `Executor` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
-    /// `StarkGenericConfig` generic parameter.
-    type Executor: InstructionExecutor<F> + AnyEnum;
-    /// Enum of periphery chips that do not implement [`InstructionExecutor`].
-    /// `Periphery` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
-    /// `StarkGenericConfig` generic parameter.
-    type Periphery: AnyEnum;
-
-    fn build(
-        &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> VmInventory<Self::Executor, Self::Periphery>;
 }
 
 #[derive(Clone, Debug)]
@@ -272,16 +275,20 @@ impl<E, P> VmInventory<E, P> {
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
 /// The minimum collection of chips that any VM must have.
+#[derive(Getters)]
 pub struct VmChipComplex<F: PrimeField32, E, P> {
-    pub config: SystemConfig,
+    #[getset(get = "pub")]
+    config: SystemConfig,
     // ATTENTION: chip destruction should follow the **reverse** of the following field order:
-    pub base: SystemBase<F>,
+    #[getset(get = "pub")]
+    base: SystemBase<F>,
     /// Extendable collection of chips for executing instructions.
     /// System ensures it contains:
     /// - PhantomChip
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
-    pub inventory: VmInventory<E, P>,
+    #[getset(get = "pub")]
+    inventory: VmInventory<E, P>,
 
     streams: Arc<Mutex<Streams<F>>>,
     /// System buses use indices [0, bus_idx_max)
@@ -490,12 +497,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.inventory.append(other);
     }
 
-    pub fn num_airs(&self) -> usize {
-        3 + self.base.memory_controller.borrow().num_airs() + self.inventory.num_airs()
+    pub fn program_chip(&self) -> &ProgramChip<F> {
+        &self.base.program_chip
     }
 
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.base.memory_controller
+    }
+
+    pub fn connector_chip(&self) -> &VmConnectorChip<F> {
+        &self.base.connector_chip
+    }
+
+    pub fn range_checker_chip(&self) -> &Arc<VariableRangeCheckerChip> {
+        &self.base.range_checker_chip
     }
 
     pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>>
@@ -526,16 +541,122 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         *self.streams.lock() = streams;
     }
 
+    pub(crate) fn num_airs(&self) -> usize {
+        3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
+    }
+
+    // TODO[jpw]: find better way to handle public values chip. It is an executor but
+    // we always need to special case it because we need to fix the air id.
+    fn public_values_chip_idx(&self) -> Option<ExecutorId> {
+        self.config
+            .continuation_enabled
+            .then(|| Self::PV_EXECUTOR_IDX)
+    }
+
+    // Avoids a downcast when you don't need the concrete type.
+    fn _public_values_chip(&self) -> Option<&E> {
+        self.config
+            .continuation_enabled
+            .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
+    }
+
+    // All inventory chips except public values chip, in reverse order they were added.
+    pub(crate) fn chips_excluding_pv_chip<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = Either<&'a E, &'a P>> {
+        let public_values_chip_idx = self.public_values_chip_idx();
+        self.inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .flat_map(move |chip_idx| match *chip_idx {
+                // Skip public values chip if it exists.
+                ChipId::Executor(id) => (Some(id) != public_values_chip_idx)
+                    .then(|| Either::Executor(&self.inventory.executors[id])),
+                ChipId::Periphery(id) => Some(Either::Periphery(&self.inventory.periphery[id])),
+            })
+    }
+
+    /// Return air names of all chips in order.
+    pub(crate) fn air_names(&self) -> Vec<String>
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        once(self.program_chip().air_name())
+            .chain([self.connector_chip().air_name()])
+            .chain(self._public_values_chip().map(|c| c.air_name()))
+            .chain(self.memory_controller().borrow().air_names())
+            .chain(self.chips_excluding_pv_chip().map(|c| c.air_name()))
+            .chain([self.range_checker_chip().air_name()])
+            .collect()
+    }
+    /// Return trace heights of all chips in order.
+    pub(crate) fn current_trace_heights(&self) -> Vec<usize>
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        once(self.program_chip().current_trace_height())
+            .chain([self.connector_chip().current_trace_height()])
+            .chain(self._public_values_chip().map(|c| c.current_trace_height()))
+            .chain(self.memory_controller().borrow().current_trace_heights())
+            .chain(
+                self.chips_excluding_pv_chip()
+                    .map(|c| c.current_trace_height()),
+            )
+            .chain([self.range_checker_chip().current_trace_height()])
+            .collect()
+    }
+    /// Return trace cells of all chips in order.
+    pub(crate) fn current_trace_cells(&self) -> Vec<usize>
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        once(self.program_chip().current_trace_cells())
+            .chain([self.connector_chip().current_trace_cells()])
+            .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
+            .chain(self.memory_controller().borrow().current_trace_cells())
+            .chain(
+                self.chips_excluding_pv_chip()
+                    .map(|c| c.current_trace_cells()),
+            )
+            .chain([self.range_checker_chip().current_trace_cells()])
+            .collect()
+    }
+
+    pub(crate) fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+        E: Chip<SC>,
+        P: Chip<SC>,
+    {
+        // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
+        let program_rap = Arc::new(self.program_chip().air) as Arc<dyn AnyRap<SC>>;
+        let connector_rap = Arc::new(self.connector_chip().air) as Arc<dyn AnyRap<SC>>;
+        [program_rap, connector_rap]
+            .into_iter()
+            .chain(self._public_values_chip().map(|chip| chip.air()))
+            .chain(self.memory_controller().borrow().airs())
+            .chain(self.chips_excluding_pv_chip().map(|chip| match chip {
+                Either::Executor(chip) => chip.air(),
+                Either::Periphery(chip) => chip.air(),
+            }))
+            .chain(once(self.range_checker_chip().air()))
+            .collect()
+    }
+
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
         mut self,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        E: Chip<SC> + AnyEnum,
-        P: Chip<SC> + AnyEnum,
+        E: Chip<SC>,
+        P: Chip<SC>,
     {
-        let has_pv_chip = self.public_values_chip().is_some();
+        let has_pv_chip = self.public_values_chip_idx().is_some();
         // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
         let mut builder = VmProofInputBuilder::new();
         let SystemBase {
@@ -687,6 +808,42 @@ impl AnyEnum for () {
 impl AnyEnum for Arc<VariableRangeCheckerChip> {
     fn as_any_kind(&self) -> &dyn Any {
         self
+    }
+}
+
+enum Either<E, P> {
+    Executor(E),
+    Periphery(P),
+}
+
+impl<'a, E, P> ChipUsageGetter for Either<&'a E, &'a P>
+where
+    E: ChipUsageGetter,
+    P: ChipUsageGetter,
+{
+    fn air_name(&self) -> String {
+        match self {
+            Either::Executor(chip) => chip.air_name(),
+            Either::Periphery(chip) => chip.air_name(),
+        }
+    }
+    fn current_trace_height(&self) -> usize {
+        match self {
+            Either::Executor(chip) => chip.current_trace_height(),
+            Either::Periphery(chip) => chip.current_trace_height(),
+        }
+    }
+    fn current_trace_cells(&self) -> usize {
+        match self {
+            Either::Executor(chip) => chip.current_trace_cells(),
+            Either::Periphery(chip) => chip.current_trace_cells(),
+        }
+    }
+    fn trace_width(&self) -> usize {
+        match self {
+            Either::Executor(chip) => chip.trace_width(),
+            Either::Periphery(chip) => chip.trace_width(),
+        }
     }
 }
 

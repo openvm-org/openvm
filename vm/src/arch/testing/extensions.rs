@@ -16,19 +16,19 @@ fn test_rv32i() {
     let execution_bus = builder.system_base().execution_bus();
     let program_bus = builder.system_base().program_bus();
 
-    let mut rv32i = VmInventory::new();
-    rv32i.add_executor(
-        Rv32BaseAluChip::<F>::new(
-            Rv32BaseAluAdapterChip::new(
-                execution_bus,
-                program_bus,
-                builder.memory_controller().clone(),
-            ),
-            BaseAluCoreChip::new(),
-            builder.memory_controller().clone(),
-        ),
-        Rv32BaseAlu256Opcode::iter(),
-    );
+    // let mut rv32i = VmInventory::new();
+    // rv32i.add_executor(
+    //     Rv32BaseAluChip::<F>::new(
+    //         Rv32BaseAluAdapterChip::new(
+    //             execution_bus,
+    //             program_bus,
+    //             builder.memory_controller().clone(),
+    //         ),
+    //         BaseAluCoreChip::new(),
+    //         builder.memory_controller().clone(),
+    //     ),
+    //     Rv32BaseAlu256Opcode::iter(),
+    // );
 
     todo!()
 }
