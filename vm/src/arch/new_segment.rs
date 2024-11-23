@@ -224,7 +224,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
                 for (air_name, now_value, &prev_value) in
-                    izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
+                    itertools::izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
                 {
                     if prev_value != now_value {
                         let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
@@ -265,7 +265,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         #[cfg(feature = "bench-metrics")]
         if collect_metrics {
             self.collected_metrics.chip_heights =
-                izip!(self.air_names.clone(), self.current_trace_heights()).collect();
+                itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
 
             self.collected_metrics.emit();
             if did_terminate {
