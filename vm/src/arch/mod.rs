@@ -7,7 +7,7 @@ mod execution;
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
-mod new_segment;
+// mod new_segment;
 
 // delete once extensions is stable
 mod chip_set;

@@ -49,10 +49,10 @@ const PUBLIC_VALUES_AIR_ID: usize = 2;
 /// Merkle AIR commits start/final memory states.
 const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
-pub const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
-pub const MEMORY_BUS: MemoryBus = MemoryBus(1);
-pub const PROGRAM_BUS: ProgramBus = ProgramBus(2);
-pub const RANGE_CHECKER_BUS: usize = 3;
+const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
+const MEMORY_BUS: MemoryBus = MemoryBus(1);
+const PROGRAM_BUS: ProgramBus = ProgramBus(2);
+const RANGE_CHECKER_BUS: usize = 3;
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
@@ -283,6 +283,26 @@ pub struct SystemBase<F> {
     pub memory_controller: MemoryControllerRef<F>,
     pub connector_chip: VmConnectorChip<F>,
     pub program_chip: ProgramChip<F>,
+
+    range_checker_bus: VariableRangeCheckerBus,
+}
+
+impl<F> SystemBase<F> {
+    pub fn range_checker_bus(&self) -> VariableRangeCheckerBus {
+        self.range_checker_bus
+    }
+
+    pub fn memory_bus(&self) -> MemoryBus {
+        MEMORY_BUS
+    }
+
+    pub fn program_bus(&self) -> ProgramBus {
+        PROGRAM_BUS
+    }
+
+    pub fn execution_bus(&self) -> ExecutionBus {
+        EXECUTION_BUS
+    }
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -376,6 +396,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             connector_chip,
             memory_controller,
             range_checker_chip: range_checker,
+            range_checker_bus: range_bus,
         };
 
         Self {
@@ -499,6 +520,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             memory_controller,
             connector_chip,
             program_chip,
+            ..
         } = self.base;
         // System: Program Chip
         debug_assert_eq!(builder.curr_air_id, PROGRAM_AIR_ID);
