@@ -44,12 +44,12 @@ pub trait IntrinsicCurve {
 }
 
 axvm::moduli_setup! {
-    Secp256k1Coord = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F";
-    Secp256k1Scalar = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141";
+    Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },
+    Secp256k1Scalar { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141" },
 }
 
 axvm::sw_setup! {
-    Secp256k1Point = Secp256k1Coord;
+    Secp256k1Point { mod_type = Secp256k1Coord },
 }
 
 impl CyclicGroup for Secp256k1Point {
@@ -74,4 +74,9 @@ impl CyclicGroup for Secp256k1Point {
 impl IntrinsicCurve for Secp256k1 {
     type Scalar = Secp256k1Scalar;
     type Point = Secp256k1Point;
+}
+
+pub fn setup_moduli() {
+    setup_Secp256k1Coord();
+    setup_Secp256k1Scalar();
 }
