@@ -50,6 +50,7 @@ fn test_add_ne() {
         config,
         Rv32WeierstrassOpcode::default_offset(),
     );
+    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -118,6 +119,7 @@ fn test_double() {
         Rv32WeierstrassOpcode::default_offset(),
         BigUint::zero(),
     );
+    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
 
     let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
@@ -184,6 +186,7 @@ fn test_p256_double() {
         Rv32WeierstrassOpcode::default_offset(),
         a,
     );
+    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
 
     let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
