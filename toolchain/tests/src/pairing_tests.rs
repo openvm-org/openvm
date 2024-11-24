@@ -161,15 +161,6 @@ mod bn254 {
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-        // let s = AffinePoint::new(
-        //     Fq::from_raw([4, 0, 0, 0]) * S.x(),
-        //     Fq::from_raw([12, 0, 0, 0]).neg() * S.y(),
-        // );
-        // let q = AffinePoint::new(
-        //     Fq2::new(Fq::from_raw([6, 0, 0, 0]).neg(), Fq::ZERO) * Q.x(),
-        //     Fq2::new(Fq::from_raw([2, 0, 0, 0]), Fq::ZERO) * Q.y(),
-        // );
-
         // Test miller_loop
         let f = Bn254::multi_miller_loop(&s, &q);
         let io0 = s

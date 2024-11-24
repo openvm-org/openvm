@@ -199,11 +199,9 @@ fn test_fp_one() {
 
 #[test]
 fn test_bls12381_miller_loop() {
-    // let mut rng = StdRng::seed_from_u64(65);
-    // let h2c_p = G1Affine::random(&mut rng);
-    // let h2c_q = G2Affine::random(&mut rng);
-    let h2c_p = G1Affine::generator();
-    let h2c_q = G2Affine::generator();
+    let mut rng = StdRng::seed_from_u64(65);
+    let h2c_p = G1Affine::random(&mut rng);
+    let h2c_q = G2Affine::random(&mut rng);
 
     let p = AffinePoint {
         x: convert_bls12381_halo2_fq_to_fp(h2c_p.x),

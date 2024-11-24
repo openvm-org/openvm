@@ -126,11 +126,6 @@ mod tests {
             BN254.XI,
             Fp12Opcode::default_offset(),
         );
-        // assert_eq!(
-        //     chip.0.core.expr().builder.num_variables,
-        //     2,
-        //     "Fp12MulDiv should only introduce new z Fp2 variable (2 Fp var)"
-        // );
 
         let mut rng = StdRng::seed_from_u64(64);
         let x = Fq12::random(&mut rng);
