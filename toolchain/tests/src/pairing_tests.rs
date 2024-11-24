@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::str::FromStr;
+
 use ax_ecc_execution::axvm_ecc::{
     algebra::field::FieldExtension,
     halo2curves::ff::Field,
@@ -142,10 +144,26 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("bn254_miller_loop")?;
+        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bn254])
+        //         .add_ecc_support(vec![EcCurve::Bn254])
+        //         .add_modular_support(vec![BN254.MODULUS.clone()])
+        //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+        // );
         let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bn254]), // .add_ecc_support(vec![EcCurve::Bn254]),
-                                                                               // .add_modular_support(vec![BN254.MODULUS.clone()])
-                                                                               // .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+            VmConfig::rv32im()
+                .add_pairing_support(vec![PairingCurve::Bn254])
+                .add_modular_support(
+                    exe.custom_op_config
+                        .intrinsics
+                        .field_arithmetic
+                        .primes
+                        .iter()
+                        .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+                        .collect(),
+                ),
         );
 
         // let mut rng = rand::rngs::StdRng::seed_from_u64(256);
