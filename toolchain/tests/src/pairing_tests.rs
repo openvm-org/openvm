@@ -144,7 +144,6 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("bn254_miller_loop")?;
-        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im()
         //         .add_pairing_support(vec![PairingCurve::Bn254])
@@ -152,6 +151,8 @@ mod bn254 {
         //         .add_modular_support(vec![BN254.MODULUS.clone()])
         //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
         // );
+
+        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
         let executor = VmExecutor::<F>::new(
             VmConfig::rv32im()
                 .add_pairing_support(vec![PairingCurve::Bn254])
@@ -166,7 +167,6 @@ mod bn254 {
                 ),
         );
 
-        // let mut rng = rand::rngs::StdRng::seed_from_u64(256);
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
