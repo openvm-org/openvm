@@ -1162,6 +1162,28 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
+                _ => unreachable!("Unsupported executor"),
+            }
+        }
+
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_pairing_fp12_op_executor_tuple(&self.supported_pairing_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&global_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            match executor {
                 ExecutorName::Fp12MulRv32_32 => {
                     let chip = Rc::new(RefCell::new(Fp12MulChip::new(
                         Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
@@ -1194,7 +1216,7 @@ impl VmConfig {
                     executors.insert(global_opcode_idx, chip.clone().into());
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
-                _ => unreachable!("Unsupported executor"),
+                _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
             }
         }
 
@@ -1539,12 +1561,6 @@ fn gen_pairing_executor_tuple(
                         ExecutorName::EcLineMulBy01234,
                         curve.prime(),
                     ),
-                    (
-                        Fp12Opcode::MUL as usize,
-                        pairing_class_offset,
-                        ExecutorName::Fp12MulRv32_32,
-                        curve.prime(),
-                    ),
                 ]
             } else if bytes <= 48 {
                 vec![
@@ -1578,13 +1594,38 @@ fn gen_pairing_executor_tuple(
                         ExecutorName::EcLineMulBy02345,
                         curve.prime(),
                     ),
-                    (
-                        Fp12Opcode::MUL as usize,
-                        pairing_class_offset,
-                        ExecutorName::Fp12MulRv32_48,
-                        curve.prime(),
-                    ),
                 ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
+}
+
+fn gen_pairing_fp12_op_executor_tuple(
+    supported_pairing_curves: &[PairingCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_pairing_curves
+        .iter()
+        .flat_map(|curve| {
+            let bytes = curve.prime().bits().div_ceil(8);
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+            if bytes <= 32 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_32,
+                    curve.prime(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_48,
+                    curve.prime(),
+                )]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }
@@ -1605,6 +1646,12 @@ fn gen_modular_executor_tuple(
             // We want to use log_num_lanes as a const, this likely requires a macro
             let class_offset = Rv32ModularArithmeticOpcode::default_offset()
                 + i * Rv32ModularArithmeticOpcode::COUNT;
+            println!(
+                "i: {}, count: {}, mod: {:?}",
+                i,
+                Rv32ModularArithmeticOpcode::COUNT,
+                modulus
+            );
             if bytes <= 32 {
                 res.extend([
                     (
@@ -1672,6 +1719,12 @@ fn gen_fp2_modular_executor_tuple(
             let modulus = &supported_modulus[modulus_idx];
             let bytes = modulus.bits().div_ceil(8);
             let class_offset = Fp2Opcode::default_offset() + modulus_idx * Fp2Opcode::COUNT;
+            println!(
+                "fp2_mod_exec modulus_idx: {}, count: {}, mod: {:?}",
+                modulus_idx,
+                Fp2Opcode::COUNT,
+                modulus
+            );
             if bytes <= 32 {
                 vec![
                     (
