@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    halo2curves_shims::ExpBigInt,
+    halo2curves_shims::ExpBytes,
     pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
 };
@@ -23,8 +23,8 @@ fn test_bls12_381_final_exp_hint() {
         "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         16,
     ).unwrap();
-    let c_qt = c.exp_bigint(Sign::Plus, q) * c.exp_bigint(Sign::Plus, SEED_NEG.clone());
-    // let c_qt = c.exp_bigint(q) * c.exp_bigint(SEED_NEG.clone());
+    let c_qt = c.exp_bytes(Sign::Plus, &q.to_bytes_be())
+        * c.exp_bytes(Sign::Plus, &SEED_NEG.to_bytes_be());
 
     assert_eq!(f * s, c_qt);
 }

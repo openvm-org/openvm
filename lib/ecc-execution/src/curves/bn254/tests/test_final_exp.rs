@@ -1,5 +1,5 @@
 use axvm_ecc::{
-    halo2curves_shims::ExpBigInt,
+    halo2curves_shims::ExpBytes,
     pairing::{FinalExp, MultiMillerLoop},
     AffineCoords, AffinePoint,
 };
@@ -28,7 +28,7 @@ fn test_bn254_final_exp_hint() {
     let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
     let lambda = six_x_plus_2.clone() + q_pows.clone();
 
-    let c_lambda = c.exp_bigint(Sign::Plus, lambda);
+    let c_lambda = c.exp_bytes(Sign::Plus, &lambda.to_bytes_be());
 
     assert_eq!(f * u, c_lambda);
 }

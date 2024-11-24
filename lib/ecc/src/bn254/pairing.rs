@@ -1,7 +1,8 @@
 use alloc::vec::Vec;
 
-use axvm_algebra::{field::FieldExtension, Field};
+use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
 use itertools::izip;
+use num_bigint::Sign;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -14,9 +15,10 @@ use super::{Bn254, Fp, Fp12, Fp2};
 #[cfg(not(target_os = "zkvm"))]
 use crate::pairing::PairingIntrinsics;
 use crate::{
+    halo2curves_shims::ExpBytes,
     pairing::{
-        Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
-        UnevaluatedLine,
+        Evaluatable, EvaluatedLine, FinalExp, FromLineDType, LineMulDType, MillerStep,
+        MultiMillerLoop, UnevaluatedLine,
     },
     AffinePoint,
 };
@@ -292,5 +294,78 @@ impl MultiMillerLoop for Bn254 {
         f = Self::evaluate_lines_vec(f, lines);
 
         (f, Q_acc)
+    }
+}
+
+#[allow(non_snake_case)]
+impl FinalExp for Bn254 {
+    type Fp = Fp;
+    type Fp2 = Fp2;
+    type Fp12 = Fp12;
+
+    fn assert_final_exp_is_one(
+        f: &Self::Fp12,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) {
+        let (c, u) = Self::final_exp_hint(f);
+        let c_inv = Fp12::ONE.div_unsafe(&c);
+
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
+        // c_mul = c^-{q^3 - q^2 + q}
+        let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
+        let c_q2_inv = Fp12::ONE.div_unsafe(&c_q2);
+        let c_q = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3 * c_q2_inv * c_q;
+
+        // Compute miller loop with c_inv
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+
+        assert_eq!(fc * c_mul * u, Fp12::ONE);
+    }
+
+    fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
+        // Residue witness
+        let mut c: Self::Fp12;
+        // Cubic nonresidue power
+        let u: Self::Fp12;
+
+        // get the 27th root of unity
+        let u_coeffs = Fp2::from_coeffs(Self::U27_COEFFS);
+        let unity_root_27 = Fp12::from_coeffs([
+            Fp2::ZERO,
+            Fp2::ZERO,
+            u_coeffs,
+            Fp2::ZERO,
+            Fp2::ZERO,
+            Fp2::ZERO,
+        ]);
+        debug_assert_eq!(
+            unity_root_27.exp_bytes(Sign::Plus, &27u32.to_be_bytes()),
+            Fp12::ONE
+        );
+
+        if f.exp_bytes(Sign::Plus, &Self::EXP1) == Fp12::ONE {
+            c = f.clone();
+            u = Fp12::ONE;
+        } else {
+            let f_mul_unity_root_27 = f * unity_root_27;
+            if f_mul_unity_root_27.exp_bytes(Sign::Plus, &Self::EXP1) == Fp12::ONE {
+                c = f_mul_unity_root_27;
+                u = unity_root_27;
+            } else {
+                c = f_mul_unity_root_27 * unity_root_27;
+                u = unity_root_27 * unity_root_27;
+                // u = unity_root_27.square();
+            }
+        }
+
+        // 1. Compute r-th root and exponentiate to rInv where
+        //   rInv = 1/r mod (p^12-1)/r
+        c = c.exp_bytes(Sign::Plus, &Self::R_INV);
     }
 }

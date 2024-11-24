@@ -199,6 +199,63 @@ mod bn254 {
         executor.execute(elf, vec![io_all])?;
         Ok(())
     }
+
+    #[test]
+    fn test_bn254_pairing_check() -> Result<()> {
+        let elf = build_example_program("bn254_pairing_check")?;
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bn254])
+        //         .add_ecc_support(vec![EcCurve::Bn254])
+        //         .add_modular_support(vec![BN254.MODULUS.clone()])
+        //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+        // );
+
+        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_pairing_support(vec![PairingCurve::Bn254])
+                .add_modular_support(
+                    exe.custom_op_config
+                        .intrinsics
+                        .field_arithmetic
+                        .primes
+                        .iter()
+                        .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+                        .collect(),
+                ),
+        );
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [S * Fr::from(4), S * Fr::from(12)];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [Q * Fr::from(8), Q * Fr::from(6)];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        executor.execute(elf, vec![io_all])?;
+        Ok(())
+    }
 }
 
 mod bls12_381 {

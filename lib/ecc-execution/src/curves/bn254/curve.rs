@@ -40,3 +40,19 @@ lazy_static! {
 }
 
 pub struct Bn254;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bigint_vals() {
+        println!("U27_COEFF");
+        println!("{:?}", U27_COEFF_0.to_bytes_le());
+        println!("{:?}", U27_COEFF_1.to_bytes_le());
+        println!("EXP1");
+        println!("{:?}", EXP1.to_bytes_be());
+        println!("EXP2");
+        println!("{:?}", EXP2.to_bytes_be());
+    }
+}

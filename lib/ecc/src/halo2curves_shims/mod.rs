@@ -6,13 +6,13 @@ use num_bigint::{BigUint, Sign};
 mod bls12_381;
 mod bn254;
 
-pub trait ExpBigInt: Field {
-    /// Exponentiates a field element by a BigUint with sign
-    fn exp_bigint(&self, sign: Sign, k: BigUint) -> Self
+pub trait ExpBytes: Field {
+    /// Exponentiates a field element by a value with a sign in big endian byte order
+    fn exp_bytes(&self, sign: Sign, bytes_be: &[u8]) -> Self
     where
         for<'a> &'a Self: Mul<&'a Self, Output = Self>,
     {
-        if k == BigUint::from(0u32) {
+        if is_one(bytes_be) {
             return Self::ONE;
         }
 
@@ -27,8 +27,7 @@ pub trait ExpBigInt: Field {
         let x_sq = &x * &x;
         let ops = [x.clone(), x_sq.clone(), &x_sq * &x];
 
-        let bytes = k.to_bytes_be();
-        for &b in bytes.iter() {
+        for &b in bytes_be.iter() {
             let mut mask = 0xc0;
             for j in 0..4 {
                 res = &res * &res * &res * &res;
@@ -43,4 +42,12 @@ pub trait ExpBigInt: Field {
     }
 }
 
-impl<F: Field> ExpBigInt for F where for<'a> &'a Self: Mul<&'a Self, Output = Self> {}
+impl<F: Field> ExpBytes for F where for<'a> &'a Self: Mul<&'a Self, Output = Self> {}
+
+fn is_one(v: &[u8]) -> bool {
+    if v.is_empty() {
+        return false;
+    }
+    // Check all bytes except the last one are 0
+    v[..v.len() - 1].iter().all(|&b| b == 0) && v[v.len() - 1] == 1
+}
