@@ -239,7 +239,7 @@ fn test_auto_carry_div() {
     // The choice of scalar (7) needs to be such that
     // 1. the denominator 7x^2 doesn't trigger autosave, >=8 doesn't work.
     // 2. But doing a division on it triggers autosave, because of division constraint, <= 6 doesn't work.
-    let mut x3 = x1.square().int_mul(8) / x2;
+    let mut x3 = x1.square().int_mul(7) / x2;
     x3.save();
 
     let builder = builder.borrow().clone();
