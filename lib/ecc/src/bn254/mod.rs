@@ -14,6 +14,13 @@ use crate::pairing::PairingIntrinsics;
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
 
+pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
+pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
+    0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
+    -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
+    0, 0, 1, 0, -1, 0, 1,
+];
+
 pub struct Bn254;
 
 impl Bn254 {

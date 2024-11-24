@@ -6,7 +6,6 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
     pairing::MillerLoopResult,
 };
-use itertools::Itertools;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};

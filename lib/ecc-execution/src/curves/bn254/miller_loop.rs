@@ -1,5 +1,6 @@
 use axvm_ecc::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
+    bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
     pairing::{
         Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },
@@ -8,7 +9,7 @@ use axvm_ecc::{
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
-use super::{Bn254, BN254_PBE_NAF, BN254_SEED};
+use super::Bn254;
 
 impl MillerStep for Bn254 {
     type Fp2 = Fq2;
@@ -124,7 +125,7 @@ impl MultiMillerLoop for Bn254 {
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BN254_SEED;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PBE_NAF;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Fq12, lines: Vec<EvaluatedLine<Fq2>>) -> Fq12 {
         let mut f = f;

@@ -204,12 +204,12 @@ impl MultiMillerLoop for Bls12_381 {
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
         let mut f = f.clone();
 
-        if c.is_some() {
+        if let Some(c) = c {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
             // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
             f.square_assign();
-            f *= c.unwrap();
+            f *= c;
         }
 
         let mut Q_acc = Q_acc;
@@ -234,7 +234,7 @@ impl MultiMillerLoop for Bls12_381 {
         let (Q_out_add, lines_S_plus_Q) = Q_acc
             .iter()
             .zip(Q.iter())
-            .map(|(Q_acc, Q)| Self::miller_add_step(&Q_acc, &Q))
+            .map(|(Q_acc, Q)| Self::miller_add_step(Q_acc, Q))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_add;
 
