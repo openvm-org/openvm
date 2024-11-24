@@ -125,6 +125,10 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                     let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS)
                         as usize
                         * Rv32ModularArithmeticOpcode::COUNT;
+                    println!(
+                        "mod_idx_shift: {}, base_funct7: {}",
+                        mod_idx_shift, base_funct7
+                    );
                     if base_funct7 == ModArithBaseFunct7::SetupMod as u8 {
                         let local_opcode = match dec_insn.rs2 {
                             0 => Rv32ModularArithmeticOpcode::SETUP_ADDSUB,
