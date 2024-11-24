@@ -168,6 +168,10 @@ impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
         "ProgramChip".to_string()
     }
 
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(self.true_program_length.next_power_of_two())
+    }
+
     fn current_trace_height(&self) -> usize {
         self.true_program_length
     }

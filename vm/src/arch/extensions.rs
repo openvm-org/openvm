@@ -552,6 +552,12 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         *self.streams.lock() = streams;
     }
 
+    /// This should **only** be called after segment execution has finished.
+    pub(super) fn take_streams(&mut self) -> Streams<F> {
+        std::mem::take(&mut self.streams.lock())
+    }
+
+    // This is O(1).
     pub(crate) fn num_airs(&self) -> usize {
         3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
     }
@@ -619,6 +625,34 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().current_trace_height()])
             .collect()
     }
+    /// Return dynamic trace heights of all chips in order, or 0 if
+    /// chip has constant height.
+    // Used for continuation segmentation logic, so this is performance-sensitive.
+    // Return iterator so we can break early.
+    pub(crate) fn dynamic_trace_heights(&self) -> impl Iterator<Item = usize> + '_
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        // program_chip, connector_chip
+        [0, 0]
+            .into_iter()
+            .chain(self._public_values_chip().map(|c| c.current_trace_height()))
+            .chain(self.memory_controller().borrow().current_trace_heights())
+            .chain(self.chips_excluding_pv_chip().map(|c| match c {
+                // executor should never be constant height
+                Either::Executor(c) => c.current_trace_height(),
+                Either::Periphery(c) => {
+                    if c.constant_trace_height().is_some() {
+                        0
+                    } else {
+                        c.current_trace_height()
+                    }
+                }
+            }))
+            .chain([0]) // range_checker_chip
+    }
+
     /// Return trace cells of all chips in order.
     pub(crate) fn current_trace_cells(&self) -> Vec<usize>
     where

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -11,13 +9,14 @@ use axvm_instructions::exe::FnBound;
 use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 
 use super::{AnyEnum, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    metrics::{cycle_tracker::CycleTracker, VmMetrics},
+    metrics::cycle_tracker::CycleTracker,
     system::{
         memory::{Equipartition, CHUNK},
         program::ExecutionError,
@@ -32,20 +31,19 @@ where
     F: PrimeField32,
     VmConfig: VmGenericConfig<F>,
 {
-    pub config: VmConfig,
     pub chip_complex: VmChipComplex<F, VmConfig::Executor, VmConfig::Periphery>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
     /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
+    #[cfg(feature = "bench-metrics")]
     pub(crate) collected_metrics: VmMetrics,
 
     #[allow(dead_code)]
     pub(crate) fn_bounds: FnBounds,
 
     pub air_names: Vec<String>,
-    pub const_height_air_ids: Vec<usize>,
     pub since_last_segment_check: usize,
 }
 
@@ -57,13 +55,14 @@ pub struct ExecutionSegmentState {
 impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: VmConfig,
+        config: &VmConfig,
         program: Program<F>,
-        streams: Arc<Mutex<Streams<F>>>,
+        init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
         fn_bounds: FnBounds,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex(streams);
+        let mut chip_complex = config.create_chip_complex();
+        chip_complex.set_streams(init_streams);
         chip_complex.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
@@ -73,17 +72,15 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 .set_initial_memory(initial_memory);
         }
         let air_names = chip_complex.air_names();
-        let const_height_air_ids = chip_complex.const_height_air_ids();
 
         Self {
-            config,
             chip_complex,
             final_memory: None,
             cycle_tracker: CycleTracker::new(),
+            #[cfg(feature = "bench-metrics")]
             collected_metrics: Default::default(),
             fn_bounds,
             air_names,
-            const_height_air_ids,
             since_last_segment_check: 0,
         }
     }
@@ -303,21 +300,15 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
             return false;
         }
         self.since_last_segment_check = 0;
-        let heights = self.current_trace_heights();
-        let mut const_height_idx = 0;
-        for (i, height) in heights.into_iter().enumerate() {
-            if const_height_idx >= self.const_height_air_ids.len()
-                || self.const_height_air_ids[const_height_idx] != i
-            {
-                if height > self.chip_complex.config().max_segment_len {
-                    tracing::info!(
-                        "Should segment because chip {} has height {}",
-                        self.air_names[i],
-                        height
-                    );
-                    return true;
-                }
-                const_height_idx += 1;
+        let heights = self.chip_complex.dynamic_trace_heights();
+        for (i, height) in heights.enumerate() {
+            if height > self.system_config().max_segment_len {
+                tracing::info!(
+                    "Should segment because chip {} has height {}",
+                    self.air_names[i],
+                    height
+                );
+                return true;
             }
         }
 
@@ -327,6 +318,8 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
     pub fn current_trace_cells(&self) -> Vec<usize> {
         self.chip_complex.current_trace_cells()
     }
+    /// Gets current trace heights for each chip.
+    /// Includes constant trace heights.
     pub fn current_trace_heights(&self) -> Vec<usize> {
         self.chip_complex.current_trace_heights()
     }

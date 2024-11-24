@@ -206,6 +206,10 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
         "VmConnectorAir".to_string()
     }
 
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(2)
+    }
+
     fn current_trace_height(&self) -> usize {
         2
     }

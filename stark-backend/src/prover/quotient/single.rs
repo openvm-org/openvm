@@ -84,8 +84,11 @@ where
                 (0..preprocessed_width)
                     .map(|col| {
                         PackedVal::<SC>::from_fn(|offset| {
-                            preprocessed_trace_on_quotient_domain
-                                .get(wrap(i_start + offset + step_idx * next_step), col)
+                            Matrix::get(
+                                &preprocessed_trace_on_quotient_domain,
+                                wrap(i_start + offset + step_idx * next_step),
+                                col,
+                            )
                         })
                     })
                     .collect_vec()

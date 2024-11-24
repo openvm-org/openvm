@@ -1,11 +1,41 @@
+use std::{cell::RefCell, rc::Rc};
+
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::program::DEFAULT_PC_STEP;
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::AbstractField;
 
 use crate::system::program::{ExecutionError, ProgramBus};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
+
+pub trait InstructionExecutor<F> {
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
+    fn execute(
+        &mut self,
+        instruction: Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>>;
+
+    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
+    /// if it is a supported opcode by the present executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
+}
+
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
+    fn execute(
+        &mut self,
+        instruction: Instruction<F>,
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        self.borrow_mut().execute(instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow)]
 #[repr(C)]

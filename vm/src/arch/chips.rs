@@ -9,14 +9,12 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::AirProofInput,
 };
-use axvm_instructions::instruction::Instruction;
 use derive_more::From;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::EnumDiscriminants;
 
 use crate::{
-    arch::ExecutionState,
     derive::InstructionExecutor,
     intrinsics::{
         ecc::{
@@ -41,36 +39,8 @@ use crate::{
         loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
     },
     rv32im::*,
-    system::{phantom::PhantomChip, program::ExecutionError},
+    system::phantom::PhantomChip,
 };
-
-pub trait InstructionExecutor<F> {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &mut self,
-        instruction: Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError>;
-
-    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
-    /// if it is a supported opcode by the present executor.
-    fn get_opcode_name(&self, opcode: usize) -> String;
-}
-
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
-    fn execute(
-        &mut self,
-        instruction: Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
-        self.borrow_mut().execute(instruction, prev_state)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
-}
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
 /// each chip. Change of the order may cause break changes of VKs.
