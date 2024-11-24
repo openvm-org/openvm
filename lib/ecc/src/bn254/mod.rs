@@ -17,10 +17,11 @@ mod tests;
 pub struct Bn254;
 
 impl Bn254 {
+    // 1 = "0100000000000000000000000000000000000000000000000000000000000000"
     pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
         Fp2 {
             c0: Bn254Fp(hex!(
-                "0100000000000000000000000000000000000000000000000000000000000000"
+                "9d0d8fc58d435dd33d0bc7f528eb780a2c4679786fa36e662fdf079ac1770a0e"
             )),
             c1: Bn254Fp(hex!(
                 "0000000000000000000000000000000000000000000000000000000000000000"
@@ -45,10 +46,10 @@ impl Bn254 {
     ];
     pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
         c0: Bn254Fp(hex!(
-            "e4bbdd0c2936b629bb30f162e133bacb31a9d1b6f9645366253570bea500f8dd"
+            "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
         )),
         c1: Bn254Fp(hex!(
-            "a1d77ce45ffe77c707affd117826d1db6d16bd27bb7edc6b2c87200285defecc"
+            "e3b02326637fd382d25ba28fc97d80212b6f79eca7b504079a0441acbc3cc007"
         )),
     };
 }

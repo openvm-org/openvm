@@ -152,7 +152,7 @@ where
             f = Self::evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = Self::post_loop(&f, Q_acc, Q, c, &xy_fracs);
+        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), Q, c, &xy_fracs);
         f = f_out;
 
         f

@@ -190,6 +190,9 @@ fn test_fp_one() {
 
 #[test]
 fn test_bn254_miller_loop() {
+    // use ax_ecc_execution::curves::bn254::Bn254 as Bn254Exec;
+    use crate::pairing::MultiMillerLoop as ExecMultiMillerLoop; //
+
     // let mut rng = StdRng::seed_from_u64(65);
     // let h2c_p = G1Affine::random(&mut rng);
     // let h2c_q = G2Affine::random(&mut rng);
@@ -209,6 +212,17 @@ fn test_bn254_miller_loop() {
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
     let compare_final = compare_miller.final_exponentiation();
+
+    // let p_exec = AffinePoint {
+    //     x: h2c_p.x,
+    //     y: h2c_p.y,
+    // };
+    // let q_exec = AffinePoint {
+    //     x: h2c_q.x,
+    //     y: h2c_q.y,
+    // };
+
+    // let f_exec = Bn254::multi_miller_loop(&[p_exec], &[q_exec]);
 
     let f = Bn254::multi_miller_loop(&[p], &[q]);
     let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);

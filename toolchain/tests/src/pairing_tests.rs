@@ -22,7 +22,7 @@ mod bn254 {
     use ax_ecc_execution::{
         axvm_ecc::{
             halo2curves::{
-                bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine},
+                bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
                 ff::Field,
             },
             pairing::MillerStep,
@@ -154,25 +154,33 @@ mod bn254 {
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
-        let s = AffinePoint::new(
-            Fq::from_raw([4, 0, 0, 0]) * S.x(),
-            Fq::from_raw([12, 0, 0, 0]).neg() * S.y(),
-        );
-        let q = AffinePoint::new(
-            Fq2::new(Fq::from_raw([6, 0, 0, 0]).neg(), Fq::ZERO) * Q.x(),
-            Fq2::new(Fq::from_raw([2, 0, 0, 0]), Fq::ZERO) * Q.y(),
-        );
+        let mut S_mul = [S * Fr::from(4), S * Fr::from(12)];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [Q * Fr::from(8), Q * Fr::from(6)];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // let s = AffinePoint::new(
+        //     Fq::from_raw([4, 0, 0, 0]) * S.x(),
+        //     Fq::from_raw([12, 0, 0, 0]).neg() * S.y(),
+        // );
+        // let q = AffinePoint::new(
+        //     Fq2::new(Fq::from_raw([6, 0, 0, 0]).neg(), Fq::ZERO) * Q.x(),
+        //     Fq2::new(Fq::from_raw([2, 0, 0, 0]), Fq::ZERO) * Q.y(),
+        // );
 
         // Test miller_loop
-        let f = Bn254::multi_miller_loop(&[s.clone()], &[q.clone()]);
-        let io0 = [s.x, s.y]
+        let f = Bn254::multi_miller_loop(&s, &q);
+        let io0 = s
             .into_iter()
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        let io1 = [q.x, q.y]
+        let io1 = q
             .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
             .chain(f.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
