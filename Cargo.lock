@@ -677,6 +677,7 @@ dependencies = [
  "k256",
  "num-bigint 0.4.6",
  "num-bigint-dig",
+ "num-traits",
  "rand 0.8.5",
  "strum_macros",
 ]

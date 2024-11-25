@@ -6,14 +6,16 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6, Fr, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
     pairing::MillerLoopResult,
 };
+use num_bigint::BigUint;
+use num_traits::Num;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::Bn254,
     pairing::{
-        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingCheck,
-        PairingIntrinsics,
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, ExpBytes, FinalExp,
+        MultiMillerLoop, PairingCheck, PairingIntrinsics,
     },
     AffinePoint,
 };
@@ -67,6 +69,20 @@ fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
             c2: convert_bn254_fp2_to_halo2_fq2(c[5].clone()),
         },
     }
+}
+
+fn convert_bn254_affine_point_halo2_fq_to_fp(p: AffinePoint<Fq>) -> AffinePoint<Fp> {
+    AffinePoint::new(
+        convert_bn254_halo2_fq_to_fp(p.x),
+        convert_bn254_halo2_fq_to_fp(p.y),
+    )
+}
+
+fn convert_bn254_affine_point_halo2_fq2_to_fp2(p: AffinePoint<Fq2>) -> AffinePoint<Fp2> {
+    AffinePoint::new(
+        convert_bn254_halo2_fq2_to_fp2(p.x),
+        convert_bn254_halo2_fq2_to_fp2(p.y),
+    )
 }
 
 #[test]
@@ -218,35 +234,60 @@ fn test_bn254_miller_loop() {
 
 #[test]
 #[allow(non_snake_case)]
-fn test_bn254_pairing_check() {
+fn test_bn254_final_exp_hint() {
     let S = G1Affine::generator();
     let Q = G2Affine::generator();
 
-    let S_mul = [S * Fr::from(1), S * Fr::from(2)];
-    let Q_mul = [Q * -Fr::from(2), Q * Fr::from(1)];
+    let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
+    let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
 
     let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
     let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
     let ps = [
-        AffinePoint::new(
-            convert_bn254_halo2_fq_to_fp(s[0].x),
-            convert_bn254_halo2_fq_to_fp(s[0].y),
-        ),
-        AffinePoint::new(
-            convert_bn254_halo2_fq_to_fp(s[1].x),
-            convert_bn254_halo2_fq_to_fp(s[1].y),
-        ),
+        convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
+        convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
     ];
     let qs = [
-        AffinePoint::new(
-            convert_bn254_halo2_fq2_to_fp2(q[0].x),
-            convert_bn254_halo2_fq2_to_fp2(q[0].y),
-        ),
-        AffinePoint::new(
-            convert_bn254_halo2_fq2_to_fp2(q[1].x),
-            convert_bn254_halo2_fq2_to_fp2(q[1].y),
-        ),
+        convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
+        convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
+    ];
+
+    let f = Bn254::multi_miller_loop(&ps, &qs);
+    let (c, u) = Bn254::final_exp_hint(&f);
+
+    let q = BigUint::from_str_radix(
+        "21888242871839275222246405745257275088696311157297823662689037894645226208583",
+        10,
+    )
+    .unwrap();
+    let six_x_plus_2: BigUint = BigUint::from_str_radix("29793968203157093288", 10).unwrap();
+    let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
+    let lambda = six_x_plus_2.clone() + q_pows.clone();
+
+    let c_lambda = c.exp_bytes(true, &lambda.to_bytes_be());
+    assert_eq!(f * u, c_lambda);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_bn254_pairing_check() {
+    let S = G1Affine::generator();
+    let Q = G2Affine::generator();
+
+    let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
+    let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
+
+    let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+    let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+    let ps = [
+        convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
+        convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
+    ];
+    let qs = [
+        convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
+        convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
     ];
 
     assert!(Bn254::pairing_check(&ps, &qs).is_ok());

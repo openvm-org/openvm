@@ -1,3 +1,4 @@
+mod exp_bytes;
 mod final_exp;
 mod line;
 mod miller_loop;
@@ -12,6 +13,7 @@ use axvm_algebra::{
     Field, IntMod,
 };
 use axvm_platform::constants::{PairingBaseFunct7, PAIRING_MAX_KINDS};
+pub use exp_bytes::*;
 pub use final_exp::*;
 pub use line::*;
 pub use miller_loop::*;

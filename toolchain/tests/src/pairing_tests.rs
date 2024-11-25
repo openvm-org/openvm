@@ -144,6 +144,7 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("bn254_miller_loop")?;
+        let executor = VmExecutor::<F>::new(VmConfig::rv32im());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im()
         //         .add_pairing_support(vec![PairingCurve::Bn254])
@@ -152,20 +153,20 @@ mod bn254 {
         //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
         // );
 
-        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_modular_support(
-                    exe.custom_op_config
-                        .intrinsics
-                        .field_arithmetic
-                        .primes
-                        .iter()
-                        .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-                        .collect(),
-                ),
-        );
+        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bn254])
+        //         .add_modular_support(
+        //             exe.custom_op_config
+        //                 .intrinsics
+        //                 .field_arithmetic
+        //                 .primes
+        //                 .iter()
+        //                 .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+        //                 .collect(),
+        //         ),
+        // );
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();

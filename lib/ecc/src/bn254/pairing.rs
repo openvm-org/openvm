@@ -3,7 +3,6 @@ use core::fmt::Error;
 
 use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
 use itertools::izip;
-use num_bigint::Sign;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -16,9 +15,8 @@ use super::{Bn254, Fp, Fp12, Fp2};
 #[cfg(not(target_os = "zkvm"))]
 use crate::pairing::PairingIntrinsics;
 use crate::{
-    halo2curves_shims::ExpBytes,
     pairing::{
-        Evaluatable, EvaluatedLine, FinalExp, FromLineDType, LineMulDType, MillerStep,
+        Evaluatable, EvaluatedLine, ExpBytes, FinalExp, FromLineDType, LineMulDType, MillerStep,
         MultiMillerLoop, PairingCheck, UnevaluatedLine,
     },
     AffinePoint,
@@ -346,16 +344,16 @@ impl FinalExp for Bn254 {
             Fp2::ZERO,
         ]);
         debug_assert_eq!(
-            unity_root_27.exp_bytes(Sign::Plus, &27u32.to_be_bytes()),
+            unity_root_27.exp_bytes(true, &27u32.to_be_bytes()),
             Fp12::ONE
         );
 
-        if f.exp_bytes(Sign::Plus, &Self::EXP1) == Fp12::ONE {
+        if f.exp_bytes(true, &Self::EXP1) == Fp12::ONE {
             c = f.clone();
             u = Fp12::ONE;
         } else {
             let f_mul_unity_root_27 = f * &unity_root_27;
-            if f_mul_unity_root_27.exp_bytes(Sign::Plus, &Self::EXP1) == Fp12::ONE {
+            if f_mul_unity_root_27.exp_bytes(true, &Self::EXP1) == Fp12::ONE {
                 c = f_mul_unity_root_27;
                 u = unity_root_27.clone();
             } else {
@@ -366,20 +364,20 @@ impl FinalExp for Bn254 {
 
         // 1. Compute r-th root and exponentiate to rInv where
         //   rInv = 1/r mod (p^12-1)/r
-        c = c.exp_bytes(Sign::Plus, &Self::R_INV);
+        c = c.exp_bytes(true, &Self::R_INV);
 
         // 2. Compute m-th root where
         //   m = (6x + 2 + q^3 - q^2 +q)/3r
         // Exponentiate to mInv where
         //   mInv = 1/m mod p^12-1
-        c = c.exp_bytes(Sign::Plus, &Self::M_INV);
+        c = c.exp_bytes(true, &Self::M_INV);
 
         // 3. Compute cube root
         // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
         // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
         // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
         // where k=12 and n=3 here and exp2 = (s+1)/3
-        let mut x = c.exp_bytes(Sign::Plus, &Self::EXP2);
+        let mut x = c.exp_bytes(true, &Self::EXP2);
 
         // 3^t is ord(x^3 / residueWitness)
         let c_inv = Fp12::ONE.div_unsafe(&c);
@@ -390,8 +388,6 @@ impl FinalExp for Bn254 {
         // Modified Tonelli-Shanks algorithm for computing the cube root
         fn tonelli_shanks_loop(x3: &mut Fp12, tmp: &mut Fp12, t: &mut i32) {
             while *x3 != Fp12::ONE {
-                // x3.square_assign();
-                // *tmp = x3.clone();
                 *tmp = &*x3 * &*x3;
                 *x3 *= tmp.clone();
                 *t += 1;
@@ -401,7 +397,7 @@ impl FinalExp for Bn254 {
         tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
 
         while t != 0 {
-            tmp = unity_root_27.exp_bytes(Sign::Plus, &Self::EXP2);
+            tmp = unity_root_27.exp_bytes(true, &Self::EXP2);
             x *= &tmp;
 
             x3 = &x * &x * &x * &c_inv;
