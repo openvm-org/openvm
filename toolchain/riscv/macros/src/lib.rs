@@ -1,19 +1,55 @@
 use syn::{
     parse::{Parse, ParseStream},
-    Stmt,
+    punctuated::Punctuated,
+    Expr, Ident, Token,
 };
 
-pub struct Stmts {
-    pub stmts: Vec<Stmt>,
+pub struct MacroArgs {
+    pub items: Vec<Item>,
 }
 
-impl Parse for Stmts {
+pub struct Item {
+    pub name: Ident,
+    pub params: Punctuated<Param, Token![,]>,
+}
+
+pub struct Param {
+    pub name: Ident,
+    pub eq_token: Token![=],
+    pub value: Expr,
+}
+
+impl Parse for MacroArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut stmts = Vec::new();
-        while !input.is_empty() {
-            stmts.push(input.parse()?);
-        }
-        Ok(Stmts { stmts })
+        Ok(MacroArgs {
+            items: input
+                .parse_terminated(Item::parse, Token![,])?
+                .into_iter()
+                .collect(),
+        })
+    }
+}
+
+impl Parse for Item {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+        let content;
+        syn::braced!(content in input);
+        let params = content.parse_terminated(Param::parse, Token![,])?;
+        Ok(Item { name, params })
+    }
+}
+
+impl Parse for Param {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        let eq_token: Token![=] = input.parse()?;
+        let value: Expr = input.parse()?;
+        Ok(Param {
+            name,
+            eq_token,
+            value,
+        })
     }
 }
 

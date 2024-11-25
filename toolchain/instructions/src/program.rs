@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, fmt::Display};
+use std::{fmt, fmt::Display};
 
 use itertools::Itertools;
 use p3_field::Field;
@@ -18,7 +18,7 @@ pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the hood and divide the incoming `pc` by whatever given.
-    pub instructions_and_debug_infos: HashMap<u32, (Instruction<F>, Option<DebugInfo>)>,
+    instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
     /// The upper bound of the number of public values the program would publish.
@@ -28,6 +28,15 @@ pub struct Program<F> {
 }
 
 impl<F: Field> Program<F> {
+    pub fn new_empty(step: u32, pc_base: u32, max_num_public_values: usize) -> Self {
+        Self {
+            instructions_and_debug_infos: vec![],
+            step,
+            pc_base,
+            max_num_public_values,
+        }
+    }
+
     pub fn new_without_debug_infos(
         instructions: &[Instruction<F>],
         step: u32,
@@ -41,13 +50,7 @@ impl<F: Field> Program<F> {
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
-                .enumerate()
-                .map(|(index, instruction)| {
-                    (
-                        index as u32 * step + pc_base,
-                        ((*instruction).clone(), None),
-                    )
-                })
+                .map(|instruction| Some((instruction.clone(), None)))
                 .collect(),
             step,
             pc_base,
@@ -65,14 +68,8 @@ impl<F: Field> Program<F> {
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
-                .zip(debug_infos.iter())
-                .enumerate()
-                .map(|(index, (instruction, debug_info))| {
-                    (
-                        (index as u32) * DEFAULT_PC_STEP,
-                        ((*instruction).clone(), (*debug_info).clone()),
-                    )
-                })
+                .zip_eq(debug_infos.iter())
+                .map(|(instruction, debug_info)| Some((instruction.clone(), debug_info.clone())))
                 .collect(),
             step: DEFAULT_PC_STEP,
             pc_base: 0,
@@ -100,19 +97,62 @@ impl<F: Field> Program<F> {
     pub fn instructions(&self) -> Vec<Instruction<F>> {
         self.instructions_and_debug_infos
             .iter()
-            .sorted_by_key(|(pc, _)| *pc)
-            .map(|(_, (instruction, _))| instruction)
-            .cloned()
+            .flatten()
+            .map(|(instruction, _)| instruction.clone())
             .collect()
     }
 
     pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
         self.instructions_and_debug_infos
             .iter()
-            .sorted_by_key(|(pc, _)| *pc)
-            .map(|(_, (_, debug_info))| debug_info)
-            .cloned()
+            .flatten()
+            .map(|(_, debug_info)| debug_info.clone())
             .collect()
+    }
+
+    pub fn enumerate_by_pc(&self) -> Vec<(u32, Instruction<F>, Option<DebugInfo>)> {
+        self.instructions_and_debug_infos
+            .iter()
+            .enumerate()
+            .flat_map(|(index, option)| {
+                option.clone().map(|(instruction, debug_info)| {
+                    (
+                        self.pc_base + (self.step * (index as u32)),
+                        instruction,
+                        debug_info,
+                    )
+                })
+            })
+            .collect()
+    }
+
+    // such that pc = pc_base + (step * index)
+    pub fn get_instruction_and_debug_info(
+        &self,
+        index: usize,
+    ) -> Option<(Instruction<F>, Option<DebugInfo>)> {
+        self.instructions_and_debug_infos
+            .get(index)
+            .cloned()
+            .flatten()
+    }
+
+    pub fn push_instruction_and_debug_info(
+        &mut self,
+        instruction: Instruction<F>,
+        debug_info: Option<DebugInfo>,
+    ) {
+        self.instructions_and_debug_infos
+            .push(Some((instruction, debug_info)));
+    }
+
+    pub fn push_instruction(&mut self, instruction: Instruction<F>) {
+        self.push_instruction_and_debug_info(instruction, None);
+    }
+
+    pub fn append(&mut self, other: Program<F>) {
+        self.instructions_and_debug_infos
+            .extend(other.instructions_and_debug_infos);
     }
 }
 impl<F: Field> Display for Program<F> {

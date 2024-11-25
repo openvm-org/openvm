@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use itertools::izip;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     config::{StarkGenericConfig, Val},
@@ -73,5 +73,14 @@ impl<SC: StarkGenericConfig> AirProofInput<SC> {
         izip!(airs, traces)
             .map(|(air, trace)| AirProofInput::simple_no_pis(air, trace))
             .collect()
+    }
+    /// Return the height of the main trace.
+    pub fn main_trace_height(&self) -> usize {
+        if self.raw.cached_mains.is_empty() {
+            // An AIR must have a main trace.
+            self.raw.common_main.as_ref().unwrap().height()
+        } else {
+            self.raw.cached_mains[0].height()
+        }
     }
 }

@@ -16,11 +16,12 @@ use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
-    VmInventoryError,
+    VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    system::memory::BOUNDARY_AIR_OFFSET,
 };
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
@@ -145,6 +146,16 @@ impl SystemConfig {
 
     pub fn has_public_values_chip(&self) -> bool {
         !self.continuation_enabled && self.num_public_values > 0
+    }
+
+    /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
+    pub fn memory_boundary_air_id(&self) -> usize {
+        let mut ret = PUBLIC_VALUES_AIR_ID;
+        if self.has_public_values_chip() {
+            ret += 1;
+        }
+        ret += BOUNDARY_AIR_OFFSET;
+        ret
     }
 }
 

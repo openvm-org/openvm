@@ -88,17 +88,16 @@ impl<F: PrimeField64> ProgramChip<F> {
 pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
     let mut instructions = program
-        .instructions_and_debug_infos
-        .iter()
-        .sorted_by_key(|(pc, _)| *pc)
-        .map(|(&pc, (instruction, _))| (pc, instruction))
-        .collect::<Vec<_>>();
+        .enumerate_by_pc()
+        .into_iter()
+        .map(|(pc, instruction, _)| (pc, instruction))
+        .collect_vec();
 
     let padding = padding_instruction();
     while !instructions.len().is_power_of_two() {
         instructions.push((
             program.pc_base + instructions.len() as u32 * program.step,
-            &padding,
+            padding.clone(),
         ));
     }
 

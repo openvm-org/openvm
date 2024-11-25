@@ -32,7 +32,7 @@ use rustc_hash::FxHashMap;
 use self::interface::MemoryInterface;
 use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig},
+    arch::{hasher::HasherChip, MemoryConfig, BOUNDARY_AIR_ID},
     system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::AccessAdapterRecord,
@@ -59,6 +59,8 @@ use crate::system::memory::{
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
 pub const MERKLE_AIR_OFFSET: usize = 1;
+/// The offset of the boundary AIR in AIRs of MemoryController.
+pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampedValues<T, const N: usize> {
@@ -349,7 +351,9 @@ impl<F: PrimeField32> MemoryController<F> {
         let (records, final_memory) = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = self.memory.finalize::<1>();
+                debug_assert_eq!(traces.len(), BOUNDARY_AIR_OFFSET);
                 traces.push(boundary_chip.generate_trace(&final_memory));
+                debug_assert_eq!(pvs.len(), BOUNDARY_AIR_OFFSET);
                 pvs.push(vec![]);
 
                 (records, None)
@@ -449,6 +453,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
+                debug_assert_eq!(airs.len(), BOUNDARY_AIR_ID);
                 airs.push(Arc::new(boundary_chip.air.clone()))
             }
             MemoryInterface::Persistent {
@@ -456,6 +461,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 ..
             } => {
+                debug_assert_eq!(airs.len(), BOUNDARY_AIR_ID);
                 airs.push(Arc::new(boundary_chip.air.clone()));
                 debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
                 airs.push(Arc::new(merkle_chip.air.clone()));

@@ -33,7 +33,8 @@ use crate::{
         memory::{
             merkle::{DirectCompressionBus, MemoryMerkleBus},
             offline_checker::MemoryBus,
-            Equipartition, MemoryController, MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
+            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
+            MERKLE_AIR_OFFSET,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -48,6 +49,8 @@ pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// continuations is enabled.
 pub const PUBLIC_VALUES_AIR_ID: usize = 2;
+/// AIR ID of the Memory Boundary AIR.
+pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
 /// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
