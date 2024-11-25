@@ -166,13 +166,13 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
                 }).unzip();
             quote! {
                 impl #impl_generics ::axvm_circuit::arch::AnyEnum for #name #ty_generics {
-                    fn as_any_kind(&self) -> &dyn Any {
+                    fn as_any_kind(&self) -> &dyn std::any::Any {
                         match self {
                             #(#arms,)*
                         }
                     }
 
-                    fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+                    fn as_any_kind_mut(&mut self) -> &mut dyn std::any::Any {
                         match self {
                             #(#arms_mut,)*
                         }

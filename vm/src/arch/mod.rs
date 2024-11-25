@@ -1,7 +1,6 @@
-/// Instruction execution and machine chip traits and enum variants
-mod chips;
 mod config;
-/// Execution bus and interface
+/// Instruction execution traits and types.
+/// Execution bus and interface.
 mod execution;
 /// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
@@ -12,6 +11,8 @@ pub mod new_segment; // replace segment::* once stable
 /// Top level [VirtualMachine] constructor and API.
 pub mod new_vm; // replace vm::* once stable
 
+// to be deleted once extensions is stable
+mod chips;
 // delete once extensions is stable
 mod chip_set;
 // delete once new_segment is stable
