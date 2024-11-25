@@ -32,7 +32,7 @@ use rustc_hash::FxHashMap;
 use self::interface::MemoryInterface;
 use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig, BOUNDARY_AIR_ID},
+    arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::AccessAdapterRecord,
@@ -453,7 +453,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                debug_assert_eq!(airs.len(), BOUNDARY_AIR_ID);
+                debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
                 airs.push(Arc::new(boundary_chip.air.clone()))
             }
             MemoryInterface::Persistent {
@@ -461,7 +461,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 ..
             } => {
-                debug_assert_eq!(airs.len(), BOUNDARY_AIR_ID);
+                debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
                 airs.push(Arc::new(boundary_chip.air.clone()));
                 debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
                 airs.push(Arc::new(merkle_chip.air.clone()));
