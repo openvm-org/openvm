@@ -205,6 +205,10 @@ jobs:
           mkdir -p ${GH_PAGES_PATH}
           cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            cp /tmp/benchmark-results/summary.md index.md
+            git add index.md
+          fi
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
           git push --force
 
