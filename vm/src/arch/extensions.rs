@@ -370,7 +370,7 @@ impl<F: PrimeField32> SystemComplex<F> {
 
         let mut inventory = VmInventory::new();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
-        if !config.continuation_enabled && config.num_public_values > 0 {
+        if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
             let chip = PublicValuesChip::new(
                 NativeAdapterChip::new(EXECUTION_BUS, PROGRAM_BUS, memory_controller.clone()),
@@ -582,14 +582,14 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     // we always need to special case it because we need to fix the air id.
     fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
-            .continuation_enabled
+            .has_public_values_chip()
             .then_some(Self::PV_EXECUTOR_IDX)
     }
 
     // Avoids a downcast when you don't need the concrete type.
     fn _public_values_chip(&self) -> Option<&E> {
         self.config
-            .continuation_enabled
+            .has_public_values_chip()
             .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
     }
 

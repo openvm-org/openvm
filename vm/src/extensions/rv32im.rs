@@ -291,10 +291,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
         let jal_lui_chip = Rv32JalLuiChip::new(
             Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
-            Rv32JalLuiCoreChip::new(
-                bitwise_lu_chip.clone(),
-                BranchLessThanOpcode::default_offset(),
-            ),
+            Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone(), Rv32JalLuiOpcode::default_offset()),
             memory_controller.clone(),
         );
         inventory.add_executor(

@@ -142,6 +142,10 @@ impl SystemConfig {
         self.collect_metrics = false;
         self
     }
+
+    pub fn has_public_values_chip(&self) -> bool {
+        !self.continuation_enabled && self.num_public_values > 0
+    }
 }
 
 impl Default for SystemConfig {
