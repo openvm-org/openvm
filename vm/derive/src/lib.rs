@@ -181,6 +181,8 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
             }
             .into()
         }
-        _ => unimplemented!("Only enums are supported"),
+        _ => syn::Error::new(name.span(), "Only enums are supported")
+            .to_compile_error()
+            .into(),
     }
 }
