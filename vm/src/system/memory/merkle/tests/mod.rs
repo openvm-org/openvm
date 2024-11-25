@@ -15,8 +15,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 
+use super::DirectCompressionBus;
 use crate::{
-    arch::MEMORY_MERKLE_BUS,
+    arch::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
@@ -30,6 +31,7 @@ use crate::{
 mod util;
 
 const DEFAULT_CHUNK: usize = 8;
+const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
@@ -66,7 +68,8 @@ fn test<const CHUNK: usize>(
     let final_tree_check =
         MemoryNode::tree_from_memory(memory_dimensions, final_memory, &hash_test_chip);
 
-    let mut chip = MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus);
+    let mut chip =
+        MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
     for &(address_space, label) in touched_labels.iter() {
         for i in 0..CHUNK {
             chip.touch_address(
@@ -241,8 +244,11 @@ fn expand_test_no_accesses() {
         &hash_test_chip,
     );
 
-    let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> =
-        MemoryMerkleChip::new(memory_dimensions, MemoryMerkleBus(MEMORY_MERKLE_BUS));
+    let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> = MemoryMerkleChip::new(
+        memory_dimensions,
+        MemoryMerkleBus(MEMORY_MERKLE_BUS),
+        COMPRESSION_BUS,
+    );
 
     let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
 
@@ -280,6 +286,7 @@ fn expand_test_negative() {
     let mut chip = MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(
         memory_dimensions,
         MemoryMerkleBus(MEMORY_MERKLE_BUS),
+        COMPRESSION_BUS,
     );
 
     let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);

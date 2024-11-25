@@ -29,11 +29,14 @@ use rand::{
     Rng,
 };
 
-use super::{Equipartition, MemoryAuxColsFactory, MemoryController, MemoryReadRecord};
+use super::{
+    merkle::DirectCompressionBus, Equipartition, MemoryAuxColsFactory, MemoryController,
+    MemoryReadRecord,
+};
 use crate::{
     arch::{
         testing::memory::gen_pointer, ExecutionBus, MemoryConfig, EXECUTION_BUS, MEMORY_BUS,
-        MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+        MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
@@ -47,6 +50,7 @@ use crate::{
 };
 
 const MAX: usize = 64;
+const RANGE_CHECKER_BUS: usize = 3;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -257,6 +261,7 @@ fn test_memory_controller() {
 fn test_memory_controller_persistent() {
     let memory_bus = MemoryBus(MEMORY_BUS);
     let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
+    let compression_bus = DirectCompressionBus(POSEIDON2_DIRECT_BUS);
     let memory_config = MemoryConfig::default();
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -266,6 +271,7 @@ fn test_memory_controller_persistent() {
         memory_config,
         range_checker.clone(),
         merkle_bus,
+        compression_bus,
         Equipartition::new(),
     );
     let aux_factory = memory_controller.aux_cols_factory();

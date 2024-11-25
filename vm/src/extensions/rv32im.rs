@@ -14,8 +14,8 @@ use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
-        SystemComplex, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension,
-        VmGenericConfig, VmInventory, VmInventoryBuilder, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     rv32im::{adapters::*, *},
     system::phantom::PhantomChip,
@@ -141,7 +141,7 @@ impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = SystemComplex::new(self.system);
+        let complex = self.system.create_chip_complex()?;
         let complex = complex.extend(&self.base)?;
         Ok(complex)
     }

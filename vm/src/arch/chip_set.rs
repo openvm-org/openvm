@@ -83,8 +83,9 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK,
+            merkle::{DirectCompressionBus, MemoryMerkleBus},
+            offline_checker::MemoryBus,
+            Equipartition, MemoryController, MemoryControllerRef, CHUNK,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -93,7 +94,7 @@ use crate::{
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
-pub const RANGE_CHECKER_BUS: usize = 4;
+const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
@@ -316,6 +317,7 @@ impl VmConfig {
                 self.memory_config,
                 range_checker.clone(),
                 merkle_bus,
+                DirectCompressionBus(POSEIDON2_DIRECT_BUS),
                 Equipartition::<F, CHUNK>::new(),
             )))
         } else {
@@ -325,7 +327,7 @@ impl VmConfig {
                 range_checker.clone(),
             )))
         };
-        let program_chip = ProgramChip::default();
+        let program_chip = ProgramChip::new(program_bus);
 
         let mut executors: HashMap<usize, AxVmExecutor<F>> = HashMap::new();
 

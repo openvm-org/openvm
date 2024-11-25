@@ -30,9 +30,9 @@ use p3_util::log2_strict_usize;
 use rustc_hash::FxHashMap;
 
 use self::interface::MemoryInterface;
-use super::volatile::VolatileBoundaryChip;
+use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig, RANGE_CHECKER_BUS},
+    arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterAir,
         manager::memory::AccessAdapterRecord,
@@ -97,6 +97,8 @@ pub struct MemoryController<F> {
     pub interface_chip: MemoryInterface<F>,
     pub(crate) mem_config: MemoryConfig,
     pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
+    // Store separately to avoid smart pointer reference each time
+    range_checker_bus: VariableRangeCheckerBus,
 
     // addr_space -> Memory data structure
     memory: Memory<F>,
@@ -119,6 +121,7 @@ impl<F: PrimeField32> MemoryController<F> {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
+        let range_checker_bus = range_checker.bus();
         Self {
             memory_bus,
             mem_config,
@@ -134,6 +137,7 @@ impl<F: PrimeField32> MemoryController<F> {
             memory: Memory::new(&Equipartition::<_, 1>::new()),
             adapter_records: FxHashMap::default(),
             range_checker,
+            range_checker_bus,
             result: None,
         }
     }
@@ -143,6 +147,7 @@ impl<F: PrimeField32> MemoryController<F> {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
         merkle_bus: MemoryMerkleBus,
+        compression_bus: DirectCompressionBus,
         initial_memory: Equipartition<F, CHUNK>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
@@ -151,9 +156,15 @@ impl<F: PrimeField32> MemoryController<F> {
             as_offset: 1,
         };
         let memory = Memory::new(&initial_memory);
+        let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface::Persistent {
-            boundary_chip: PersistentBoundaryChip::new(memory_dims, memory_bus, merkle_bus),
-            merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus),
+            boundary_chip: PersistentBoundaryChip::new(
+                memory_dims,
+                memory_bus,
+                merkle_bus,
+                compression_bus,
+            ),
+            merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
             initial_memory,
         };
         Self {
@@ -163,6 +174,7 @@ impl<F: PrimeField32> MemoryController<F> {
             memory,
             adapter_records: FxHashMap::default(),
             range_checker,
+            range_checker_bus,
             result: None,
         }
     }
@@ -188,7 +200,7 @@ impl<F: PrimeField32> MemoryController<F> {
         MemoryBridge::new(
             self.memory_bus,
             self.mem_config.clk_max_bits,
-            self.mem_config.decomp,
+            self.range_checker_bus,
         )
     }
 
@@ -290,7 +302,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
-        let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, self.mem_config.decomp);
+        let range_bus = self.range_checker.bus();
         MemoryAuxColsFactory {
             range_checker: self.range_checker.clone(),
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
@@ -653,9 +665,11 @@ mod tests {
 
     use super::MemoryController;
     use crate::{
-        arch::{MemoryConfig, MEMORY_BUS, RANGE_CHECKER_BUS},
+        arch::{MemoryConfig, MEMORY_BUS},
         system::memory::offline_checker::MemoryBus,
     };
+
+    const RANGE_CHECKER_BUS: usize = 3;
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {

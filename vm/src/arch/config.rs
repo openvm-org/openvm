@@ -14,7 +14,10 @@ use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-use super::{AnyEnum, InstructionExecutor, VmChipComplex, VmInventoryError};
+use super::{
+    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
+    VmInventoryError,
+};
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -151,6 +154,23 @@ impl Default for SystemConfig {
     }
 }
 
+impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
+    type Executor = SystemExecutor<F>;
+    type Periphery = SystemPeriphery<F>;
+
+    fn system(&self) -> &SystemConfig {
+        self
+    }
+
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+        let complex = SystemComplex::new(*self);
+        Ok(complex)
+    }
+}
+
+// to be deleted
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
     /// List of all executors except modular executors.

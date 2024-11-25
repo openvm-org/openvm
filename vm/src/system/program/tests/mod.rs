@@ -27,7 +27,7 @@ use crate::{
         },
         READ_INSTRUCTION_BUS,
     },
-    system::program::{trace::AxVmCommittedExe, ProgramChip},
+    system::program::{trace::AxVmCommittedExe, ProgramBus, ProgramChip},
 };
 
 assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
@@ -35,7 +35,8 @@ assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2OuterConfig>: Serialize, Dese
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();
-    let mut chip = ProgramChip::new_with_program(program);
+    let bus = ProgramBus(READ_INSTRUCTION_BUS);
+    let mut chip = ProgramChip::new_with_program(program, bus);
     let mut execution_frequencies = vec![0; instructions.len()];
     for pc_idx in execution {
         execution_frequencies[pc_idx as usize] += 1;
@@ -43,7 +44,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     }
     let program_proof_input = chip.generate_air_proof_input(None);
 
-    let counter_air = DummyInteractionAir::new(9, true, READ_INSTRUCTION_BUS);
+    let counter_air = DummyInteractionAir::new(9, true, bus.0);
     let mut program_cells = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_cells.extend(vec![
@@ -166,9 +167,10 @@ fn test_program_negative() {
         Instruction::large_from_isize(LOADW.with_default_offset(), -1, 0, 0, 1, 1, 0, 1),
         Instruction::large_from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0, 0, 0),
     ];
+    let bus = ProgramBus(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
 
-    let mut chip = ProgramChip::new_with_program(program);
+    let mut chip = ProgramChip::new_with_program(program, bus);
     let execution_frequencies = vec![1; instructions.len()];
     for pc_idx in 0..instructions.len() {
         chip.get_instruction(pc_idx as u32 * DEFAULT_PC_STEP)
@@ -176,7 +178,7 @@ fn test_program_negative() {
     }
     let program_proof_input = chip.generate_air_proof_input(None);
 
-    let counter_air = DummyInteractionAir::new(7, true, READ_INSTRUCTION_BUS);
+    let counter_air = DummyInteractionAir::new(7, true, bus.0);
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![

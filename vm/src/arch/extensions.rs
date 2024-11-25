@@ -31,8 +31,9 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
+            merkle::{DirectCompressionBus, MemoryMerkleBus},
+            offline_checker::MemoryBus,
+            Equipartition, MemoryController, MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -347,22 +348,24 @@ impl<F: PrimeField32> SystemComplex<F> {
 
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let memory_controller = if config.continuation_enabled {
-            bus_idx_max += 1;
-            Rc::new(RefCell::new(MemoryController::with_persistent_memory(
+            bus_idx_max += 2;
+            MemoryController::with_persistent_memory(
                 MEMORY_BUS,
                 config.memory_config,
                 range_checker.clone(),
-                MemoryMerkleBus(bus_idx_max - 1),
+                MemoryMerkleBus(bus_idx_max - 2),
+                DirectCompressionBus(bus_idx_max - 1),
                 Equipartition::<F, CHUNK>::new(),
-            )))
+            )
         } else {
-            Rc::new(RefCell::new(MemoryController::with_volatile_memory(
+            MemoryController::with_volatile_memory(
                 MEMORY_BUS,
                 config.memory_config,
                 range_checker.clone(),
-            )))
+            )
         };
-        let program_chip = ProgramChip::default();
+        let memory_controller = Rc::new(RefCell::new(memory_controller));
+        let program_chip = ProgramChip::new(PROGRAM_BUS);
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
         let mut inventory = VmInventory::new();
@@ -388,8 +391,12 @@ impl<F: PrimeField32> SystemComplex<F> {
             // This is **not** an instruction executor.
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
             // special handling when that happens
-            let direct_bus_idx = bus_idx_max;
-            bus_idx_max += 1;
+            let direct_bus_idx = memory_controller
+                .borrow()
+                .interface_chip
+                .compression_bus()
+                .unwrap()
+                .0;
             let chip = Poseidon2Chip::from_poseidon2_config(
                 vm_poseidon2_config(),
                 config.max_constraint_degree.min(SBOX_DEGREE),

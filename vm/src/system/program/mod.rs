@@ -7,7 +7,7 @@ use axvm_instructions::{
 };
 use p3_field::PrimeField64;
 
-use crate::{arch::READ_INSTRUCTION_BUS, system::program::trace::padding_instruction};
+use crate::system::program::trace::padding_instruction;
 
 #[cfg(test)]
 pub mod tests;
@@ -96,22 +96,18 @@ pub struct ProgramChip<F> {
     pub execution_frequencies: Vec<usize>,
 }
 
-impl<F: PrimeField64> Default for ProgramChip<F> {
-    fn default() -> Self {
+impl<F: PrimeField64> ProgramChip<F> {
+    pub fn new(bus: ProgramBus) -> Self {
         Self {
             execution_frequencies: vec![],
             program: Program::default(),
             true_program_length: 0,
-            air: ProgramAir {
-                bus: ProgramBus(READ_INSTRUCTION_BUS),
-            },
+            air: ProgramAir { bus },
         }
     }
-}
 
-impl<F: PrimeField64> ProgramChip<F> {
-    pub fn new_with_program(program: Program<F>) -> Self {
-        let mut ret = Self::default();
+    pub fn new_with_program(program: Program<F>, bus: ProgramBus) -> Self {
+        let mut ret = Self::new(bus);
         ret.set_program(program);
         ret
     }
