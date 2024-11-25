@@ -229,8 +229,7 @@ mod bn254 {
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
-        let mut S_mul = [S * Fr::from(4), S * Fr::from(12)];
-        S_mul[1].y = -S_mul[1].y;
+        let S_mul = [S * Fr::from(4), -S * Fr::from(12)];
         let Q_mul = [Q * Fr::from(8), Q * Fr::from(6)];
 
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));

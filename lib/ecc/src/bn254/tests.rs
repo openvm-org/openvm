@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use axvm_algebra::{field::FieldExtension, IntMod};
 use group::ff::Field;
 use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
+    bn256::{Fq, Fq12, Fq2, Fq6, Fr, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
     pairing::MillerLoopResult,
 };
 use rand::{rngs::StdRng, SeedableRng};
@@ -12,7 +12,8 @@ use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::Bn254,
     pairing::{
-        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingCheck,
+        PairingIntrinsics,
     },
     AffinePoint,
 };
@@ -213,4 +214,40 @@ fn test_bn254_miller_loop() {
     let final_f = wrapped_f.final_exponentiation();
 
     assert_eq!(final_f, compare_final);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_bn254_pairing_check() {
+    let S = G1Affine::generator();
+    let Q = G2Affine::generator();
+
+    let S_mul = [S * Fr::from(1), S * Fr::from(2)];
+    let Q_mul = [Q * -Fr::from(2), Q * Fr::from(1)];
+
+    let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+    let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+    let ps = [
+        AffinePoint::new(
+            convert_bn254_halo2_fq_to_fp(s[0].x),
+            convert_bn254_halo2_fq_to_fp(s[0].y),
+        ),
+        AffinePoint::new(
+            convert_bn254_halo2_fq_to_fp(s[1].x),
+            convert_bn254_halo2_fq_to_fp(s[1].y),
+        ),
+    ];
+    let qs = [
+        AffinePoint::new(
+            convert_bn254_halo2_fq2_to_fp2(q[0].x),
+            convert_bn254_halo2_fq2_to_fp2(q[0].y),
+        ),
+        AffinePoint::new(
+            convert_bn254_halo2_fq2_to_fp2(q[1].x),
+            convert_bn254_halo2_fq2_to_fp2(q[1].y),
+        ),
+    ];
+
+    assert!(Bn254::pairing_check(&ps, &qs).is_ok());
 }

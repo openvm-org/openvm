@@ -5,6 +5,8 @@ mod miller_step;
 mod operations;
 mod sextic_ext_field;
 
+use core::fmt::Error;
+
 use axvm_algebra::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
@@ -16,6 +18,8 @@ pub use miller_loop::*;
 pub use miller_step::*;
 pub(crate) use operations::*;
 pub use sextic_ext_field::*;
+
+use crate::AffinePoint;
 
 pub trait PairingIntrinsics {
     type Fp: Field + IntMod;
@@ -29,6 +33,18 @@ pub trait PairingIntrinsics {
     /// Multiplication constants for the Frobenius map for coefficients in Fp2 c1..=c5 for powers 0..12
     /// FROBENIUS_COEFFS[i][j] = \xi^{(j + 1) * (p^i - 1)/6} when p = 1 (mod 6)
     const FROBENIUS_COEFFS: [[Self::Fp2; 5]; 12];
+}
+
+#[allow(non_snake_case)]
+pub trait PairingCheck {
+    type Fp: Field;
+    type Fp2: Field + FieldExtension<Self::Fp> + ComplexConjugate;
+    type Fp12: FieldExtension<Self::Fp2> + ComplexConjugate;
+
+    fn pairing_check(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Result<(), Error>;
 }
 
 pub const fn shifted_funct7<P: PairingIntrinsics>(funct7: PairingBaseFunct7) -> usize {

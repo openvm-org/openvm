@@ -1,7 +1,7 @@
 use core::ops::Mul;
 
 use axvm_algebra::Field;
-use num_bigint::{BigUint, Sign};
+use num_bigint::Sign;
 
 mod bls12_381;
 mod bn254;
