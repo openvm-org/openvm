@@ -12,9 +12,6 @@ use axvm_ecc::{
 };
 
 axvm::entry!(main);
-axvm::moduli_setup! {
-    Bn254Modulus { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
-}
 
 fn test_miller_loop(io: &[u8]) {
     let s0 = &io[0..32 * 2];
@@ -43,7 +40,6 @@ fn test_miller_loop(io: &[u8]) {
 }
 
 pub fn main() {
-    setup_Bn254Modulus();
     let io = read_vec();
     assert_eq!(io.len(), 32 * 24);
     test_miller_loop(&io);
