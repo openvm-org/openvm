@@ -16,4 +16,5 @@ pub fn main() {
     }
     reveal(a as u32, 0);
     reveal((a >> 32) as u32, 1);
+    reveal(b / a, 2);
 }
