@@ -284,13 +284,11 @@ fn test_memory_controller_persistent() {
         memory_bridge: memory_controller.memory_bridge(),
     };
 
+    // This never gets used because poseido2_chip will only have direct compression interactions
     let dummy_memory_controller = MemoryController::with_volatile_memory(
         MemoryBus(MEMORY_BUS),
         MemoryConfig::default(),
-        Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            RANGE_CHECKER_BUS,
-            1,
-        ))),
+        range_checker.clone(),
     );
 
     let mut poseidon_chip = Poseidon2Chip::from_poseidon2_config(
@@ -309,8 +307,8 @@ fn test_memory_controller_persistent() {
         Arc::new(memory_requester_air),
         memory_requester_trace,
     ));
-    air_proof_inputs.push(range_checker.generate_air_proof_input());
     air_proof_inputs.push(poseidon_chip.generate_air_proof_input());
+    air_proof_inputs.push(range_checker.generate_air_proof_input());
 
     BabyBearPoseidon2Engine::run_test_fast(air_proof_inputs).expect("Verification failed");
 }
