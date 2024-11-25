@@ -10,7 +10,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_circuit_derive::AnyEnum;
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
     program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
 };
@@ -39,17 +39,17 @@ use crate::{
     },
 };
 
-// TODO: Make these public after chip_set.rs is removed
-const PROGRAM_AIR_ID: usize = 0;
+/// Global AIR ID in the VM circuit verifying key.
+pub const PROGRAM_AIR_ID: usize = 0;
 /// ProgramAir is the first AIR so its cached trace should be the first main trace.
-const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
-const CONNECTOR_AIR_ID: usize = 1;
+pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
+pub const CONNECTOR_AIR_ID: usize = 1;
 /// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
 /// continuations is enabled.
-const PUBLIC_VALUES_AIR_ID: usize = 2;
+pub const PUBLIC_VALUES_AIR_ID: usize = 2;
 /// If VM has continuations enabled, all AIRs of MemoryController are added after ConnectorChip.
 /// Merkle AIR commits start/final memory states.
-const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
+pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 const EXECUTION_BUS: ExecutionBus = ExecutionBus(0);
 const MEMORY_BUS: MemoryBus = MemoryBus(1);
@@ -74,7 +74,7 @@ pub trait VmExtension<F: PrimeField32> {
     fn build(
         &self,
         builder: &mut VmInventoryBuilder<F>,
-    ) -> VmInventory<Self::Executor, Self::Periphery>;
+    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
 /// Builder for processing unit. Processing units extend an existing system unit.
@@ -111,7 +111,7 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         self.system
     }
 
-    pub fn new_bus(&mut self) -> usize {
+    pub fn new_bus_idx(&mut self) -> usize {
         let idx = self.bus_idx_max;
         self.bus_idx_max += 1;
         idx
@@ -163,6 +163,8 @@ enum ChipId {
 pub enum VmInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
     ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+    #[error("Chip {name} not found")]
+    ChipNotFound { name: String },
 }
 
 impl<E, P> Default for VmInventory<E, P> {
@@ -195,11 +197,14 @@ impl<E, P> VmInventory<E, P> {
     }
 
     /// Append `other` to current inventory. This means `self` comes earlier in the dependency chain.
-    pub fn append(&mut self, mut other: VmInventory<E, P>) {
+    pub fn append(&mut self, mut other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
         let num_executors = self.executors.len();
         let num_periphery = self.periphery.len();
-        for (_, id) in other.instruction_lookup.iter_mut() {
-            *id += num_executors;
+        for (opcode, mut id) in other.instruction_lookup.into_iter() {
+            id += num_executors;
+            if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
+                return Err(VmInventoryError::ExecutorExists { opcode, id: old_id });
+            }
         }
         for chip_id in other.insertion_order.iter_mut() {
             match chip_id {
@@ -210,6 +215,7 @@ impl<E, P> VmInventory<E, P> {
         self.executors.append(&mut other.executors);
         self.periphery.append(&mut other.periphery);
         self.insertion_order.append(&mut other.insertion_order);
+        Ok(())
     }
 
     /// Inserts an executor with the collection of opcodes that it handles.
@@ -217,7 +223,7 @@ impl<E, P> VmInventory<E, P> {
     /// executor ID is returned.
     pub fn add_executor(
         &mut self,
-        executor: E,
+        executor: impl Into<E>,
         opcodes: impl IntoIterator<Item = AxVmOpcode>,
     ) -> Result<(), VmInventoryError> {
         let opcodes: Vec<_> = opcodes.into_iter().collect();
@@ -230,7 +236,7 @@ impl<E, P> VmInventory<E, P> {
             }
         }
         let id = self.executors.len();
-        self.executors.push(executor);
+        self.executors.push(executor.into());
         self.insertion_order.push(ChipId::Executor(id));
         for opcode in opcodes {
             self.instruction_lookup.insert(opcode, id);
@@ -238,9 +244,9 @@ impl<E, P> VmInventory<E, P> {
         Ok(())
     }
 
-    pub fn add_periphery_chip(&mut self, periphery_chip: P) {
+    pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<P>) {
         let id = self.periphery.len();
-        self.periphery.push(periphery_chip);
+        self.periphery.push(periphery_chip.into());
         self.insertion_order.push(ChipId::Periphery(id));
     }
 
@@ -321,7 +327,7 @@ impl<F> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(PhantomChip<F>),
@@ -373,7 +379,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 memory_controller.clone(),
             );
             inventory
-                .add_executor(chip.into(), [PublishOpcode::default_offset()])
+                .add_executor(chip, [PublishOpcode::default_offset()])
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -393,7 +399,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 direct_bus_idx,
                 Poseidon2Opcode::default_offset(),
             );
-            inventory.add_periphery_chip(chip.into());
+            inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
@@ -405,7 +411,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         );
         phantom_chip.set_streams(streams.clone());
         inventory
-            .add_executor(phantom_chip.into(), [phantom_opcode])
+            .add_executor(phantom_chip, [phantom_opcode])
             .unwrap();
 
         let base = SystemBase {
@@ -453,7 +459,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     /// Extend the chip complex with a new extension.
     /// A new chip complex with different type generics is returned with the combined inventory.
-    pub fn extend<E3, P3, Ext>(mut self, config: &Ext) -> VmChipComplex<F, E3, P3>
+    pub fn extend<E3, P3, Ext>(
+        mut self,
+        config: &Ext,
+    ) -> Result<VmChipComplex<F, E3, P3>, VmInventoryError>
     where
         Ext: VmExtension<F>,
         E: Into<E3> + AnyEnum,
@@ -462,11 +471,11 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         Ext::Periphery: Into<P3>,
     {
         let mut builder = self.inventory_builder();
-        let inventory_ext = config.build(&mut builder);
+        let inventory_ext = config.build(&mut builder)?;
         self.bus_idx_max = builder.bus_idx_max;
         let mut ext_complex = self.transmute();
-        ext_complex.append(inventory_ext.transmute());
-        ext_complex
+        ext_complex.append(inventory_ext.transmute())?;
+        Ok(ext_complex)
     }
 
     pub fn transmute<E2, P2>(self) -> VmChipComplex<F, E2, P2>
@@ -485,8 +494,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     /// Appends `other` to the current inventory.
     /// This means `self` comes earlier in the dependency chain.
-    pub fn append(&mut self, other: VmInventory<E, P>) {
-        self.inventory.append(other);
+    pub fn append(&mut self, other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
+        self.inventory.append(other)
     }
 
     pub fn program_chip(&self) -> &ProgramChip<F> {
@@ -558,7 +567,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     // This is O(1).
-    pub(crate) fn num_airs(&self) -> usize {
+    pub fn num_airs(&self) -> usize {
         3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
     }
 
@@ -567,7 +576,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
             .continuation_enabled
-            .then(|| Self::PV_EXECUTOR_IDX)
+            .then_some(Self::PV_EXECUTOR_IDX)
     }
 
     // Avoids a downcast when you don't need the concrete type.
@@ -578,9 +587,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     // All inventory chips except public values chip, in reverse order they were added.
-    pub(crate) fn chips_excluding_pv_chip<'a>(
-        &'a self,
-    ) -> impl Iterator<Item = Either<&'a E, &'a P>> {
+    pub(crate) fn chips_excluding_pv_chip(&self) -> impl Iterator<Item = Either<&'_ E, &'_ P>> {
         let public_values_chip_idx = self.public_values_chip_idx();
         self.inventory
             .insertion_order
@@ -847,17 +854,25 @@ pub trait AnyEnum {
     fn as_any_kind_mut(&mut self) -> &mut dyn Any;
 }
 
-impl AnyEnum for Arc<VariableRangeCheckerChip> {
+impl AnyEnum for () {
     fn as_any_kind(&self) -> &dyn Any {
         self
     }
-
     fn as_any_kind_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
 
-enum Either<E, P> {
+impl AnyEnum for Arc<VariableRangeCheckerChip> {
+    fn as_any_kind(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+pub(crate) enum Either<E, P> {
     Executor(E),
     Periphery(P),
 }

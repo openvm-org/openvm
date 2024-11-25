@@ -84,7 +84,7 @@ use crate::{
         connector::VmConnectorChip,
         memory::{
             merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, CHUNK, MERKLE_AIR_OFFSET,
+            MemoryControllerRef, CHUNK,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -102,16 +102,7 @@ pub const BYTE_XOR_BUS: usize = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const MEMORY_MERKLE_BUS: usize = 12;
 
-pub const PROGRAM_AIR_ID: usize = 0;
-/// ProgramAir is the first AIR so its cached trace should be the first main trace.
-pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
-pub const CONNECTOR_AIR_ID: usize = 1;
-/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
-/// using persistent memory.
-pub const PUBLIC_VALUES_AIR_ID: usize = 2;
-/// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
-/// Merkle AIR commits start/final memory states.
-pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
+use super::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 
 pub struct VmChipSet<F: PrimeField32> {
     pub executors: HashMap<usize, AxVmExecutor<F>>,

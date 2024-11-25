@@ -14,7 +14,7 @@ use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-use super::{AnyEnum, InstructionExecutor, VmChipComplex};
+use super::{AnyEnum, InstructionExecutor, VmChipComplex, VmInventoryError};
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
@@ -38,7 +38,9 @@ pub trait VmGenericConfig<F: PrimeField32> {
     /// Must contain system config
     fn system(&self) -> &SystemConfig;
 
-    fn create_chip_complex(&self) -> VmChipComplex<F, Self::Executor, Self::Periphery>;
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
@@ -106,6 +108,11 @@ impl SystemConfig {
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
         }
+    }
+
+    pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
+        self.max_constraint_degree = max_constraint_degree;
+        self
     }
 
     pub fn with_continuations(mut self) -> Self {

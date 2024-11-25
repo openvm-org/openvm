@@ -61,7 +61,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         initial_memory: Option<Equipartition<F, CHUNK>>,
         fn_bounds: FnBounds,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex();
+        let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
         chip_complex.set_program(program);
 

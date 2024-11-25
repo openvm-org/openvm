@@ -364,7 +364,7 @@ where
 
     pub fn keygen(&self) -> MultiStarkProvingKey<SC> {
         let mut keygen_builder = self.engine.keygen_builder();
-        let chip_complex = self.config().create_chip_complex();
+        let chip_complex = self.config().create_chip_complex().unwrap();
         for air in chip_complex.airs() {
             keygen_builder.add_air(air);
         }
