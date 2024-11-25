@@ -16,8 +16,8 @@ use super::{Bn254, Fp, Fp12, Fp2};
 use crate::pairing::PairingIntrinsics;
 use crate::{
     pairing::{
-        Evaluatable, EvaluatedLine, ExpBytes, FinalExp, FromLineDType, LineMulDType, MillerStep,
-        MultiMillerLoop, PairingCheck, UnevaluatedLine,
+        self, Evaluatable, EvaluatedLine, ExpBytes, FinalExp, FromLineDType, LineMulDType,
+        MillerStep, MultiMillerLoop, PairingCheck, UnevaluatedLine,
     },
     AffinePoint,
 };
@@ -296,123 +296,7 @@ impl MultiMillerLoop for Bn254 {
     }
 }
 
-#[allow(non_snake_case)]
-impl FinalExp for Bn254 {
-    type Fp = Fp;
-    type Fp2 = Fp2;
-    type Fp12 = Fp12;
-
-    fn assert_final_exp_is_one(
-        f: &Self::Fp12,
-        P: &[AffinePoint<Self::Fp>],
-        Q: &[AffinePoint<Self::Fp2>],
-    ) {
-        let (c, u) = Self::final_exp_hint(f);
-        let c_inv = Fp12::ONE.div_unsafe(&c);
-
-        // f * u == c^λ
-        // f * u == c^{6x + 2 + q^3 - q^2 + q}
-        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
-        // where fc == f * c^-{6x + 2}
-        // c_mul = c^-{q^3 - q^2 + q}
-        let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
-        let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
-        let c_q2_inv = Fp12::ONE.div_unsafe(&c_q2);
-        let c_q = FieldExtension::frobenius_map(&c_inv, 1);
-        let c_mul = c_q3 * c_q2_inv * c_q;
-
-        // Compute miller loop with c_inv
-        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
-
-        assert_eq!(fc * c_mul * u, Fp12::ONE);
-    }
-
-    fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
-        // Residue witness
-        let mut c: Self::Fp12;
-        // Cubic nonresidue power
-        let u: Self::Fp12;
-
-        // get the 27th root of unity
-        let u_coeffs = Fp2::from_coeffs(Self::U27_COEFFS);
-        let unity_root_27 = Fp12::from_coeffs([
-            Fp2::ZERO,
-            Fp2::ZERO,
-            u_coeffs,
-            Fp2::ZERO,
-            Fp2::ZERO,
-            Fp2::ZERO,
-        ]);
-        debug_assert_eq!(
-            unity_root_27.exp_bytes(true, &27u32.to_be_bytes()),
-            Fp12::ONE
-        );
-
-        if f.exp_bytes(true, &Self::EXP1) == Fp12::ONE {
-            c = f.clone();
-            u = Fp12::ONE;
-        } else {
-            let f_mul_unity_root_27 = f * &unity_root_27;
-            if f_mul_unity_root_27.exp_bytes(true, &Self::EXP1) == Fp12::ONE {
-                c = f_mul_unity_root_27;
-                u = unity_root_27.clone();
-            } else {
-                c = f_mul_unity_root_27 * &unity_root_27;
-                u = &unity_root_27 * &unity_root_27;
-            }
-        }
-
-        // 1. Compute r-th root and exponentiate to rInv where
-        //   rInv = 1/r mod (p^12-1)/r
-        c = c.exp_bytes(true, &Self::R_INV);
-
-        // 2. Compute m-th root where
-        //   m = (6x + 2 + q^3 - q^2 +q)/3r
-        // Exponentiate to mInv where
-        //   mInv = 1/m mod p^12-1
-        c = c.exp_bytes(true, &Self::M_INV);
-
-        // 3. Compute cube root
-        // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
-        // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
-        // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
-        // where k=12 and n=3 here and exp2 = (s+1)/3
-        let mut x = c.exp_bytes(true, &Self::EXP2);
-
-        // 3^t is ord(x^3 / residueWitness)
-        let c_inv = Fp12::ONE.div_unsafe(&c);
-        let mut x3 = &x * &x * &x * &c_inv;
-        let mut t = 0;
-        let mut tmp = &x3 * &x3;
-
-        // Modified Tonelli-Shanks algorithm for computing the cube root
-        fn tonelli_shanks_loop(x3: &mut Fp12, tmp: &mut Fp12, t: &mut i32) {
-            while *x3 != Fp12::ONE {
-                *tmp = &*x3 * &*x3;
-                *x3 *= tmp.clone();
-                *t += 1;
-            }
-        }
-
-        tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
-
-        while t != 0 {
-            tmp = unity_root_27.exp_bytes(true, &Self::EXP2);
-            x *= &tmp;
-
-            x3 = &x * &x * &x * &c_inv;
-            t = 0;
-            tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
-        }
-
-        debug_assert_eq!(c, &x * &x * &x);
-        // x is the cube root of the residue witness c
-        c = x;
-
-        (c, u)
-    }
-}
-
+#[cfg(target_os = "zkvm")]
 #[allow(non_snake_case)]
 impl PairingCheck for Bn254 {
     type Fp = Fp;
@@ -424,7 +308,26 @@ impl PairingCheck for Bn254 {
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Result<(), Error> {
         let f = Self::multi_miller_loop(P, Q);
-        Self::assert_final_exp_is_one(&f, P, Q);
+        let hint = super::pairing::final_exp_hint::bn254_final_exp_hint(&f.to_bytes());
+        let c = Fp12::from_bytes(&hint[..32 * 12]);
+        let u = Fp12::from_bytes(&hint[32 * 12..]);
+        let c_inv = Fp12::ONE.div_unsafe(&c);
+
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
+        // c_mul = c^-{q^3 - q^2 + q}
+        let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
+        let c_q2_inv = c_q2.invert().unwrap();
+        let c_q = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3 * c_q2_inv * c_q;
+
+        // Compute miller loop with c_inv
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+
+        assert_eq!(fc * c_mul * u, Fp12::ONE);
         Ok(())
     }
 }
