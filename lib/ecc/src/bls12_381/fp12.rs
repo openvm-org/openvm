@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign, Neg};
@@ -49,8 +50,31 @@ impl FieldExtension<Fp2> for Fp12 {
         Self::new(coeffs)
     }
 
+    fn from_bytes(bytes: &[u8]) -> Self {
+        assert_eq!(bytes.len(), 576);
+        Self::from_coeffs([
+            Fp2::from_bytes(&bytes[0..96]),
+            Fp2::from_bytes(&bytes[96..192]),
+            Fp2::from_bytes(&bytes[192..288]),
+            Fp2::from_bytes(&bytes[288..384]),
+            Fp2::from_bytes(&bytes[384..480]),
+            Fp2::from_bytes(&bytes[480..576]),
+        ])
+    }
+
     fn to_coeffs(self) -> Self::Coeffs {
         self.c
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(576);
+        bytes.extend_from_slice(&self.c[0].to_bytes());
+        bytes.extend_from_slice(&self.c[1].to_bytes());
+        bytes.extend_from_slice(&self.c[2].to_bytes());
+        bytes.extend_from_slice(&self.c[3].to_bytes());
+        bytes.extend_from_slice(&self.c[4].to_bytes());
+        bytes.extend_from_slice(&self.c[5].to_bytes());
+        bytes
     }
 
     fn embed(c0: Fp2) -> Self {

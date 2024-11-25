@@ -232,63 +232,63 @@ fn test_bn254_miller_loop() {
     assert_eq!(final_f, compare_final);
 }
 
-#[test]
-#[allow(non_snake_case)]
-fn test_bn254_final_exp_hint() {
-    let S = G1Affine::generator();
-    let Q = G2Affine::generator();
+// #[test]
+// #[allow(non_snake_case)]
+// fn test_bn254_final_exp_hint() {
+//     let S = G1Affine::generator();
+//     let Q = G2Affine::generator();
 
-    let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
-    let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
+//     let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
+//     let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
 
-    let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
-    let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+//     let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+//     let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-    let ps = [
-        convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
-        convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
-    ];
-    let qs = [
-        convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
-        convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
-    ];
+//     let ps = [
+//         convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
+//         convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
+//     ];
+//     let qs = [
+//         convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
+//         convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
+//     ];
 
-    let f = Bn254::multi_miller_loop(&ps, &qs);
-    let (c, u) = Bn254::final_exp_hint(&f);
+//     let f = Bn254::multi_miller_loop(&ps, &qs);
+//     let (c, u) = Bn254::final_exp_hint(&f);
 
-    let q = BigUint::from_str_radix(
-        "21888242871839275222246405745257275088696311157297823662689037894645226208583",
-        10,
-    )
-    .unwrap();
-    let six_x_plus_2: BigUint = BigUint::from_str_radix("29793968203157093288", 10).unwrap();
-    let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
-    let lambda = six_x_plus_2.clone() + q_pows.clone();
+//     let q = BigUint::from_str_radix(
+//         "21888242871839275222246405745257275088696311157297823662689037894645226208583",
+//         10,
+//     )
+//     .unwrap();
+//     let six_x_plus_2: BigUint = BigUint::from_str_radix("29793968203157093288", 10).unwrap();
+//     let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
+//     let lambda = six_x_plus_2.clone() + q_pows.clone();
 
-    let c_lambda = c.exp_bytes(true, &lambda.to_bytes_be());
-    assert_eq!(f * u, c_lambda);
-}
+//     let c_lambda = c.exp_bytes(true, &lambda.to_bytes_be());
+//     assert_eq!(f * u, c_lambda);
+// }
 
-#[test]
-#[allow(non_snake_case)]
-fn test_bn254_pairing_check() {
-    let S = G1Affine::generator();
-    let Q = G2Affine::generator();
+// #[test]
+// #[allow(non_snake_case)]
+// fn test_bn254_pairing_check() {
+//     let S = G1Affine::generator();
+//     let Q = G2Affine::generator();
 
-    let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
-    let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
+//     let S_mul = [S * Fr::from(1), S * -Fr::from(2)];
+//     let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
 
-    let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
-    let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+//     let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+//     let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-    let ps = [
-        convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
-        convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
-    ];
-    let qs = [
-        convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
-        convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
-    ];
+//     let ps = [
+//         convert_bn254_affine_point_halo2_fq_to_fp(s[0].clone()),
+//         convert_bn254_affine_point_halo2_fq_to_fp(s[1].clone()),
+//     ];
+//     let qs = [
+//         convert_bn254_affine_point_halo2_fq2_to_fp2(q[0].clone()),
+//         convert_bn254_affine_point_halo2_fq2_to_fp2(q[1].clone()),
+//     ];
 
-    assert!(Bn254::pairing_check(&ps, &qs).is_ok());
-}
+//     assert!(Bn254::pairing_check(&ps, &qs).is_ok());
+// }

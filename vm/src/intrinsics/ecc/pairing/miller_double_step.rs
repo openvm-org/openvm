@@ -93,12 +93,11 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_execution::curves::bn254::Bn254;
-    use ax_ecc_primitives::test_utils::bn254_fq_to_biguint;
+    use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
+    use ax_ecc_primitives::test_utils::{bls12381_fq_to_biguint, bn254_fq_to_biguint};
     use axvm_ecc::{pairing::MillerStep, AffinePoint};
-    use axvm_ecc_constants::BN254;
+    use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use halo2curves_axiom::bn256::G2Affine;
     use p3_baby_bear::BabyBear;
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
@@ -115,13 +114,15 @@ mod tests {
     };
 
     type F = BabyBear;
-    const NUM_LIMBS: usize = 32;
-    const LIMB_BITS: usize = 8;
-    const BLOCK_SIZE: usize = 32;
 
     #[test]
     #[allow(non_snake_case)]
-    fn test_miller_double() {
+    fn test_miller_double_bn254() {
+        use halo2curves_axiom::bn256::G2Affine;
+        const NUM_LIMBS: usize = 32;
+        const LIMB_BITS: usize = 8;
+        const BLOCK_SIZE: usize = 32;
+
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
             modulus: BN254.MODULUS.clone(),
@@ -171,6 +172,79 @@ mod tests {
         assert_eq!(result[5], bn254_fq_to_biguint(l_init.b.c1));
         assert_eq!(result[6], bn254_fq_to_biguint(l_init.c.c0));
         assert_eq!(result[7], bn254_fq_to_biguint(l_init.c.c1));
+
+        let input_limbs = inputs
+            .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));
+
+        let instruction = rv32_write_heap_default(
+            &mut tester,
+            input_limbs.to_vec(),
+            vec![],
+            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
+        );
+
+        tester.execute(&mut chip, instruction);
+        let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn test_miller_double_bls12_381() {
+        use halo2curves_axiom::bls12_381::G2Affine;
+        const NUM_LIMBS: usize = 48;
+        const LIMB_BITS: usize = 8;
+        const BLOCK_SIZE: usize = 16;
+
+        let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let config = ExprBuilderConfig {
+            modulus: BLS12381.MODULUS.clone(),
+            limb_bits: LIMB_BITS,
+            num_limbs: NUM_LIMBS,
+        };
+        let expr = miller_double_step_expr(
+            config,
+            tester.memory_controller().borrow().range_checker.bus(),
+        );
+        let core = FieldExpressionCoreChip::new(
+            expr,
+            PairingOpcode::default_offset(),
+            vec![PairingOpcode::MILLER_DOUBLE_STEP as usize],
+            vec![],
+            tester.memory_controller().borrow().range_checker.clone(),
+            "MillerDouble",
+        );
+        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+        let adapter = Rv32VecHeapAdapterChip::<F, 1, 12, 24, BLOCK_SIZE, BLOCK_SIZE>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+            bitwise_chip.clone(),
+        );
+        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+
+        let mut rng0 = StdRng::seed_from_u64(12);
+        let Q = G2Affine::random(&mut rng0);
+        let inputs = [Q.x.c0, Q.x.c1, Q.y.c0, Q.y.c1].map(bls12381_fq_to_biguint);
+
+        let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
+        let (Q_acc_init, l_init) = Bls12_381::miller_double_step(&Q_ecpoint);
+        let result = chip
+            .core
+            .expr()
+            .execute_with_output(inputs.to_vec(), vec![]);
+        assert_eq!(result.len(), 8); // AffinePoint<Fp2> and two Fp2 coefficients
+        assert_eq!(result[0], bls12381_fq_to_biguint(Q_acc_init.x.c0));
+        assert_eq!(result[1], bls12381_fq_to_biguint(Q_acc_init.x.c1));
+        assert_eq!(result[2], bls12381_fq_to_biguint(Q_acc_init.y.c0));
+        assert_eq!(result[3], bls12381_fq_to_biguint(Q_acc_init.y.c1));
+        assert_eq!(result[4], bls12381_fq_to_biguint(l_init.b.c0));
+        assert_eq!(result[5], bls12381_fq_to_biguint(l_init.b.c1));
+        assert_eq!(result[6], bls12381_fq_to_biguint(l_init.c.c0));
+        assert_eq!(result[7], bls12381_fq_to_biguint(l_init.c.c1));
 
         let input_limbs = inputs
             .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));

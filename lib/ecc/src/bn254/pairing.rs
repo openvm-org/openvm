@@ -5,7 +5,7 @@ use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::shifted_funct7,
+    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck},
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
@@ -16,8 +16,8 @@ use super::{Bn254, Fp, Fp12, Fp2};
 use crate::pairing::PairingIntrinsics;
 use crate::{
     pairing::{
-        self, Evaluatable, EvaluatedLine, ExpBytes, FinalExp, FromLineDType, LineMulDType,
-        MillerStep, MultiMillerLoop, PairingCheck, UnevaluatedLine,
+        Evaluatable, EvaluatedLine, FinalExp, FromLineDType, LineMulDType, MillerStep,
+        MultiMillerLoop, UnevaluatedLine,
     },
     AffinePoint,
 };
@@ -308,7 +308,7 @@ impl PairingCheck for Bn254 {
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Result<(), Error> {
         let f = Self::multi_miller_loop(P, Q);
-        let hint = super::pairing::final_exp_hint::bn254_final_exp_hint(&f.to_bytes());
+        let hint = final_exp_hint::bn254_final_exp_hint(&f.to_bytes());
         let c = Fp12::from_bytes(&hint[..32 * 12]);
         let u = Fp12::from_bytes(&hint[32 * 12..]);
         let c_inv = Fp12::ONE.div_unsafe(&c);
@@ -320,7 +320,7 @@ impl PairingCheck for Bn254 {
         // c_mul = c^-{q^3 - q^2 + q}
         let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
         let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
-        let c_q2_inv = c_q2.invert().unwrap();
+        let c_q2_inv = Fp12::ONE.div_unsafe(&c_q2);
         let c_q = FieldExtension::frobenius_map(&c_inv, 1);
         let c_mul = c_q3 * c_q2_inv * c_q;
 
