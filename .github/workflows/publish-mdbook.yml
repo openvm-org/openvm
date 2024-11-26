@@ -2,7 +2,7 @@ name: Publish mdBook to GitHub Pages
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
     paths:
       - "book/**"
 
