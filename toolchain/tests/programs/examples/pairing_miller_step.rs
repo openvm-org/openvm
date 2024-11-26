@@ -3,16 +3,13 @@
 
 use axvm::io::read_vec;
 use axvm_algebra::IntMod;
-use axvm_ecc::{
-    bls12_381::{Bls12_381, Fp2},
-    bn254::{Bn254, Fp2},
-    pairing::MillerStep,
-    AffinePoint,
-};
+use axvm_ecc::{pairing::MillerStep, AffinePoint};
 
 axvm::entry!(main);
 
 mod bn254 {
+    use axvm_ecc::bn254::{Bn254, Fp2};
+
     use super::*;
 
     pub fn test_miller_step(io: &[u8]) {
@@ -75,6 +72,8 @@ mod bn254 {
 }
 
 mod bls12_381 {
+    use axvm_ecc::bls12_381::{Bls12_381, Fp2};
+
     use super::*;
 
     pub fn test_miller_step(io: &[u8]) {
@@ -85,7 +84,7 @@ mod bls12_381 {
 
         let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
 
-        let (pt_cmp, l_cmp) = Bn254::miller_double_step(s_cast);
+        let (pt_cmp, l_cmp) = Bls12_381::miller_double_step(s_cast);
         let mut pt_bytes = [0u8; 48 * 4];
         let mut l_bytes = [0u8; 48 * 4];
 
@@ -112,7 +111,7 @@ mod bls12_381 {
 
         let s_cast = unsafe { &*(s.as_ptr() as *const AffinePoint<Fp2>) };
         let q_cast = unsafe { &*(q.as_ptr() as *const AffinePoint<Fp2>) };
-        let (pt_cmp, l0_cmp, l1_cmp) = Bn254::miller_double_and_add_step(s_cast, q_cast);
+        let (pt_cmp, l0_cmp, l1_cmp) = Bls12_381::miller_double_and_add_step(s_cast, q_cast);
         let mut pt_bytes = [0u8; 48 * 4];
         let mut l0_bytes = [0u8; 48 * 4];
         let mut l1_bytes = [0u8; 48 * 4];
