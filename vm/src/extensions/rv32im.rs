@@ -5,7 +5,7 @@ use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_instructions::*;
 use derive_more::derive::From;
 use p3_field::PrimeField32;
@@ -28,10 +28,13 @@ pub struct Rv32IConfig {
     // todo: hintstore
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, VmGenericConfig)]
 pub struct Rv32ImConfig {
+    #[system]
     pub system: SystemConfig,
+    #[extension]
     pub base: Rv32I,
+    #[extension]
     pub mul: Rv32M,
     // todo: hintstore
 }
@@ -108,17 +111,17 @@ pub enum Rv32Periphery<F: PrimeField32> {
     Phantom(PhantomChip<F>),
 }
 
-// TODO: generate this by proc-macro
-/// RISC-V 32-bit IM (Base + Multiplication) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Rv32ImExecutor<F: PrimeField32> {
-    #[any_enum]
-    System(SystemExecutor<F>),
-    #[any_enum]
-    Base(Rv32IExecutor<F>),
-    #[any_enum]
-    Mul(Rv32MExecutor<F>),
-}
+// // TODO: generate this by proc-macro
+// /// RISC-V 32-bit IM (Base + Multiplication) Instruction Executors
+// #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+// pub enum Rv32ImExecutor<F: PrimeField32> {
+//     #[any_enum]
+//     System(SystemExecutor<F>),
+//     #[any_enum]
+//     Base(Rv32IExecutor<F>),
+//     #[any_enum]
+//     Mul(Rv32MExecutor<F>),
+// }
 
 // TODO: generate this by proc-macro
 #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
