@@ -245,17 +245,6 @@ mod bn254 {
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-        // // Miller loop output verify
-        // let f = Bn254::multi_miller_loop(&s, &q);
-        // let (c, u) = Bn254::final_exp_hint(&f);
-        // let c_inv = c.invert().unwrap();
-        // let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
-        // let c_q2 = FieldExtension::frobenius_map(&c, 2);
-        // let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
-        // let c_mul = c_q3_inv * c_q2 * c_q_inv;
-
-        // let fc = Bn254::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
-
         // Gather inputs
         let io0 = s
             .into_iter()
@@ -512,16 +501,6 @@ mod bls12_381 {
 
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
-
-        // // Miller loop output verify
-        // let f = Bls12_381::multi_miller_loop(&s, &q);
-        // let (c, u) = Bls12_381::final_exp_hint(&f);
-        // let c_inv = c.invert().unwrap();
-        // let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
-        // let c_q2 = FieldExtension::frobenius_map(&c, 2);
-        // let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
-        // let c_mul = c_q3_inv * c_q2 * c_q_inv;
-        // let fc = Bls12_381::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
 
         // Gather inputs
         let io0 = s

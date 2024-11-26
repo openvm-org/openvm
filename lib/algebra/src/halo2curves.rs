@@ -60,14 +60,6 @@ mod bn254 {
     pub fn bytes_to_bn254_fq(bytes: &[u8]) -> Fq {
         assert_eq!(bytes.len(), 32);
         Fq::from_bytes(&bytes.try_into().unwrap()).unwrap()
-        // Fq::from_raw(
-        //     bytes
-        //         .chunks(8)
-        //         .map(|x| u64::from_le_bytes(x.try_into().unwrap()))
-        //         .collect::<Vec<u64>>()
-        //         .try_into()
-        //         .unwrap(),
-        // )
     }
 
     /// FieldExtension for Fq2 with Fq as base field

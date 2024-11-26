@@ -64,13 +64,13 @@ pub trait FieldExtension<BaseField> {
     /// Create an extension field element from its base field coefficients.
     fn from_coeffs(coeffs: Self::Coeffs) -> Self;
 
-    /// Create an extension field element from bytes.
+    /// Create an extension field element from little-endian bytes.
     fn from_bytes(bytes: &[u8]) -> Self;
 
     /// Convert an extension field element to its base field coefficients.
     fn to_coeffs(self) -> Self::Coeffs;
 
-    /// Convert an extension field element to bytes.
+    /// Convert an extension field element to little-endian bytes.
     fn to_bytes(&self) -> Vec<u8>;
 
     /// Embed a base field element into an extension field element.
