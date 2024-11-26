@@ -74,7 +74,7 @@ where
 
 We auto-implement `Rap<AB>` for any `Air<AB> where AB: InteractionBuilder`. The `Rap` adds in the extension field columns specified by interactions; note that these columns are not specified explicitly in plonky3 trace generation.
 
-![image](https://hackmd.io/_uploads/BkVAcpFyyx.png)
+![image](../../assets/rap.png)
 
 So when you implement `Air<AB: InteractionBuilder>` you automatically implement `Rap<AB>` **for some** AirBuilder.
 
