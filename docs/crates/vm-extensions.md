@@ -1,6 +1,6 @@
 # VM Extensions
 
-```rust!
+```rust
 pub trait VmExtension<F: PrimeField32> {
     type Executor: InstructionExecutor<F> + AnyEnum;
     type Periphery: AnyEnum;
@@ -24,7 +24,7 @@ Think of `VmInventory<Executor, Periphery>` as the collection of all chips, whic
 
 `VmInventory` API relevant for `VmExtension`:
 
-```rust!
+```rust
     pub fn add_executor(
         &mut self,
         executor: impl Into<Executor>,
@@ -46,7 +46,7 @@ where you should specify all opcodes owned by an executor when you add it.
 
 For runtime execution in a segment, the `VmInventory` also provides the getter functions:
 
-```rust!
+```rust
     pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&Executor>;
 
     pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut Executor>;
@@ -56,7 +56,7 @@ For runtime execution in a segment, the `VmInventory` also provides the getter f
 
 Here is the API of `VmInventoryBuilder`:
 
-```rust!
+```rust
 impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn memory_controller(&self) -> &MemoryControllerRef<F>;
     pub fn system_base(&self) -> &SystemBase<F>;
@@ -77,7 +77,7 @@ Once you have multiple extensions, how do you compose them into a VM?
 
 We have trait `VmGenericConfig`:
 
-```rust!
+```rust
 pub trait VmGenericConfig<F: PrimeField32> {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
@@ -96,7 +96,7 @@ A `VmGenericConfig` is a struct that is a `SystemConfig` together with a collect
 We will have a macro so that `VmGenericConfig` is auto-implemented
 when you do: **macro implementation in progress, do it manually for now**
 
-```rust!
+```rust
 #[derive(VmGenericConfig)]
 struct MyVmConfig {
     #[system]
@@ -122,7 +122,7 @@ For that we need to understand what `VmChipComplex` is: it replaces the role of 
 
 The macro will generate the `VmChipComplex` iteratively using the
 
-```rust!
+```rust
     pub fn extend<E3, P3, Ext>(
         mut self,
         config: &Ext,
@@ -147,7 +147,7 @@ For each extension's inventory generation, the `VmInventoryBuilder` is provided 
 
 The top level structs of `VirtualMachine`, `VmExecutor`, `SegmentExecutor` remain almost entirely the same, but now has `VmGenericConfig` as a generic:
 
-```rust!
+```rust
 pub struct VirtualMachine<SC: StarkGenericConfig, E, VmConfig> {
 ```
 

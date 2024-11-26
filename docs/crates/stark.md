@@ -9,7 +9,7 @@ An AIR in our system represents the set of constraints and metadata necessary to
 
 #### From plonky3
 
-```rust!
+```rust
 pub trait BaseAir<F: Field> {
     fn width(&self) -> usize;
 }
@@ -29,7 +29,7 @@ The way `Air` works is that you always implement `Air<AB>` with respect to "**so
 
 The struct implementing `Air` should be **stateless**. The struct should only contain configuration parameters necessary to determine the AIR constraints.
 
-```rust!
+```rust
 pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
     fn num_public_values(&self) -> usize {
         0
@@ -44,7 +44,7 @@ impl<F> BaseAirWithPublicValues<F> for MyAir {}
 
 For cached trace support:
 
-```rust!
+```rust
 /// An AIR with 1 or more main trace partitions.
 pub trait PartitionedBaseAir<F>: BaseAir<F> {
     /// By default, an AIR has no cached main trace.
@@ -63,7 +63,7 @@ impl<F> PartitionedBaseAir<F> for MyAir {}
 
 The common main trace is the "usual" main trace. All common main trace across all AIRs are committed into one commitment. Cached main are additional sections of main trace that are committed individually. Cached trace is not used in VM **except** by ProgramAir, where the axVM `Program` is committed into a dedicated commitment.
 
-```rust!
+```rust
 pub trait Rap<AB>: Sync
 where
     AB: PermutationAirBuilder,
@@ -86,7 +86,7 @@ The stark-backend uses three different concrete `AirBuilder` implementations:
 
 that depend on a `SC: StarkGenericConfig`. The `SC` specifies FRI proof system configuration parameters.
 
-```rust!
+```rust
 pub trait AnyRap<SC: StarkGenericConfig>:
     Rap<SymbolicRapBuilder<Val<SC>>> // for keygen to extract fixed data about the RAP
     + for<'a> Rap<ProverConstraintFolder<'a, SC>> // for prover quotient polynomial calculation
@@ -105,7 +105,7 @@ The backend wants to be able to prove multiple different AIRs together. So it mu
 
 To generate a proof, we pair an AIR (represented by `Arc<dyn AnyRap<SC>>`) with a set of methods to generate input traces in the `Chip` trait:
 
-```rust!
+```rust
 pub trait Chip<SC: StarkGenericConfig> {
     fn air(&self) -> Arc<dyn AnyRap<SC>>;
 

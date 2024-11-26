@@ -21,7 +21,7 @@ pub trait InstructionExecutor<F> {
 
 We divide all opcodes in the VM into groups, each of which is handled by a single **chip**. A chip should be a struct of type `C` and associated Air of type `A` which satisfy the following trait bounds:
 
-```rust!
+```rust
 C: Chip<SC> + InstructionExecutor<F>
 A: Air<AB> + BaseAir<F> + BaseAirWithPublicValues<F>
 ```
@@ -39,7 +39,7 @@ Together, these perform the following functionalities:
 
 Each specific instantiation of a modular VM is defined in the following structs which handle VMs with/without continuations:
 
-```rust!
+```rust
 pub struct VirtualMachine<F: PrimeField32> {
     pub config: VmConfig,
     /// Streams are shared between `ExecutionSegment`s and within each
@@ -56,7 +56,7 @@ pub struct SingleSegmentVM<F: PrimeField32> {
 
 The `Streams<F>` holds an `input_stream` and `hint_stream`:
 
-```rust!
+```rust
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
@@ -65,7 +65,7 @@ pub struct Streams<F> {
 
 Configuration of opcodes and memory is handled by:
 
-```rust!
+```rust
 pub struct VmConfig {
     /// List of all executors except modular executors.
     pub executors: Vec<ExecutorName>,
@@ -96,7 +96,7 @@ Given a `VmConfig`, we instantiate a `VmChipSet` using `VmConfig.create_chip_set
 
 **`VmChipSet` will be replaced by `VmChipComplex` very soon.**
 
-```rust!
+```rust
 pub struct VmChipSet<F: PrimeField32> {
     pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
 
@@ -125,7 +125,7 @@ Trace generation proceeds from:
 
 with subsets of functionality offered by `.execute()` and `execute_and_generate()`. The following struct tracks each continuation segment:
 
-```rust!
+```rust
 pub struct ExecutionSegment<F: PrimeField32> {
     pub config: VmConfig,
     pub chip_set: VmChipSet<F>,
@@ -180,7 +180,7 @@ The AdapterAir does not see the CoreAir, but the CoreAir is able to see the Adap
 
 Traits with their associated types and functions:
 
-```rust!
+```rust
 /// The interface between core AIR and adapter AIR.
 pub trait VmAdapterInterface<T> {
     type Reads;
@@ -290,7 +290,7 @@ You do not need to implement `Air` on the struct you implement `VmAdapterAir` or
 
 To create a chip used to support a set of opcodes in the VM, we start with types
 
-```rust!
+```rust
 A: VmAdapterChip
 C: VmCoreChip
 A::Air: VmAdapterAir
@@ -299,7 +299,7 @@ C::Air: VmCoreAir
 
 where `A::Air` and `C:Air` are implemented on all relevant `AirBuilder` required by the backend. We can then create `VmChipWrapper` and `VmAirWrapper` types below:
 
-```rust!
+```rust
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
     pub adapter: A,
     pub core: C,
@@ -330,7 +330,7 @@ They implement the following traits:
 
 **Convention:** If you have a new `Foo` functionality you want to support, make structs `FooCoreChip, FooCoreAir`. Either use existing `BarAdapterChip, BarAdapterAir` or make your own. Then typedef
 
-```rust!
+```rust
 pub type FooChip<F> = VmChipWrapper<F, BarAdapterChip<F>, FooCoreChip<F>>;
 pub type FooAir = VmAirWrapper<BarAdapterAir, FooCoreAir>;
 ```
@@ -339,7 +339,7 @@ If there is a risk of ambiguity, use name `BarFooChip` instead of just `FooChip`
 
 ### Basic structs for shared use
 
-```rust!
+```rust
 pub struct BasicAdapterInterface<
     T,
     PI,
