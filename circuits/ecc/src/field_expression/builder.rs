@@ -73,13 +73,12 @@ pub struct ExprBuilder {
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
 
-    needs_setup: bool,
     // Setup opcode is a special op that verifies the modulus is correct.
     // There are some chips that don't need it because we hardcode the modulus. E.g. the pairing ones.
-    // For chips that need setup:
-    // 1. if it supports multiple ops (num_flags > 1), the seutp is derived: setup = is_valid - sum(all_flags)
-    // 2. else if it supports only one opcode so user won't explicitly create a flag for it.
-    //    We create a default flag for it on finalizing.
+    // For those chips need setup, setup is derived: setup = is_valid - sum(all_flags)
+    // Therefore when the chip only supports one opcode, user won't explicitly create a flag for it
+    // and we will create a default flag for it on finalizing.
+    needs_setup: bool,
 }
 
 impl ExprBuilder {
@@ -145,7 +144,6 @@ impl ExprBuilder {
         self.num_flags - 1
     }
 
-    // Number of flags for ops, not including the default flag.
     pub fn needs_setup(&self) -> bool {
         assert!(self.finalized); // Should only be used after finalize.
         self.needs_setup
@@ -244,9 +242,6 @@ impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         assert!(self.builder.is_finalized());
-        // Number of flags always equal number of ops that chip can handle.
-        // When the chip only handles one op, it has a default flag.
-        // When the chip has multiple ops, the setup is derived: is_valid - sum(all_flags)
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
             + self.builder.carry_limbs.iter().sum::<usize>()
@@ -279,14 +274,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
-        println!("builder num flags: {}", self.builder.num_flags);
-        println!("num flags: {}", flags.len());
-        let no_setup = AB::Expr::from_bool(flags.is_empty());
-        let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
-        let is_setup = is_setup * (AB::Expr::ONE - no_setup);
-        println!("is_setup: {:?}", is_setup);
-
-        {
+        if self.builder.needs_setup() {
+            let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
+            builder.assert_bool(is_setup.clone());
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
                 let lhs = if i < inputs[0].len() {
                     inputs[0][i].into()
@@ -322,7 +312,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         for flag in flags.iter() {
             builder.assert_bool(*flag);
         }
-        builder.assert_bool(is_setup);
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i]
                 .evaluate_overflow_expr::<AB>(&inputs, &vars, &constants, &flags);
