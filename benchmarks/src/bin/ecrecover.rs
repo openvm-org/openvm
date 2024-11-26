@@ -69,7 +69,8 @@ fn main() -> Result<()> {
                     .map(BabyBear::from_canonical_u8)
                     .collect::<Vec<_>>()];
 
-                let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
+                // let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
+                let msg = ["Elliptic"];
                 input_stream.extend(
                     msg.iter()
                         .map(|s| make_input(&signing_key, s.as_bytes()))
