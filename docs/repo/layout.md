@@ -101,6 +101,7 @@ The toolchain, ISA, and VM are simultaenously extendable. This repository mainta
 - [`ax-circuit-primitives`](../../circuits/primitives): Primitive chips and sub-chips for standalone use in any circuit.
 - [`ax-circuit-derive`](../../circuits/derive): Procedural macros for use in circuit to derive traits.
 - [`ax-poseidon2-air`](../../circuits/hashes/poseidon2-air): Standalone poseidon2 AIR implementation.
+- [`ax-ecc-primitives`](../../circuits/ecc): General builder for generating chip for any modular arithmetic expression for a compile-time modulus. To be refactored.
 
 ### Proof System
 
