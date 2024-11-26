@@ -58,7 +58,7 @@ mod bls12_381 {
         let q0_cast = unsafe { &*(q0.as_ptr() as *const AffinePoint<Fp2>) };
         let q1_cast = unsafe { &*(q1.as_ptr() as *const AffinePoint<Fp2>) };
 
-        let f = Bn254::multi_miller_loop(
+        let f = Bls12_381::multi_miller_loop(
             &[s0_cast.clone(), s1_cast.clone()],
             &[q0_cast.clone(), q1_cast.clone()],
         );
@@ -75,7 +75,7 @@ mod bls12_381 {
 
 pub fn main() {
     let io = read_vec();
-    const BN254_SIZE: usize = 48 * 24;
+    const BN254_SIZE: usize = 32 * 24;
     const BLS12_381_SIZE: usize = 48 * 24;
 
     match io.len() {

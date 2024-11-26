@@ -1646,12 +1646,6 @@ fn gen_modular_executor_tuple(
             // We want to use log_num_lanes as a const, this likely requires a macro
             let class_offset = Rv32ModularArithmeticOpcode::default_offset()
                 + i * Rv32ModularArithmeticOpcode::COUNT;
-            println!(
-                "i: {}, count: {}, mod: {:?}",
-                i,
-                Rv32ModularArithmeticOpcode::COUNT,
-                modulus
-            );
             if bytes <= 32 {
                 res.extend([
                     (
@@ -1719,12 +1713,6 @@ fn gen_fp2_modular_executor_tuple(
             let modulus = &supported_modulus[modulus_idx];
             let bytes = modulus.bits().div_ceil(8);
             let class_offset = Fp2Opcode::default_offset() + modulus_idx * Fp2Opcode::COUNT;
-            println!(
-                "fp2_mod_exec modulus_idx: {}, count: {}, mod: {:?}",
-                modulus_idx,
-                Fp2Opcode::COUNT,
-                modulus
-            );
             if bytes <= 32 {
                 vec![
                     (
