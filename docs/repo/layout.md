@@ -8,7 +8,7 @@ The main components of the repository are:
   - [CI](#ci)
   - [CLI](#cli)
   - [VM SDK](#vm-sdk)
-  - [VM Circuit Framework](#vm-circuit-framework)
+  - [VM Framework](#vm-framework)
   - [Rust Toolchain](#rust-toolchain)
   - [Extensions](#extensions)
     - [RV32IM](#rv32im)
@@ -40,10 +40,12 @@ Command-line binary to compile, execute, and prove guest programs is in [`cargo-
 
 - [`axvm-sdk`](../../axvm-sdk): The developer SDK for the VM. It includes the axVM aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
 
-### VM Circuit Framework
+### VM Framework
 
 - [`axvm-circuit`](../../vm): The VM circuit framework. It includes the struct and trait definitions used throughout the architecture, as well as the system chips.
 - [`axvm-circuit-derive`](../../vm/derive): Procedural macros to derive traits in the VM circuit framework.
+- [`axvm-instructions`](../../toolchain/instructions): axVM instruction struct and trait definitions.
+- [`axvm-instructions-derive`](../../toolchain/instructions/derive): Procedural macros to derive traits for axVM instructions.
 
 ### Rust Toolchain
 
