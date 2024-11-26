@@ -1,13 +1,14 @@
 use alloc::vec::Vec;
-use core::fmt::Error;
 
-use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
+use axvm_algebra::{field::FieldExtension, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck},
+    axvm_algebra::DivUnsafe,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
+    core::fmt::Error,
     core::mem::MaybeUninit,
 };
 
@@ -16,8 +17,8 @@ use super::{Bn254, Fp, Fp12, Fp2};
 use crate::pairing::PairingIntrinsics;
 use crate::{
     pairing::{
-        Evaluatable, EvaluatedLine, FinalExp, FromLineDType, LineMulDType, MillerStep,
-        MultiMillerLoop, UnevaluatedLine,
+        Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
+        UnevaluatedLine,
     },
     AffinePoint,
 };

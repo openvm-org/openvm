@@ -245,16 +245,16 @@ mod bn254 {
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-        // Miller loop output verify
-        let f = Bn254::multi_miller_loop(&s, &q);
-        let (c, u) = Bn254::final_exp_hint(&f);
-        let c_inv = c.invert().unwrap();
-        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
-        let c_q2 = FieldExtension::frobenius_map(&c, 2);
-        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
-        let c_mul = c_q3_inv * c_q2 * c_q_inv;
+        // // Miller loop output verify
+        // let f = Bn254::multi_miller_loop(&s, &q);
+        // let (c, u) = Bn254::final_exp_hint(&f);
+        // let c_inv = c.invert().unwrap();
+        // let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        // let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        // let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        // let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
-        let fc = Bn254::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
+        // let fc = Bn254::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
 
         // Gather inputs
         let io0 = s
@@ -457,6 +457,82 @@ mod bls12_381 {
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter())
             .chain(f.to_coeffs())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        executor.execute(elf, vec![io_all])?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_bls12_381_pairing_check() -> Result<()> {
+        let elf = build_example_program("pairing_check")?;
+
+        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
+        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let mut enabled_moduli = exe
+        //     .custom_op_config
+        //     .intrinsics
+        //     .field_arithmetic
+        //     .primes
+        //     .iter()
+        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+        //     .collect::<Vec<_>>();
+        let enabled_moduli = vec![
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
+        ];
+
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_pairing_support(vec![PairingCurve::Bls12_381])
+                .add_ecc_support(vec![EcCurve::Bls12_381])
+                .add_modular_support(enabled_moduli.clone())
+                .add_complex_ext_support(enabled_moduli),
+        );
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // // Miller loop output verify
+        // let f = Bls12_381::multi_miller_loop(&s, &q);
+        // let (c, u) = Bls12_381::final_exp_hint(&f);
+        // let c_inv = c.invert().unwrap();
+        // let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        // let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        // let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        // let c_mul = c_q3_inv * c_q2 * c_q_inv;
+        // let fc = Bls12_381::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
+
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .map(AbstractField::from_canonical_u8)
