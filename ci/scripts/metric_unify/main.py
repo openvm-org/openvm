@@ -65,15 +65,10 @@ class Metric:
 
 class MetricDb:
     def __init__(self, metrics_file):
-        print(f"Loading metrics from {metrics_file}")
-        import os
-        print(os.path.isfile(metrics_file))
         # Dict[labels => List[Metric]]
         self.flat_dict = {}
         # Dict label_keys_tuple => Dict[label_values_tuple => List[Metric]]
         self.dict_by_label_types = {}
-        with open(metrics_file, 'r') as f:
-            print(f.read())
         with open(metrics_file, 'r') as f:
             data = json.load(f)
 
