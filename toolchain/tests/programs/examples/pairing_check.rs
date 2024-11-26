@@ -18,7 +18,6 @@ fn test_pairing_check(io: &[u8]) {
     let s1 = &io[32 * 2..32 * 4];
     let q0 = &io[32 * 4..32 * 8];
     let q1 = &io[32 * 8..32 * 12];
-    let f_cmp = &io[32 * 12..32 * 24];
 
     let s0_cast = unsafe { &*(s0.as_ptr() as *const AffinePoint<Fp>) };
     let s1_cast = unsafe { &*(s1.as_ptr() as *const AffinePoint<Fp>) };

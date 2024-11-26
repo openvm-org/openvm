@@ -203,15 +203,24 @@ mod bn254 {
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
-        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        let enabled_moduli = exe
-            .custom_op_config
-            .intrinsics
-            .field_arithmetic
-            .primes
-            .iter()
-            .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-            .collect::<Vec<_>>();
+
+        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
+        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let mut enabled_moduli = exe
+        //     .custom_op_config
+        //     .intrinsics
+        //     .field_arithmetic
+        //     .primes
+        //     .iter()
+        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+        //     .collect::<Vec<_>>();
+        let enabled_moduli = vec![
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
+        ];
+
         let executor = VmExecutor::<F>::new(
             VmConfig::rv32im()
                 .add_pairing_support(vec![PairingCurve::Bn254])
@@ -223,7 +232,8 @@ mod bn254 {
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
-        let S_mul = [S * Fr::from(1), -S * Fr::from(2)];
+        let mut S_mul = [S * Fr::from(1), S * Fr::from(2)];
+        S_mul[1].y = -S_mul[1].y;
         let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
 
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
