@@ -1,0 +1,6 @@
+[book]
+authors = ["Yi Sun"]
+language = "en"
+multilingual = false
+src = "src"
+title = "axVM Book"
