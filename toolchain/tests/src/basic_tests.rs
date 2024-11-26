@@ -1,6 +1,6 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm, ExecutorName, VmConfig, VmExecutor},
     extensions::rv32im::{Rv32IConfig, Rv32ImConfig},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
@@ -14,6 +14,7 @@ use crate::utils::build_example_program;
 
 type F = BabyBear;
 
+/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
@@ -69,12 +70,12 @@ fn test_read_runtime() -> Result<()> {
 #[test]
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
-    let config = VmConfig::rv32i();
-    let executor = VmExecutor::<F>::new(config.clone());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, Rv32IConfig>::new(config);
     let final_memory = executor.execute(elf, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
     let pv_proof = UserPublicValuesProof::compute(
-        config.memory_config.memory_dimensions(),
+        config.system.memory_config.memory_dimensions(),
         ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
         &hasher,
         &final_memory,
