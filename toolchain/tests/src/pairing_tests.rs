@@ -1,7 +1,5 @@
 #![allow(non_snake_case)]
 
-use std::str::FromStr;
-
 use ax_ecc_execution::axvm_ecc::{
     algebra::field::FieldExtension,
     halo2curves::ff::Field,
@@ -143,15 +141,24 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
-        let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        let enabled_moduli = exe
-            .custom_op_config
-            .intrinsics
-            .field_arithmetic
-            .primes
-            .iter()
-            .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-            .collect::<Vec<_>>();
+
+        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
+        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let mut enabled_moduli = exe
+        //     .custom_op_config
+        //     .intrinsics
+        //     .field_arithmetic
+        //     .primes
+        //     .iter()
+        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+        //     .collect::<Vec<_>>();
+        let enabled_moduli = vec![
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
+            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
+        ];
+
         let executor = VmExecutor::<F>::new(
             VmConfig::rv32im()
                 .add_pairing_support(vec![PairingCurve::Bn254])
@@ -163,9 +170,9 @@ mod bn254 {
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
-        let mut S_mul = [S * Fr::from(4), S * Fr::from(12)];
+        let mut S_mul = [S * Fr::from(1), S * Fr::from(2)];
         S_mul[1].y = -S_mul[1].y;
-        let Q_mul = [Q * Fr::from(8), Q * Fr::from(6)];
+        let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
 
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
@@ -197,7 +204,7 @@ mod bn254 {
 mod bls12_381 {
     use ax_ecc_execution::{
         axvm_ecc::{
-            halo2curves::bls12_381::{Fq12, Fq2, G1Affine, G2Affine},
+            halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
             pairing::{LineMulMType, MillerStep},
             AffinePoint,
         },
@@ -306,6 +313,74 @@ mod bls12_381 {
         let (pt, l0, l1) = Bls12_381::miller_double_and_add_step(&s, &q);
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]
             .into_iter()
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
+
+        executor.execute(elf, vec![io_all])?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_bls12_381_miller_loop() -> Result<()> {
+        let elf = build_example_program("pairing_miller_loop")?;
+
+        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
+        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
+        // let mut enabled_moduli = exe
+        //     .custom_op_config
+        //     .intrinsics
+        //     .field_arithmetic
+        //     .primes
+        //     .iter()
+        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
+        //     .collect::<Vec<_>>();
+        let enabled_moduli = vec![
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
+        ];
+
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_pairing_support(vec![PairingCurve::Bls12_381])
+                .add_ecc_support(vec![EcCurve::Bls12_381])
+                .add_modular_support(enabled_moduli.clone())
+                .add_complex_ext_support(enabled_moduli),
+        );
+
+        let S = G1Affine::generator();
+        let Q = G2Affine::generator();
+
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
+        S_mul[1].y = -S_mul[1].y;
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
+
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Test miller_loop
+        let f = Bls12_381::multi_miller_loop(&s, &q);
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
+
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .chain(f.to_coeffs())
+            .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
