@@ -102,5 +102,5 @@ pub fn mul_by_01234_expr(
     r.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    FieldExpr::new(builder, range_bus, false)
 }

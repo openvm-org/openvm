@@ -23,13 +23,17 @@ pub struct FieldExpressionCoreAir {
     /// The global opcode offset.
     pub offset: usize,
 
-    /// All the opcode indices (including setup) supported by this Air. The last one must be the setup opcode.
+    /// All the opcode indices (including setup) supported by this Air.
+    /// The last one must be the setup opcode if it's a chip needs setup.
     pub local_opcode_idx: Vec<usize>,
     /// Opcode flag idx (indices from builder.new_flag()) for all except setup opcode. Empty if single op chip.
     pub opcode_flag_idx: Vec<usize>,
-    // Example 1: 1-op chip EcAdd
+    // Example 1: 1-op chip EcAdd that nees setup
     //   local_opcode_idx = [0, 2], where 0 is EcAdd, 2 is setup
     //   opcode_flag_idx = [], not needed for single op chip.
+    // Example 1: 1-op chip EvaluateLine that doesn't need setup
+    //   local_opcode_idx = [2], the id within PairingOpcodeEnum
+    //   opcode_flag_idx = [], not needed
     // Example 2: 2-op chip MulDiv
     //   local_opcode_idx = [2, 3, 4], where 2 is Mul, 3 is Div, 4 is setup
     //   opcode_flag_idx = [0, 1], where 0 is mul_flag, 1 is div_flag, in the builder
@@ -42,7 +46,7 @@ impl FieldExpressionCoreAir {
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
     ) -> Self {
-        let opcode_flag_idx = if opcode_flag_idx.is_empty() {
+        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.has_setup() {
             // single op chip, so there is only one default flag, must be 0.
             vec![0]
         } else {
@@ -222,9 +226,14 @@ where
         let local_opcode_index = opcode - self.air.offset;
         let mut flags = vec![];
 
-        if self.air.expr.num_op_flags() == 0 {
-            // The chip only handles one opcode. So flag is true if it's the opcode (at index 0), false if it's the setup.
-            flags.push(local_opcode_index == self.air.local_opcode_idx[0]);
+        if self.expr().num_op_flags() == 0 {
+            // The chip only handles one opcode.
+            if self.expr().has_setup() {
+                // The flag is true if it's the opcode (at index 0), false if it's the setup.
+                flags.push(local_opcode_index == self.air.local_opcode_idx[0]);
+            } else {
+                // single op, no setup -> no flag needed
+            }
         } else {
             flags = vec![false; self.air.num_op_flags()];
             self.air

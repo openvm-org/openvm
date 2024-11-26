@@ -83,7 +83,7 @@ pub fn miller_double_step_expr(
     c.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    FieldExpr::new(builder, range_bus, false)
 }
 
 #[cfg(test)]

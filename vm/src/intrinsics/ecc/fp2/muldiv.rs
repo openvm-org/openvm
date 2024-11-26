@@ -111,7 +111,11 @@ pub fn fp2_muldiv_expr(
     builder.borrow_mut().set_compute(z_idx.1, compute_z1);
 
     let builder = builder.borrow().clone();
-    (FieldExpr::new(builder, range_bus), is_mul_flag, is_div_flag)
+    (
+        FieldExpr::new(builder, range_bus, true),
+        is_mul_flag,
+        is_div_flag,
+    )
 }
 
 #[cfg(test)]

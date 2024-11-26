@@ -106,11 +106,11 @@ impl ExprBuilder {
         self.finalized
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self, needs_setup: bool) {
         self.finalized = true;
 
-        // setup the dummy flag
-        if self.num_flags == 0 {
+        // setup the defalut flag if needed
+        if needs_setup && self.num_flags == 0 {
             self.new_flag();
             self.has_default_op_flag = true;
         }
@@ -145,6 +145,10 @@ impl ExprBuilder {
         } else {
             self.num_flags
         }
+    }
+
+    pub fn has_setup(&self) -> bool {
+        self.has_default_op_flag || self.num_flags > 1
     }
 
     // Below functions are used when adding variables and constraints manually, need to be careful.
@@ -206,9 +210,13 @@ pub struct FieldExpr {
 }
 
 impl FieldExpr {
-    pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(
+        builder: ExprBuilder,
+        range_bus: VariableRangeCheckerBus,
+        needs_setup: bool,
+    ) -> Self {
         let mut builder = builder;
-        builder.finalize();
+        builder.finalize(needs_setup);
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
@@ -271,7 +279,12 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
+        println!("builder num flags: {}", self.builder.num_flags);
+        println!("num flags: {}", flags.len());
+        let no_setup = AB::Expr::from_bool(flags.is_empty());
         let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
+        let is_setup = is_setup * (AB::Expr::ONE - no_setup);
+        println!("is_setup: {:?}", is_setup);
 
         {
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
@@ -366,7 +379,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
-        assert!(flags.len() == self.builder.num_flags);
+        assert_eq!(flags.len(), self.builder.num_flags);
 
         let limb_bits = self.limb_bits;
         let mut vars = vec![BigUint::zero(); self.num_variables];

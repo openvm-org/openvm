@@ -74,7 +74,11 @@ pub fn fp2_addsub_expr(
     z.save_output();
 
     let builder = builder.borrow().clone();
-    (FieldExpr::new(builder, range_bus), is_add_flag, is_sub_flag)
+    (
+        FieldExpr::new(builder, range_bus, true),
+        is_add_flag,
+        is_sub_flag,
+    )
 }
 
 #[cfg(test)]
