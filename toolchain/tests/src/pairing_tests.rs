@@ -232,12 +232,29 @@ mod bn254 {
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
-        let mut S_mul = [S * Fr::from(1), S * Fr::from(2)];
+        let mut S_mul = [
+            G1Affine::from(S * Fr::from(1)),
+            G1Affine::from(S * Fr::from(2)),
+        ];
         S_mul[1].y = -S_mul[1].y;
-        let Q_mul = [Q * Fr::from(2), Q * Fr::from(1)];
+        let Q_mul = [
+            G2Affine::from(Q * Fr::from(2)),
+            G2Affine::from(Q * Fr::from(1)),
+        ];
 
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+
+        // Miller loop output verify
+        let f = Bn254::multi_miller_loop(&s, &q);
+        let (c, u) = Bn254::final_exp_hint(&f);
+        let c_inv = c.invert().unwrap();
+        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3_inv * c_q2 * c_q_inv;
+
+        let fc = Bn254::multi_miller_loop_embedded_exp(&s, &q, Some(c_inv));
 
         // Gather inputs
         let io0 = s

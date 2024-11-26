@@ -29,11 +29,10 @@ impl FinalExp for Bn254 {
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
         // where fc == f * c^-{6x + 2}
         // c_mul = c^-{q^3 - q^2 + q}
-        let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
-        let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
-        let c_q2_inv = c_q2.invert().unwrap();
-        let c_q = FieldExtension::frobenius_map(&c_inv, 1);
-        let c_mul = c_q3 * c_q2_inv * c_q;
+        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
         // Compute miller loop with c_inv
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
