@@ -32,8 +32,8 @@ impl FieldExtension<Fp> for Fp2 {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(64);
-        bytes.extend_from_slice(&self.c0.as_le_bytes());
-        bytes.extend_from_slice(&self.c1.as_le_bytes());
+        bytes.extend_from_slice(self.c0.as_le_bytes());
+        bytes.extend_from_slice(self.c1.as_le_bytes());
         bytes
     }
 

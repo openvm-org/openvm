@@ -3,19 +3,16 @@ use alloc::vec::Vec;
 use axvm_algebra::{field::FieldExtension, IntMod};
 use group::ff::Field;
 use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, Fq6, Fr, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
+    bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
     pairing::MillerLoopResult,
 };
-use num_bigint::BigUint;
-use num_traits::Num;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::Bn254,
     pairing::{
-        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, ExpBytes, FinalExp,
-        MultiMillerLoop, PairingCheck, PairingIntrinsics,
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
     },
     AffinePoint,
 };
@@ -69,20 +66,6 @@ fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
             c2: convert_bn254_fp2_to_halo2_fq2(c[5].clone()),
         },
     }
-}
-
-fn convert_bn254_affine_point_halo2_fq_to_fp(p: AffinePoint<Fq>) -> AffinePoint<Fp> {
-    AffinePoint::new(
-        convert_bn254_halo2_fq_to_fp(p.x),
-        convert_bn254_halo2_fq_to_fp(p.y),
-    )
-}
-
-fn convert_bn254_affine_point_halo2_fq2_to_fp2(p: AffinePoint<Fq2>) -> AffinePoint<Fp2> {
-    AffinePoint::new(
-        convert_bn254_halo2_fq2_to_fp2(p.x),
-        convert_bn254_halo2_fq2_to_fp2(p.y),
-    )
 }
 
 #[test]
