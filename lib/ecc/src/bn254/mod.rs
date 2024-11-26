@@ -24,7 +24,6 @@ pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
 pub struct Bn254;
 
 impl Bn254 {
-    // 1 = "0100000000000000000000000000000000000000000000000000000000000000"
     pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
         Fp2 {
             c0: Bn254Fp(hex!(

@@ -664,7 +664,6 @@ dependencies = [
 name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
- "ax-ecc-execution",
  "axvm",
  "axvm-algebra",
  "axvm-platform",

@@ -27,9 +27,6 @@ group = "0.13.0"
 num-bigint-dig.workspace = true
 num-bigint.workspace = true
 
-[dev-dependencies]
-ax-ecc-execution = { workspace = true }
-
 [features]
 default = []
 std = ["axvm/std"]
