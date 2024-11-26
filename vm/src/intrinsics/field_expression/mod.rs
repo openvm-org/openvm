@@ -31,12 +31,13 @@ pub struct FieldExpressionCoreAir {
     // Example 1: 1-op chip EcAdd that nees setup
     //   local_opcode_idx = [0, 2], where 0 is EcAdd, 2 is setup
     //   opcode_flag_idx = [], not needed for single op chip.
-    // Example 1: 1-op chip EvaluateLine that doesn't need setup
+    // Example 2: 1-op chip EvaluateLine that doesn't need setup
     //   local_opcode_idx = [2], the id within PairingOpcodeEnum
     //   opcode_flag_idx = [], not needed
-    // Example 2: 2-op chip MulDiv
+    // Example 3: 2-op chip MulDiv that needs setup
     //   local_opcode_idx = [2, 3, 4], where 2 is Mul, 3 is Div, 4 is setup
     //   opcode_flag_idx = [0, 1], where 0 is mul_flag, 1 is div_flag, in the builder
+    // We don't support 2-op chip that doesn't need setup right now.
 }
 
 impl FieldExpressionCoreAir {
@@ -46,11 +47,11 @@ impl FieldExpressionCoreAir {
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
     ) -> Self {
-        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.has_setup() {
-            // single op chip, so there is only one default flag, must be 0.
+        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
+            // single op chip that needs setup, so there is only one default flag, must be 0.
             vec![0]
         } else {
-            // multi ops chip, use as is.
+            // multi ops chip or no-setup chip, use as is.
             opcode_flag_idx
         };
         assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
@@ -68,10 +69,6 @@ impl FieldExpressionCoreAir {
 
     pub fn num_vars(&self) -> usize {
         self.expr.builder.num_variables
-    }
-
-    pub fn num_op_flags(&self) -> usize {
-        self.expr.builder.num_op_flags()
     }
 
     pub fn num_flags(&self) -> usize {
@@ -226,16 +223,10 @@ where
         let local_opcode_index = opcode - self.air.offset;
         let mut flags = vec![];
 
-        if self.expr().num_op_flags() == 0 {
-            // The chip only handles one opcode.
-            if self.expr().has_setup() {
-                // The flag is true if it's the opcode (at index 0), false if it's the setup.
-                flags.push(local_opcode_index == self.air.local_opcode_idx[0]);
-            } else {
-                // single op, no setup -> no flag needed
-            }
-        } else {
-            flags = vec![false; self.air.num_op_flags()];
+        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is needed.
+        // Otherwise, there is a flag for each opcode and will be derived by is_valid - sum(flags).
+        if self.expr().needs_setup() {
+            flags = vec![false; self.air.num_flags()];
             self.air
                 .opcode_flag_idx
                 .iter()

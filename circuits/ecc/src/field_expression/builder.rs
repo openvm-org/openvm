@@ -72,10 +72,14 @@ pub struct ExprBuilder {
 
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
-    // The chips support only one opcode doesn't create any flag.
-    // Builder will create a default flag for it on finalizing.
-    // 1 meaning it's doing the operation, 0 meaning it's setup.
-    has_default_op_flag: bool,
+
+    needs_setup: bool,
+    // Setup opcode is a special op that verifies the modulus is correct.
+    // There are some chips that don't need it because we hardcode the modulus. E.g. the pairing ones.
+    // For chips that need setup:
+    // 1. if it supports multiple ops (num_flags > 1), the seutp is derived: setup = is_valid - sum(all_flags)
+    // 2. else if it supports only one opcode so user won't explicitly create a flag for it.
+    //    We create a default flag for it on finalizing.
 }
 
 impl ExprBuilder {
@@ -98,7 +102,7 @@ impl ExprBuilder {
             computes: vec![],
             output_indices: vec![],
             finalized: false,
-            has_default_op_flag: false,
+            needs_setup: false,
         }
     }
 
@@ -108,11 +112,14 @@ impl ExprBuilder {
 
     pub fn finalize(&mut self, needs_setup: bool) {
         self.finalized = true;
+        self.needs_setup = needs_setup;
+
+        // We don't support multi-op chip that doesn't need setup right now.
+        assert!(needs_setup || self.num_flags == 0);
 
         // setup the defalut flag if needed
         if needs_setup && self.num_flags == 0 {
             self.new_flag();
-            self.has_default_op_flag = true;
         }
     }
 
@@ -139,16 +146,9 @@ impl ExprBuilder {
     }
 
     // Number of flags for ops, not including the default flag.
-    pub fn num_op_flags(&self) -> usize {
-        if self.has_default_op_flag {
-            0
-        } else {
-            self.num_flags
-        }
-    }
-
-    pub fn has_setup(&self) -> bool {
-        self.has_default_op_flag || self.num_flags > 1
+    pub fn needs_setup(&self) -> bool {
+        assert!(self.finalized); // Should only be used after finalize.
+        self.needs_setup
     }
 
     // Below functions are used when adding variables and constraints manually, need to be careful.
