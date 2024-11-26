@@ -296,6 +296,13 @@ impl FieldVariable {
 
         let mut builder = self.builder.borrow_mut();
         let (new_var_idx, new_var) = builder.new_var();
+        let new_constraint = SymbolicExpr::Sub(
+            Box::new(SymbolicExpr::Mul(
+                Box::new(other.expr.clone()),
+                Box::new(new_var.clone()),
+            )),
+            Box::new(self.expr.clone()),
+        );
         builder.set_constraint(new_var_idx, new_constraint);
         // Only compute can have division.
         let compute = SymbolicExpr::Div(Box::new(self.expr.clone()), Box::new(other.expr.clone()));

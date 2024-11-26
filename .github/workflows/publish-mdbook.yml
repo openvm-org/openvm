@@ -1,0 +1,51 @@
+name: Publish mdBook to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "book/**"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Setup mdbook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: "latest"
+
+      - name: Install mdbook plugins
+        run: |
+          cargo install mdbook-katex mdbook-linkcheck mdbook-mermaid just
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9.1.0
+
+      - name: Install pnpm deps
+        run: pnpm i --frozen-lockfile
+
+      - name: Build the book
+        run: |
+          cd book
+          just lint-book-toc
+          mdbook build
+
+      - name: Add CNAME file
+        run: echo "vm.axiom.xyz" > ./book/CNAME
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: book
