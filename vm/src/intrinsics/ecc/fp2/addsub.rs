@@ -41,7 +41,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![Fp2Opcode::ADD as usize, Fp2Opcode::SUB as usize],
+            vec![
+                Fp2Opcode::ADD as usize,
+                Fp2Opcode::SUB as usize,
+                Fp2Opcode::SETUP_ADDSUB as usize,
+            ],
             vec![is_add_flag, is_sub_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2AddSub",

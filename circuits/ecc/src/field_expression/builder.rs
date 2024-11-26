@@ -72,8 +72,10 @@ pub struct ExprBuilder {
 
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
-    // The chips without any flags need a setup flag.
-    has_setup_flag: bool,
+    // The chips support only one opcode doesn't create any flag.
+    // Builder will create a default flag for it on finalizing.
+    // 1 meaning it's doing the operation, 0 meaning it's setup.
+    has_default_op_flag: bool,
 }
 
 impl ExprBuilder {
@@ -96,7 +98,7 @@ impl ExprBuilder {
             computes: vec![],
             output_indices: vec![],
             finalized: false,
-            has_setup_flag: false,
+            has_default_op_flag: false,
         }
     }
 
@@ -110,7 +112,7 @@ impl ExprBuilder {
         // setup the dummy flag
         if self.num_flags == 0 {
             self.new_flag();
-            self.has_setup_flag = true;
+            self.has_default_op_flag = true;
         }
     }
 
@@ -136,9 +138,9 @@ impl ExprBuilder {
         self.num_flags - 1
     }
 
-    // Number of flags for ops, not including the setup flag.
+    // Number of flags for ops, not including the default flag.
     pub fn num_op_flags(&self) -> usize {
-        if self.has_setup_flag {
+        if self.has_default_op_flag {
             0
         } else {
             self.num_flags
@@ -234,6 +236,9 @@ impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         assert!(self.builder.is_finalized());
+        // Number of flags always equal number of ops that chip can handle.
+        // When the chip only handles one op, it has a default flag.
+        // When the chip has multiple ops, the setup is derived: is_valid - sum(all_flags)
         self.num_limbs * (self.builder.num_input + self.builder.num_variables)
             + self.builder.q_limbs.iter().sum::<usize>()
             + self.builder.carry_limbs.iter().sum::<usize>()
@@ -361,15 +366,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
-        let mut flags = flags.clone();
-        if !self.builder.has_setup_flag {
-            assert!(flags.len() == self.builder.num_flags);
-        } else {
-            // Just one dummy flag.
-            assert!(self.builder.num_flags == 1);
-            assert!(flags.is_empty());
-            flags.push(true);
-        }
+        assert!(flags.len() == self.builder.num_flags);
 
         let limb_bits = self.limb_bits;
         let mut vars = vec![BigUint::zero(); self.num_variables];

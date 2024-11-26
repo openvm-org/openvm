@@ -372,6 +372,8 @@ pub enum Rv32ModularArithmeticOpcode {
 pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
     EC_DOUBLE,
+    SETUP_EC_ADD_NE,
+    SETUP_EC_DOUBLE,
 }
 
 #[derive(
@@ -395,8 +397,10 @@ pub enum Fp12Opcode {
 pub enum Fp2Opcode {
     ADD,
     SUB,
+    SETUP_ADDSUB,
     MUL,
     DIV,
+    SETUP_MULDIV,
 }
 
 #[derive(
