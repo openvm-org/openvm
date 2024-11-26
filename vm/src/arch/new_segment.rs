@@ -63,6 +63,11 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
+        let program = if config.system().collect_metrics {
+            program.strip_debug_infos()
+        } else {
+            program
+        };
         chip_complex.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
