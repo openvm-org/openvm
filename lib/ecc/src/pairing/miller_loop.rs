@@ -65,6 +65,9 @@ where
     ) -> Self::Fp12 {
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
+        for p in P {
+            assert!(p.x != <Self::Fp as Field>::ZERO || p.y != <Self::Fp as Field>::ZERO);
+        }
 
         let xy_fracs = P
             .iter()

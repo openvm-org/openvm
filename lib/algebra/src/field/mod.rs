@@ -13,6 +13,7 @@ use crate::{DivAssignUnsafe, DivUnsafe};
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized
+    + Eq
     + Clone
     + Debug
     + Neg<Output = Self>

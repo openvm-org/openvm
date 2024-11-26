@@ -214,3 +214,21 @@ fn test_bn254_miller_loop() {
 
     assert_eq!(final_f, compare_final);
 }
+
+#[test]
+#[should_panic]
+fn test_bn254_miller_loop_identity() {
+    let mut rng = StdRng::seed_from_u64(33);
+    let h2c_q = G2Affine::random(&mut rng);
+
+    let p = AffinePoint {
+        x: convert_bn254_halo2_fq_to_fp(Fq::ZERO),
+        y: convert_bn254_halo2_fq_to_fp(Fq::ZERO),
+    };
+    let q = AffinePoint {
+        x: convert_bn254_halo2_fq2_to_fp2(h2c_q.x),
+        y: convert_bn254_halo2_fq2_to_fp2(h2c_q.y),
+    };
+
+    let _f = Bn254::multi_miller_loop(&[p], &[q]);
+}
