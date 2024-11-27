@@ -219,18 +219,6 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             system_name[0] = system_name[0].to_ascii_uppercase();
             let system_name = system_name.iter().collect::<String>();
             let system_name = Ident::new(&system_name, Span::call_site().into());
-            let system_executor = Ident::new(
-                &format!(
-                    "{}Executor",
-                    system
-                        .ty
-                        .to_token_stream()
-                        .to_string()
-                        .strip_suffix("Config")
-                        .expect("Struct name must end with Config")
-                ),
-                Span::call_site().into(),
-            );
 
             let extensions = fields
                 .iter()
@@ -251,12 +239,10 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     field_name[0] = field_name[0].to_ascii_uppercase();
                     let field_name = field_name.iter().collect::<String>();
                     let field_name = Ident::new(&field_name, Span::call_site().into());
-                    let type_name = e.ty.to_token_stream().to_string();
-                    let type_name =
-                        Ident::new(&format!("{}Executor", type_name), Span::call_site().into());
+                    let type_name = e.ty.to_token_stream();
                     quote! {
                         #[any_enum]
-                        #field_name(#type_name<F>),
+                        #field_name(<#type_name as VmExtension<F>>::Executor),
                     }
                 })
                 .collect::<Vec<_>>();
@@ -272,7 +258,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
                 pub enum #enum_name<F: PrimeField32> {
                     #[any_enum]
-                    #system_name(#system_executor<F>),
+                    #system_name(SystemExecutor<F>),
                     #(#extension_enums)*
                 }
             })
