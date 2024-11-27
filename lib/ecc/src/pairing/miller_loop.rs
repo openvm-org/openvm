@@ -75,11 +75,6 @@ where
             Self::Fp12::ONE
         };
 
-        // let mut f = if let Some(c) = c.clone() {
-        //     c
-        // } else {
-        //     Self::Fp12::ONE
-        // };
         let mut Q_acc = Q.to_vec();
 
         let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, Q, c.clone(), &xy_fracs);
