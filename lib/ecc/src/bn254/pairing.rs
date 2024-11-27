@@ -198,17 +198,17 @@ impl MultiMillerLoop for Bn254 {
     }
 
     fn pre_loop(
-        f: &Self::Fp12,
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         _Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
         xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
-        let mut f = f.clone();
-
-        if c.is_some() {
-            f.square_assign();
-        }
+        let mut f = if let Some(mut c) = c {
+            c.square_assign();
+            c
+        } else {
+            Self::Fp12::ONE
+        };
 
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
