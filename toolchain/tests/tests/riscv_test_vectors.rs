@@ -9,7 +9,7 @@ use eyre::Result;
 use p3_baby_bear::BabyBear;
 
 type F = BabyBear;
-/// TODO: change to use new_vm::VmExecutor and new _air_test_with_min_segments when stable
+
 #[test]
 #[ignore = "must run makefile"]
 fn test_rv32im_riscv_vector_runtime() -> Result<()> {
