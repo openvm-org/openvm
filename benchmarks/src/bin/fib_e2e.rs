@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         .collect();
     run_with_metric_collection("OUTPUT_PATH", || {
         let root_proof =
-            prover.generate_proof_with_metric_spans(app_input, "Fibonacci Continuations Program");
+            prover.generate_proof_with_metric_spans(app_input, "Fibonacci Continuation Program");
         #[allow(unused_variables)]
         let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
             .in_scope(|| {

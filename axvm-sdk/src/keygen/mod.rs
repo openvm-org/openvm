@@ -65,10 +65,10 @@ pub struct AggProvingKey {
 
 impl AggProvingKey {
     pub fn keygen(config: AggConfig, app_pk: Option<&AppProvingKey>) -> Self {
-        Self::dummy_witness_and_keygen(config, app_pk).0
+        Self::dummy_proof_and_keygen(config, app_pk).0
     }
 
-    pub fn dummy_witness_and_keygen(
+    pub fn dummy_proof_and_keygen(
         config: AggConfig,
         app_pk: Option<&AppProvingKey>,
     ) -> (Self, Proof<SC>) {

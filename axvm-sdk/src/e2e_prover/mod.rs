@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::SingleSegmentVmExecutor;
+use axvm_circuit::arch::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
@@ -87,6 +87,14 @@ impl E2EStarkProver {
     }
 
     fn generate_app_proof(&self, input: Vec<F>) -> ContinuationVmProof<SC> {
+        #[cfg(feature = "bench-metrics")]
+        {
+            let mut vm_config = self.app_pk.app_vm_pk.vm_config.clone();
+            vm_config.collect_metrics = true;
+            let vm = VmExecutor::new(vm_config);
+            vm.execute_segments(self.app_committed_exe.exe.clone(), vec![input.clone()])
+                .unwrap();
+        }
         let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
             self.app_pk.app_vm_pk.clone(),
             self.app_committed_exe.clone(),
@@ -130,6 +138,8 @@ impl E2EStarkProver {
             );
             let group = format!("internal_verifier_height_{}", internal_node_height);
             proofs = info_span!("internal verifier", group = group).in_scope(|| {
+                counter!("fri.log_blowup")
+                    .absolute(self.agg_pk.internal_vm_pk.fri_params.log_blowup as u64);
                 internal_inputs
                     .into_iter()
                     .map(|input| {
