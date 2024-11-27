@@ -2,11 +2,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant};
 use p3_field::AbstractField;
 use thiserror::Error;
 
-use crate::system::program::ProgramBus;
+use super::Streams;
+use crate::system::{memory::MemoryController, program::ProgramBus};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -32,8 +33,6 @@ pub enum ExecutionError {
     DisabledOperation { pc: u32, opcode: usize },
     #[error("at pc = {pc}")]
     HintOutOfBounds { pc: u32 },
-    #[error("at pc {pc}")]
-    EndOfInputStream { pc: u32 },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
     PublicValueIndexOutOfBounds {
         pc: u32,
@@ -47,13 +46,16 @@ pub enum ExecutionError {
         existing_value: usize,
         new_value: usize,
     },
-    #[error("at pc {pc}, phantom sub-instruction not found for discriminant {discriminant}")]
-    PhantomNotFound { pc: u32, discriminant: u16 },
-    #[error("at pc {pc}, discriminant {discriminant}, phantom error: {inner}")]
+    #[error("at pc {pc}, phantom sub-instruction not found for discriminant {}", .discriminant.0)]
+    PhantomNotFound {
+        pc: u32,
+        discriminant: PhantomDiscriminant,
+    },
+    #[error("at pc {pc}, discriminant {}, phantom error: {inner}", .discriminant.0)]
     Phantom {
         pc: u32,
-        discriminant: u16,
-        inner: Box<dyn std::error::Error>,
+        discriminant: PhantomDiscriminant,
+        inner: eyre::Error,
     },
 }
 
@@ -266,15 +268,21 @@ impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
     }
 }
 
+/// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
+/// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](super::program::DEFAULT_PC_STEP).
+///
+/// They should not mutate memory, but they can mutate the input & hint streams.
+///
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
-/// Phantom sub-instruction always advances the program counter by `DEFAULT_PC_STEP`.
-///
-/// Phantom sub-instructions are unconstrained, so they should not mutate
-/// memory, but they can mutate the input & hint streams.
-pub trait PhantomSubInstruction<F> {
-    type Error: std::error::Error;
-
-    fn phantom_execute(&mut self, a: F, b: F, c_upper: u16)
-        -> std::result::Result<(), Self::Error>;
+pub trait PhantomSubExecutor<F> {
+    fn phantom_execute(
+        &mut self,
+        memory: &MemoryController<F>,
+        streams: &mut Streams<F>,
+        discriminant: PhantomDiscriminant,
+        a: F,
+        b: F,
+        c_upper: u16,
+    ) -> eyre::Result<()>;
 }

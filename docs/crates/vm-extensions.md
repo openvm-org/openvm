@@ -33,6 +33,12 @@ Think of `VmInventory<Executor, Periphery>` as the collection of all chips, whic
 
     pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<Periphery>);
 
+    pub fn add_phantom_sub_executor<F: 'static, PE: PhantomSubExecutor<F> + 'static>(
+        &mut self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError>;
+
     pub fn executors(&self) -> &[Executor] {
         &self.executors
     }

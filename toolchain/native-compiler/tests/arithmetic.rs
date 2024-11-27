@@ -1,6 +1,6 @@
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
-    system::program::{util::execute_program, ExecutionError::Fail},
+    arch::{ExecutionError, VmConfig, VmExecutor},
+    system::program::util::execute_program,
 };
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
@@ -426,5 +426,5 @@ fn assert_failed_assertion(
     let program = builder.compile_isa();
     let executor = VmExecutor::new(VmConfig::aggregation(4, 3));
     let result = executor.execute(program, vec![]);
-    assert!(matches!(result, Err(Fail(_))));
+    assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

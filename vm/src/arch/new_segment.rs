@@ -143,15 +143,14 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 break;
             }
 
-            // Some phantom instruction handling is more convenient to do here than in PhantomChip. FIXME[jpw]
+            // Some phantom instruction handling is more convenient to do here than in PhantomChip.
             if opcode == SystemOpcode::PHANTOM as usize {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
-                let phantom = PhantomInstruction::from_repr(discriminant)
-                    .ok_or(ExecutionError::PhantomNotFound { pc, discriminant })?;
-                tracing::trace!("pc: {pc:#x} | phantom: {phantom:?}");
+                let phantom = SysPhantom::from_repr(discriminant);
+                tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
                 match phantom {
-                    PhantomInstruction::DebugPanic => {
+                    Some(SysPhantom::DebugPanic) => {
                         if let Some(mut backtrace) = prev_backtrace {
                             backtrace.resolve();
                             eprintln!("axvm program failure; backtrace:\n{:?}", backtrace);
@@ -160,14 +159,14 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                         }
                         return Err(ExecutionError::Fail { pc });
                     }
-                    PhantomInstruction::CtStart => {
+                    Some(SysPhantom::CtStart) => {
                         // hack to remove "CT-" prefix
                         #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.start(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
                     }
-                    PhantomInstruction::CtEnd => {
+                    Some(SysPhantom::CtEnd) => {
                         // hack to remove "CT-" prefix
                         #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.end(

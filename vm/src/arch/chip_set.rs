@@ -409,12 +409,38 @@ impl VmConfig {
             }
             match executor {
                 ExecutorName::Phantom => {
-                    let phantom_chip = Rc::new(RefCell::new(PhantomChip::new(
+                    let mut phantom_chip = PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
                         offset,
-                    )));
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::rv32im::phantom::Rv32HintInputSubEx,
+                        PhantomDiscriminant(Rv32Phantom::HintInput as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::rv32im::phantom::Rv32PrintStrSubEx,
+                        PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativeHintInputSubEx,
+                        PhantomDiscriminant(NativePhantom::HintInput as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativePrintSubEx,
+                        PhantomDiscriminant(NativePhantom::Print as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativeHintBitsSubEx,
+                        PhantomDiscriminant(NativePhantom::HintBits as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::pairing::phantom::PairingHintSubEx,
+                        PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
+                    );
+
+                    let phantom_chip = Rc::new(RefCell::new(phantom_chip));
                     for opcode in range {
                         executors.insert(opcode, phantom_chip.clone().into());
                     }

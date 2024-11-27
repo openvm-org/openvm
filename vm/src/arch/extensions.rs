@@ -12,7 +12,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
-    program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
+    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode,
 };
 use derive_more::derive::From;
 use getset::Getters;
@@ -21,7 +22,10 @@ use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
-use super::{vm_poseidon2_config, ExecutionBus, InstructionExecutor, Streams, SystemConfig};
+use super::{
+    vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
+    SystemConfig,
+};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::{
@@ -167,6 +171,8 @@ enum ChipId {
 pub enum VmInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
     ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+    #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
+    PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
     #[error("Chip {name} not found")]
     ChipNotFound { name: String },
 }
@@ -252,6 +258,28 @@ impl<E, P> VmInventory<E, P> {
         let id = self.periphery.len();
         self.periphery.push(periphery_chip.into());
         self.insertion_order.push(ChipId::Periphery(id));
+    }
+
+    /// The generic `F` must match that of the `PhantomChip<F>`.
+    pub fn add_phantom_sub_executor<F: 'static, PE: PhantomSubExecutor<F> + 'static>(
+        &mut self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError>
+    where
+        E: AnyEnum,
+    {
+        let chip: &mut PhantomChip<F> = self
+            .executors
+            .iter_mut()
+            .flat_map(|e| e.as_any_kind_mut().downcast_mut())
+            .next()
+            .expect("PhantomChip always exists");
+        let existing = chip.add_sub_executor(phantom_sub, discriminant);
+        if existing.is_some() {
+            return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
+        }
+        Ok(())
     }
 
     pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&E> {
