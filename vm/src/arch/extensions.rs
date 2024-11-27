@@ -136,6 +136,22 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
             .collect()
     }
 
+    /// The generic `F` must match that of the `PhantomChip<F>`.
+    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+        &self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError> {
+        let chip_ref: &RefCell<PhantomChip<F>> =
+            self.find_chip().first().expect("PhantomChip always exists");
+        let mut chip = chip_ref.borrow_mut();
+        let existing = chip.add_sub_executor(phantom_sub, discriminant);
+        if existing.is_some() {
+            return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
+        }
+        Ok(())
+    }
+
     /// Shareable streams. Clone to get a shared mutable reference.
     pub fn streams(&self) -> &Arc<Mutex<Streams<F>>> {
         self.streams
@@ -260,28 +276,6 @@ impl<E, P> VmInventory<E, P> {
         self.insertion_order.push(ChipId::Periphery(id));
     }
 
-    /// The generic `F` must match that of the `PhantomChip<F>`.
-    pub fn add_phantom_sub_executor<F: 'static, PE: PhantomSubExecutor<F> + 'static>(
-        &mut self,
-        phantom_sub: PE,
-        discriminant: PhantomDiscriminant,
-    ) -> Result<(), VmInventoryError>
-    where
-        E: AnyEnum,
-    {
-        let chip: &mut PhantomChip<F> = self
-            .executors
-            .iter_mut()
-            .flat_map(|e| e.as_any_kind_mut().downcast_mut())
-            .next()
-            .expect("PhantomChip always exists");
-        let existing = chip.add_sub_executor(phantom_sub, discriminant);
-        if existing.is_some() {
-            return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
-        }
-        Ok(())
-    }
-
     pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&E> {
         let id = self.instruction_lookup.get(&opcode)?;
         self.executors.get(*id)
@@ -362,7 +356,7 @@ impl<F> SystemBase<F> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
-    Phantom(PhantomChip<F>),
+    Phantom(RefCell<PhantomChip<F>>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -449,7 +443,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         );
         phantom_chip.set_streams(streams.clone());
         inventory
-            .add_executor(phantom_chip, [phantom_opcode])
+            .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();
 
         let base = SystemBase {

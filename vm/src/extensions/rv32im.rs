@@ -324,11 +324,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
-        inventory.add_phantom_sub_executor::<F, _>(
+        builder.add_phantom_sub_executor(
             phantom::Rv32HintInputSubEx,
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
-        inventory.add_phantom_sub_executor::<F, _>(
+        builder.add_phantom_sub_executor(
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
         )?;

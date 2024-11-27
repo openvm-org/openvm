@@ -73,6 +73,20 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
+    fn execute(
+        &mut self,
+        instruction: Instruction<F>,
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        self.borrow_mut().execute(instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
+}
+
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
     fn execute(
         &mut self,

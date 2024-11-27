@@ -70,6 +70,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn find_chip<C: 'static>(&self) -> Vec<&C>;
     /// Shareable streams. Clone to get a shared mutable reference.
     pub fn streams(&self) -> &Arc<Mutex<Streams<F>>>;
+    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+        &self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError>;
 }
 ```
 
