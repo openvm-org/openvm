@@ -1,8 +1,9 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
+    extensions::rv32im::{Rv32IConfig, Rv32ImConfig},
     system::memory::tree::public_values::UserPublicValuesProof,
-    utils::air_test_with_min_segments,
+    utils::new_air_test_with_min_segments,
 };
 use axvm_transpiler::{axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use eyre::Result;
@@ -16,16 +17,16 @@ type F = BabyBear;
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
-    let config = VmConfig::rv32i();
-    air_test_with_min_segments(config, elf, vec![], min_segments);
+    let config = Rv32IConfig::default();
+    new_air_test_with_min_segments(config, elf, vec![], min_segments);
     Ok(())
 }
 
 #[test_case("collatz", 1)]
 fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
-    let config = VmConfig::rv32im();
-    air_test_with_min_segments(config, elf, vec![], min_segments);
+    let config = Rv32ImConfig::default();
+    new_air_test_with_min_segments(config, elf, vec![], min_segments);
     Ok(())
 }
 

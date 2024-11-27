@@ -37,6 +37,7 @@ use crate::{
     arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
         ecc::{
+            fp12::Fp12MulChip,
             fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
                 EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
@@ -84,8 +85,9 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK, MERKLE_AIR_OFFSET,
+            merkle::{DirectCompressionBus, MemoryMerkleBus},
+            offline_checker::MemoryBus,
+            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -94,7 +96,7 @@ use crate::{
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
-pub const RANGE_CHECKER_BUS: usize = 4;
+const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
@@ -103,18 +105,7 @@ pub const BYTE_XOR_BUS: usize = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const MEMORY_MERKLE_BUS: usize = 12;
 
-pub const PROGRAM_AIR_ID: usize = 0;
-/// ProgramAir is the first AIR so its cached trace should be the first main trace.
-pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
-pub const CONNECTOR_AIR_ID: usize = 1;
-/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
-/// using persistent memory.
-pub const PUBLIC_VALUES_AIR_ID: usize = 2;
-/// AIR ID of the Memory Boundary AIR.
-pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
-/// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
-/// Merkle AIR commits start/final memory states.
-pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
+use super::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 
 pub struct VmChipSet<F: PrimeField32> {
     pub executors: HashMap<usize, AxVmExecutor<F>>,
@@ -150,6 +141,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             }
         }
     }
+
     /// Returns the AIR ID of the given executor if it exists.
     pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
         self.executor_to_air_id_mapping().get(&executor).copied()
@@ -175,6 +167,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             })
             .collect()
     }
+
     /// Return IDs of AIRs which heights won't during execution.
     pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
         let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
@@ -353,6 +346,7 @@ impl VmConfig {
                 self.memory_config,
                 range_checker.clone(),
                 merkle_bus,
+                DirectCompressionBus(POSEIDON2_DIRECT_BUS),
                 Equipartition::<F, CHUNK>::new(),
             )))
         } else {
@@ -362,7 +356,7 @@ impl VmConfig {
                 range_checker.clone(),
             )))
         };
-        let program_chip = ProgramChip::default();
+        let program_chip = ProgramChip::new(program_bus);
 
         let mut executors: HashMap<usize, AxVmExecutor<F>> = HashMap::new();
 
@@ -415,12 +409,38 @@ impl VmConfig {
             }
             match executor {
                 ExecutorName::Phantom => {
-                    let phantom_chip = Rc::new(RefCell::new(PhantomChip::new(
+                    let mut phantom_chip = PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
                         offset,
-                    )));
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::rv32im::phantom::Rv32HintInputSubEx,
+                        PhantomDiscriminant(Rv32Phantom::HintInput as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::rv32im::phantom::Rv32PrintStrSubEx,
+                        PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativeHintInputSubEx,
+                        PhantomDiscriminant(NativePhantom::HintInput as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativePrintSubEx,
+                        PhantomDiscriminant(NativePhantom::Print as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::native::phantom::NativeHintBitsSubEx,
+                        PhantomDiscriminant(NativePhantom::HintBits as u16),
+                    );
+                    phantom_chip.add_sub_executor(
+                        crate::extensions::pairing::phantom::PairingHintSubEx,
+                        PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
+                    );
+
+                    let phantom_chip = Rc::new(RefCell::new(phantom_chip));
                     for opcode in range {
                         executors.insert(opcode, phantom_chip.clone().into());
                     }
@@ -892,6 +912,7 @@ impl VmConfig {
                 execution_bus,
                 program_bus,
                 memory_controller.clone(),
+                POSEIDON2_DIRECT_BUS,
                 offset,
             )));
             for opcode in range {
@@ -1162,6 +1183,60 @@ impl VmConfig {
                     chips.push(AxVmChip::Executor(chip.into()));
                 }
                 _ => unreachable!("Unsupported executor"),
+            }
+        }
+
+        for (local_opcode_idx, class_offset, executor, modulus) in
+            gen_pairing_fp12_op_executor_tuple(&self.supported_pairing_curves)
+        {
+            let global_opcode_idx = local_opcode_idx + class_offset;
+            if executors.contains_key(&global_opcode_idx) {
+                panic!("Attempting to override an executor for opcode {global_opcode_idx}");
+            }
+            let config32 = ExprBuilderConfig {
+                modulus: modulus.clone(),
+                num_limbs: 32,
+                limb_bits: 8,
+            };
+            let config48 = ExprBuilderConfig {
+                modulus,
+                num_limbs: 48,
+                limb_bits: 8,
+            };
+            match executor {
+                ExecutorName::Fp12MulRv32_32 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 12, 12, 32, 32>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config32,
+                        BN254.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                ExecutorName::Fp12MulRv32_48 => {
+                    let chip = Rc::new(RefCell::new(Fp12MulChip::new(
+                        Rv32VecHeapAdapterChip::<F, 2, 36, 36, 16, 16>::new(
+                            execution_bus,
+                            program_bus,
+                            memory_controller.clone(),
+                            bitwise_lookup_chip.clone(),
+                        ),
+                        memory_controller.clone(),
+                        config48,
+                        BLS12381.XI,
+                        class_offset,
+                    )));
+                    executors.insert(global_opcode_idx, chip.clone().into());
+                    chips.push(AxVmChip::Executor(chip.into()));
+                }
+                _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
             }
         }
 
@@ -1540,6 +1615,37 @@ fn gen_pairing_executor_tuple(
                         curve.prime(),
                     ),
                 ]
+            } else {
+                panic!("curve {:?} is not supported", curve);
+            }
+        })
+        .collect()
+}
+
+fn gen_pairing_fp12_op_executor_tuple(
+    supported_pairing_curves: &[PairingCurve],
+) -> Vec<(usize, usize, ExecutorName, BigUint)> {
+    supported_pairing_curves
+        .iter()
+        .flat_map(|curve| {
+            let bytes = curve.prime().bits().div_ceil(8);
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
+            if bytes <= 32 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_32,
+                    curve.prime(),
+                )]
+            } else if bytes <= 48 {
+                vec![(
+                    Fp12Opcode::MUL as usize,
+                    pairing_class_offset,
+                    ExecutorName::Fp12MulRv32_48,
+                    curve.prime(),
+                )]
             } else {
                 panic!("curve {:?} is not supported", curve);
             }

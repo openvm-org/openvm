@@ -1,8 +1,9 @@
+use alloc::vec::Vec;
 use core::ops::Neg;
 
 use axvm_algebra::{
     field::{Complex, FieldExtension},
-    Field,
+    Field, IntMod,
 };
 
 use super::Fp;
@@ -17,8 +18,23 @@ impl FieldExtension<Fp> for Fp2 {
         Self { c0, c1 }
     }
 
+    fn from_bytes(bytes: &[u8]) -> Self {
+        assert_eq!(bytes.len(), 64);
+        Self::from_coeffs([
+            Fp::from_const_bytes(bytes[0..32].try_into().unwrap()),
+            Fp::from_const_bytes(bytes[32..64].try_into().unwrap()),
+        ])
+    }
+
     fn to_coeffs(self) -> Self::Coeffs {
         [self.c0, self.c1]
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(64);
+        bytes.extend_from_slice(self.c0.as_le_bytes());
+        bytes.extend_from_slice(self.c1.as_le_bytes());
+        bytes
     }
 
     fn embed(c0: Fp) -> Self {

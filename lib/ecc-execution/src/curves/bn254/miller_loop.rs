@@ -1,5 +1,6 @@
 use axvm_ecc::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
+    bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
     pairing::{
         Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },
@@ -8,7 +9,7 @@ use axvm_ecc::{
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
-use super::{Bn254, BN254_PBE_NAF, BN254_SEED};
+use super::Bn254;
 
 impl MillerStep for Bn254 {
     type Fp2 = Fq2;
@@ -124,7 +125,7 @@ impl MultiMillerLoop for Bn254 {
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BN254_SEED;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PBE_NAF;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Fq12, lines: Vec<EvaluatedLine<Fq2>>) -> Fq12 {
         let mut f = f;
@@ -144,17 +145,17 @@ impl MultiMillerLoop for Bn254 {
     }
 
     fn pre_loop(
-        f: &Fq12,
         Q_acc: Vec<AffinePoint<Fq2>>,
         _Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
-        let mut f = *f;
-
-        if c.is_some() {
-            f = f.square();
-        }
+        let mut f = if let Some(mut c) = c {
+            c.square_assign();
+            c
+        } else {
+            Self::Fp12::ONE
+        };
 
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Fq2>>::new();
@@ -166,8 +167,8 @@ impl MultiMillerLoop for Bn254 {
         Q_acc = Q_out_double;
 
         let lines_iter = izip!(lines_2S.iter(), xy_fracs.iter());
-        for (line_2S, (x_over_y, y_inv)) in lines_iter {
-            let line = line_2S.evaluate(&(*x_over_y, *y_inv));
+        for (line_2S, xy_frac) in lines_iter {
+            let line = line_2S.evaluate(xy_frac);
             initial_lines.push(line);
         }
 

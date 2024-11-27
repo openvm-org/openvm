@@ -20,11 +20,10 @@ use crate::{
             Rv32HintStoreOpcode::{self, *},
             UsizeOpcode,
         },
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, Streams,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        AdapterAirContext, AdapterRuntimeContext, ExecutionError, MinimalInstruction, Result,
+        Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    system::program::ExecutionError,
 };
 
 /// HintStore Core Chip handles the range checking of the data to be written to memory
@@ -137,7 +136,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let mut streams = self.streams.get().unwrap().lock();
         if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS {
-            return Err(ExecutionError::HintOutOfBounds(from_pc));
+            return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
         }
         let data: [F; RV32_REGISTER_NUM_LIMBS] =
             array::from_fn(|_| streams.hint_stream.pop_front().unwrap());

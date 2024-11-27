@@ -252,11 +252,14 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
 fn process_phantom<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<F>> {
     let dec_insn = IType::new(instruction_u32);
     PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
-        PhantomImm::HintInput => {
-            Instruction::phantom(PhantomInstruction::HintInputRv32, F::ZERO, F::ZERO, 0)
-        }
+        PhantomImm::HintInput => Instruction::phantom(
+            PhantomDiscriminant(Rv32Phantom::HintInput as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
+        ),
         PhantomImm::PrintStr => Instruction::phantom(
-            PhantomInstruction::PrintStrRv32,
+            PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             0,
@@ -273,7 +276,7 @@ fn process_pairing<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
         assert_eq!(dec_insn.rs2, 0);
         // Return exits the outermost function
         return Some(Instruction::phantom(
-            PhantomInstruction::HintFinalExp,
+            PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             F::from_canonical_usize(pairing_idx),
             0,

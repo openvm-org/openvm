@@ -229,6 +229,47 @@ fn test_auto_carry_add() {
     .expect("Verification failed");
 }
 
+#[test]
+fn test_auto_carry_div() {
+    let prime = secp256k1_coord_prime();
+    let (range_checker, builder) = setup(&prime);
+
+    let mut x1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
+    // The choice of scalar (7) needs to be such that
+    // 1. the denominator 7x^2 doesn't trigger autosave, >=8 doesn't work.
+    // 2. But doing a division on it triggers autosave, because of division constraint, <= 6 doesn't work.
+    let mut x3 = x1.square().int_mul(7) / x2;
+    x3.save();
+
+    let builder = builder.borrow().clone();
+    assert_eq!(builder.num_variables, 2); // numerator autosaved, and the final division
+
+    let expr = FieldExpr::new(builder, range_checker.bus());
+    let width = BaseAir::<BabyBear>::width(&expr);
+
+    let x = generate_random_biguint(&prime);
+    let y = generate_random_biguint(&prime);
+    // let expected = (&x * &x * BigUint::from(10u32)) % prime;
+    let inputs = vec![x, y];
+
+    let mut row = BabyBear::zero_vec(width);
+    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
+    let FieldExprCols { vars, .. } = expr.load_vars(&row);
+    assert_eq!(vars.len(), 2);
+    // let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
+    // assert_eq!(generated, expected);
+
+    let trace = RowMajorMatrix::new(row, width);
+    let range_trace = range_checker.generate_trace();
+
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![expr, range_checker.air],
+        vec![trace, range_trace],
+    )
+    .expect("Verification failed");
+}
+
 fn make_addsub_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());

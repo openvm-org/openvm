@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use axvm_circuit::arch::{
     instructions::{program::Program, *},
     Modulus,
@@ -318,13 +316,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 
     match instruction {
         AsmInstruction::PrintV(src) => vec![Instruction::phantom(
-            PhantomInstruction::PrintF,
+            PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
             2,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
-            PhantomInstruction::PrintF,
+            PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
             2,
@@ -332,7 +330,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
             .map(|i| {
                 Instruction::phantom(
-                    PhantomInstruction::PrintF,
+                    PhantomDiscriminant(NativePhantom::Print as u16),
                     i32_f(src + i * word_size_i32),
                     F::ZERO,
                     2,
@@ -520,7 +518,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ))
             .collect(),
         AsmInstruction::Trap => vec![
-            Instruction::phantom(PhantomInstruction::DebugPanic, F::ZERO, F::ZERO, 0),
+            Instruction::phantom(PhantomDiscriminant(SysPhantom::DebugPanic as u16), F::ZERO, F::ZERO, 0),
         ],
         AsmInstruction::Halt => vec![
             // terminate
@@ -534,10 +532,10 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ),
         ],
         AsmInstruction::HintInputVec() => vec![
-            Instruction::phantom(PhantomInstruction::HintInput, F::ZERO, F::ZERO, 0)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintInput as u16), F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::HintBits(src, len) => vec![
-            Instruction::phantom(PhantomInstruction::HintBits, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
@@ -620,14 +618,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtStart)]
+                vec![Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16))]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtEnd)]
+                vec![Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16))]
             } else {
                 vec![]
             }
@@ -691,16 +689,16 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         }
     }
 
-    let mut instructions_and_debug_infos = HashMap::new();
-    instructions_and_debug_infos.insert(0, (init_register_0, init_debug_info));
+    let mut result = Program::new_empty(DEFAULT_PC_STEP, 0, DEFAULT_MAX_NUM_PUBLIC_VALUES);
+    result.push_instruction_and_debug_info(init_register_0, init_debug_info);
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {
-            let cur_size = instructions_and_debug_infos.len() as u32;
+            let cur_size = result.len() as u32;
             let cur_pc = cur_size * DEFAULT_PC_STEP;
 
             let labels =
                 |label: F| F::from_canonical_u32(block_start[label.as_canonical_u64() as usize]);
-            let result = convert_instruction(
+            let local_result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
                 F::from_canonical_u32(cur_pc),
@@ -708,18 +706,9 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
                 &options,
             );
 
-            for (local_pc, (instruction, debug_info)) in result.instructions_and_debug_infos {
-                let existing = instructions_and_debug_infos
-                    .insert(cur_pc + local_pc, (instruction.clone(), debug_info.clone()));
-                assert!(existing.is_none(), "pc should not already exist");
-            }
+            result.append(local_result);
         }
     }
 
-    Program {
-        instructions_and_debug_infos,
-        step: DEFAULT_PC_STEP,
-        pc_base: 0,
-        max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
-    }
+    result
 }

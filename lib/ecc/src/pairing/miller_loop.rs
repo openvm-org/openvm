@@ -32,7 +32,6 @@ where
     ///
     /// xy_fracs consists of (x/y, 1/y) pairs for each point P
     fn pre_loop(
-        f: &Self::Fp12,
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
@@ -76,15 +75,10 @@ where
             Self::Fp12::ONE
         };
 
-        let mut f = if let Some(c) = c.clone() {
-            c
-        } else {
-            Self::Fp12::ONE
-        };
         let mut Q_acc = Q.to_vec();
 
-        let (f_out, Q_acc_out) = Self::pre_loop(&f, Q_acc, Q, c.clone(), &xy_fracs);
-        f = f_out;
+        let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, Q, c.clone(), &xy_fracs);
+        let mut f = f_out;
         Q_acc = Q_acc_out;
 
         for i in (0..Self::PSEUDO_BINARY_ENCODING.len() - 2).rev() {
@@ -152,7 +146,7 @@ where
             f = Self::evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = Self::post_loop(&f, Q_acc, Q, c, &xy_fracs);
+        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), Q, c, &xy_fracs);
         f = f_out;
 
         f

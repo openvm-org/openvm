@@ -3,7 +3,7 @@ use ax_stark_backend::interaction::InteractionBuilder;
 use p3_field::{AbstractField, Field};
 
 use super::{air::Poseidon2VmAir, columns::Poseidon2VmIoCols, WIDTH};
-use crate::arch::{instructions::Poseidon2Opcode::PERM_POS2, ExecutionState, POSEIDON2_DIRECT_BUS};
+use crate::arch::{instructions::Poseidon2Opcode::PERM_POS2, ExecutionState};
 
 impl<F: Field> Poseidon2VmAir<F> {
     /// Receives instructions from the Core on the designated `POSEIDON2_BUS` (opcodes) or `POSEIDON2_DIRECT_BUS` (direct), and sends both read and write requests to the memory chip.
@@ -30,14 +30,14 @@ impl<F: Field> Poseidon2VmAir<F> {
             .eval(builder, io.is_opcode);
 
         // DIRECT
-        if self.direct {
+        if let Some(direct_bus) = self.direct_bus {
             let fields = internal_io
                 .flatten()
                 .into_iter()
                 .take(WIDTH + WIDTH / 2)
                 .collect::<Vec<AB::Var>>();
 
-            builder.push_receive(POSEIDON2_DIRECT_BUS, fields, io.is_compress_direct);
+            builder.push_receive(direct_bus, fields, io.is_compress_direct);
         }
     }
 }

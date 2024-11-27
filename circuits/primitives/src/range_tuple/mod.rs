@@ -170,6 +170,9 @@ impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(self.count.len())
+    }
     fn current_trace_height(&self) -> usize {
         self.count.len()
     }

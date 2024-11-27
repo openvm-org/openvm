@@ -12,12 +12,9 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::Rng;
 use test_log::test;
 
-use crate::{
-    arch::RANGE_CHECKER_BUS,
-    system::memory::{
-        offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
-        TimestampedValues,
-    },
+use crate::system::memory::{
+    offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
+    TimestampedValues,
 };
 
 type Val = BabyBear;
@@ -27,6 +24,7 @@ fn boundary_air_test() {
     let mut rng = create_seeded_rng();
 
     const MEMORY_BUS: usize = 1;
+    const RANGE_CHECKER_BUS: usize = 3;
     const MAX_ADDRESS_SPACE: usize = 4;
     const LIMB_BITS: usize = 15;
     const MAX_VAL: usize = 1 << LIMB_BITS;

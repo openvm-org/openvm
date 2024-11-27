@@ -10,13 +10,12 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor, VmConfig,
-        VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, ExecutorName,
+        SingleSegmentVmExecutor, VmConfig, VmExecutor,
     },
     prover::{local::VmLocalProver, SingleSegmentVmProver},
     system::{
-        memory::tree::public_values::UserPublicValuesProof,
-        program::{trace::AxVmCommittedExe, ExecutionError},
+        memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
     },
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -64,7 +63,8 @@ fn test_1() {
         },
     };
     let max_num_user_public_values = axvm_sdk_config.max_num_user_public_values;
-    let axvm_sdk_pk = AxVmSdkProvingKey::keygen(axvm_sdk_config);
+    #[allow(unused_variables)]
+    let (axvm_sdk_pk, dummy_internal_proof) = AxVmSdkProvingKey::keygen_impl(axvm_sdk_config);
     let app_engine = BabyBearPoseidon2Engine::new(axvm_sdk_pk.app_vm_pk.fri_params);
 
     let mut program = {
@@ -168,7 +168,7 @@ fn test_1() {
             public_values_root_proof: Some(wrong_pv_root_proof),
         });
         match execution_result.err().unwrap() {
-            ExecutionError::Fail(_) => {}
+            ExecutionError::Fail { .. } => {}
             _ => panic!("Expected execution to fail"),
         }
     }
@@ -181,7 +181,7 @@ fn test_1() {
             public_values_root_proof: Some(wrong_pv_root_proof),
         });
         match execution_result.err().unwrap() {
-            ExecutionError::Fail(_) => {}
+            ExecutionError::Fail { .. } => {}
             _ => panic!("Expected execution to fail"),
         }
     }
@@ -253,4 +253,38 @@ fn test_1() {
         root_pvs.leaf_verifier_commit,
         app_exe_commit.leaf_vm_verifier_commit
     );
+    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &axvm_sdk_pk.root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
+}
+#[cfg(feature = "static-verifier")]
+mod static_verifier {
+    use ax_stark_sdk::{
+        ax_stark_backend::prover::types::Proof,
+        config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+    };
+    use axvm_native_compiler::prelude::Witness;
+    use axvm_recursion::witness::Witnessable;
+    use axvm_sdk::keygen::RootVerifierProvingKey;
+
+    use crate::SC;
+
+    pub(crate) fn test_static_verifier(
+        root_verifier_pk: &RootVerifierProvingKey,
+        dummy_internal_proof: Proof<SC>,
+        root_proot: &Proof<BabyBearPoseidon2OuterConfig>,
+    ) {
+        // Here we intend to use a dummy root proof to generate a static verifier circuit in order
+        // to test if the static verifier circuit can handle a different root proof.
+        let dummy_root_proof = root_verifier_pk.generate_dummy_root_proof(dummy_internal_proof);
+        let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_root_proof);
+        let mut witness = Witness::default();
+        root_proot.write(&mut witness);
+        // Here the proof is verified inside.
+        // FIXME: explicitly verify the proof.
+        static_verifier.prove(witness);
+    }
 }

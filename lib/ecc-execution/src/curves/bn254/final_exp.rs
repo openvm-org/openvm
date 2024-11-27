@@ -11,8 +11,16 @@ use halo2curves_axiom::{
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 
 #[allow(non_snake_case)]
-impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
-    fn assert_final_exp_is_one(f: &Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
+impl FinalExp for Bn254 {
+    type Fp = Fq;
+    type Fp2 = Fq2;
+    type Fp12 = Fq12;
+
+    fn assert_final_exp_is_one(
+        f: &Self::Fp12,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) {
         let (c, u) = Self::final_exp_hint(f);
         let c_inv = c.invert().unwrap();
 
@@ -21,14 +29,12 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
         // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
         // where fc == f * c^-{6x + 2}
         // c_mul = c^-{q^3 - q^2 + q}
-        let c_q3 = FieldExtension::frobenius_map(&c_inv, 3);
-        let c_q2 = FieldExtension::frobenius_map(&c_inv, 2);
-        let c_q2_inv = c_q2.invert().unwrap();
-        let c_q = FieldExtension::frobenius_map(&c_inv, 1);
-        let c_mul = c_q3 * c_q2_inv * c_q;
+        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3_inv * c_q2 * c_q_inv;
 
         // Compute miller loop with c_inv
-        // todo!()
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
         assert_eq!(fc * c_mul * u, Fq12::ONE);
@@ -37,7 +43,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bn254 {
     // Adapted from the Gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/sw_bn254/hints.go#L23
     // returns c (residueWitness) and u (cubicNonResiduePower)
-    fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
+    fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
         // Residue witness
         let mut c;
         // Cubic nonresidue power

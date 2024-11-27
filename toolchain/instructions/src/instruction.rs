@@ -2,7 +2,7 @@ use backtrace::Backtrace;
 use p3_field::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::isize_to_field, PhantomInstruction, SystemOpcode, UsizeOpcode};
+use crate::{utils::isize_to_field, PhantomDiscriminant, SystemOpcode, UsizeOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
@@ -73,20 +73,20 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn phantom(kind: PhantomInstruction, a: F, b: F, c_upper: u16) -> Self {
+    pub fn phantom(discriminant: PhantomDiscriminant, a: F, b: F, c_upper: u16) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.with_default_offset(),
             a,
             b,
-            c: F::from_canonical_u32((kind as u32) | ((c_upper as u32) << 16)),
+            c: F::from_canonical_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
             ..Default::default()
         }
     }
 
-    pub fn debug(phantom: PhantomInstruction) -> Self {
+    pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.with_default_offset(),
-            c: F::from_canonical_usize(phantom as usize),
+            c: F::from_canonical_u32(discriminant.0 as u32),
             ..Default::default()
         }
     }

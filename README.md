@@ -1,6 +1,9 @@
-# AFS
+# axVM
 
-AFS stands for Axiom Flash Storage, or potentially Axiom Filesystem.
+**Install**
+| User Book
+| [Developer Docs](./docs)
+| Crate Docs
 
 ## Introduction to Plonky3
 
