@@ -13,7 +13,7 @@ use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_ecc_primitives::field_expression::ExprBuilderConfig;
+// use ax_ecc_primitives::field_expression::ExprBuilderConfig;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -32,29 +32,29 @@ use parking_lot::Mutex;
 use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
-use super::{vm_poseidon2_config, EcCurve, PairingCurve, Streams};
+use super::{vm_poseidon2_config, Streams};
 use crate::{
     arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
     intrinsics::{
-        ecc::{
-            fp12::Fp12MulChip,
-            fp2::{Fp2AddSubChip, Fp2MulDivChip},
-            pairing::{
-                EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
-                EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
-                MillerDoubleStepChip,
-            },
-            weierstrass::{EcAddNeChip, EcDoubleChip},
-        },
+        // ecc::{
+        //     fp12::Fp12MulChip,
+        //     fp2::{Fp2AddSubChip, Fp2MulDivChip},
+        //     pairing::{
+        //         EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
+        //         EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
+        //         MillerDoubleStepChip,
+        //     },
+        //     weierstrass::{EcAddNeChip, EcDoubleChip},
+        // },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
             Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
             Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
         },
-        modular::{
-            ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
-            ModularMulDivChip, ModularMulDivCoreChip,
-        },
+        // modular::{
+        //     ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
+        //     ModularMulDivChip, ModularMulDivCoreChip,
+        // },
     },
     kernels::{
         adapters::{
@@ -921,6 +921,7 @@ impl VmConfig {
             chips.push(AxVmChip::Executor(poseidon_chip.into()));
         }
 
+        /*
         for (local_opcode_idx, class_offset, executor, modulus) in
             gen_ec_executor_tuple(&self.supported_ec_curves)
         {
@@ -1470,6 +1471,7 @@ impl VmConfig {
                 _ => unreachable!("Fp2 executors should only contain Fp2AddSub and Fp2MulDiv"),
             }
         }
+        */
 
         if Arc::strong_count(&bitwise_lookup_chip) > 1 {
             chips.push(AxVmChip::BitwiseOperationLookup(bitwise_lookup_chip));
@@ -1493,6 +1495,7 @@ impl VmConfig {
     }
 }
 
+/*
 // Returns (local_opcode_idx, global offset, executor name, modulus)
 fn gen_ec_executor_tuple(
     supported_ec_curves: &[EcCurve],
@@ -1844,6 +1847,7 @@ fn gen_fp2_modular_executor_tuple(
         })
         .collect()
 }
+*/
 
 fn shift_range(r: Range<usize>, x: usize) -> Range<usize> {
     let start = r.start + x;

@@ -1,4 +1,5 @@
 mod builder;
+mod core_chip;
 mod field_variable;
 mod symbolic_expr;
 
@@ -6,5 +7,6 @@ mod symbolic_expr;
 mod tests;
 
 pub use builder::*;
+pub use core_chip::*;
 pub use field_variable::*;
 pub use symbolic_expr::*;

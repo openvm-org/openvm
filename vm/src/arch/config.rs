@@ -20,7 +20,7 @@ use super::{
 };
 use crate::{
     arch::ExecutorName,
-    intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    // intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::memory::BOUNDARY_AIR_OFFSET,
 };
 
@@ -277,6 +277,7 @@ impl VmConfig {
         self.add_executor(ExecutorName::Multiplication256Rv32)
     }
 
+    /*
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
         res.supported_modulus.extend(enabled_modulus);
@@ -320,6 +321,7 @@ impl VmConfig {
     pub fn add_canonical_pairing_curves(self) -> Self {
         self.add_pairing_support(vec![PairingCurve::Bn254])
     }
+    */
 
     pub fn with_num_public_values(mut self, n: usize) -> Self {
         self.num_public_values = n;
@@ -432,6 +434,22 @@ pub enum Modulus {
     Secp256k1Scalar = 1,
 }
 
+// TO BE DELETED:
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum EcCurve {
+    Secp256k1,
+    Bn254,
+    Bls12_381,
+}
+
+// TODO: move this to axvm-ecc
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
+pub enum PairingCurve {
+    Bn254,
+    Bls12_381,
+}
+
+/*
 impl Modulus {
     pub fn prime(&self) -> BigUint {
         match self {
@@ -445,13 +463,7 @@ impl Modulus {
     }
 }
 
-// TO BE DELETED:
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EcCurve {
-    Secp256k1,
-    Bn254,
-    Bls12_381,
-}
+
 
 impl EcCurve {
     pub fn prime(&self) -> BigUint {
@@ -463,12 +475,7 @@ impl EcCurve {
     }
 }
 
-// TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
-pub enum PairingCurve {
-    Bn254,
-    Bls12_381,
-}
+
 
 impl PairingCurve {
     pub fn prime(&self) -> BigUint {
@@ -478,3 +485,4 @@ impl PairingCurve {
         }
     }
 }
+*/

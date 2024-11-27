@@ -17,22 +17,22 @@ use strum::EnumDiscriminants;
 use crate::{
     derive::InstructionExecutor,
     intrinsics::{
-        ecc::{
-            fp12::Fp12MulChip,
-            fp2::{Fp2AddSubChip, Fp2MulDivChip},
-            pairing::{
-                EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
-                EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
-                MillerDoubleStepChip,
-            },
-            weierstrass::{EcAddNeChip, EcDoubleChip},
-        },
+        // ecc::{
+        //     fp12::Fp12MulChip,
+        //     fp2::{Fp2AddSubChip, Fp2MulDivChip},
+        //     pairing::{
+        //         EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
+        //         EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
+        //         MillerDoubleStepChip,
+        //     },
+        //     weierstrass::{EcAddNeChip, EcDoubleChip},
+        // },
         hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
         int256::{
             Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
             Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
         },
-        modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
+        // modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
     kernels::{
         branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
@@ -84,6 +84,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
     BranchEqual256Rv32(Rc<RefCell<Rv32BranchEqual256Chip<F>>>),
     BranchLessThan256Rv32(Rc<RefCell<Rv32BranchLessThan256Chip<F>>>),
     Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
+    /*
     // Modular arithmetic:
     // 32-bytes or 48-bytes modulus.
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
@@ -119,6 +120,7 @@ pub enum AxVmExecutor<F: PrimeField32> {
     MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
     EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
     EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
+    */
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
