@@ -200,17 +200,17 @@ impl MultiMillerLoop for Bn254 {
     }
 
     fn pre_loop(
-        f: &Self::Fp12,
         Q_acc: Vec<AffinePoint<Self::Fp2>>,
         _Q: &[AffinePoint<Self::Fp2>],
         c: Option<Self::Fp12>,
         xy_fracs: &[(Self::Fp, Self::Fp)],
     ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
-        let mut f = f.clone();
-
-        if c.is_some() {
-            f.square_assign();
-        }
+        let mut f = if let Some(mut c) = c {
+            c.square_assign();
+            c
+        } else {
+            Self::Fp12::ONE
+        };
 
         let mut Q_acc = Q_acc;
         let mut initial_lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
@@ -244,6 +244,8 @@ impl MultiMillerLoop for Bn254 {
 
         let x_to_q_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[1];
         let x_to_q_sq_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[2];
+
+        // twisted frobenius calculation: `frob_p(twist(q)) = twist(q1)`
         let q1_vec = Q
             .iter()
             .map(|Q| {
@@ -268,6 +270,7 @@ impl MultiMillerLoop for Bn254 {
             lines.push(line);
         }
 
+        // twisted frobenius calculation: `-frob_p^2(twist(q)) = twist(q2)`
         let q2_vec = Q
             .iter()
             .map(|Q| {

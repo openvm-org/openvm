@@ -146,20 +146,22 @@ impl MultiMillerLoop for Bls12_381 {
 
     /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
     fn pre_loop(
-        f: &Fq12,
         Q_acc: Vec<AffinePoint<Fq2>>,
         Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
-        let mut f = *f;
-
-        if c.is_some() {
+        let mut f = if let Some(mut c) = c {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
             // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
-            f = f.square() * c.unwrap();
-        }
+            let mut c3 = c;
+            c.square_assign();
+            c3 *= &c;
+            c3
+        } else {
+            Self::Fp12::ONE
+        };
 
         let mut Q_acc = Q_acc;
 

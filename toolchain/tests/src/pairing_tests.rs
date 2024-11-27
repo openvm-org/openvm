@@ -407,7 +407,6 @@ mod bls12_381 {
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
         ];
 
         let executor = VmExecutor::<F>::new(
