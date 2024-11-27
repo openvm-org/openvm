@@ -245,7 +245,7 @@ fn test_auto_carry_div() {
     let builder = builder.borrow().clone();
     assert_eq!(builder.num_variables, 2); // numerator autosaved, and the final division
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
