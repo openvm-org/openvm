@@ -69,7 +69,7 @@ fn test_1() {
 
     #[allow(unused_variables)]
     let (agg_pk, dummy_internal_proof) =
-        AggProvingKey::dummy_proof_and_keygen(agg_config.clone(), Some(&app_pk));
+        AggProvingKey::dummy_proof_and_keygen(agg_config.clone(), None);
 
     let program = {
         let n = 200;
