@@ -50,6 +50,10 @@ pub trait Field:
 
     /// Square `self` in-place
     fn square_assign(&mut self);
+
+    fn inverse(&self) -> Option<Self> {
+        Some(Self::ONE.div_unsafe(self))
+    }
 }
 
 /// Field extension trait. BaseField is the base field of the extension field.

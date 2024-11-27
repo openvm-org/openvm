@@ -10,24 +10,25 @@ use std::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use axvm_ecc::algebra::Field;
+use axvm_ecc::{algebra::Field, bn254::Bn254Point};
 use halo2curves_axiom::{ff::PrimeField, CurveAffine};
 use snark_verifier::{
     loader::{LoadedEcPoint, LoadedScalar},
     util::arithmetic::{fe_to_big, FieldOps},
 };
 
-use super::loader::{AxVmCurve, AxVmLoader, LOADER};
+use super::loader::{AxVmLoader, LOADER};
 
 #[derive(Clone)]
 pub struct AxVmScalar<F: PrimeField, F2: Field>(pub F2, pub PhantomData<F>);
 
 #[derive(Clone)]
-pub struct AxVmEcPoint<C: CurveAffine>(pub C);
+pub struct AxVmEcPoint<CA: CurveAffine, C>(pub C, pub PhantomData<CA>);
 
 impl<F: PrimeField, F2: Field> PartialEq for AxVmScalar<F, F2> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        todo!();
+        // self.0.clone() == other.0
     }
 }
 
@@ -39,112 +40,113 @@ impl<F: PrimeField, F2: Field> LoadedScalar<F> for AxVmScalar<F, F2> {
     }
 
     fn pow_var(&self, exp: &Self, _: usize) -> Self {
-        let exp = fe_to_big(exp.0).to_u64_digits();
-        AxVmScalar(self.0.pow_vartime(exp))
+        todo!()
     }
 }
 
-impl<F: PrimeField> Debug for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> Debug for AxVmScalar<F, F2> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Scalar").field("value", &self.0).finish()
+        f.debug_struct("Scalar")
+            .field("value", &self.0.clone())
+            .finish()
     }
 }
 
-impl<F: PrimeField> FieldOps for AxVmScalar<F> {
-    fn invert(&self) -> Option<Self> {
-        Option::<F>::from(self.0.invert()).map(|f| AxVmScalar(f))
-    }
-}
-
-impl<F: PrimeField> Add for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> Add for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        AxVmScalar(self.0 + rhs.0)
+        AxVmScalar(self.0.clone() + rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> Sub for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> Sub for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        AxVmScalar(self.0 - rhs.0)
+        AxVmScalar(self.0.clone() - rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> Mul for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> Mul for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        AxVmScalar(self.0 * rhs.0)
+        AxVmScalar(self.0.clone() * rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> Neg for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> Neg for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        AxVmScalar(-self.0)
+        AxVmScalar(-self.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> Add<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> Add<&'b Self> for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn add(self, rhs: &'b Self) -> Self::Output {
-        AxVmScalar(self.0 + rhs.0)
+        AxVmScalar(self.0.clone() + rhs.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> Sub<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> Sub<&'b Self> for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn sub(self, rhs: &'b Self) -> Self::Output {
-        AxVmScalar(self.0 - rhs.0)
+        AxVmScalar(self.0.clone() - rhs.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> Mul<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> Mul<&'b Self> for AxVmScalar<F, F2> {
     type Output = Self;
 
     fn mul(self, rhs: &'b Self) -> Self::Output {
-        AxVmScalar(self.0 * rhs.0)
+        AxVmScalar(self.0.clone() * rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> AddAssign for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> AddAssign for AxVmScalar<F, F2> {
     fn add_assign(&mut self, rhs: Self) {
-        *self = AxVmScalar(self.0 + rhs.0)
+        *self = AxVmScalar(self.0.clone() + rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> SubAssign for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> SubAssign for AxVmScalar<F, F2> {
     fn sub_assign(&mut self, rhs: Self) {
-        *self = AxVmScalar(self.0 - rhs.0)
+        *self = AxVmScalar(self.0.clone() - rhs.0.clone(), PhantomData)
     }
 }
 
-impl<F: PrimeField> MulAssign for AxVmScalar<F> {
+impl<F: PrimeField, F2: Field> MulAssign for AxVmScalar<F, F2> {
     fn mul_assign(&mut self, rhs: Self) {
-        *self = AxVmScalar(self.0 * rhs.0)
+        *self = AxVmScalar(self.0.clone() * rhs.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> AddAssign<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> AddAssign<&'b Self> for AxVmScalar<F, F2> {
     fn add_assign(&mut self, rhs: &'b Self) {
-        *self = AxVmScalar(self.0 + rhs.0)
+        *self = AxVmScalar(self.0.clone() + rhs.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> SubAssign<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> SubAssign<&'b Self> for AxVmScalar<F, F2> {
     fn sub_assign(&mut self, rhs: &'b Self) {
-        *self = AxVmScalar(self.0 - rhs.0)
+        *self = AxVmScalar(self.0.clone() - rhs.0.clone(), PhantomData)
     }
 }
 
-impl<'b, F: PrimeField> MulAssign<&'b Self> for AxVmScalar<F> {
+impl<'b, F: PrimeField, F2: Field> MulAssign<&'b Self> for AxVmScalar<F, F2> {
     fn mul_assign(&mut self, rhs: &'b Self) {
-        *self = AxVmScalar(self.0 * rhs.0)
+        *self = AxVmScalar(self.0.clone() * rhs.0.clone(), PhantomData)
+    }
+}
+
+impl<F: PrimeField, F2: Field> FieldOps for AxVmScalar<F, F2> {
+    fn invert(&self) -> Option<Self> {
+        Option::from(self.0.inverse()).map(|f| AxVmScalar(f, PhantomData))
     }
 }
 
@@ -154,13 +156,14 @@ impl<'b, F: PrimeField> MulAssign<&'b Self> for AxVmScalar<F> {
 //     }
 // }
 
-impl<C: CurveAffine> PartialEq for AxVmEcPoint<C> {
+impl<CA: CurveAffine> PartialEq for AxVmEcPoint<CA, Bn254Point> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        todo!();
+        // self.0.clone() == other.0
     }
 }
 
-impl<C: AxVmCurve> LoadedEcPoint<C> for AxVmEcPoint<C> {
+impl<CA: CurveAffine> LoadedEcPoint<CA> for AxVmEcPoint<CA, Bn254Point> {
     type Loader = AxVmLoader;
 
     fn loader(&self) -> &Self::Loader {
@@ -168,8 +171,10 @@ impl<C: AxVmCurve> LoadedEcPoint<C> for AxVmEcPoint<C> {
     }
 }
 
-impl<C: CurveAffine> Debug for AxVmEcPoint<C> {
+impl<CA: CurveAffine> Debug for AxVmEcPoint<CA, Bn254Point> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EcPoint").field("value", &self.0).finish()
+        f.debug_struct("EcPoint")
+            .field("value", &self.0.clone())
+            .finish()
     }
 }

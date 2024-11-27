@@ -1,4 +1,8 @@
-use axvm_ecc::algebra::field::FieldExtension;
+use axvm_ecc::{
+    algebra::field::FieldExtension,
+    bn254::{Bn254Point, Bn254Scalar},
+    sw::IntrinsicCurve,
+};
 use halo2curves_axiom::bn256::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
@@ -53,3 +57,8 @@ pub const BN254_PBE_NAF: [i8; BN254_PBE_NAF_LEN] = [
 ];
 
 pub struct Bn254;
+
+impl IntrinsicCurve for Bn254 {
+    type Scalar = Bn254Scalar;
+    type Point = Bn254Point;
+}

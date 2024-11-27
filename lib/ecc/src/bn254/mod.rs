@@ -1,15 +1,24 @@
+use alloc::vec::Vec;
+use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+
 use axvm::moduli_setup;
 use axvm_algebra::{Field, IntMod};
+
+use crate::{sw::SwPoint, Group};
 
 mod fp12;
 mod fp2;
 pub mod pairing;
 
+use elliptic_curve::{
+    sec1::{Coordinates, EncodedPoint, ModulusSize},
+    Curve,
+};
 pub use fp12::*;
 pub use fp2::*;
 use hex_literal::hex;
 
-use crate::pairing::PairingIntrinsics;
+use crate::{pairing::PairingIntrinsics, CyclicGroup};
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
@@ -20,9 +29,28 @@ moduli_setup! {
     Bn254Fp = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
 }
 
+moduli_setup! {
+    Bn254Scalar = "0x30644E72 E131A029 B85045B6 8181585D 2833E848 79B97091 43E1F593 F0000001";
+}
+
 pub type Fp = Bn254Fp;
+pub type Fr = Bn254Scalar;
 
 impl Field for Fp {
+    type SelfRef<'a> = &'a Self;
+    const ZERO: Self = <Self as IntMod>::ZERO;
+    const ONE: Self = <Self as IntMod>::ONE;
+
+    fn double_assign(&mut self) {
+        IntMod::double_assign(self);
+    }
+
+    fn square_assign(&mut self) {
+        IntMod::square_assign(self);
+    }
+}
+
+impl Field for Fr {
     type SelfRef<'a> = &'a Self;
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;
@@ -609,4 +637,29 @@ impl PairingIntrinsics for Bn254 {
             },
         ],
     ];
+}
+
+axvm::sw_setup! {
+    Bn254Point = Bn254Fp;
+}
+
+pub type EcPoint = Bn254Point;
+
+impl CyclicGroup for Bn254Point {
+    const GENERATOR: Self = Bn254Point {
+        x: Bn254Fp::from_const_bytes(hex!(
+            "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
+        )),
+        y: Bn254Fp::from_const_bytes(hex!(
+            "B8D410FB8FD0479C195485A648B417FDA808110EFCFBA45D65C4A32677DA3A48"
+        )),
+    };
+    const NEG_GENERATOR: Self = Bn254Point {
+        x: Bn254Fp::from_const_bytes(hex!(
+            "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
+        )),
+        y: Bn254Fp::from_const_bytes(hex!(
+            "7727EF046F2FB863E6AB7A59B74BE80257F7EEF103045BA29A3B5CD98825C5B7"
+        )),
+    };
 }
