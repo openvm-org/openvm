@@ -1663,6 +1663,12 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                     (
+                        Fp2Opcode::SETUP_ADDSUB as usize,
+                        class_offset,
+                        ExecutorName::Fp2AddSubRv32_32,
+                        modulus.clone(),
+                    ),
+                    (
                         Fp2Opcode::MUL as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_32,
@@ -1670,6 +1676,12 @@ fn gen_fp2_modular_executor_tuple(
                     ),
                     (
                         Fp2Opcode::DIV as usize,
+                        class_offset,
+                        ExecutorName::Fp2MulDivRv32_32,
+                        modulus.clone(),
+                    ),
+                    (
+                        Fp2Opcode::SETUP_MULDIV as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_32,
                         modulus.clone(),
@@ -1690,6 +1702,12 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                     (
+                        Fp2Opcode::SETUP_ADDSUB as usize,
+                        class_offset,
+                        ExecutorName::Fp2AddSubRv32_48,
+                        modulus.clone(),
+                    ),
+                    (
                         Fp2Opcode::MUL as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_48,
@@ -1697,6 +1715,12 @@ fn gen_fp2_modular_executor_tuple(
                     ),
                     (
                         Fp2Opcode::DIV as usize,
+                        class_offset,
+                        ExecutorName::Fp2MulDivRv32_48,
+                        modulus.clone(),
+                    ),
+                    (
+                        Fp2Opcode::SETUP_MULDIV as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_48,
                         modulus.clone(),

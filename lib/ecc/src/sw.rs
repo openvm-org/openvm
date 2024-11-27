@@ -81,6 +81,10 @@ pub fn setup_moduli() {
     setup_Secp256k1Scalar();
 }
 
+pub fn setup_fp2() {
+    setup_Secp256k1Coord_fp2();
+}
+
 pub fn setup_curves() {
     setup_Secp256k1Point();
 }
