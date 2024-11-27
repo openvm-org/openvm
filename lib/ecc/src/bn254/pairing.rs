@@ -242,6 +242,8 @@ impl MultiMillerLoop for Bn254 {
 
         let x_to_q_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[1];
         let x_to_q_sq_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[2];
+
+        // twisted frobenius calculation: `frob_p(twist(q)) = twist(q1)`
         let q1_vec = Q
             .iter()
             .map(|Q| {
@@ -266,6 +268,7 @@ impl MultiMillerLoop for Bn254 {
             lines.push(line);
         }
 
+        // twisted frobenius calculation: `-frob_p^2(twist(q)) = twist(q2)`
         let q2_vec = Q
             .iter()
             .map(|Q| {

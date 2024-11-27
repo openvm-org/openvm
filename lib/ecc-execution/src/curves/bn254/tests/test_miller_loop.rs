@@ -43,14 +43,3 @@ fn test_multi_miller_loop_bn254() {
     let rand_seeds = [8, 15, 29, 55, 166];
     run_miller_loop_test(&rand_seeds);
 }
-
-#[test]
-fn test_multi_miller_loop_generators() {
-    let g1 = G1Affine::generator();
-    let g2 = G2Affine::generator();
-    let p = AffinePoint { x: g1.x, y: g1.y };
-    let q = AffinePoint { x: g2.x, y: g2.y };
-
-    let f = Bn254::multi_miller_loop(&[p], &[q]);
-    println!("final f: {:#?}", f);
-}
