@@ -15,6 +15,7 @@ members = [
     "circuits/primitives",
     "circuits/derive",
     "vm",
+    "extensions/ax-mod-circuit-builder",
     "toolchain/instructions",
     "toolchain/instructions/derive",
     "toolchain/transpiler",
