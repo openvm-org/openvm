@@ -4,11 +4,10 @@ use axvm_algebra::{field::FieldExtension, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck},
+    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
     axvm_algebra::DivUnsafe,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
-    core::fmt::Error,
     core::mem::MaybeUninit,
 };
 
@@ -310,7 +309,7 @@ impl PairingCheck for Bn254 {
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
-    ) -> Result<(), Error> {
+    ) -> Result<(), PairingCheckError> {
         let f = Self::multi_miller_loop(P, Q);
         let hint = final_exp_hint::bn254_final_exp_hint(&f.to_bytes());
         let c = Fp12::from_bytes(&hint[..32 * 12]);
@@ -330,7 +329,10 @@ impl PairingCheck for Bn254 {
         // Compute miller loop with c_inv
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
 
-        assert_eq!(fc * c_mul * u, Fp12::ONE);
-        Ok(())
+        if fc * c_mul * u == Fp12::ONE {
+            Ok(())
+        } else {
+            Err(PairingCheckError)
+        }
     }
 }

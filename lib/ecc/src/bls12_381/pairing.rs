@@ -7,11 +7,10 @@ use axvm_algebra::{
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck},
+    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
     axvm_algebra::DivUnsafe,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
-    core::fmt::Error,
     core::mem::MaybeUninit,
 };
 
@@ -277,7 +276,7 @@ impl PairingCheck for Bls12_381 {
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
-    ) -> Result<(), Error> {
+    ) -> Result<(), PairingCheckError> {
         let f = Self::multi_miller_loop(P, Q);
         let hint = final_exp_hint::bls12_381_final_exp_hint(&f.to_bytes());
         let c = Fp12::from_bytes(&hint[..48 * 12]);
@@ -292,16 +291,18 @@ impl PairingCheck for Bls12_381 {
         //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
         //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
         // f * c'^-y * c^-q * s = 1
-        let c_inv = Fp12::ONE.div_unsafe(&c);
+        let c_q = FieldExtension::frobenius_map(&c, 1);
         let c_conj_inv = Fp12::ONE.div_unsafe(&c.conjugate());
-        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
 
         // fc = f_{Miller,x,Q}(P) * c^{x}
         // where
         //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
         let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
 
-        assert_eq!(fc * c_q_inv * s, Fp12::ONE);
-        Ok(())
+        if fc * s == c_q {
+            Ok(())
+        } else {
+            Err(PairingCheckError)
+        }
     }
 }

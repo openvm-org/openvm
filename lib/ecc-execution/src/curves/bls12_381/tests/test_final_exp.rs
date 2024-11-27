@@ -1,5 +1,6 @@
 use axvm_ecc::{
-    pairing::{ExpBytes, FinalExp, MultiMillerLoop},
+    algebra::ExpBytes,
+    pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
 };
 use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};

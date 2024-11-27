@@ -1,6 +1,6 @@
 use core::ops::Mul;
 
-use axvm_algebra::Field;
+use crate::Field;
 
 pub trait ExpBytes: Field {
     /// Exponentiates a field element by a value with a sign in big endian byte order

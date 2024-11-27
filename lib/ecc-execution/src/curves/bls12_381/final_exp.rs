@@ -1,6 +1,6 @@
 use axvm_ecc::{
-    algebra::Field,
-    pairing::{ExpBytes, FinalExp, MultiMillerLoop},
+    algebra::{ExpBytes, Field},
+    pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
 };
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};

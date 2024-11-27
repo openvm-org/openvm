@@ -68,12 +68,9 @@ impl FieldExtension<Fp2> for Fp12 {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(384);
-        bytes.extend_from_slice(&self.c[0].to_bytes());
-        bytes.extend_from_slice(&self.c[1].to_bytes());
-        bytes.extend_from_slice(&self.c[2].to_bytes());
-        bytes.extend_from_slice(&self.c[3].to_bytes());
-        bytes.extend_from_slice(&self.c[4].to_bytes());
-        bytes.extend_from_slice(&self.c[5].to_bytes());
+        for coeff in self.clone().to_coeffs() {
+            bytes.extend_from_slice(&coeff.to_bytes());
+        }
         bytes
     }
 

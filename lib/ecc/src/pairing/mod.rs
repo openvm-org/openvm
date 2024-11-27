@@ -1,4 +1,3 @@
-mod exp_bytes;
 mod final_exp;
 mod line;
 mod miller_loop;
@@ -6,14 +5,11 @@ mod miller_step;
 mod operations;
 mod sextic_ext_field;
 
-use core::fmt::Error;
-
 use axvm_algebra::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
 };
 use axvm_platform::constants::{PairingBaseFunct7, PAIRING_MAX_KINDS};
-pub use exp_bytes::*;
 pub use final_exp::*;
 pub use line::*;
 pub use miller_loop::*;
@@ -46,9 +42,19 @@ pub trait PairingCheck {
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
-    ) -> Result<(), Error>;
+    ) -> Result<(), PairingCheckError>;
 }
 
 pub const fn shifted_funct7<P: PairingIntrinsics>(funct7: PairingBaseFunct7) -> usize {
     P::PAIRING_IDX * (PAIRING_MAX_KINDS as usize) + funct7 as usize
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PairingCheckError;
+
+impl core::error::Error for PairingCheckError {}
+impl core::fmt::Display for PairingCheckError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Pairing check failed")
+    }
 }
