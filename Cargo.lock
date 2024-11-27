@@ -850,10 +850,12 @@ dependencies = [
  "axvm-native-compiler",
  "axvm-recursion",
  "derivative",
+ "metrics",
  "p3-baby-bear",
  "serde",
  "serde_json",
  "static_assertions",
+ "tracing",
 ]
 
 [[package]]
