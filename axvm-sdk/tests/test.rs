@@ -247,7 +247,7 @@ fn test_e2e_proof_generation() {
 
     setup_agg_pk();
     #[allow(unused_variables)]
-    let (e2e_prover, dummy_proof) = load_agg_pk_into_e2e_prover(app_config);
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
     let air_id_perm = e2e_prover.agg_pk.root_verifier_pk.air_id_permutation();
     let special_air_ids = air_id_perm.get_special_air_ids();
@@ -273,7 +273,7 @@ fn test_e2e_proof_generation() {
 
     #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(
-        &agg_pk.root_verifier_pk,
+        &e2e_prover.agg_pk.root_verifier_pk,
         dummy_internal_proof,
         &root_proof,
     );
