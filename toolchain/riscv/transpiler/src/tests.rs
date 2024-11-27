@@ -7,7 +7,7 @@ use axvm_circuit::{
     arch::{new_vm, VmConfig, VmExecutor},
     extensions::rv32im::Rv32ImConfig,
     intrinsics::modular::SECP256K1_COORD_PRIME,
-    utils::air_test,
+    utils::new_air_test_with_min_segments,
 };
 use axvm_platform::memory::MEM_SIZE;
 use eyre::Result;
@@ -77,8 +77,8 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 
 #[test]
 fn test_terminate_prove() -> Result<()> {
-    let config = VmConfig::rv32i();
+    let config = Rv32ImConfig::default();
     let elf = get_elf("data/rv32im-terminate-from-as")?;
-    air_test(config, elf);
+    new_air_test_with_min_segments(config, elf, vec![], 1);
     Ok(())
 }

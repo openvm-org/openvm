@@ -34,7 +34,8 @@ fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
     Ok(())
 }
@@ -42,7 +43,8 @@ fn test_read_vec_runtime() -> Result<()> {
 #[test]
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
 
     #[derive(serde::Serialize)]
     struct Foo {
@@ -103,7 +105,8 @@ fn test_keccak256_runtime() -> Result<()> {
 #[test]
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }
