@@ -71,7 +71,7 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     internal_exe: Arc<AxVmCommittedExe<SC>>,
     num_public_values: usize,
 ) -> Proof<SC> {
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(2);
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
     let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params);
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
@@ -112,7 +112,7 @@ fn dummy_leaf_proof_impl(
         1,
         "Dummy proof should only have 1 segment"
     );
-    let e = BabyBearPoseidon2Engine::new(app_vm_pk.fri_params);
+    let e = BabyBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
     let leaf_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
         leaf_program.into(),
         e.config.pcs(),
