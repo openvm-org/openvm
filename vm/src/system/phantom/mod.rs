@@ -24,13 +24,11 @@ use parking_lot::Mutex;
 
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
+        PcIncOrSet, Streams,
     },
     rv32im::adapters::unsafe_read_rv32_register,
-    system::{
-        memory::MemoryControllerRef,
-        program::{ExecutionError, ProgramBus},
-    },
+    system::{memory::MemoryControllerRef, program::ProgramBus},
 };
 
 /// Final exponent hint instructions
@@ -130,9 +128,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
 
         let c_u32 = c.as_canonical_u32();
         let discriminant = c_u32 as u16;
-        let phantom = PhantomInstruction::from_repr(discriminant).ok_or(
-            ExecutionError::InvalidPhantomInstruction(from_state.pc, discriminant),
-        )?;
+        let phantom =
+            PhantomInstruction::from_repr(discriminant).ok_or(ExecutionError::PhantomNotFound {
+                pc: from_state.pc,
+                discriminant,
+            })?;
         match phantom {
             PhantomInstruction::Nop => {}
             PhantomInstruction::PrintF => {
@@ -145,7 +145,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 let mut hint = match streams.input_stream.pop_front() {
                     Some(hint) => hint,
                     None => {
-                        return Err(ExecutionError::EndOfInputStream(from_state.pc));
+                        return Err(ExecutionError::EndOfInputStream { pc: from_state.pc });
                     }
                 };
                 streams.hint_stream.clear();

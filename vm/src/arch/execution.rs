@@ -4,10 +4,58 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use p3_field::AbstractField;
+use thiserror::Error;
 
-use crate::system::program::{ExecutionError, ProgramBus};
+use crate::system::program::ProgramBus;
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
+
+#[derive(Error, Debug)]
+pub enum ExecutionError {
+    #[error("execution failed at pc {pc}")]
+    Fail { pc: u32 },
+    #[error("pc {pc} not found for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    PcNotFound {
+        pc: u32,
+        step: u32,
+        pc_base: u32,
+        program_len: usize,
+    },
+    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    PcOutOfBounds {
+        pc: u32,
+        step: u32,
+        pc_base: u32,
+        program_len: usize,
+    },
+    #[error("at pc {pc}, opcode {opcode:?} was not enabled")]
+    DisabledOperation { pc: u32, opcode: usize },
+    #[error("at pc = {pc}")]
+    HintOutOfBounds { pc: u32 },
+    #[error("at pc {pc}")]
+    EndOfInputStream { pc: u32 },
+    #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
+    PublicValueIndexOutOfBounds {
+        pc: u32,
+        num_public_values: usize,
+        public_value_index: usize,
+    },
+    #[error("at pc {pc}, tried to publish {new_value} into index {public_value_index} but already had {existing_value}")]
+    PublicValueNotEqual {
+        pc: u32,
+        public_value_index: usize,
+        existing_value: usize,
+        new_value: usize,
+    },
+    #[error("at pc {pc}, phantom sub-instruction not found for discriminant {discriminant}")]
+    PhantomNotFound { pc: u32, discriminant: u16 },
+    #[error("at pc {pc}, discriminant {discriminant}, phantom error: {inner}")]
+    Phantom {
+        pc: u32,
+        discriminant: u16,
+        inner: Box<dyn std::error::Error>,
+    },
+}
 
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
@@ -216,4 +264,17 @@ impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
             Some(to_pc) => PcIncOrSet::Set(to_pc),
         }
     }
+}
+
+/// Phantom sub-instructions are only allowed to use operands
+/// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+/// Phantom sub-instruction always advances the program counter by `DEFAULT_PC_STEP`.
+///
+/// Phantom sub-instructions are unconstrained, so they should not mutate
+/// memory, but they can mutate the input & hint streams.
+pub trait PhantomSubInstruction<F> {
+    type Error: std::error::Error;
+
+    fn phantom_execute(&mut self, a: F, b: F, c_upper: u16)
+        -> std::result::Result<(), Self::Error>;
 }

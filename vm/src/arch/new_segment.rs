@@ -10,17 +10,14 @@ use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program}
 use backtrace::Backtrace;
 use p3_field::PrimeField32;
 
-use super::{AnyEnum, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
+use super::{AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     metrics::cycle_tracker::CycleTracker,
-    system::{
-        memory::{Equipartition, CHUNK},
-        program::ExecutionError,
-    },
+    system::memory::{Equipartition, CHUNK},
 };
 
 /// Check segment every 100 instructions.
@@ -151,7 +148,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
                 let phantom = PhantomInstruction::from_repr(discriminant)
-                    .ok_or(ExecutionError::InvalidPhantomInstruction(pc, discriminant))?;
+                    .ok_or(ExecutionError::PhantomNotFound { pc, discriminant })?;
                 tracing::trace!("pc: {pc:#x} | phantom: {phantom:?}");
                 match phantom {
                     PhantomInstruction::DebugPanic => {
@@ -161,7 +158,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                         } else {
                             eprintln!("axvm program failure; no backtrace");
                         }
-                        return Err(ExecutionError::Fail(pc));
+                        return Err(ExecutionError::Fail { pc });
                     }
                     PhantomInstruction::CtStart => {
                         // hack to remove "CT-" prefix
@@ -213,7 +210,7 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;
             } else {
-                return Err(ExecutionError::DisabledOperation(pc, opcode));
+                return Err(ExecutionError::DisabledOperation { pc, opcode });
             };
 
             #[cfg(feature = "bench-metrics")]

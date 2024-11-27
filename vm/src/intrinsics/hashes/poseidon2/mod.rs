@@ -22,14 +22,14 @@ use crate::{
             Poseidon2Opcode::{self, *},
             UsizeOpcode,
         },
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
         },
-        program::{ExecutionError, ProgramBus},
+        program::ProgramBus,
     },
 };
 

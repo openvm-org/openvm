@@ -1,5 +1,7 @@
 use strum::{EnumCount, EnumIter, FromRepr};
 
+pub struct PhantomDiscriminant(pub u16);
+
 /// Enum for different phantom instructions.
 /// Phantom instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](super::program::DEFAULT_PC_STEP).
