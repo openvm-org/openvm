@@ -8,10 +8,6 @@ pub trait ExpBytes: Field {
     where
         for<'a> &'a Self: Mul<&'a Self, Output = Self>,
     {
-        if is_one(bytes_be) {
-            return Self::ONE;
-        }
-
         let mut x = self.clone();
 
         if !is_positive {
@@ -39,11 +35,3 @@ pub trait ExpBytes: Field {
 }
 
 impl<F: Field> ExpBytes for F where for<'a> &'a Self: Mul<&'a Self, Output = Self> {}
-
-fn is_one(v: &[u8]) -> bool {
-    if v.is_empty() {
-        return false;
-    }
-    // Check all bytes except the last one are 0
-    v[..v.len() - 1].iter().all(|&b| b == 0) && v[v.len() - 1] == 1
-}
