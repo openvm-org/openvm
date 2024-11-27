@@ -192,7 +192,7 @@ impl AggProvingKey {
     }
 
     pub fn num_public_values(&self) -> usize {
-        self.root_verifier_pk.vm_pk.vm_config.num_public_values
+        self.root_verifier_pk.vm_pk.vm_config.num_public_values - (2 * DIGEST_SIZE)
     }
 }
 
