@@ -71,7 +71,7 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     internal_exe: Arc<AxVmCommittedExe<SC>>,
     num_public_values: usize,
 ) -> Proof<SC> {
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(2);
     let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params);
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
