@@ -117,7 +117,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         let expected_answer = match op - ADD_LOCAL {
             0 => (&a + &b) % &modulus,
             1 => (&a + &modulus - &b) % &modulus,
-            2 => a.clone(),
+            2 => a.clone() % &modulus,
             _ => panic!(),
         };
 
@@ -246,7 +246,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         let expected_answer = match op - MUL_LOCAL {
             0 => (&a * &b) % &modulus,
             1 => (&a * big_uint_mod_inverse(&b, &modulus)) % &modulus,
-            2 => a.clone(),
+            2 => a.clone() % &modulus,
             _ => panic!(),
         };
 
