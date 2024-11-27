@@ -10,10 +10,10 @@ use derive_more::derive::From;
 use p3_field::PrimeField32;
 use strum::IntoEnumIterator;
 
+use super::rv32im::Rv32Periphery;
 use crate::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     rv32im::{adapters::*, *},
-    system::phantom::PhantomChip,
 };
 
 /// RISC-V HintStore Extension for handling IO
@@ -26,16 +26,9 @@ pub enum Rv32HintStoreExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum Rv32HintStorePeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
-    // We put this only to get the <F> generic to work
-    Phantom(PhantomChip<F>),
-}
-
 impl<F: PrimeField32> VmExtension<F> for Rv32HintStore {
     type Executor = Rv32HintStoreExecutor<F>;
-    type Periphery = Rv32HintStorePeriphery<F>;
+    type Periphery = Rv32Periphery<F>;
 
     fn build(
         &self,

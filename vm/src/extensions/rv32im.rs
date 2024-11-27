@@ -12,7 +12,7 @@ use p3_field::PrimeField32;
 use program::DEFAULT_PC_STEP;
 use strum::IntoEnumIterator;
 
-use super::rv32hintstore::{Rv32HintStore, Rv32HintStoreExecutor, Rv32HintStorePeriphery};
+use super::rv32_io::{Rv32HintStore, Rv32HintStoreExecutor};
 use crate::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
@@ -132,8 +132,6 @@ pub enum Rv32ImPeriphery<F: PrimeField32> {
     System(SystemPeriphery<F>),
     #[any_enum]
     Rv32(Rv32Periphery<F>),
-    #[any_enum]
-    HintStore(Rv32HintStorePeriphery<F>),
 }
 
 // TODO: generate this by proc-macro

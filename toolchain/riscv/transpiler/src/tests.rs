@@ -57,7 +57,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let config = Rv32ImConfig::default();
-    let executor = new_vm::VmExecutor::<F, Rv32ImConfig>::new(config);
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }
