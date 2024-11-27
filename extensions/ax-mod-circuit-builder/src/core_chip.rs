@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use ax_circuit_primitives::{var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator};
-use ax_ecc_primitives::field_expression::{FieldExpr, FieldExprCols};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_circuit::{
     arch::{
@@ -15,6 +14,9 @@ use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
+
+use crate::{FieldExpr, FieldExprCols};
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,

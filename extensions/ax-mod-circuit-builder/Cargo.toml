@@ -15,6 +15,7 @@ ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
+axvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
 ax-ecc-execution = { workspace = true, optional = true }
 
