@@ -2,9 +2,13 @@
 
 extern crate proc_macro;
 
+use std::sync::atomic::AtomicUsize;
+
 use axvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, ExprPath};
+
+static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -22,7 +26,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
-    for (ec_idx, item) in items.into_iter().enumerate() {
+    for item in items.into_iter() {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_type: Option<syn::Path> = None;
@@ -44,6 +48,8 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
+        let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
 
@@ -351,6 +357,42 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
             impl SubAssign for #struct_name {
                 fn sub_assign(&mut self, rhs: Self) {
                     self.add_assign(rhs.neg());
+                }
+            }
+
+            // make a setup function that sends setup op to ec add, ec double. fp2 ?
+            #[allow(non_snake_case)]
+            pub fn #setup_function() {
+                #[cfg(target_os = "zkvm")]
+                {
+                    // p1 is (x1, y1), and x1 must be the modulus.
+                    // y1 needs to be non-zero to avoid division by zero in double.
+                    let modulus_bytes = <#intmod_type as IntMod>::MODULUS;
+                    let one = <#intmod_type as IntMod>::ONE.as_le_bytes();
+                    let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
+                    // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
+                    let p2 = [one.as_ref(), one.as_ref()].concat();
+                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    axvm_platform::custom_insn_r!(
+                        axvm_platform::constants::CUSTOM_1,
+                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
+                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                            + #ec_idx
+                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        p1.as_ptr(),
+                        p2.as_ptr()
+                    );
+                    axvm_platform::custom_insn_r!(
+                        axvm_platform::constants::CUSTOM_1,
+                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
+                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                            + #ec_idx
+                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        p1.as_ptr(),
+                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
+                    );
                 }
             }
         });

@@ -439,7 +439,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             EXECUTION_BUS,
             PROGRAM_BUS,
             memory_controller.clone(),
-            phantom_opcode,
+            SystemOpcode::default_offset(),
         );
         phantom_chip.set_streams(streams.clone());
         inventory

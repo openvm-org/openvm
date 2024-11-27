@@ -1,6 +1,6 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, VmConfig, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm, ExecutorName, VmConfig, VmExecutor},
     extensions::rv32im::{Rv32IConfig, Rv32ImConfig},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
@@ -14,6 +14,7 @@ use crate::utils::build_example_program;
 
 type F = BabyBear;
 
+/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
@@ -33,7 +34,8 @@ fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
     Ok(())
 }
@@ -41,7 +43,8 @@ fn test_read_vec_runtime() -> Result<()> {
 #[test]
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
 
     #[derive(serde::Serialize)]
     struct Foo {
@@ -69,12 +72,12 @@ fn test_read_runtime() -> Result<()> {
 #[test]
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
-    let config = VmConfig::rv32i();
-    let executor = VmExecutor::<F>::new(config.clone());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     let final_memory = executor.execute(elf, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
     let pv_proof = UserPublicValuesProof::compute(
-        config.memory_config.memory_dimensions(),
+        config.system.memory_config.memory_dimensions(),
         ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
         &hasher,
         &final_memory,
@@ -102,7 +105,8 @@ fn test_keccak256_runtime() -> Result<()> {
 #[test]
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32i());
+    let config = Rv32IConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }

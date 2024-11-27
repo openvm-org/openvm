@@ -924,7 +924,10 @@ impl VmConfig {
         for (local_opcode_idx, class_offset, executor, modulus) in
             gen_ec_executor_tuple(&self.supported_ec_curves)
         {
+            println!("adding sw!");
             let global_opcode_idx = local_opcode_idx + class_offset;
+            println!("global_opcode_idx: {}", global_opcode_idx);
+            println!("executors: {:?}", executor);
             if executors.contains_key(&global_opcode_idx) {
                 let name = ExecutorName::from(executors.get(&global_opcode_idx).unwrap());
                 panic!(
@@ -1510,7 +1513,19 @@ fn gen_ec_executor_tuple(
                         curve.prime(),
                     ),
                     (
+                        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_2x32,
+                        curve.prime(),
+                    ),
+                    (
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_2x32,
+                        curve.prime(),
+                    ),
+                    (
+                        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
                         class_offset,
                         ExecutorName::EcDoubleRv32_2x32,
                         curve.prime(),
@@ -1525,7 +1540,19 @@ fn gen_ec_executor_tuple(
                         curve.prime(),
                     ),
                     (
+                        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                        class_offset,
+                        ExecutorName::EcAddNeRv32_6x16,
+                        curve.prime(),
+                    ),
+                    (
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+                        class_offset,
+                        ExecutorName::EcDoubleRv32_6x16,
+                        curve.prime(),
+                    ),
+                    (
+                        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
                         class_offset,
                         ExecutorName::EcDoubleRv32_6x16,
                         curve.prime(),
@@ -1748,6 +1775,12 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                     (
+                        Fp2Opcode::SETUP_ADDSUB as usize,
+                        class_offset,
+                        ExecutorName::Fp2AddSubRv32_32,
+                        modulus.clone(),
+                    ),
+                    (
                         Fp2Opcode::MUL as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_32,
@@ -1755,6 +1788,12 @@ fn gen_fp2_modular_executor_tuple(
                     ),
                     (
                         Fp2Opcode::DIV as usize,
+                        class_offset,
+                        ExecutorName::Fp2MulDivRv32_32,
+                        modulus.clone(),
+                    ),
+                    (
+                        Fp2Opcode::SETUP_MULDIV as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_32,
                         modulus.clone(),
@@ -1775,6 +1814,12 @@ fn gen_fp2_modular_executor_tuple(
                         modulus.clone(),
                     ),
                     (
+                        Fp2Opcode::SETUP_ADDSUB as usize,
+                        class_offset,
+                        ExecutorName::Fp2AddSubRv32_48,
+                        modulus.clone(),
+                    ),
+                    (
                         Fp2Opcode::MUL as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_48,
@@ -1782,6 +1827,12 @@ fn gen_fp2_modular_executor_tuple(
                     ),
                     (
                         Fp2Opcode::DIV as usize,
+                        class_offset,
+                        ExecutorName::Fp2MulDivRv32_48,
+                        modulus.clone(),
+                    ),
+                    (
+                        Fp2Opcode::SETUP_MULDIV as usize,
                         class_offset,
                         ExecutorName::Fp2MulDivRv32_48,
                         modulus.clone(),

@@ -372,6 +372,8 @@ pub enum Rv32ModularArithmeticOpcode {
 pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
     EC_DOUBLE,
+    SETUP_EC_ADD_NE,
+    SETUP_EC_DOUBLE,
 }
 
 #[derive(
@@ -395,14 +397,16 @@ pub enum Fp12Opcode {
 pub enum Fp2Opcode {
     ADD,
     SUB,
+    SETUP_ADDSUB,
     MUL,
     DIV,
+    SETUP_MULDIV,
 }
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x720]
+#[opcode_offset = 0x750]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {

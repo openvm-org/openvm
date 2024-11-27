@@ -1,17 +1,20 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
-    utils::air_test,
+    arch::new_vm::VmExecutor, extensions::rv32im::Rv32ImConfig,
+    utils::new_air_test_with_min_segments,
 };
 use axvm_toolchain_tests::utils::decode_elf;
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 
+type F = BabyBear;
+
 #[test]
 #[ignore = "must run makefile"]
 fn test_rv32im_riscv_vector_runtime() -> Result<()> {
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
+    let config = Rv32ImConfig::default();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
@@ -24,7 +27,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             println!("Running: {}", file_name);
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
-                let executor = VmExecutor::<BabyBear>::new(VmConfig::rv32im());
+                let executor = VmExecutor::<F, _>::new(config);
                 let res = executor.execute(elf, vec![])?;
                 Ok(res)
             });
@@ -43,7 +46,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 #[test]
 #[ignore = "long prover tests"]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
-    let config = VmConfig::rv32im();
+    let config = Rv32ImConfig::default();
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
     for entry in read_dir(dir)? {
@@ -58,7 +61,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             let elf = decode_elf(&path)?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(config.clone(), elf);
+                new_air_test_with_min_segments(config, elf, vec![], 1);
             });
 
             match result {

@@ -65,7 +65,7 @@ pub fn fp12_mul_expr(
     res.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    FieldExpr::new(builder, range_bus, false)
 }
 
 #[cfg(test)]

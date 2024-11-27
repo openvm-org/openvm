@@ -4,9 +4,10 @@ use std::{
 };
 
 use axvm_circuit::{
-    arch::{VmConfig, VmExecutor},
+    arch::{new_vm, VmConfig, VmExecutor},
+    extensions::rv32im::Rv32ImConfig,
     intrinsics::modular::SECP256K1_COORD_PRIME,
-    utils::air_test,
+    utils::new_air_test_with_min_segments,
 };
 use axvm_platform::memory::MEM_SIZE;
 use eyre::Result;
@@ -17,15 +18,12 @@ use crate::{elf::Elf, transpiler::Transpiler, AxVmExe};
 
 type F = BabyBear;
 
-fn setup_executor_from_elf(
-    elf_path: impl AsRef<Path>,
-    config: VmConfig,
-) -> Result<(VmExecutor<F>, AxVmExe<F>)> {
+/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
+fn get_elf(elf_path: impl AsRef<Path>) -> Result<AxVmExe<F>> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-    let executor = VmExecutor::new(config);
-    Ok((executor, elf.into()))
+    Ok(elf.into())
 }
 
 // An "eyeball test" only: prints the decoded ELF for eyeball inspection
@@ -57,9 +55,10 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 #[test_case("data/rv32im-exp-from-as")]
 #[test_case("data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
-    let config = VmConfig::rv32im();
-    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
-    executor.execute(exe, vec![])?;
+    let elf = get_elf(elf_path)?;
+    let config = Rv32ImConfig::default();
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    executor.execute(elf, vec![])?;
     Ok(())
 }
 
@@ -70,15 +69,16 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
         .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()])
         .add_int256_alu()
         .add_int256_m();
-    let (executor, exe) = setup_executor_from_elf(elf_path, config)?;
-    executor.execute(exe, vec![])?;
+    let elf = get_elf(elf_path)?;
+    let executor = VmExecutor::<F>::new(config);
+    executor.execute(elf, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_terminate_prove() -> Result<()> {
-    let config = VmConfig::rv32i();
-    let (_, exe) = setup_executor_from_elf("data/rv32im-terminate-from-as", config.clone())?;
-    air_test(config, exe);
+    let config = Rv32ImConfig::default();
+    let elf = get_elf("data/rv32im-terminate-from-as")?;
+    new_air_test_with_min_segments(config, elf, vec![], 1);
     Ok(())
 }

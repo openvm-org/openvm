@@ -41,7 +41,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
-            vec![Fp2Opcode::MUL as usize, Fp2Opcode::DIV as usize],
+            vec![
+                Fp2Opcode::MUL as usize,
+                Fp2Opcode::DIV as usize,
+                Fp2Opcode::SETUP_MULDIV as usize,
+            ],
             vec![is_mul_flag, is_div_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2MulDiv",
@@ -107,7 +111,11 @@ pub fn fp2_muldiv_expr(
     builder.borrow_mut().set_compute(z_idx.1, compute_z1);
 
     let builder = builder.borrow().clone();
-    (FieldExpr::new(builder, range_bus), is_mul_flag, is_div_flag)
+    (
+        FieldExpr::new(builder, range_bus, true),
+        is_mul_flag,
+        is_div_flag,
+    )
 }
 
 #[cfg(test)]

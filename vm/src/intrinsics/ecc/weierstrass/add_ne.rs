@@ -22,5 +22,5 @@ pub fn ec_add_ne_expr(
     y3.save_output();
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    FieldExpr::new(builder, range_bus, true)
 }

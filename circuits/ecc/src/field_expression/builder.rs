@@ -72,8 +72,13 @@ pub struct ExprBuilder {
 
     /// Whether the builder has been finalized. Only after finalize, we can do generate_subrow and eval etc.
     finalized: bool,
-    // The chips without any flags need a setup flag.
-    has_setup_flag: bool,
+
+    // Setup opcode is a special op that verifies the modulus is correct.
+    // There are some chips that don't need it because we hardcode the modulus. E.g. the pairing ones.
+    // For those chips need setup, setup is derived: setup = is_valid - sum(all_flags)
+    // Therefore when the chip only supports one opcode, user won't explicitly create a flag for it
+    // and we will create a default flag for it on finalizing.
+    needs_setup: bool,
 }
 
 impl ExprBuilder {
@@ -96,7 +101,7 @@ impl ExprBuilder {
             computes: vec![],
             output_indices: vec![],
             finalized: false,
-            has_setup_flag: false,
+            needs_setup: false,
         }
     }
 
@@ -104,13 +109,16 @@ impl ExprBuilder {
         self.finalized
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self, needs_setup: bool) {
         self.finalized = true;
+        self.needs_setup = needs_setup;
 
-        // setup the dummy flag
-        if self.num_flags == 0 {
+        // We don't support multi-op chip that doesn't need setup right now.
+        assert!(needs_setup || self.num_flags == 0);
+
+        // setup the defalut flag if needed
+        if needs_setup && self.num_flags == 0 {
             self.new_flag();
-            self.has_setup_flag = true;
         }
     }
 
@@ -136,13 +144,9 @@ impl ExprBuilder {
         self.num_flags - 1
     }
 
-    // Number of flags for ops, not including the setup flag.
-    pub fn num_op_flags(&self) -> usize {
-        if self.has_setup_flag {
-            0
-        } else {
-            self.num_flags
-        }
+    pub fn needs_setup(&self) -> bool {
+        assert!(self.finalized); // Should only be used after finalize.
+        self.needs_setup
     }
 
     // Below functions are used when adding variables and constraints manually, need to be careful.
@@ -204,9 +208,13 @@ pub struct FieldExpr {
 }
 
 impl FieldExpr {
-    pub fn new(builder: ExprBuilder, range_bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(
+        builder: ExprBuilder,
+        range_bus: VariableRangeCheckerBus,
+        needs_setup: bool,
+    ) -> Self {
         let mut builder = builder;
-        builder.finalize();
+        builder.finalize(needs_setup);
         let subair = CheckCarryModToZeroSubAir::new(
             builder.prime.clone(),
             builder.limb_bits,
@@ -266,9 +274,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             flags,
         } = self.load_vars(local);
 
-        let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
-
-        {
+        if self.builder.needs_setup() {
+            let is_setup = flags.iter().fold(is_valid.into(), |acc, &x| acc - x);
+            builder.assert_bool(is_setup.clone());
             for i in 0..inputs[0].len().max(self.builder.prime_limbs.len()) {
                 let lhs = if i < inputs[0].len() {
                     inputs[0][i].into()
@@ -304,7 +312,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         for flag in flags.iter() {
             builder.assert_bool(*flag);
         }
-        builder.assert_bool(is_setup);
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i]
                 .evaluate_overflow_expr::<AB>(&inputs, &vars, &constants, &flags);
@@ -361,15 +368,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
         // Remove this if this is no longer the case in the future.
         assert_eq!(self.num_variables, self.constraints.len());
 
-        let mut flags = flags.clone();
-        if !self.builder.has_setup_flag {
-            assert!(flags.len() == self.builder.num_flags);
-        } else {
-            // Just one dummy flag.
-            assert!(self.builder.num_flags == 1);
-            assert!(flags.is_empty());
-            flags.push(true);
-        }
+        assert_eq!(flags.len(), self.builder.num_flags);
 
         let limb_bits = self.limb_bits;
         let mut vars = vec![BigUint::zero(); self.num_variables];

@@ -12,6 +12,7 @@ use p3_field::PrimeField32;
 use program::DEFAULT_PC_STEP;
 use strum::IntoEnumIterator;
 
+use super::rv32_io::{Rv32HintStore, Rv32HintStoreExecutor};
 use crate::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
@@ -25,7 +26,7 @@ use crate::{
 pub struct Rv32IConfig {
     pub system: SystemConfig,
     pub base: Rv32I,
-    // todo: hintstore
+    pub io: Rv32HintStore,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -33,7 +34,7 @@ pub struct Rv32ImConfig {
     pub system: SystemConfig,
     pub base: Rv32I,
     pub mul: Rv32M,
-    // todo: hintstore
+    pub io: Rv32HintStore,
 }
 
 impl Default for Rv32IConfig {
@@ -42,6 +43,7 @@ impl Default for Rv32IConfig {
         Self {
             system,
             base: Default::default(),
+            io: Default::default(),
         }
     }
 }
@@ -53,6 +55,7 @@ impl Default for Rv32ImConfig {
             system: inner.system,
             base: inner.base,
             mul: Default::default(),
+            io: Default::default(),
         }
     }
 }
@@ -115,6 +118,8 @@ pub enum Rv32ImExecutor<F: PrimeField32> {
     #[any_enum]
     System(SystemExecutor<F>),
     #[any_enum]
+    HintStore(Rv32HintStoreExecutor<F>),
+    #[any_enum]
     Base(Rv32IExecutor<F>),
     #[any_enum]
     Mul(Rv32MExecutor<F>),
@@ -142,7 +147,9 @@ impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
         let complex = self.system.create_chip_complex()?;
-        let complex = complex.extend(&self.base)?;
+        let complex: VmChipComplex<F, Rv32ImExecutor<F>, Rv32ImPeriphery<F>> =
+            complex.extend(&self.base)?;
+        let complex = complex.extend(&self.io)?;
         Ok(complex)
     }
 }
@@ -162,6 +169,7 @@ impl<F: PrimeField32> VmGenericConfig<F> for Rv32ImConfig {
         let base = Rv32IConfig {
             system: self.system,
             base: self.base,
+            io: self.io,
         };
         let complex = base.create_chip_complex()?;
         let complex = complex.extend(&self.mul)?;

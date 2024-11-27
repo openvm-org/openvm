@@ -6,7 +6,7 @@ use core::hint::black_box;
 use axvm_algebra::IntMod;
 use axvm_ecc::{
     msm,
-    sw::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
+    sw::{setup_curves, Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     Group,
 };
 use hex_literal::hex;
@@ -14,6 +14,8 @@ use hex_literal::hex;
 axvm::entry!(main);
 
 pub fn main() {
+    setup_curves();
+
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
     let x1 = Secp256k1Coord::from_u32(1);
