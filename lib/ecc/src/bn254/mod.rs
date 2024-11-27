@@ -75,7 +75,7 @@ moduli_setup! {
 }
 
 moduli_setup! {
-    Bn254Scalar = "0x30644E72 E131A029 B85045B6 8181585D 2833E848 79B97091 43E1F593 F0000001";
+    Bn254Scalar { modulus = "0x30644E72 E131A029 B85045B6 8181585D 2833E848 79B97091 43E1F593 F0000001" },
 }
 
 pub type Fp = Bn254Fp;
@@ -625,7 +625,7 @@ impl PairingIntrinsics for Bn254 {
 }
 
 axvm::sw_setup! {
-    Bn254Point = Bn254Fp;
+    Bn254Point { mod_type = Bn254Fp },
 }
 
 pub type EcPoint = Bn254Point;

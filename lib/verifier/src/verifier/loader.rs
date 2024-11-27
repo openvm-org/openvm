@@ -3,15 +3,15 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use axvm_ecc::{
-    algebra::{Field, IntMod},
-    bn254::{self, Bn254, EcPoint, Fp, Fr},
+    algebra::{field::FieldExtension, Field, IntMod},
+    bn254::{self, Bn254, Bn254Point, EcPoint, Fp, Fp2, Fr},
     msm,
-    pairing::MultiMillerLoop,
+    pairing::{FinalExp, MultiMillerLoop},
     sw::SwPoint,
     AffineCoords, AffinePoint, EccBinOps,
 };
 use halo2curves_axiom::{
-    bn256::{Bn256, Fq as Halo2Fp, Fr as Halo2Fr, G1Affine},
+    bn256::{Bn256, Fq as Halo2Fp, Fr as Halo2Fr, G1Affine, G2Affine},
     group::{Group, ScalarMul},
     CurveAffine,
 };
@@ -79,13 +79,13 @@ impl EcPointLoader<G1Affine> for AxVmLoader {
     fn multi_scalar_multiplication(
         pairs: &[(&AxVmScalar<Halo2Fr, Fr>, &AxVmEcPoint<G1Affine, EcPoint>)],
     ) -> Self::LoadedEcPoint {
-        let mut scalars: Vec<Fr> = Vec::with_capacity(pairs.len());
-        let mut base: Vec<EcPoint> = Vec::with_capacity(pairs.len());
+        let mut scalars = Vec::with_capacity(pairs.len());
+        let mut base = Vec::with_capacity(pairs.len());
         for (scalar, point) in pairs {
-            scalars.push(scalar.0);
-            base.push(point.0);
+            scalars.push(scalar.0.clone());
+            base.push(point.0.clone());
         }
-        AxVmEcPoint(msm(&scalars, &base), PhantomData)
+        AxVmEcPoint(msm::<Bn254Point, Fr>(&scalars, &base), PhantomData)
     }
 }
 
@@ -136,14 +136,33 @@ where
         dk: &Self::DecidingKey,
         KzgAccumulator { lhs, rhs }: KzgAccumulator<G1Affine, AxVmLoader>,
     ) -> Result<(), Error> {
-        let terms = [(&lhs.0, &dk.g2().into()), (&rhs.0, &(-dk.s_g2()).into())];
-        bool::from(
-            bn254::multi_miller_loop(&terms)
-                .final_exponentiation()
-                .is_identity(),
-        )
-        .then_some(())
-        .ok_or_else(|| Error::AssertionFailure("e(lhs, g2)·e(rhs, -s_g2) == O".to_string()))
+        let terms: [(&Bn254Point, &G2Affine); 2] =
+            [(&lhs.0, &dk.g2().into()), (&rhs.0, &(-dk.s_g2()).into())];
+        let P = Vec::with_capacity(2);
+        let Q = Vec::with_capacity(2);
+        for t in terms {
+            let point = AffinePoint {
+                x: t.0.x(),
+                y: t.0.y(),
+            };
+            P.push(point);
+            let x = t.1.x().to_bytes();
+            let y = t.1.y().to_bytes();
+            let point = AffinePoint {
+                x: Fp2::from_coeffs([Fp::from_le_bytes(&x[0..32]), Fp::from_le_bytes(&x[32..64])]),
+                y: Fp2::from_coeffs([Fp::from_le_bytes(&y[0..32]), Fp::from_le_bytes(&y[32..64])]),
+            };
+            Q.push(point);
+        }
+        let res = Bn254::multi_miller_loop(&P, &Q);
+        let c = Bn254::assert_final_exp_is_one(&res);
+        // bool::from(
+
+        //         .final_exponentiation()
+        //         .is_identity(),
+        // )
+        // .then_some(())
+        // .ok_or_else(|| Error::AssertionFailure("e(lhs, g2)·e(rhs, -s_g2) == O".to_string()))
     }
 
     fn decide_all(

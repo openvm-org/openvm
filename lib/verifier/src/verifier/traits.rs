@@ -10,8 +10,15 @@ use std::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use axvm_ecc::{algebra::Field, bn254::Bn254Point};
-use halo2curves_axiom::{ff::PrimeField, CurveAffine};
+use axvm_ecc::{
+    algebra::Field,
+    bn254::{Bn254Point, Fp, Fr},
+};
+use halo2curves_axiom::{
+    bn256::{Fq as Halo2Fp, Fr as Halo2Fr, G1Affine},
+    ff::PrimeField,
+    CurveAffine,
+};
 use snark_verifier::{
     loader::{LoadedEcPoint, LoadedScalar},
     util::arithmetic::{fe_to_big, FieldOps},
@@ -32,7 +39,19 @@ impl<F: PrimeField, F2: Field> PartialEq for AxVmScalar<F, F2> {
     }
 }
 
-impl<F: PrimeField, F2: Field> LoadedScalar<F> for AxVmScalar<F, F2> {
+impl LoadedScalar<Halo2Fp> for AxVmScalar<Halo2Fp, Fp> {
+    type Loader = AxVmLoader;
+
+    fn loader(&self) -> &Self::Loader {
+        &LOADER
+    }
+
+    fn pow_var(&self, exp: &Self, _: usize) -> Self {
+        todo!()
+    }
+}
+
+impl LoadedScalar<Halo2Fr> for AxVmScalar<Halo2Fr, Fr> {
     type Loader = AxVmLoader;
 
     fn loader(&self) -> &Self::Loader {
@@ -163,7 +182,7 @@ impl<CA: CurveAffine> PartialEq for AxVmEcPoint<CA, Bn254Point> {
     }
 }
 
-impl<CA: CurveAffine> LoadedEcPoint<CA> for AxVmEcPoint<CA, Bn254Point> {
+impl LoadedEcPoint<G1Affine> for AxVmEcPoint<G1Affine, Bn254Point> {
     type Loader = AxVmLoader;
 
     fn loader(&self) -> &Self::Loader {
