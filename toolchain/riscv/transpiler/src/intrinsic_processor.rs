@@ -172,26 +172,43 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                 }
                 Some(ShortWeierstrass) => {
                     // short weierstrass ec
+                    assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
                     let dec_insn = RType::new(instruction_u32);
                     let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
-                    let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                        Some(SwBaseFunct7::SwAddNe) => {
-                            Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                                + Rv32WeierstrassOpcode::default_offset()
-                        }
-                        Some(SwBaseFunct7::SwDouble) => {
-                            assert!(dec_insn.rs2 == 0);
-                            Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                                + Rv32WeierstrassOpcode::default_offset()
-                        }
-                        _ => unimplemented!(),
-                    };
-                    assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
                     let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
                         as usize
                         * Rv32WeierstrassOpcode::COUNT;
-                    let global_opcode = global_opcode + curve_idx_shift;
-                    Some(from_r_type(global_opcode, 2, &dec_insn))
+                    if base_funct7 == SwBaseFunct7::SwSetup as u8 {
+                        let local_opcode = match dec_insn.rs2 {
+                            0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
+                            _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+                        };
+                        Some(Instruction::new(
+                            local_opcode.with_default_offset() + curve_idx_shift,
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                            F::ONE, // d_as = 1
+                            F::TWO, // e_as = 2
+                            F::ZERO,
+                            F::ZERO,
+                        ))
+                    } else {
+                        let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
+                            Some(SwBaseFunct7::SwAddNe) => {
+                                Rv32WeierstrassOpcode::EC_ADD_NE as usize
+                                    + Rv32WeierstrassOpcode::default_offset()
+                            }
+                            Some(SwBaseFunct7::SwDouble) => {
+                                assert!(dec_insn.rs2 == 0);
+                                Rv32WeierstrassOpcode::EC_DOUBLE as usize
+                                    + Rv32WeierstrassOpcode::default_offset()
+                            }
+                            _ => unimplemented!(),
+                        };
+                        let global_opcode = global_opcode + curve_idx_shift;
+                        Some(from_r_type(global_opcode, 2, &dec_insn))
+                    }
                 }
                 Some(ComplexExtField) => {
                     // complex operations
