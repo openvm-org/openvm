@@ -11,8 +11,8 @@ axvm-platform = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
 strum_macros.workspace = true
-ecdsa = { workspace = true , features = ["verifying"]}
-elliptic-curve = { workspace = true , features = ["arithmetic", "sec1"]}
+ecdsa = { workspace = true, features = ["verifying"] }
+elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true }
 hex-literal = { workspace = true }
 axvm-algebra = { workspace = true }
@@ -26,6 +26,7 @@ group = "0.13.0"
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true
 num-bigint.workspace = true
+num-traits.workspace = true
 
 [features]
 default = []

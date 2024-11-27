@@ -16,13 +16,13 @@ use parking_lot::Mutex;
 use thiserror::Error;
 
 pub use super::new_vm::Streams;
-use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{ExecutionError, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::{ExecutionSegment, VmConfig},
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
-        program::{trace::AxVmCommittedExe, ExecutionError},
+        program::trace::AxVmCommittedExe,
     },
 };
 

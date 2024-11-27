@@ -12,7 +12,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
-    program::Program, Poseidon2Opcode, PublishOpcode, SystemOpcode, UsizeOpcode,
+    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode,
 };
 use derive_more::derive::From;
 use getset::Getters;
@@ -21,7 +22,10 @@ use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
-use super::{vm_poseidon2_config, ExecutionBus, InstructionExecutor, Streams, SystemConfig};
+use super::{
+    vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
+    SystemConfig,
+};
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     kernels::{
@@ -132,6 +136,22 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
             .collect()
     }
 
+    /// The generic `F` must match that of the `PhantomChip<F>`.
+    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+        &self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError> {
+        let chip_ref: &RefCell<PhantomChip<F>> =
+            self.find_chip().first().expect("PhantomChip always exists");
+        let mut chip = chip_ref.borrow_mut();
+        let existing = chip.add_sub_executor(phantom_sub, discriminant);
+        if existing.is_some() {
+            return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
+        }
+        Ok(())
+    }
+
     /// Shareable streams. Clone to get a shared mutable reference.
     pub fn streams(&self) -> &Arc<Mutex<Streams<F>>> {
         self.streams
@@ -167,6 +187,8 @@ enum ChipId {
 pub enum VmInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
     ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+    #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
+    PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
     #[error("Chip {name} not found")]
     ChipNotFound { name: String },
 }
@@ -334,7 +356,7 @@ impl<F> SystemBase<F> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
-    Phantom(PhantomChip<F>),
+    Phantom(RefCell<PhantomChip<F>>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -421,7 +443,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         );
         phantom_chip.set_streams(streams.clone());
         inventory
-            .add_executor(phantom_chip, [phantom_opcode])
+            .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();
 
         let base = SystemBase {

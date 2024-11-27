@@ -1,12 +1,20 @@
+use alloc::vec::Vec;
+
 use axvm_algebra::{field::FieldExtension, IntMod};
 use group::ff::Field;
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6, FROBENIUS_COEFF_FQ12_C1};
+use halo2curves_axiom::{
+    bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
+    pairing::MillerLoopResult,
+};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{
     bn254::Bn254,
-    pairing::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign, PairingIntrinsics},
+    pairing::{
+        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
+    },
+    AffinePoint,
 };
 
 fn convert_bn254_halo2_fq_to_fp(x: Fq) -> Fp {
@@ -25,6 +33,28 @@ fn convert_bn254_halo2_fq12_to_fp12(x: Fq12) -> Fp12 {
     Fp12 {
         c: x.to_coeffs().map(convert_bn254_halo2_fq2_to_fp2),
     }
+}
+
+fn convert_bn254_fp_to_halo2_fq(x: Fp) -> Fq {
+    let bytes =
+        x.0.chunks(8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+    Fq::from_raw(bytes)
+}
+
+fn convert_bn254_fp2_to_halo2_fq2(x: Fp2) -> Fq2 {
+    Fq2 {
+        c0: convert_bn254_fp_to_halo2_fq(x.c0.clone()),
+        c1: convert_bn254_fp_to_halo2_fq(x.c1.clone()),
+    }
+}
+
+fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
+    let c = x.to_coeffs();
+    Fq12::from_coeffs(c.map(convert_bn254_fp2_to_halo2_fq2))
 }
 
 #[test]
@@ -144,4 +174,32 @@ fn test_fp_one() {
     let fp_one = Fp::ONE;
     let fq_one = Fq::ONE;
     assert_eq!(fp_one, convert_bn254_halo2_fq_to_fp(fq_one));
+}
+
+#[test]
+fn test_bn254_miller_loop() {
+    let mut rng = StdRng::seed_from_u64(53);
+    let h2c_p = G1Affine::random(&mut rng);
+    let h2c_q = G2Affine::random(&mut rng);
+
+    let p = AffinePoint {
+        x: convert_bn254_halo2_fq_to_fp(h2c_p.x),
+        y: convert_bn254_halo2_fq_to_fp(h2c_p.y),
+    };
+    let q = AffinePoint {
+        x: convert_bn254_halo2_fq2_to_fp2(h2c_q.x),
+        y: convert_bn254_halo2_fq2_to_fp2(h2c_q.y),
+    };
+
+    // Compare against halo2curves implementation
+    let h2c_q_prepared = G2Prepared::from(h2c_q);
+    let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
+    let compare_final = compare_miller.final_exponentiation();
+
+    let f = Bn254::multi_miller_loop(&[p], &[q]);
+    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
+    let wrapped_f = Gt(f_fq12);
+    let final_f = wrapped_f.final_exponentiation();
+
+    assert_eq!(final_f, compare_final);
 }

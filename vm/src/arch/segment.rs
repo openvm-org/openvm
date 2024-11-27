@@ -15,13 +15,10 @@ use parking_lot::Mutex;
 
 use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
 use crate::{
-    arch::{instructions::*, AxVmChip, ExecutionState, InstructionExecutor},
+    arch::{instructions::*, AxVmChip, ExecutionError, ExecutionState, InstructionExecutor},
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     metrics::{cycle_tracker::CycleTracker, VmMetrics},
-    system::{
-        memory::{Equipartition, CHUNK},
-        program::ExecutionError,
-    },
+    system::memory::{Equipartition, CHUNK},
 };
 
 /// Check segment every 100 instructions.
@@ -172,27 +169,26 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             if opcode == SystemOpcode::PHANTOM as usize {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
-                let phantom = PhantomInstruction::from_repr(discriminant)
-                    .ok_or(ExecutionError::InvalidPhantomInstruction(pc, discriminant))?;
-                tracing::trace!("pc: {pc:#x} | phantom: {phantom:?}");
+                let phantom = SysPhantom::from_repr(discriminant);
+                tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
                 match phantom {
-                    PhantomInstruction::DebugPanic => {
+                    Some(SysPhantom::DebugPanic) => {
                         if let Some(mut backtrace) = prev_backtrace {
                             backtrace.resolve();
                             eprintln!("axvm program failure; backtrace:\n{:?}", backtrace);
                         } else {
                             eprintln!("axvm program failure; no backtrace");
                         }
-                        return Err(ExecutionError::Fail(pc));
+                        return Err(ExecutionError::Fail { pc });
                     }
-                    PhantomInstruction::CtStart => {
+                    Some(SysPhantom::CtStart) => {
                         // hack to remove "CT-" prefix
                         #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.start(
                             dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
                         )
                     }
-                    PhantomInstruction::CtEnd => {
+                    Some(SysPhantom::CtEnd) => {
                         // hack to remove "CT-" prefix
                         #[cfg(not(feature = "function-span"))]
                         self.cycle_tracker.end(
@@ -233,7 +229,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;
             } else {
-                return Err(ExecutionError::DisabledOperation(pc, opcode));
+                return Err(ExecutionError::DisabledOperation { pc, opcode });
             };
 
             if collect_metrics {

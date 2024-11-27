@@ -1,5 +1,6 @@
 use axvm_ecc::{
     algebra::{DivUnsafe, Field},
+    bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
     pairing::{
         Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },
@@ -8,7 +9,7 @@ use axvm_ecc::{
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;
 
-use super::{Bls12_381, BLS12_381_PBE, BLS12_381_SEED_ABS};
+use super::Bls12_381;
 
 impl MillerStep for Bls12_381 {
     type Fp2 = Fq2;
@@ -124,7 +125,7 @@ impl MultiMillerLoop for Bls12_381 {
     type Fp12 = Fq12;
 
     const SEED_ABS: u64 = BLS12_381_SEED_ABS;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PBE;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Fq12, lines: Vec<EvaluatedLine<Fq2>>) -> Fq12 {
         let mut f = f;
@@ -145,20 +146,22 @@ impl MultiMillerLoop for Bls12_381 {
 
     /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
     fn pre_loop(
-        f: &Fq12,
         Q_acc: Vec<AffinePoint<Fq2>>,
         Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
-        let mut f = *f;
-
-        if c.is_some() {
+        let mut f = if let Some(mut c) = c {
             // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
             // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
             // Therefore, the final value of f at the end of this block is c^3.
-            f = f.square() * c.unwrap();
-        }
+            let mut c3 = c;
+            c.square_assign();
+            c3 *= &c;
+            c3
+        } else {
+            Self::Fp12::ONE
+        };
 
         let mut Q_acc = Q_acc;
 
@@ -206,6 +209,11 @@ impl MultiMillerLoop for Bls12_381 {
         _xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         // Conjugate for negative component of the seed
+        // Explanation:
+        // The general Miller loop formula implies that f_{-x} = 1/f_x. To avoid an inversion, we use the fact that
+        // for the final exponentiation, we only need the Miller loop result up to multiplication by some proper subfield
+        // of Fp12. Using the fact that Fp12 is a quadratic extension of Fp6, we have that f_x * conjugate(f_x) * 1/f_x lies in Fp6.
+        // Therefore we conjugate f_x instead of taking the inverse.
         let f = f.conjugate();
         (f, Q_acc)
     }

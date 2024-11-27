@@ -13,28 +13,24 @@ use ax_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomInstruction, SystemOpcode,
-    UsizeOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode, UsizeOpcode,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;
+use rustc_hash::FxHashMap;
 
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, PcIncOrSet, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
+        PcIncOrSet, PhantomSubExecutor, Streams,
     },
-    rv32im::adapters::unsafe_read_rv32_register,
-    system::{
-        memory::MemoryControllerRef,
-        program::{ExecutionError, ProgramBus},
-    },
+    system::{memory::MemoryControllerRef, program::ProgramBus},
 };
 
-/// Final exponent hint instructions
-mod pairing;
 #[cfg(test)]
 mod tests;
 
@@ -88,14 +84,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     }
 }
 
-pub struct PhantomChip<F: Field> {
+pub struct PhantomChip<F> {
     pub air: PhantomAir,
     pub rows: Vec<PhantomCols<F>>,
     memory: MemoryControllerRef<F>,
     streams: OnceLock<Arc<Mutex<Streams<F>>>>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
 }
 
-impl<F: Field> PhantomChip<F> {
+impl<F> PhantomChip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
@@ -110,10 +107,23 @@ impl<F: Field> PhantomChip<F> {
             rows: vec![],
             memory: memory_controller,
             streams: OnceLock::new(),
+            phantom_executors: FxHashMap::default(),
         }
     }
+
     pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
+        if self.streams.set(streams).is_err() {
+            panic!("Streams should only be set once");
+        }
+    }
+
+    pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(
+        &mut self,
+        sub_executor: P,
+        discriminant: PhantomDiscriminant,
+    ) -> Option<Box<dyn PhantomSubExecutor<F>>> {
+        self.phantom_executors
+            .insert(discriminant, Box::new(sub_executor))
     }
 }
 
@@ -129,102 +139,35 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         assert_eq!(opcode, self.air.phantom_opcode);
 
         let c_u32 = c.as_canonical_u32();
-        let discriminant = c_u32 as u16;
-        let phantom = PhantomInstruction::from_repr(discriminant).ok_or(
-            ExecutionError::InvalidPhantomInstruction(from_state.pc, discriminant),
-        )?;
-        match phantom {
-            PhantomInstruction::Nop => {}
-            PhantomInstruction::PrintF => {
-                let addr_space = F::from_canonical_u32(c_u32 >> 16);
-                let value = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
-                println!("{}", value);
-            }
-            PhantomInstruction::HintInput | PhantomInstruction::HintInputRv32 => {
-                let mut streams = self.streams.get().unwrap().lock();
-                let mut hint = match streams.input_stream.pop_front() {
-                    Some(hint) => hint,
-                    None => {
-                        return Err(ExecutionError::EndOfInputStream(from_state.pc));
-                    }
-                };
-                streams.hint_stream.clear();
-                if phantom == PhantomInstruction::HintInputRv32 {
-                    streams.hint_stream.extend(
-                        (hint.len() as u32)
-                            .to_le_bytes()
-                            .iter()
-                            .map(|b| F::from_canonical_u8(*b)),
-                    );
-                    // Extend by 0 for 4 byte alignment
-                    let capacity = hint.len().div_ceil(4) * 4;
-                    hint.resize(capacity, F::ZERO);
-                    streams.hint_stream.extend(hint);
-                } else {
-                    streams
-                        .hint_stream
-                        .push_back(F::from_canonical_usize(hint.len()));
-                    streams.hint_stream.extend(hint);
-                }
-                drop(streams);
-            }
-            PhantomInstruction::HintBits => {
-                let addr_space = F::from_canonical_u32(c_u32 >> 16);
-                let mut streams = self.streams.get().unwrap().lock();
-                let val = RefCell::borrow(&self.memory).unsafe_read_cell(addr_space, a);
-                let mut val = val.as_canonical_u32();
-
-                let len = b.as_canonical_u32();
-                streams.hint_stream.clear();
-                for _ in 0..len {
-                    streams
-                        .hint_stream
-                        .push_back(F::from_canonical_u32(val & 1));
-                    val >>= 1;
-                }
-                drop(streams);
-            }
-            PhantomInstruction::PrintStrRv32 => {
-                let memory = RefCell::borrow(&self.memory);
-                let rd = unsafe_read_rv32_register(&memory, a);
-                let rs1 = unsafe_read_rv32_register(&memory, b);
-                let peek_str = || -> eyre::Result<String> {
-                    let bytes = (0..rs1)
-                        .map(|i| -> eyre::Result<u8> {
-                            let val =
-                                memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd + i));
-                            let byte: u8 = val.as_canonical_u32().try_into()?;
-                            Ok(byte)
-                        })
-                        .collect::<eyre::Result<Vec<u8>>>()?;
-                    let str = String::from_utf8(bytes)?;
-                    Ok(str)
-                };
-                match peek_str() {
-                    Ok(peeked) => {
-                        println!("{peeked}");
-                    }
-                    Err(err) => {
-                        println!("Error peeking string: {err}");
-                    }
-                }
-            }
-            PhantomInstruction::HintFinalExp => {
-                let memory = RefCell::borrow(&self.memory);
-                let mut streams = self.streams.get().unwrap().lock();
-                let rs = unsafe_read_rv32_register(&memory, a);
-                let b = b.as_canonical_u32();
-                if let Err(err) = pairing::hint_final_exp(&memory, &mut streams.hint_stream, rs, b)
-                {
-                    println!("Error hint_final_exp: {err}");
-                    return Err(ExecutionError::InvalidPhantomInstruction(
-                        from_state.pc,
-                        discriminant,
-                    ));
-                }
-            }
-            _ => {}
-        };
+        let discriminant = PhantomDiscriminant(c_u32 as u16);
+        // If not a system phantom sub-instruction (which is handled in
+        // ExecutionSegment), look for a phantom sub-executor to handle it.
+        if SysPhantom::from_repr(discriminant.0).is_none() {
+            let sub_executor = self
+                .phantom_executors
+                .get_mut(&discriminant)
+                .ok_or_else(|| ExecutionError::PhantomNotFound {
+                    pc: from_state.pc,
+                    discriminant,
+                })?;
+            let memory = RefCell::borrow(&self.memory);
+            let mut streams = self.streams.get().unwrap().lock();
+            sub_executor
+                .as_mut()
+                .phantom_execute(
+                    &memory,
+                    &mut streams,
+                    discriminant,
+                    a,
+                    b,
+                    (c_u32 >> 16) as u16,
+                )
+                .map_err(|e| ExecutionError::Phantom {
+                    pc: from_state.pc,
+                    discriminant,
+                    inner: e,
+                })?;
+        }
 
         self.rows.push(PhantomCols {
             pc: F::from_canonical_u32(from_state.pc),

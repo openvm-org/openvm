@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm::io::read_vec;
-use axvm_ecc::pairing_hint::bls12_381_final_exp_hint;
+use axvm_ecc::pairing::final_exp_hint::bls12_381_final_exp_hint;
 
 axvm::entry!(main);
 

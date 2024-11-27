@@ -109,7 +109,7 @@ where
         // λ1 = (y_s - y_q) / (x_s - x_q)
         let x_delta = x_s - x_q;
         let lambda = &((y_s - y_q).div_unsafe(&x_delta));
-        let x_s_plus_q = lambda * lambda - x_delta;
+        let x_s_plus_q = lambda * lambda - x_s - x_q;
         let y_s_plus_q = lambda * &(x_q - &x_s_plus_q) - y_q;
 
         let s_plus_q = AffinePoint {

@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use crate::{config::StarkGenericConfig, prover::types::AirProofInput, rap::AnyRap};
 
@@ -33,20 +37,44 @@ pub trait ChipUsageGetter {
     }
 }
 
-impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for Rc<RefCell<C>> {
+impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for RefCell<C> {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
         self.borrow().air()
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        self.into_inner().generate_air_proof_input()
+    }
+}
+
+impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for Rc<C> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        self.as_ref().air()
+    }
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         if let Some(c) = Rc::into_inner(self) {
-            c.into_inner().generate_air_proof_input()
+            c.generate_air_proof_input()
         } else {
             panic!("Cannot generate AirProofInput while other chips still hold a reference");
         }
     }
 }
 
-impl<C: ChipUsageGetter> ChipUsageGetter for Rc<RefCell<C>> {
+impl<C: ChipUsageGetter> ChipUsageGetter for Rc<C> {
+    fn air_name(&self) -> String {
+        self.as_ref().air_name()
+    }
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.as_ref().constant_trace_height()
+    }
+    fn current_trace_height(&self) -> usize {
+        self.as_ref().current_trace_height()
+    }
+    fn trace_width(&self) -> usize {
+        self.as_ref().trace_width()
+    }
+}
+
+impl<C: ChipUsageGetter> ChipUsageGetter for RefCell<C> {
     fn air_name(&self) -> String {
         self.borrow().air_name()
     }
@@ -73,6 +101,7 @@ impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for Arc<C> {
         }
     }
 }
+
 impl<C: ChipUsageGetter> ChipUsageGetter for Arc<C> {
     fn air_name(&self) -> String {
         self.as_ref().air_name()
@@ -85,5 +114,29 @@ impl<C: ChipUsageGetter> ChipUsageGetter for Arc<C> {
     }
     fn trace_width(&self) -> usize {
         self.as_ref().trace_width()
+    }
+}
+
+impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for Mutex<C> {
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        self.lock().unwrap().air()
+    }
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        self.into_inner().unwrap().generate_air_proof_input()
+    }
+}
+
+impl<C: ChipUsageGetter> ChipUsageGetter for Mutex<C> {
+    fn air_name(&self) -> String {
+        self.lock().unwrap().air_name()
+    }
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.lock().unwrap().constant_trace_height()
+    }
+    fn current_trace_height(&self) -> usize {
+        self.lock().unwrap().current_trace_height()
+    }
+    fn trace_width(&self) -> usize {
+        self.lock().unwrap().trace_width()
     }
 }

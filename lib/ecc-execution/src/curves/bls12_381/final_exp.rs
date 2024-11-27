@@ -1,17 +1,24 @@
 use axvm_ecc::{
-    algebra::Field,
-    halo2curves_shims::ExpBigInt,
+    algebra::{ExpBytes, Field},
     pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
 };
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-use num_bigint::{BigUint, Sign};
+use num_bigint::BigUint;
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 
 #[allow(non_snake_case)]
-impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
-    fn assert_final_exp_is_one(f: &Fq12, P: &[AffinePoint<Fq>], Q: &[AffinePoint<Fq2>]) {
+impl FinalExp for Bls12_381 {
+    type Fp = Fq;
+    type Fp2 = Fq2;
+    type Fp12 = Fq12;
+
+    fn assert_final_exp_is_one(
+        f: &Self::Fp12,
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) {
         let (c, s) = Self::final_exp_hint(f);
 
         // f * s = c^{q - x}
@@ -38,17 +45,17 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
     // Adapted from the gnark implementation:
     // https://github.com/Consensys/gnark/blob/af754dd1c47a92be375930ae1abfbd134c5310d8/std/algebra/emulated/fields_bls12381/hints.go#L273
     // returns c (residueWitness) and s (scalingFactor)
-    fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
+    fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
         // 1. get p-th root inverse
         let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
-        let mut root = f.exp_bigint(Sign::Plus, exp.clone());
+        let mut root = f.exp_bytes(true, &exp.to_bytes_be());
         let root_pth_inv: Fq12;
         if root == Fq12::ONE {
             root_pth_inv = Fq12::ONE;
         } else {
             let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
             exp = exp_inv % POLY_FACTOR.clone();
-            root_pth_inv = root.exp_bigint(Sign::Minus, exp);
+            root_pth_inv = root.exp_bytes(false, &exp.to_bytes_be());
         }
 
         // 2.1. get order of 3rd primitive root
@@ -56,20 +63,21 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         let mut order_3rd_power: u32 = 0;
         exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
 
-        root = f.exp_bigint(Sign::Plus, exp.clone());
+        root = f.exp_bytes(true, &exp.to_bytes_be());
+        let three_be = three.to_bytes_be();
         // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize order_3rd_power to 0
         if root == Fq12::ONE {
             order_3rd_power = 0;
         }
-        root = root.exp_bigint(Sign::Plus, three.clone());
+        root = root.exp_bytes(true, &three_be);
         if root == Fq12::ONE {
             order_3rd_power = 1;
         }
-        root = root.exp_bigint(Sign::Plus, three.clone());
+        root = root.exp_bytes(true, &three_be);
         if root == Fq12::ONE {
             order_3rd_power = 2;
         }
-        root = root.exp_bigint(Sign::Plus, three.clone());
+        root = root.exp_bytes(true, &three_be);
         if root == Fq12::ONE {
             order_3rd_power = 3;
         }
@@ -81,10 +89,10 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         } else {
             let order_3rd = three.pow(order_3rd_power);
             exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-            root = f.exp_bigint(Sign::Plus, exp.clone());
+            root = f.exp_bytes(true, &exp.to_bytes_be());
             let exp_inv = exp.modinv(&order_3rd).unwrap();
             exp = exp_inv % order_3rd;
-            root_27th_inv = root.exp_bigint(Sign::Minus, exp);
+            root_27th_inv = root.exp_bytes(false, &exp.to_bytes_be());
         }
 
         // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
@@ -95,7 +103,7 @@ impl FinalExp<Fq, Fq2, Fq12> for Bls12_381 {
         // 3. get the witness residue
         // lambda = q - u, the optimal exponent
         exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
-        let c = f.exp_bigint(Sign::Plus, exp.clone());
+        let c = f.exp_bytes(true, &exp.to_bytes_be());
 
         (c, s)
     }

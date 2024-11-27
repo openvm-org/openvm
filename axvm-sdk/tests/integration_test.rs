@@ -10,13 +10,12 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutorName, SingleSegmentVmExecutor, VmConfig,
-        VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, ExecutorName,
+        SingleSegmentVmExecutor, VmConfig, VmExecutor,
     },
     prover::{local::VmLocalProver, SingleSegmentVmProver},
     system::{
-        memory::tree::public_values::UserPublicValuesProof,
-        program::{trace::AxVmCommittedExe, ExecutionError},
+        memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
     },
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -169,7 +168,7 @@ fn test_1() {
             public_values_root_proof: Some(wrong_pv_root_proof),
         });
         match execution_result.err().unwrap() {
-            ExecutionError::Fail(_) => {}
+            ExecutionError::Fail { .. } => {}
             _ => panic!("Expected execution to fail"),
         }
     }
@@ -182,7 +181,7 @@ fn test_1() {
             public_values_root_proof: Some(wrong_pv_root_proof),
         });
         match execution_result.err().unwrap() {
-            ExecutionError::Fail(_) => {}
+            ExecutionError::Fail { .. } => {}
             _ => panic!("Expected execution to fail"),
         }
     }
