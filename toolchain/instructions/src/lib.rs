@@ -406,7 +406,7 @@ pub enum Fp2Opcode {
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x720]
+#[opcode_offset = 0x750]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {
