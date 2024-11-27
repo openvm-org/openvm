@@ -69,10 +69,12 @@ impl E2EStarkProver {
         program_name: &str,
     ) -> Proof<OuterSC> {
         let group_name = program_name.replace(" ", "_").to_lowercase();
-        let app_proofs = info_span!("App Continuation Program", group_name).in_scope(|| {
-            counter!("fri.log_blowup").absolute(self.app_pk.app_vm_pk.fri_params.log_blowup as u64);
-            self.generate_app_proof(input)
-        });
+        let app_proofs =
+            info_span!("App Continuation Program", group = group_name).in_scope(|| {
+                counter!("fri.log_blowup")
+                    .absolute(self.app_pk.app_vm_pk.fri_params.log_blowup as u64);
+                self.generate_app_proof(input)
+            });
         let leaf_proofs = info_span!("leaf verifier", group = "leaf_verifier").in_scope(|| {
             counter!("fri.log_blowup")
                 .absolute(self.agg_pk.leaf_vm_pk.fri_params.log_blowup as u64);
