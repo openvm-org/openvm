@@ -21,6 +21,10 @@ pub mod field;
 #[cfg(all(not(target_os = "zkvm"), feature = "halo2curves"))]
 mod halo2curves;
 
+/// Exponentiation by bytes
+mod exp_bytes;
+pub use exp_bytes::*;
+
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {
     /// Output type of `div_unsafe`.

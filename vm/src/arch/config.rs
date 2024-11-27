@@ -4,6 +4,7 @@ use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
+    ChipUsageGetter,
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
@@ -13,18 +14,37 @@ use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
+use super::{
+    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
+    VmInventoryError, PUBLIC_VALUES_AIR_ID,
+};
 use crate::{
     arch::ExecutorName,
     intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    system::memory::BOUNDARY_AIR_OFFSET,
 };
 
-pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
-pub const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 7; // the sbox degree used for Poseidon2
+const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
+// sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
+// allows log_blowup = 1
+const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
+}
+
+pub trait VmGenericConfig<F: PrimeField32> {
+    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Periphery: AnyEnum + ChipUsageGetter;
+
+    /// Must contain system config
+    fn system(&self) -> &SystemConfig;
+
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
@@ -35,6 +55,7 @@ pub struct MemoryConfig {
     pub as_offset: usize,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
+    /// Limb size used by the range checker
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
@@ -48,6 +69,123 @@ impl Default for MemoryConfig {
     }
 }
 
+/// System-level configuration for the virtual machine. Contains all configuration parameters that
+/// are managed by the architecture, including configuration for continuations support.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct SystemConfig {
+    /// The maximum constraint degree any chip is allowed to use.
+    pub max_constraint_degree: usize,
+    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
+    /// each segment is proved by a proof. Each proof commits the before and after state of the
+    /// corresponding segment.
+    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
+    /// proof.
+    pub continuation_enabled: bool,
+    /// Memory configuration
+    pub memory_config: MemoryConfig,
+    /// `num_public_values` has different meanings in single segment mode and continuation mode.
+    /// In single segment mode, `num_public_values` is the number of public values of
+    /// `PublicValuesChip`. In this case, verifier can read public values directly.
+    /// In continuation mode, public values are stored in a special address space.
+    /// `num_public_values` indicates the number of allowed addresses in that address space. The verifier
+    /// cannot read public values directly, but they can decommit the public values from the memory
+    /// merkle root.
+    pub num_public_values: usize,
+    /// When continuations are enabled, a heuristic used to determine when to segment execution.
+    pub max_segment_len: usize,
+    /// Whether to collect metrics.
+    /// **Warning**: this slows down the runtime.
+    pub collect_metrics: bool,
+}
+
+impl SystemConfig {
+    pub fn new(
+        max_constraint_degree: usize,
+        memory_config: MemoryConfig,
+        num_public_values: usize,
+    ) -> Self {
+        Self {
+            max_constraint_degree,
+            continuation_enabled: false,
+            memory_config,
+            num_public_values,
+            max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
+            collect_metrics: false,
+        }
+    }
+
+    pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
+        self.max_constraint_degree = max_constraint_degree;
+        self
+    }
+
+    pub fn with_continuations(mut self) -> Self {
+        self.continuation_enabled = true;
+        self
+    }
+
+    pub fn without_continuations(mut self) -> Self {
+        self.continuation_enabled = false;
+        self
+    }
+
+    pub fn with_public_values(mut self, num_public_values: usize) -> Self {
+        self.num_public_values = num_public_values;
+        self
+    }
+
+    pub fn with_metric_collection(mut self) -> Self {
+        self.collect_metrics = true;
+        self
+    }
+
+    pub fn without_metric_collection(mut self) -> Self {
+        self.collect_metrics = false;
+        self
+    }
+
+    pub fn has_public_values_chip(&self) -> bool {
+        !self.continuation_enabled && self.num_public_values > 0
+    }
+
+    /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
+    pub fn memory_boundary_air_id(&self) -> usize {
+        let mut ret = PUBLIC_VALUES_AIR_ID;
+        if self.has_public_values_chip() {
+            ret += 1;
+        }
+        ret += BOUNDARY_AIR_OFFSET;
+        ret
+    }
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self::new(
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            Default::default(),
+            0,
+        )
+    }
+}
+
+impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
+    type Executor = SystemExecutor<F>;
+    type Periphery = SystemPeriphery<F>;
+
+    fn system(&self) -> &SystemConfig {
+        self
+    }
+
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+        let complex = SystemComplex::new(*self);
+        Ok(complex)
+    }
+}
+
+// to be deleted
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmConfig {
     /// List of all executors except modular executors.

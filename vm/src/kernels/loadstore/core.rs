@@ -14,11 +14,10 @@ use strum::IntoEnumIterator;
 
 use crate::{
     arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, Result, Streams,
-        VmAdapterInterface, VmCoreAir, VmCoreChip,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError,
+        Result, Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
     },
     kernels::adapters::loadstore_native_adapter::NativeLoadStoreInstruction,
-    system::program::ExecutionError,
 };
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -152,7 +151,7 @@ where
         let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
             let mut streams = self.streams.get().unwrap().lock();
             if streams.hint_stream.len() < NUM_CELLS {
-                return Err(ExecutionError::HintOutOfBounds(from_pc));
+                return Err(ExecutionError::HintOutOfBounds { pc: from_pc });
             }
             array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
         } else {

@@ -20,3 +20,6 @@ pub mod rv32im;
 pub mod system;
 /// Utility functions and test utils
 pub mod utils;
+
+// temporary: should be separate crates
+pub mod extensions;

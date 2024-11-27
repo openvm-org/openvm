@@ -209,6 +209,11 @@ impl MultiMillerLoop for Bls12_381 {
         _xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         // Conjugate for negative component of the seed
+        // Explanation:
+        // The general Miller loop formula implies that f_{-x} = 1/f_x. To avoid an inversion, we use the fact that
+        // for the final exponentiation, we only need the Miller loop result up to multiplication by some proper subfield
+        // of Fp12. Using the fact that Fp12 is a quadratic extension of Fp6, we have that f_x * conjugate(f_x) * 1/f_x lies in Fp6.
+        // Therefore we conjugate f_x instead of taking the inverse.
         let f = f.conjugate();
         (f, Q_acc)
     }

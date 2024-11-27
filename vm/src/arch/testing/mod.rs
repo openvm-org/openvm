@@ -29,10 +29,7 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::{
-        ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS,
-        READ_INSTRUCTION_BUS,
-    },
+    arch::{ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS},
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
@@ -49,6 +46,8 @@ pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::{intrinsics::hashes::poseidon2::Poseidon2Chip, system::memory::MemoryControllerRef};
+
+const RANGE_CHECKER_BUS: usize = 4;
 
 #[derive(Debug)]
 pub struct VmChipTestBuilder<F: PrimeField32> {

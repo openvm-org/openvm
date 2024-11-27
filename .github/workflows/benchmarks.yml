@@ -24,6 +24,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   AXIOM_FAST_TEST: "1"
+  CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   create-matrix:
@@ -138,7 +139,6 @@ jobs:
 
       - name: Load all metadata files from S3
         run: |
-          current_sha=$(git rev-parse HEAD)
           md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench != true) |
@@ -158,17 +158,20 @@ jobs:
               continue
             fi
             echo "Downloading results for benchmark: $md_file"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${md_file}" "${md_file}"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${CURRENT_SHA}-${md_file}" "${md_file}"
           done <<< "$md_files"
 
           E2E_FILE_LIST=""
           if [[ -n "$e2e_md_files" ]]; then
             while read e2e_md_file; do
               echo "Downloading results for benchmark: $e2e_md_file"
-              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${current_sha}-${e2e_md_file}" "${e2e_md_file}"
+              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${CURRENT_SHA}-${e2e_md_file}" "${e2e_md_file}"
             done <<< "$e2e_md_files"
             E2E_FILE_LIST="${e2e_md_file_list}"
           fi
+
+          echo "Benchmarks: ${md_file_list}"
+          echo "E2E Benchmarks: ${E2E_FILE_LIST}"
 
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --e2e-md-files "${E2E_FILE_LIST}" \
@@ -176,7 +179,7 @@ jobs:
             --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
 
           echo "" >> summary.md
-          echo "Commit: https://github.com/${{ github.repository }}/commit/${current_sha}" >> summary.md
+          echo "Commit: https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}" >> summary.md
           echo "" >> summary.md
           echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> summary.md
           mkdir -p /tmp/benchmark-results/
@@ -202,6 +205,10 @@ jobs:
           mkdir -p ${GH_PAGES_PATH}
           cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
           git add ${GH_PAGES_PATH}/summary.md
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            cp /tmp/benchmark-results/summary.md index.md
+            git add index.md
+          fi
           git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
           git push --force
 

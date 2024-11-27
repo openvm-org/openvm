@@ -4,7 +4,8 @@ use axvm_algebra::{field::FieldExtension, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::shifted_funct7,
+    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
+    axvm_algebra::DivUnsafe,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
@@ -295,5 +296,43 @@ impl MultiMillerLoop for Bn254 {
         f = Self::evaluate_lines_vec(f, lines);
 
         (f, Q_acc)
+    }
+}
+
+#[cfg(target_os = "zkvm")]
+#[allow(non_snake_case)]
+impl PairingCheck for Bn254 {
+    type Fp = Fp;
+    type Fp2 = Fp2;
+    type Fp12 = Fp12;
+
+    fn pairing_check(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Result<(), PairingCheckError> {
+        let f = Self::multi_miller_loop(P, Q);
+        let hint = final_exp_hint::bn254_final_exp_hint(&f.to_bytes());
+        let c = Fp12::from_bytes(&hint[..32 * 12]);
+        let u = Fp12::from_bytes(&hint[32 * 12..]);
+        let c_inv = Fp12::ONE.div_unsafe(&c);
+
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
+        // c_mul = c^-{q^3 - q^2 + q}
+        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3_inv * c_q2 * c_q_inv;
+
+        // Compute miller loop with c_inv
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+
+        if fc * c_mul * u == Fp12::ONE {
+            Ok(())
+        } else {
+            Err(PairingCheckError)
+        }
     }
 }

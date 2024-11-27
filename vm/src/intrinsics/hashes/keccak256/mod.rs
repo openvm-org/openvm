@@ -23,12 +23,12 @@ use axvm_instructions::{
 use crate::{
     arch::{
         instructions::{Rv32KeccakOpcode, UsizeOpcode},
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
     },
     rv32im::adapters::read_rv32_register,
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::{ExecutionError, ProgramBus},
+        program::ProgramBus,
     },
 };
 

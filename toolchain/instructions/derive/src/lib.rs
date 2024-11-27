@@ -3,7 +3,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Lit, Meta, MetaNameValue};
+use syn::{parse_macro_input, Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta};
 
 #[proc_macro_derive(UsizeOpcode, attributes(opcode_offset))]
 pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
@@ -12,14 +12,15 @@ pub fn usize_opcode_derive(input: TokenStream) -> TokenStream {
 
     let mut offset = None;
     for attr in ast.attrs {
-        if let Ok(Meta::NameValue(MetaNameValue {
-            path,
-            lit: Lit::Int(lit_int),
-            ..
-        })) = attr.parse_meta()
-        {
-            if path.is_ident("opcode_offset") {
-                offset = Some(lit_int.base10_parse::<usize>().unwrap());
+        if let Meta::NameValue(meta) = attr.meta {
+            if meta.path.is_ident("opcode_offset") {
+                if let Expr::Lit(ExprLit {
+                    lit: Lit::Int(lit_int),
+                    ..
+                }) = meta.value
+                {
+                    offset = Some(lit_int.base10_parse::<usize>().unwrap());
+                }
             }
         }
     }

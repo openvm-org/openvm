@@ -45,3 +45,7 @@ nightly-features = ["axvm-circuit/nightly-features"]
 [[bench]]
 name = "fibonacci_execute"
 harness = false
+
+[[bin]]
+name = "fib_e2e"
+required-features = ["static-verifier"]

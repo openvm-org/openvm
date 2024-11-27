@@ -13,8 +13,9 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rustc_hash::FxHashSet;
 
+use super::merkle::DirectCompressionBus;
 use crate::{
-    arch::{hasher::HasherChip, POSEIDON2_DIRECT_BUS},
+    arch::hasher::HasherChip,
     system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
         offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
@@ -48,6 +49,7 @@ pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,
     pub merkle_bus: MemoryMerkleBus,
+    pub compression_bus: DirectCompressionBus,
 }
 
 impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
@@ -89,7 +91,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
         );
 
         builder.push_send(
-            POSEIDON2_DIRECT_BUS,
+            self.compression_bus.0,
             iter::empty()
                 .chain(local.values.map(Into::into))
                 .chain(iter::repeat(AB::Expr::ZERO).take(CHUNK))
@@ -121,12 +123,14 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         memory_dimensions: MemoryDimensions,
         memory_bus: MemoryBus,
         merkle_bus: MemoryMerkleBus,
+        compression_bus: DirectCompressionBus,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {
                 memory_dims: memory_dimensions,
                 memory_bus,
                 merkle_bus,
+                compression_bus,
             },
             touched_labels: FxHashSet::default(),
         }

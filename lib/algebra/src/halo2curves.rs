@@ -51,9 +51,16 @@ where
 }
 
 mod bn254 {
+    use alloc::vec::Vec;
+
     use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, Fq6};
 
     use crate::field::{ComplexConjugate, FieldExtension};
+
+    pub fn bytes_to_bn254_fq(bytes: &[u8]) -> Fq {
+        assert_eq!(bytes.len(), 32);
+        Fq::from_bytes(&bytes.try_into().unwrap()).unwrap()
+    }
 
     /// FieldExtension for Fq2 with Fq as base field
     impl FieldExtension<Fq> for Fq2 {
@@ -67,8 +74,23 @@ mod bn254 {
             }
         }
 
+        fn from_bytes(bytes: &[u8]) -> Self {
+            assert_eq!(bytes.len(), 64);
+            Self::from_coeffs([
+                bytes_to_bn254_fq(&bytes[0..32]),
+                bytes_to_bn254_fq(&bytes[32..64]),
+            ])
+        }
+
         fn to_coeffs(self) -> Self::Coeffs {
             [self.c0, self.c1]
+        }
+
+        fn to_bytes(&self) -> Vec<u8> {
+            let mut bytes = Vec::with_capacity(64);
+            bytes.extend_from_slice(&self.c0.to_bytes());
+            bytes.extend_from_slice(&self.c1.to_bytes());
+            bytes
         }
 
         fn embed(c0: Fq) -> Self {
@@ -121,10 +143,31 @@ mod bn254 {
             }
         }
 
+        fn from_bytes(bytes: &[u8]) -> Self {
+            assert_eq!(bytes.len(), 384);
+            Self::from_coeffs([
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[0..64]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[64..128]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[128..192]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[192..256]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[256..320]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[320..384]),
+            ])
+        }
+
         fn to_coeffs(self) -> Self::Coeffs {
             [
                 self.c0.c0, self.c1.c0, self.c0.c1, self.c1.c1, self.c0.c2, self.c1.c2,
             ]
+        }
+
+        fn to_bytes(&self) -> Vec<u8> {
+            let coeffs = self.to_coeffs();
+            let mut bytes = Vec::with_capacity(384);
+            for coeff in coeffs {
+                bytes.extend_from_slice(&coeff.to_bytes());
+            }
+            bytes
         }
 
         fn embed(c0: Fq2) -> Self {
@@ -173,9 +216,16 @@ mod bn254 {
 }
 
 mod bls12_381 {
+    use alloc::vec::Vec;
+
     use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, Fq6};
 
     use crate::field::{ComplexConjugate, FieldExtension};
+
+    pub fn bytes_to_bls12_381_fq(bytes: &[u8]) -> Fq {
+        assert_eq!(bytes.len(), 48);
+        Fq::from_bytes(&bytes.try_into().unwrap()).unwrap()
+    }
 
     /// FieldExtension for Fq2 with Fq as base field
     impl FieldExtension<Fq> for Fq2 {
@@ -189,8 +239,23 @@ mod bls12_381 {
             }
         }
 
+        fn from_bytes(bytes: &[u8]) -> Self {
+            assert_eq!(bytes.len(), 96);
+            Self::from_coeffs([
+                bytes_to_bls12_381_fq(&bytes[0..48]),
+                bytes_to_bls12_381_fq(&bytes[48..96]),
+            ])
+        }
+
         fn to_coeffs(self) -> Self::Coeffs {
             [self.c0, self.c1]
+        }
+
+        fn to_bytes(&self) -> Vec<u8> {
+            let mut bytes = Vec::with_capacity(96);
+            bytes.extend_from_slice(&self.c0.to_bytes());
+            bytes.extend_from_slice(&self.c1.to_bytes());
+            bytes
         }
 
         fn embed(c0: Fq) -> Self {
@@ -246,10 +311,31 @@ mod bls12_381 {
             }
         }
 
+        fn from_bytes(bytes: &[u8]) -> Self {
+            assert_eq!(bytes.len(), 576);
+            Self::from_coeffs([
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[0..96]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[96..192]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[192..288]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[288..384]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[384..480]),
+                <Fq2 as FieldExtension<Fq>>::from_bytes(&bytes[480..576]),
+            ])
+        }
+
         fn to_coeffs(self) -> Self::Coeffs {
             [
                 self.c0.c0, self.c1.c0, self.c0.c1, self.c1.c1, self.c0.c2, self.c1.c2,
             ]
+        }
+
+        fn to_bytes(&self) -> Vec<u8> {
+            let coeffs = self.to_coeffs();
+            let mut bytes = Vec::with_capacity(576);
+            for coeff in coeffs {
+                bytes.extend_from_slice(&coeff.to_bytes());
+            }
+            bytes
         }
 
         fn embed(base_elem: Fq2) -> Self {

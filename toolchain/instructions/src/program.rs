@@ -77,6 +77,17 @@ impl<F: Field> Program<F> {
         }
     }
 
+    pub fn strip_debug_infos(self) -> Self {
+        Self {
+            instructions_and_debug_infos: self
+                .instructions_and_debug_infos
+                .into_iter()
+                .map(|opt| opt.map(|(ins, _)| (ins, None)))
+                .collect(),
+            ..self
+        }
+    }
+
     pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
         Self::new_without_debug_infos(
             instructions,

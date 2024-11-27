@@ -50,20 +50,13 @@ impl Bn254 {
             )),
         },
     ];
+
     pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
         c0: Bn254Fp(hex!(
             "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
         )),
         c1: Bn254Fp(hex!(
             "e3b02326637fd382d25ba28fc97d80212b6f79eca7b504079a0441acbc3cc007"
-        )),
-    };
-    pub const XI_TO_3Q_SQ_MINUS_1_OVER_6: Fp2 = Fp2 {
-        c0: Bn254Fp(hex!(
-            "be02f284bb8ff34891c82c947f519ae166d83f77b726a5700a6b791601af8b29"
-        )),
-        c1: Bn254Fp(hex!(
-            "0000000000000000000000000000000000000000000000000000000000000000"
         )),
     };
 }

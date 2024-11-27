@@ -27,7 +27,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
 use crate::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor},
+    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     kernels::field_extension::FieldExtension,
     system::{
         memory::{
@@ -37,7 +37,7 @@ use crate::{
             MemoryAddress, MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord,
             MemoryWriteRecord,
         },
-        program::{ExecutionError, ProgramBus},
+        program::ProgramBus,
     },
 };
 

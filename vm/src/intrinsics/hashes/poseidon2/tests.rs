@@ -21,6 +21,7 @@ use crate::{
             UsizeOpcode,
         },
         testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
+        POSEIDON2_DIRECT_BUS,
     },
     intrinsics::hashes::poseidon2::Poseidon2VmIoCols,
 };
@@ -60,6 +61,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_controller(),
+        POSEIDON2_DIRECT_BUS,
         0,
     );
 

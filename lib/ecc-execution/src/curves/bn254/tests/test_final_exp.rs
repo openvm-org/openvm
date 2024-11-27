@@ -1,11 +1,11 @@
 use axvm_ecc::{
-    halo2curves_shims::ExpBigInt,
+    algebra::ExpBytes,
     pairing::{FinalExp, MultiMillerLoop},
     AffineCoords, AffinePoint,
 };
 use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
-use num_bigint::{BigUint, Sign};
+use num_bigint::BigUint;
 use num_traits::Num;
 
 use crate::curves::bn254::Bn254;
@@ -28,7 +28,7 @@ fn test_bn254_final_exp_hint() {
     let q_pows = q.clone().pow(3) - q.clone().pow(2) + q;
     let lambda = six_x_plus_2.clone() + q_pows.clone();
 
-    let c_lambda = c.exp_bigint(Sign::Plus, lambda);
+    let c_lambda = c.exp_bytes(true, &lambda.to_bytes_be());
 
     assert_eq!(f * u, c_lambda);
 }

@@ -105,7 +105,15 @@ pub fn get_connector_pvs<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) -> VmConnectorPvs<Felt<C::F>> {
-    let a_id = RVar::from(CONNECTOR_AIR_ID);
+    get_connector_pvs_impl(builder, proof, CONNECTOR_AIR_ID)
+}
+
+fn get_connector_pvs_impl<C: Config>(
+    builder: &mut Builder<C>,
+    proof: &StarkProofVariable<C>,
+    connector_air_id: usize,
+) -> VmConnectorPvs<Felt<C::F>> {
+    let a_id = RVar::from(connector_air_id);
     let a_input = builder.get(&proof.per_air, a_id);
     let proof_pvs = &a_input.public_values;
     VmConnectorPvs {
@@ -133,7 +141,19 @@ pub fn assert_single_segment_vm_exit_successfully<C: Config>(
     builder: &mut Builder<C>,
     proof: &StarkProofVariable<C>,
 ) {
-    let connector_pvs = get_connector_pvs(builder, proof);
+    assert_single_segment_vm_exit_successfully_with_connector_air_id(
+        builder,
+        proof,
+        CONNECTOR_AIR_ID,
+    )
+}
+
+pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Config>(
+    builder: &mut Builder<C>,
+    proof: &StarkProofVariable<C>,
+    connector_air_id: usize,
+) {
+    let connector_pvs = get_connector_pvs_impl(builder, proof, connector_air_id);
     // FIXME: does single segment VM program always have pc_start = 0?
     // Start PC should be 0
     builder.assert_felt_eq(connector_pvs.initial_pc, C::F::ZERO);

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter};
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
@@ -8,14 +8,14 @@ use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
-use crate::system::memory::merkle::{
-    MemoryDimensions, MemoryMerkleBus, MemoryMerkleCols, MemoryMerklePvs,
-};
+use super::{DirectCompressionBus, MemoryMerkleBus};
+use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
 #[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: MemoryMerkleBus,
+    pub compression_bus: DirectCompressionBus,
 }
 
 impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
@@ -119,5 +119,68 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         }
 
         self.eval_interactions(builder, local);
+    }
+}
+
+impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
+    pub fn eval_interactions<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &MemoryMerkleCols<AB::Var, CHUNK>,
+    ) {
+        // interaction does not occur for first two rows;
+        // for those, parent hash value comes from public values
+        builder.push_send(
+            self.merkle_bus.0,
+            [
+                local.expand_direction.into(),
+                local.parent_height.into(),
+                local.parent_as_label.into(),
+                local.parent_address_label.into(),
+            ]
+            .into_iter()
+            .chain(local.parent_hash.into_iter().map(Into::into)),
+            // count can probably be made degree 1 if necessary
+            (AB::Expr::ONE - local.is_root) * local.expand_direction,
+        );
+
+        builder.push_receive(
+            self.merkle_bus.0,
+            [
+                local.expand_direction + (local.left_direction_different * AB::F::TWO),
+                local.parent_height - AB::F::ONE,
+                local.parent_as_label * (AB::Expr::ONE + local.height_section),
+                local.parent_address_label * (AB::Expr::TWO - local.height_section),
+            ]
+            .into_iter()
+            .chain(local.left_child_hash.into_iter().map(Into::into)),
+            local.expand_direction.into(),
+        );
+
+        builder.push_receive(
+            self.merkle_bus.0,
+            [
+                local.expand_direction + (local.right_direction_different * AB::F::TWO),
+                local.parent_height - AB::F::ONE,
+                (local.parent_as_label * (AB::Expr::ONE + local.height_section))
+                    + local.height_section,
+                (local.parent_address_label * (AB::Expr::TWO - local.height_section))
+                    + (AB::Expr::ONE - local.height_section),
+            ]
+            .into_iter()
+            .chain(local.right_child_hash.into_iter().map(Into::into)),
+            local.expand_direction.into(),
+        );
+
+        let compress_fields = iter::empty()
+            .chain(local.left_child_hash)
+            .chain(local.right_child_hash)
+            .chain(local.parent_hash);
+        // TODO: do not hardcode the hash bus
+        builder.push_send(
+            self.compression_bus.0,
+            compress_fields,
+            local.expand_direction * local.expand_direction,
+        );
     }
 }

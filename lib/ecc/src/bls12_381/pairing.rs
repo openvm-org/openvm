@@ -7,7 +7,8 @@ use axvm_algebra::{
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::shifted_funct7,
+    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
+    axvm_algebra::DivUnsafe,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
@@ -262,5 +263,46 @@ impl MultiMillerLoop for Bls12_381 {
         let mut f = f.clone();
         f.conjugate_assign();
         (f, Q_acc)
+    }
+}
+
+#[cfg(target_os = "zkvm")]
+#[allow(non_snake_case)]
+impl PairingCheck for Bls12_381 {
+    type Fp = Fp;
+    type Fp2 = Fp2;
+    type Fp12 = Fp12;
+
+    fn pairing_check(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Result<(), PairingCheckError> {
+        let f = Self::multi_miller_loop(P, Q);
+        let hint = final_exp_hint::bls12_381_final_exp_hint(&f.to_bytes());
+        let c = Fp12::from_bytes(&hint[..48 * 12]);
+        let s = Fp12::from_bytes(&hint[48 * 12..]);
+
+        // f * s = c^{q - x}
+        // f * s = c^q * c^-x
+        // f * c^x * c^-q * s = 1,
+        //   where fc = f * c'^x (embedded Miller loop with c conjugate inverse),
+        //   and the curve seed x = -0xd201000000010000
+        //   the miller loop computation includes a conjugation at the end because the value of the
+        //   seed is negative, so we need to conjugate the miller loop input c as c'. We then substitute
+        //   y = -x to get c^-y and finally compute c'^-y as input to the miller loop:
+        // f * c'^-y * c^-q * s = 1
+        let c_q = FieldExtension::frobenius_map(&c, 1);
+        let c_conj_inv = Fp12::ONE.div_unsafe(&c.conjugate());
+
+        // fc = f_{Miller,x,Q}(P) * c^{x}
+        // where
+        //   fc = conjugate( f_{Miller,-x,Q}(P) * c'^{-x} ), with c' denoting the conjugate of c
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_conj_inv));
+
+        if fc * s == c_q {
+            Ok(())
+        } else {
+            Err(PairingCheckError)
+        }
     }
 }
