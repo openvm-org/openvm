@@ -239,10 +239,13 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     field_name[0] = field_name[0].to_ascii_uppercase();
                     let field_name = field_name.iter().collect::<String>();
                     let field_name = Ident::new(&field_name, Span::call_site().into());
-                    let type_name = e.ty.to_token_stream();
+                    // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: https://github.com/rust-lang/rust/issues/85576
+                    let type_name = e.ty.to_token_stream().to_string();
+                    let type_name =
+                        Ident::new(&format!("{}Executor", type_name), Span::call_site().into());
                     quote! {
                         #[any_enum]
-                        #field_name(<#type_name as VmExtension<F>>::Executor),
+                        #field_name(#type_name<F>),
                     }
                 })
                 .collect::<Vec<_>>();
