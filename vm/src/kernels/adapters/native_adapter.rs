@@ -30,7 +30,7 @@ use crate::{
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
 #[derive(Debug)]
-pub struct NativeAdapterChip<F: Field, const R: usize, const W: usize> {
+pub struct NativeAdapterChip<F, const R: usize, const W: usize> {
     pub air: NativeAdapterAir<R, W>,
     _marker: PhantomData<F>,
 }

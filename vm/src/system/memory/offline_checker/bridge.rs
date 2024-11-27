@@ -10,14 +10,11 @@ use p3_air::AirBuilder;
 use p3_field::AbstractField;
 
 use super::bus::MemoryBus;
-use crate::{
-    arch::RANGE_CHECKER_BUS,
-    system::memory::{
-        offline_checker::columns::{
-            MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
-        },
-        MemoryAddress,
+use crate::system::memory::{
+    offline_checker::columns::{
+        MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
     },
+    MemoryAddress,
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will be decomposed into)
@@ -35,9 +32,13 @@ pub struct MemoryBridge {
 
 impl MemoryBridge {
     /// Create a new [MemoryBridge] with the provided offline_checker.
-    pub fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
+    pub fn new(
+        memory_bus: MemoryBus,
+        clk_max_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+    ) -> Self {
         Self {
-            offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, decomp),
+            offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, range_bus),
         }
     }
 
@@ -262,8 +263,7 @@ struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    fn new(memory_bus: MemoryBus, clk_max_bits: usize, decomp: usize) -> Self {
-        let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp);
+    fn new(memory_bus: MemoryBus, clk_max_bits: usize, range_bus: VariableRangeCheckerBus) -> Self {
         Self {
             memory_bus,
             timestamp_lt_air: AssertLtSubAir::new(range_bus, clk_max_bits),

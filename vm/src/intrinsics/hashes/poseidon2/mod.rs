@@ -65,6 +65,7 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_bridge: MemoryBridge,
+        direct_bus: usize,
         offset: usize,
     ) -> Self {
         let inner = Poseidon2Air::<WIDTH, F>::from_config(config, max_constraint_degree, 0);
@@ -72,19 +73,19 @@ impl<F: PrimeField32> Poseidon2VmAir<F> {
             inner,
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
-            direct: true,
+            direct_bus: Some(direct_bus),
             offset,
         }
     }
 
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
-    pub fn set_direct(&mut self, direct: bool) {
-        self.direct = direct;
+    pub fn set_direct(&mut self, direct_bus: Option<usize>) {
+        self.direct_bus = direct_bus;
     }
 
     /// By default direct bus is on. If `continuations = OFF`, this should be called.
     pub fn disable_direct(&mut self) {
-        self.direct = false;
+        self.direct_bus = None;
     }
 
     /// Number of interactions through opcode bus.
@@ -106,6 +107,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
+        direct_bus_idx: usize,
         offset: usize,
     ) -> Self {
         let air = Poseidon2VmAir::<F>::from_poseidon2_config(
@@ -114,6 +116,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
             execution_bus,
             program_bus,
             memory_controller.borrow().memory_bridge(),
+            direct_bus_idx,
             offset,
         );
         Self {

@@ -85,8 +85,9 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            merkle::MemoryMerkleBus, offline_checker::MemoryBus, Equipartition, MemoryController,
-            MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK, MERKLE_AIR_OFFSET,
+            merkle::{DirectCompressionBus, MemoryMerkleBus},
+            offline_checker::MemoryBus,
+            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
         },
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
@@ -95,7 +96,7 @@ use crate::{
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
-pub const RANGE_CHECKER_BUS: usize = 4;
+const RANGE_CHECKER_BUS: usize = 4;
 pub const POSEIDON2_DIRECT_BUS: usize = 6;
 pub const READ_INSTRUCTION_BUS: usize = 8;
 pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
@@ -104,18 +105,7 @@ pub const BYTE_XOR_BUS: usize = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
 pub const MEMORY_MERKLE_BUS: usize = 12;
 
-pub const PROGRAM_AIR_ID: usize = 0;
-/// ProgramAir is the first AIR so its cached trace should be the first main trace.
-pub const PROGRAM_CACHED_TRACE_INDEX: usize = 0;
-pub const CONNECTOR_AIR_ID: usize = 1;
-/// If PublicValuesAir is **enabled**, its AIR ID is 2. PublicValuesAir is always disabled when
-/// using persistent memory.
-pub const PUBLIC_VALUES_AIR_ID: usize = 2;
-/// AIR ID of the Memory Boundary AIR.
-pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSET;
-/// If VM uses persistent memory, all AIRs of MemoryController are added after ConnectorChip.
-/// Merkle AIR commits start/final memory states.
-pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
+use super::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 
 pub struct VmChipSet<F: PrimeField32> {
     pub executors: HashMap<usize, AxVmExecutor<F>>,
@@ -151,6 +141,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             }
         }
     }
+
     /// Returns the AIR ID of the given executor if it exists.
     pub fn get_executor_air_id(&self, executor: ExecutorName) -> Option<usize> {
         self.executor_to_air_id_mapping().get(&executor).copied()
@@ -176,6 +167,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             })
             .collect()
     }
+
     /// Return IDs of AIRs which heights won't during execution.
     pub(crate) fn const_height_air_ids(&self) -> Vec<usize> {
         let mut ret = vec![PROGRAM_AIR_ID, CONNECTOR_AIR_ID];
@@ -354,6 +346,7 @@ impl VmConfig {
                 self.memory_config,
                 range_checker.clone(),
                 merkle_bus,
+                DirectCompressionBus(POSEIDON2_DIRECT_BUS),
                 Equipartition::<F, CHUNK>::new(),
             )))
         } else {
@@ -363,7 +356,7 @@ impl VmConfig {
                 range_checker.clone(),
             )))
         };
-        let program_chip = ProgramChip::default();
+        let program_chip = ProgramChip::new(program_bus);
 
         let mut executors: HashMap<usize, AxVmExecutor<F>> = HashMap::new();
 
@@ -893,6 +886,7 @@ impl VmConfig {
                 execution_bus,
                 program_bus,
                 memory_controller.clone(),
+                POSEIDON2_DIRECT_BUS,
                 offset,
             )));
             for opcode in range {

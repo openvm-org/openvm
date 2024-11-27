@@ -1,16 +1,23 @@
+use ax_stark_backend::Chip;
 use ax_stark_sdk::{
     ax_stark_backend::{
         config::{StarkGenericConfig, Val},
         verifier::VerificationError,
     },
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        setup_tracing, FriParameters,
+    },
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
-use crate::arch::{VirtualMachine, VmConfig, VmExecutor, VmMemoryState};
+use crate::arch::{
+    new_vm::VirtualMachine as NewVirtualMachine, VirtualMachine, VmConfig, VmExecutor,
+    VmGenericConfig, VmMemoryState,
+};
 
 pub fn air_test(config: VmConfig, exe: impl Into<AxVmExe<BabyBear>>) {
     air_test_with_min_segments(config, exe, vec![], 1);
@@ -24,9 +31,6 @@ pub fn air_test_with_min_segments(
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>> {
     setup_tracing();
-
-    let continuation_enabled = config.continuation_enabled;
-
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
@@ -35,14 +39,34 @@ pub fn air_test_with_min_segments(
     let proofs = vm.prove(&pk, result);
 
     assert!(proofs.len() >= min_segments);
-    if continuation_enabled {
-        vm.verify(&pk.get_vk(), proofs)
-            .expect("segment proofs should verify");
-    } else {
-        assert_eq!(proofs.len(), 1);
-        vm.verify_single(&pk.get_vk(), &proofs.into_iter().next().unwrap())
-            .expect("segment proof should verify");
-    }
+    vm.verify(&pk.get_vk(), proofs)
+        .expect("segment proofs should verify");
+    final_memory
+}
+
+/// Executes the VM and returns the final memory state.
+pub fn new_air_test_with_min_segments<VmConfig>(
+    config: VmConfig,
+    exe: impl Into<AxVmExe<BabyBear>>,
+    input: Vec<Vec<BabyBear>>,
+    min_segments: usize,
+) -> Option<VmMemoryState<BabyBear>>
+where
+    VmConfig: VmGenericConfig<BabyBear>,
+    VmConfig::Executor: Chip<BabyBearPoseidon2Config>,
+    VmConfig::Periphery: Chip<BabyBearPoseidon2Config>,
+{
+    setup_tracing();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let vm = NewVirtualMachine::new(engine, config);
+    let pk = vm.keygen();
+    let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let final_memory = result.final_memory.take();
+    let proofs = vm.prove(&pk, result);
+
+    assert!(proofs.len() >= min_segments);
+    vm.verify(&pk.get_vk(), proofs)
+        .expect("segment proofs should verify");
     final_memory
 }
 

@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 }
 
 #[derive(Debug)]
-pub struct VmConnectorChip<F: PrimeField32> {
+pub struct VmConnectorChip<F> {
     pub air: VmConnectorAir,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     _marker: PhantomData<F>,
@@ -204,6 +204,10 @@ where
 impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     fn air_name(&self) -> String {
         "VmConnectorAir".to_string()
+    }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(2)
     }
 
     fn current_trace_height(&self) -> usize {

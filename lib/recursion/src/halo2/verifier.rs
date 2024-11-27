@@ -54,9 +54,7 @@ pub fn generate_halo2_verifier_circuit(
 }
 
 impl Halo2VerifierCircuit {
-    pub fn prove(&self, input: Proof<BabyBearPoseidon2OuterConfig>) -> Snark {
-        let mut witness = Witness::default();
-        input.write(&mut witness);
+    pub fn prove(&self, witness: Witness<OuterConfig>) -> Snark {
         Halo2Prover::prove(
             self.pinning.config_params.clone(),
             self.pinning.break_points.clone(),
@@ -65,6 +63,7 @@ impl Halo2VerifierCircuit {
             witness,
         )
     }
+    // TODO: Add verify method
 
     pub fn keygen_wrapper_circuit(&self, k: usize, snark: Snark) -> Halo2ProvingPinning {
         let mut circuit = generate_wrapper_circuit(Keygen, k, snark);

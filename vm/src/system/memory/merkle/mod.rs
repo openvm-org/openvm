@@ -5,12 +5,12 @@ use rustc_hash::FxHashSet;
 
 use super::manager::dimensions::MemoryDimensions;
 mod air;
-mod bridge;
+mod bus;
 mod columns;
 mod trace;
 
 pub use air::*;
-pub use bridge::*;
+pub use bus::*;
 pub use columns::*;
 
 #[cfg(test)]
@@ -25,7 +25,12 @@ pub struct MemoryMerkleChip<const CHUNK: usize, F> {
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    pub fn new(memory_dimensions: MemoryDimensions, merkle_bus: MemoryMerkleBus) -> Self {
+    /// `compression_bus` is the bus for direct (no-memory involved) interactions to call the cryptographic compression function.
+    pub fn new(
+        memory_dimensions: MemoryDimensions,
+        merkle_bus: MemoryMerkleBus,
+        compression_bus: DirectCompressionBus,
+    ) -> Self {
         assert!(memory_dimensions.as_height > 0);
         assert!(memory_dimensions.address_height > 0);
         let mut touched_nodes = FxHashSet::default();
@@ -34,6 +39,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             air: MemoryMerkleAir {
                 memory_dimensions,
                 merkle_bus,
+                compression_bus,
             },
             touched_nodes,
             num_touched_nonleaves: 1,

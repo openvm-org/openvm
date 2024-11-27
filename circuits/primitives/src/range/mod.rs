@@ -3,7 +3,7 @@
 //! Caution: We almost always prefer to use the [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead of this chip.
 // Adapted from Valida
 
-use core::mem::{size_of, transmute};
+use core::mem::size_of;
 use std::{
     borrow::{Borrow, BorrowMut},
     sync::atomic::AtomicU32,
@@ -17,7 +17,6 @@ use ax_stark_backend::{
 use p3_air::{Air, BaseAir, PairBuilder};
 use p3_field::Field;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_util::indices_arr;
 
 mod bus;
 
@@ -39,10 +38,7 @@ pub struct RangePreprocessedCols<T> {
 }
 
 pub const NUM_RANGE_COLS: usize = size_of::<RangeCols<u8>>();
-pub const RANGE_COL_MAP: RangeCols<usize> = make_col_map();
-
 pub const NUM_RANGE_PREPROCESSED_COLS: usize = size_of::<RangePreprocessedCols<u8>>();
-pub const RANGE_PREPROCESSED_COL_MAP: RangePreprocessedCols<usize> = make_preprocessed_col_map();
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct RangeCheckerAir {
@@ -123,17 +119,5 @@ impl RangeCheckerChip {
                 F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
         }
         RowMajorMatrix::new(rows, NUM_RANGE_COLS)
-    }
-}
-
-const fn make_col_map() -> RangeCols<usize> {
-    let indices_arr = indices_arr::<NUM_RANGE_COLS>();
-    unsafe { transmute::<[usize; NUM_RANGE_COLS], RangeCols<usize>>(indices_arr) }
-}
-
-const fn make_preprocessed_col_map() -> RangePreprocessedCols<usize> {
-    let indices_arr = indices_arr::<NUM_RANGE_PREPROCESSED_COLS>();
-    unsafe {
-        transmute::<[usize; NUM_RANGE_PREPROCESSED_COLS], RangePreprocessedCols<usize>>(indices_arr)
     }
 }

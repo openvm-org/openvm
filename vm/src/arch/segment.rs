@@ -90,6 +90,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ) -> Self {
         let mut chip_set = config.create_chip_set();
         chip_set.set_streams(streams);
+        let program = if config.collect_metrics {
+            program
+        } else {
+            program.strip_debug_infos()
+        };
         chip_set.set_program(program);
 
         if let Some(initial_memory) = initial_memory {

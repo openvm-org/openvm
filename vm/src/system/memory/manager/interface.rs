@@ -1,7 +1,9 @@
 use p3_field::PrimeField32;
 
 use crate::system::memory::{
-    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
+    merkle::{DirectCompressionBus, MemoryMerkleChip},
+    persistent::PersistentBoundaryChip,
+    volatile::VolatileBoundaryChip,
     Equipartition, CHUNK,
 };
 
@@ -30,6 +32,15 @@ impl<F: PrimeField32> MemoryInterface<F> {
             } => {
                 boundary_chip.touch_address(addr_space, pointer);
                 merkle_chip.touch_address(addr_space, pointer);
+            }
+        }
+    }
+
+    pub fn compression_bus(&self) -> Option<DirectCompressionBus> {
+        match self {
+            MemoryInterface::Volatile { .. } => None,
+            MemoryInterface::Persistent { merkle_chip, .. } => {
+                Some(merkle_chip.air.compression_bus)
             }
         }
     }

@@ -1,0 +1,14 @@
+{
+    "name": "specs",
+    "version": "1.0.0",
+    "private": true,
+    "engines": {
+      "node": ">=16",
+      "pnpm": ">=9"
+    },
+    "dependencies": {
+      "doctoc": "^2.2.1",
+      "markdownlint-cli2": "0.4.0",
+      "cspell": "^8.1.3"
+    }
+}

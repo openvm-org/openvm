@@ -6,6 +6,7 @@ use ax_stark_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
+use axvm_native_compiler::prelude::Witness;
 use snark_verifier_sdk::Snark;
 
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
             gen_wrapper_circuit_evm_proof, generate_halo2_verifier_circuit, Halo2VerifierCircuit,
         },
     },
+    witness::Witnessable,
 };
 
 pub fn run_static_verifier_test(
@@ -49,7 +51,9 @@ pub fn run_static_verifier_test(
         step = "static_verifier_prove"
     )
     .entered();
-    let static_verifier_snark = stark_verifier_circuit.prove(vparams.data.proof);
+    let mut witness = Witness::default();
+    vparams.data.proof.write(&mut witness);
+    let static_verifier_snark = stark_verifier_circuit.prove(witness);
     info_span.exit();
     (stark_verifier_circuit, static_verifier_snark)
 }

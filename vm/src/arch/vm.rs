@@ -15,6 +15,7 @@ use p3_field::PrimeField32;
 use parking_lot::Mutex;
 use thiserror::Error;
 
+pub use super::new_vm::Streams;
 use super::{CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::{ExecutionSegment, VmConfig},
@@ -27,21 +28,6 @@ use crate::{
 
 /// VM memory state for continuations.
 pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
-
-#[derive(Clone, Default, Debug)]
-pub struct Streams<F> {
-    pub input_stream: VecDeque<Vec<F>>,
-    pub hint_stream: VecDeque<F>,
-}
-
-impl<F> Streams<F> {
-    pub fn new(input_stream: impl Into<VecDeque<Vec<F>>>) -> Self {
-        Self {
-            input_stream: input_stream.into(),
-            hint_stream: VecDeque::default(),
-        }
-    }
-}
 
 pub struct VmExecutor<F: PrimeField32> {
     pub config: VmConfig,

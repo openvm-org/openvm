@@ -187,11 +187,12 @@ impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_B
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
-
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(1 << (2 * NUM_BITS))
+    }
     fn current_trace_height(&self) -> usize {
         1 << (2 * NUM_BITS)
     }
-
     fn trace_width(&self) -> usize {
         NUM_BITWISE_OP_LOOKUP_COLS
     }

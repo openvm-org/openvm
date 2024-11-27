@@ -17,6 +17,12 @@ pub trait Chip<SC: StarkGenericConfig>: ChipUsageGetter + Sized {
 /// A trait to get chip usage information.
 pub trait ChipUsageGetter {
     fn air_name(&self) -> String;
+    /// If the chip has a state-independent trace height that is determined
+    /// upon construction, return this height. This is used to distinguish
+    /// "static" versus "dynamic" usage metrics.
+    fn constant_trace_height(&self) -> Option<usize> {
+        None
+    }
     /// Height of used rows in the main trace.
     fn current_trace_height(&self) -> usize;
     /// Width of the main trace
@@ -44,6 +50,9 @@ impl<C: ChipUsageGetter> ChipUsageGetter for Rc<RefCell<C>> {
     fn air_name(&self) -> String {
         self.borrow().air_name()
     }
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.borrow().constant_trace_height()
+    }
     fn current_trace_height(&self) -> usize {
         self.borrow().current_trace_height()
     }
@@ -67,6 +76,9 @@ impl<SC: StarkGenericConfig, C: Chip<SC>> Chip<SC> for Arc<C> {
 impl<C: ChipUsageGetter> ChipUsageGetter for Arc<C> {
     fn air_name(&self) -> String {
         self.as_ref().air_name()
+    }
+    fn constant_trace_height(&self) -> Option<usize> {
+        self.as_ref().constant_trace_height()
     }
     fn current_trace_height(&self) -> usize {
         self.as_ref().current_trace_height()

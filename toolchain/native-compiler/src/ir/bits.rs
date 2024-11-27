@@ -48,7 +48,7 @@ impl<C: Config> Builder<C> {
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
         self.push(DslIr::HintBitsF(num, num_bits));
 
-        let output = self.dyn_array::<Var<_>>(num_bits as usize);
+        let output = self.dyn_array::<Felt<_>>(num_bits as usize);
 
         let sum: Felt<_> = self.eval(C::F::ZERO);
         for i in 0..num_bits as usize {
@@ -60,17 +60,16 @@ impl<C: Config> Builder<C> {
             self.push(DslIr::StoreHintWord(output.ptr(), index));
 
             let bit = self.get(&output, i);
-            self.assert_var_eq(bit * (bit - C::N::ONE), C::N::ZERO);
-            self.if_eq(bit, C::N::ONE).then(|builder| {
-                builder.assign(&sum, sum + C::F::from_canonical_u32(1 << i));
-            });
+            self.assert_felt_eq(bit * (bit - C::F::ONE), C::F::ZERO);
+            self.assign(&sum, sum + bit * C::F::from_canonical_u32(1 << i));
         }
 
         // TODO: There is an edge case where the witnessed bits may slightly overflow and cause
         // the output to be incorrect. This is a known issue and will be fixed in the future.
         self.assert_felt_eq(sum, num);
 
-        output
+        // Cast Array<C, Felt<C::F>> to Array<C, Var<C::N>>
+        Array::Dyn(output.ptr(), output.len())
     }
 
     /// Converts a felt to bits inside a circuit.

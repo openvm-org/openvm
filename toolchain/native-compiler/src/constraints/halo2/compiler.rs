@@ -499,6 +499,7 @@ fn is_babybear_ir<C: Config>(ir: &DslIr<C>) -> bool {
             | DslIr::AssertEqE(_, _)
             | DslIr::AssertEqEI(_, _)
             | DslIr::WitnessExt(_, _)
+            | DslIr::CastFV(_, _)
     )
 }
 

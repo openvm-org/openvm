@@ -198,10 +198,12 @@ impl ChipUsageGetter for VariableRangeCheckerChip {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(self.count.len())
+    }
     fn current_trace_height(&self) -> usize {
         self.count.len()
     }
-
     fn trace_width(&self) -> usize {
         NUM_VARIABLE_RANGE_COLS
     }

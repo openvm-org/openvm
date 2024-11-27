@@ -127,7 +127,11 @@ impl Halo2Prover {
         //
         //     pk
         // };
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
         let pk = keygen_pk2(params.as_ref(), &builder, false).unwrap();
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("halo2_keygen_time_ms").set(start.elapsed().as_millis() as f64);
         let break_points = builder.break_points();
 
         let config_params = builder.config_params.clone();
