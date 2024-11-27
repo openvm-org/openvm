@@ -26,7 +26,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
-    for (ec_idx, item) in items.into_iter().enumerate() {
+    for item in items.into_iter() {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_type: Option<syn::Path> = None;
@@ -48,7 +48,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
-        let curve_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
@@ -365,34 +365,32 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    // rs1 is (x1, y1), and x1 must be the modulus.
+                    // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
                     let modulus_bytes = <#intmod_type as IntMod>::MODULUS;
-                    let mut one = [0u8; <#intmod_type as IntMod>::NUM_BYTES];
-                    one[0] = 1;
-                    let rs1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
-                    // (EcAdd only) rs2 is (x2, y2), and x2 has to be non-zero as
-                    // x1 - x2 has to be non-zero to avoid division over zero in add.
-                    let rs2 = [one.as_ref(), one.as_ref()].concat();
+                    let one = <#intmod_type as IntMod>::ONE.as_le_bytes();
+                    let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
+                    // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
+                    let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         axvm_platform::constants::CUSTOM_1,
                         axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
                         axvm_platform::constants::SwBaseFunct7::SwSetup as usize
-                            + #curve_idx
+                            + #ec_idx
                                 * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
-                        rs1.as_ptr(),
-                        rs2.as_ptr()
+                        p1.as_ptr(),
+                        p2.as_ptr()
                     );
                     axvm_platform::custom_insn_r!(
                         axvm_platform::constants::CUSTOM_1,
                         axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
                         axvm_platform::constants::SwBaseFunct7::SwSetup as usize
-                            + #curve_idx
+                            + #ec_idx
                                 * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
-                        rs1.as_ptr(),
+                        p1.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
                     );
                 }
