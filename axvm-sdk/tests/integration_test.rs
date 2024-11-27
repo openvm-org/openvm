@@ -38,9 +38,9 @@ type C = InnerConfig;
 type F = BabyBear;
 #[test]
 fn test_1() {
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
+    // let fri_params = standard_fri_params_with_100_bits_conjectured_security(3);
     let app_config = AppConfig {
-        app_fri_params: fri_params,
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(1),
         app_vm_config: VmConfig {
             max_segment_len: 200,
             continuation_enabled: true,
@@ -54,9 +54,9 @@ fn test_1() {
     };
     let agg_config = AggConfig {
         max_num_user_public_values: 16,
-        leaf_fri_params: fri_params,
-        internal_fri_params: fri_params,
-        root_fri_params: fri_params,
+        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
+        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
+        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             compile_prints: true,
