@@ -8,6 +8,9 @@ use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use eyre::Result;
 use tempfile::tempdir;
 
+mod ecdsa;
+pub use ecdsa::*;
+
 fn get_programs_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     dir.push("programs");
