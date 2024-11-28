@@ -728,6 +728,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
+            #[allow(non_snake_case)]
             pub fn #setup_function_fp2() {
                 #[cfg(target_os = "zkvm")]
                 {

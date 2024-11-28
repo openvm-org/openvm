@@ -71,25 +71,20 @@ pub(crate) mod phantom {
                 use axvm_ecc::halo2curves::bn256::{Fq, Fq12, Fq2};
                 const N: usize = 32;
                 debug_assert_eq!(BN254.NUM_LIMBS, N); // TODO: make this const instead of static
-                if (p_len as usize) % (2 * N) != 0 {
-                    bail!("hint_pairing: invalid p_len={p_len}");
-                }
-                if (q_len as usize) % (4 * N) != 0 {
-                    bail!("hint_pairing: invalid q_len={q_len}");
+                if p_len != q_len {
+                    bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }
                 let p = (0..p_len)
-                    .step_by(2 * N)
                     .map(|i| -> eyre::Result<_> {
-                        let ptr = p_ptr + i;
+                        let ptr = p_ptr + i * 2 * (N as u32);
                         let x = read_fp::<N, F, Fq>(memory, ptr)?;
                         let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
                         Ok(AffinePoint::new(x, y))
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
                 let q = (0..q_len)
-                    .step_by(4 * N)
                     .map(|i| -> eyre::Result<_> {
-                        let mut ptr = q_ptr + i;
+                        let mut ptr = q_ptr + i * 4 * (N as u32);
                         let mut read_fp2 = || -> eyre::Result<_> {
                             let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
                             let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
@@ -118,25 +113,20 @@ pub(crate) mod phantom {
                 use axvm_ecc::halo2curves::bls12_381::{Fq, Fq12, Fq2};
                 const N: usize = 48;
                 debug_assert_eq!(BLS12381.NUM_LIMBS, N); // TODO: make this const instead of static
-                if (p_len as usize) % (2 * N) != 0 {
-                    bail!("hint_pairing: invalid p_len={p_len}");
-                }
-                if (q_len as usize) % (4 * N) != 0 {
-                    bail!("hint_pairing: invalid q_len={q_len}");
+                if p_len != q_len {
+                    bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }
                 let p = (0..p_len)
-                    .step_by(2 * N)
                     .map(|i| -> eyre::Result<_> {
-                        let ptr = p_ptr + i;
+                        let ptr = p_ptr + i * 2 * (N as u32);
                         let x = read_fp::<N, F, Fq>(memory, ptr)?;
                         let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
                         Ok(AffinePoint::new(x, y))
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
                 let q = (0..q_len)
-                    .step_by(4 * N)
                     .map(|i| -> eyre::Result<_> {
-                        let mut ptr = q_ptr + i;
+                        let mut ptr = q_ptr + i * 4 * (N as u32);
                         let mut read_fp2 = || -> eyre::Result<_> {
                             let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
                             let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
