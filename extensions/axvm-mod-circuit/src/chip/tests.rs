@@ -1,27 +1,14 @@
 use std::{array::from_fn, sync::Arc};
 
-use ark_ff::Zero;
 use ax_circuit_primitives::{
     bigint::utils::{
         big_uint_mod_inverse, big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
     },
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_ecc_primitives::field_expression::ExprBuilderConfig;
+use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
-};
-use num_bigint_dig::BigUint;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use rand::Rng;
-
-use super::{
-    ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivCoreChip,
-};
-use crate::{
+use axvm_circuit::{
     arch::{
         instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
@@ -30,6 +17,19 @@ use crate::{
         Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS,
     },
     utils::{biguint_to_limbs, generate_field_element, rv32_write_heap_default},
+};
+use axvm_ecc_constants::BLS12381;
+use axvm_instructions::{
+    instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
+};
+use num_bigint_dig::BigUint;
+use num_traits::Zero;
+use p3_baby_bear::BabyBear;
+use p3_field::AbstractField;
+use rand::Rng;
+
+use super::{
+    ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip, ModularMulDivCoreChip,
 };
 
 const NUM_LIMBS: usize = 32;

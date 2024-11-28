@@ -34,7 +34,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 syn::parse_quote! { #inner_ty: ::axvm_circuit::arch::InstructionExecutor<F> },
             );
             quote! {
-                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::axvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         instruction: ::axvm_circuit::arch::instructions::instruction::Instruction<F>,

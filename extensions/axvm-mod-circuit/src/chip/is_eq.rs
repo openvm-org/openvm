@@ -12,15 +12,14 @@ use ax_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use axvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
 use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode, UsizeOpcode};
 use num_bigint_dig::BigUint;
 use p3_air::{AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
-
-use crate::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
 
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR

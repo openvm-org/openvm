@@ -417,6 +417,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ax-mod-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "rand 0.8.5",
+ "tracing",
+]
+
+[[package]]
 name = "ax-mod-circuit-builder"
 version = "0.1.0"
 dependencies = [
@@ -426,6 +453,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-ecc-constants",
+ "axvm-instructions",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",

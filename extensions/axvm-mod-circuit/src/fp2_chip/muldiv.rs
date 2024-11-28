@@ -2,19 +2,18 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr, SymbolicExpr},
-    field_extension::Fp2,
+use ax_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, SymbolicExpr,
+};
+use axvm_circuit::{
+    arch::{instructions::Fp2Opcode, VmChipWrapper},
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
 use p3_field::PrimeField32;
 
-use crate::{
-    arch::{instructions::Fp2Opcode, VmChipWrapper},
-    intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    system::memory::MemoryControllerRef,
-};
+use crate::Fp2;
 
 // Input: Fp2 * 2
 // Output: Fp2
@@ -125,9 +124,14 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_primitives::{
-        field_expression::ExprBuilderConfig,
+    use ax_mod_circuit_builder::{
         test_utils::{bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
+        ExprBuilderConfig,
+    };
+    use axvm_circuit::{
+        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        rv32im::adapters::Rv32VecHeapAdapterChip,
+        utils::{biguint_to_limbs, rv32_write_heap_default},
     };
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -137,12 +141,7 @@ mod tests {
     use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
 
-    use crate::{
-        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        intrinsics::ecc::fp2::Fp2MulDivChip,
-        rv32im::adapters::Rv32VecHeapAdapterChip,
-        utils::{biguint_to_limbs, rv32_write_heap_default},
-    };
+    use super::Fp2MulDivChip;
 
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;

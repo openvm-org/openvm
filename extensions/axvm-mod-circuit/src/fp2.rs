@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::field_expression::{ExprBuilder, FieldVariable, SymbolicExpr};
+use ax_mod_circuit_builder::{ExprBuilder, FieldVariable, SymbolicExpr};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 #[derive(Clone)]
@@ -167,6 +167,7 @@ impl Fp2 {
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
+    use ax_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
     use ax_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     };
@@ -178,10 +179,7 @@ mod tests {
     use p3_field::AbstractField;
     use p3_matrix::dense::RowMajorMatrix;
 
-    use super::{
-        super::super::{field_expression::*, test_utils::*},
-        *,
-    };
+    use super::Fp2;
 
     fn two_fp2_input(x: &Fq2, y: &Fq2) -> Vec<BigUint> {
         vec![

@@ -9,7 +9,7 @@ pub use muldiv::*;
 use num_bigint_dig::BigUint;
 use once_cell::sync::Lazy;
 
-use crate::{
+use axvm_circuit::{
     arch::{VmAirWrapper, VmChipWrapper},
     rv32im::adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
 };

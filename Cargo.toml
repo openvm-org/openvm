@@ -16,6 +16,7 @@ members = [
     "circuits/derive",
     "vm",
     "extensions/ax-mod-circuit-builder",
+    "extensions/axvm-mod-circuit",
     "toolchain/instructions",
     "toolchain/instructions/derive",
     "toolchain/transpiler",
@@ -93,6 +94,7 @@ axvm-moduli-setup = { path = "toolchain/riscv/macros/moduli-setup", default-feat
 axvm-sw-setup = { path = "toolchain/riscv/macros/sw-setup", default-features = false }
 axvm-circuit = { path = "vm", default-features = false }
 axvm-circuit-derive = { path = "vm/derive", default-features = false }
+ax-mod-circuit-builder = { path = "extensions/ax-mod-circuit-builder", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
 ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
 ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
