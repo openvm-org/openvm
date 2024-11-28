@@ -730,6 +730,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-keccak256-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "lazy_static",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
