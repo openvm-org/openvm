@@ -1,16 +1,24 @@
 pub(crate) mod phantom {
-    use std::{array::from_fn, collections::VecDeque};
+    use std::collections::VecDeque;
 
     use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
-    use axvm_ecc::{algebra::field::FieldExtension, halo2curves::ff, pairing::FinalExp};
+    use axvm_ecc::{
+        algebra::field::FieldExtension,
+        halo2curves::ff,
+        pairing::{FinalExp, MultiMillerLoop},
+        AffinePoint,
+    };
     use axvm_ecc_constants::{BLS12381, BN254};
-    use axvm_instructions::PhantomDiscriminant;
+    use axvm_instructions::{
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+        PhantomDiscriminant,
+    };
     use eyre::bail;
     use p3_field::PrimeField32;
 
     use crate::{
         arch::{PairingCurve, PhantomSubExecutor, Streams},
-        rv32im::adapters::unsafe_read_rv32_register,
+        rv32im::adapters::{compose, unsafe_read_rv32_register},
         system::memory::MemoryController,
     };
 
@@ -24,34 +32,77 @@ pub(crate) mod phantom {
             _: PhantomDiscriminant,
             a: F,
             b: F,
-            _: u16,
+            c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs = unsafe_read_rv32_register(memory, a);
-            let b = b.as_canonical_u32();
-            hint_final_exp(memory, &mut streams.hint_stream, rs, b)
+            let rs1 = unsafe_read_rv32_register(memory, a);
+            let rs2 = unsafe_read_rv32_register(memory, b);
+            hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
 
-    /// Return success as bool
-    // TODO: return descriptive error type instead of eyre::Result
-    fn hint_final_exp<F: PrimeField32>(
+    fn hint_pairing<F: PrimeField32>(
         memory: &MemoryController<F>,
         hint_stream: &mut VecDeque<F>,
-        mut rs: u32,
-        b: u32,
+        rs1: u32,
+        rs2: u32,
+        c_upper: u16,
     ) -> eyre::Result<()> {
-        match PairingCurve::from_repr(b as usize) {
+        let p_ptr = compose(memory.unsafe_read(
+            F::from_canonical_u32(RV32_MEMORY_AS),
+            F::from_canonical_u32(rs1),
+        ));
+        // len in bytes
+        let p_len = compose(memory.unsafe_read(
+            F::from_canonical_u32(RV32_MEMORY_AS),
+            F::from_canonical_u32(rs1 + RV32_REGISTER_NUM_LIMBS as u32),
+        ));
+        let q_ptr = compose(memory.unsafe_read(
+            F::from_canonical_u32(RV32_MEMORY_AS),
+            F::from_canonical_u32(rs2),
+        ));
+        // len in bytes
+        let q_len = compose(memory.unsafe_read(
+            F::from_canonical_u32(RV32_MEMORY_AS),
+            F::from_canonical_u32(rs2 + RV32_REGISTER_NUM_LIMBS as u32),
+        ));
+
+        match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
                 use axvm_ecc::halo2curves::bn256::{Fq, Fq12, Fq2};
                 const N: usize = 32;
                 debug_assert_eq!(BN254.NUM_LIMBS, N); // TODO: make this const instead of static
-                let f: Fq12 = Fq12::from_coeffs(from_fn(|_| {
-                    Fq2::from_coeffs(from_fn(|_| {
-                        let fp = read_fp::<N, F, Fq>(memory, rs).unwrap(); // TODO: better error handling
-                        rs += N as u32;
-                        fp
-                    }))
-                }));
+                if (p_len as usize) % (2 * N) != 0 {
+                    bail!("hint_pairing: invalid p_len={p_len}");
+                }
+                if (q_len as usize) % (4 * N) != 0 {
+                    bail!("hint_pairing: invalid q_len={q_len}");
+                }
+                let p = (0..p_len)
+                    .step_by(2 * N)
+                    .map(|i| -> eyre::Result<_> {
+                        let ptr = p_ptr + i;
+                        let x = read_fp::<N, F, Fq>(memory, ptr)?;
+                        let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                        Ok(AffinePoint::new(x, y))
+                    })
+                    .collect::<eyre::Result<Vec<_>>>()?;
+                let q = (0..q_len)
+                    .step_by(4 * N)
+                    .map(|i| -> eyre::Result<_> {
+                        let mut ptr = q_ptr + i;
+                        let mut read_fp2 = || -> eyre::Result<_> {
+                            let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
+                            let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                            ptr += 2 * N as u32;
+                            Ok(Fq2::new(c0, c1))
+                        };
+                        let x = read_fp2()?;
+                        let y = read_fp2()?;
+                        Ok(AffinePoint::new(x, y))
+                    })
+                    .collect::<eyre::Result<Vec<_>>>()?;
+
+                let f: Fq12 = Bn254::multi_miller_loop(&p, &q);
                 let (c, u) = Bn254::final_exp_hint(&f);
                 hint_stream.clear();
                 hint_stream.extend(
@@ -67,13 +118,38 @@ pub(crate) mod phantom {
                 use axvm_ecc::halo2curves::bls12_381::{Fq, Fq12, Fq2};
                 const N: usize = 48;
                 debug_assert_eq!(BLS12381.NUM_LIMBS, N); // TODO: make this const instead of static
-                let f: Fq12 = Fq12::from_coeffs(from_fn(|_| {
-                    Fq2::from_coeffs(from_fn(|_| {
-                        let fp = read_fp::<N, F, Fq>(memory, rs).unwrap();
-                        rs += N as u32;
-                        fp
-                    }))
-                }));
+                if (p_len as usize) % (2 * N) != 0 {
+                    bail!("hint_pairing: invalid p_len={p_len}");
+                }
+                if (q_len as usize) % (4 * N) != 0 {
+                    bail!("hint_pairing: invalid q_len={q_len}");
+                }
+                let p = (0..p_len)
+                    .step_by(2 * N)
+                    .map(|i| -> eyre::Result<_> {
+                        let ptr = p_ptr + i;
+                        let x = read_fp::<N, F, Fq>(memory, ptr)?;
+                        let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                        Ok(AffinePoint::new(x, y))
+                    })
+                    .collect::<eyre::Result<Vec<_>>>()?;
+                let q = (0..q_len)
+                    .step_by(4 * N)
+                    .map(|i| -> eyre::Result<_> {
+                        let mut ptr = q_ptr + i;
+                        let mut read_fp2 = || -> eyre::Result<_> {
+                            let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
+                            let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                            ptr += 2 * N as u32;
+                            Ok(Fq2 { c0, c1 })
+                        };
+                        let x = read_fp2()?;
+                        let y = read_fp2()?;
+                        Ok(AffinePoint::new(x, y))
+                    })
+                    .collect::<eyre::Result<Vec<_>>>()?;
+
+                let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
                 let (c, u) = Bls12_381::final_exp_hint(&f);
                 hint_stream.clear();
                 hint_stream.extend(
@@ -86,7 +162,7 @@ pub(crate) mod phantom {
                 );
             }
             _ => {
-                bail!("hint_final_exp: invalid operand b={b}");
+                bail!("hint_pairing: invalid PairingCurve={c_upper}");
             }
         }
         Ok(())
@@ -94,7 +170,7 @@ pub(crate) mod phantom {
 
     fn read_fp<const N: usize, F: PrimeField32, Fp: ff::PrimeField>(
         memory: &MemoryController<F>,
-        rs: u32,
+        ptr: u32,
     ) -> eyre::Result<Fp>
     where
         Fp::Repr: From<[u8; N]>,
@@ -102,12 +178,15 @@ pub(crate) mod phantom {
         let mut repr = [0u8; N];
         for (i, byte) in repr.iter_mut().enumerate() {
             *byte = memory
-                .unsafe_read_cell(F::TWO, F::from_canonical_u32(rs + i as u32))
+                .unsafe_read_cell(
+                    F::from_canonical_u32(RV32_MEMORY_AS),
+                    F::from_canonical_u32(ptr + i as u32),
+                )
                 .as_canonical_u32()
                 .try_into()?;
         }
         Fp::from_repr(repr.into())
             .into_option()
-            .ok_or(eyre::eyre!("bad repr"))
+            .ok_or(eyre::eyre!("bad ff::PrimeField repr"))
     }
 }
