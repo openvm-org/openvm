@@ -21,9 +21,11 @@ use crate::{
     system::phantom::PhantomChip,
 };
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, VmGenericConfig)]
 pub struct Rv32IConfig {
+    #[system]
     pub system: SystemConfig,
+    #[extension(executor = Rv32IExecutor, periphery = Rv32IPeriphery)]
     pub base: Rv32I,
     // todo: hintstore
 }
@@ -32,9 +34,9 @@ pub struct Rv32IConfig {
 pub struct Rv32ImConfig {
     #[system]
     pub system: SystemConfig,
-    #[extension]
+    #[extension(periphery = Rv32Periphery)]
     pub base: Rv32I,
-    #[extension]
+    #[extension(executor = Rv32MExecutor, periphery = Rv32Periphery)]
     pub mul: Rv32M,
     // todo: hintstore
 }
@@ -112,65 +114,31 @@ pub enum Rv32Periphery<F: PrimeField32> {
 }
 
 // // TODO: generate this by proc-macro
-// /// RISC-V 32-bit IM (Base + Multiplication) Instruction Executors
-// #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-// pub enum Rv32ImExecutor<F: PrimeField32> {
+// #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
+// pub enum Rv32ImPeriphery<F: PrimeField32> {
 //     #[any_enum]
-//     System(SystemExecutor<F>),
+//     System(SystemPeriphery<F>),
 //     #[any_enum]
-//     Base(Rv32IExecutor<F>),
-//     #[any_enum]
-//     Mul(Rv32MExecutor<F>),
+//     Rv32(Rv32Periphery<F>),
 // }
 
-// TODO: generate this by proc-macro
-#[derive(ChipUsageGetter, Chip, From, AnyEnum)]
-pub enum Rv32ImPeriphery<F: PrimeField32> {
-    #[any_enum]
-    System(SystemPeriphery<F>),
-    #[any_enum]
-    Rv32(Rv32Periphery<F>),
-}
+// // TODO: generate this by proc-macro
+// impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
+//     type Executor = Rv32ImExecutor<F>;
+//     type Periphery = Rv32ImPeriphery<F>;
 
-// TODO: generate this by proc-macro
-impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
-    type Executor = Rv32ImExecutor<F>;
-    type Periphery = Rv32ImPeriphery<F>;
+//     fn system(&self) -> &SystemConfig {
+//         &self.system
+//     }
 
-    fn system(&self) -> &SystemConfig {
-        &self.system
-    }
-
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = self.system.create_chip_complex()?;
-        let complex = complex.extend(&self.base)?;
-        Ok(complex)
-    }
-}
-
-// TODO: generate this by proc-macro
-impl<F: PrimeField32> VmGenericConfig<F> for Rv32ImConfig {
-    type Executor = Rv32ImExecutor<F>;
-    type Periphery = Rv32ImPeriphery<F>;
-
-    fn system(&self) -> &SystemConfig {
-        &self.system
-    }
-
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let base = Rv32IConfig {
-            system: self.system,
-            base: self.base,
-        };
-        let complex = base.create_chip_complex()?;
-        let complex = complex.extend(&self.mul)?;
-        Ok(complex)
-    }
-}
+//     fn create_chip_complex(
+//         &self,
+//     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+//         let complex = self.system.create_chip_complex()?;
+//         let complex = complex.extend(&self.base)?;
+//         Ok(complex)
+//     }
+// }
 
 impl<F: PrimeField32> VmExtension<F> for Rv32I {
     type Executor = Rv32IExecutor<F>;

@@ -4,7 +4,7 @@ extern crate proc_macro;
 use itertools::{multiunzip, Itertools};
 use proc_macro::{Span, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{Data, Fields, GenericParam, Ident};
+use syn::{punctuated::Punctuated, Data, Fields, GenericParam, Ident, Meta, Token};
 
 #[proc_macro_derive(InstructionExecutor)]
 pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
@@ -187,10 +187,21 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
     }
 }
 
+// VmGenericConfig derive macro
+
 #[proc_macro_derive(VmGenericConfig, attributes(system, extension))]
 pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
     let name = &ast.ident;
+
+    let gen_name_with_uppercase_idents = |ident: &Ident| {
+        let mut name = ident.to_string().chars().collect::<Vec<_>>();
+        assert!(name[0].is_lowercase(), "Field name must not be capitalized");
+        let res_lower = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
+        name[0] = name[0].to_ascii_uppercase();
+        let res_upper = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
+        (res_lower, res_upper)
+    };
 
     match &ast.data {
         syn::Data::Struct(inner) => {
@@ -209,16 +220,8 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("system")))
                 .exactly_one()
                 .expect("Exactly one field must have #[system] attribute");
-            let mut system_name = system
-                .ident
-                .clone()
-                .unwrap()
-                .to_string()
-                .chars()
-                .collect::<Vec<_>>();
-            system_name[0] = system_name[0].to_ascii_uppercase();
-            let system_name = system_name.iter().collect::<String>();
-            let system_name = Ident::new(&system_name, Span::call_site().into());
+            let (system_name, system_name_upper) =
+                gen_name_with_uppercase_idents(&system.ident.clone().unwrap());
 
             let extensions = fields
                 .iter()
@@ -226,43 +229,111 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 .cloned()
                 .collect::<Vec<_>>();
 
-            let extension_enums = extensions
-                .into_iter()
-                .map(|e| {
-                    let mut field_name = e
-                        .ident
-                        .clone()
-                        .unwrap()
-                        .to_string()
-                        .chars()
-                        .collect::<Vec<_>>();
-                    field_name[0] = field_name[0].to_ascii_uppercase();
-                    let field_name = field_name.iter().collect::<String>();
-                    let field_name = Ident::new(&field_name, Span::call_site().into());
-                    // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: https://github.com/rust-lang/rust/issues/85576
-                    let type_name = e.ty.to_token_stream().to_string();
-                    let type_name =
-                        Ident::new(&format!("{}Executor", type_name), Span::call_site().into());
-                    quote! {
-                        #[any_enum]
-                        #field_name(#type_name<F>),
+            let mut executor_enum_fields = Vec::new();
+            let mut periphery_enum_fields = Vec::new();
+            let mut create_chip_complex = Vec::new();
+            for &e in extensions.iter() {
+                let (field_name, field_name_upper) =
+                    gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
+                // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: https://github.com/rust-lang/rust/issues/85576
+                let mut executor_name = Ident::new(
+                    &format!("{}ConfigExecutor", e.ty.to_token_stream()),
+                    Span::call_site().into(),
+                );
+                let mut periphery_name = Ident::new(
+                    &format!("{}ConfigPeriphery", e.ty.to_token_stream()),
+                    Span::call_site().into(),
+                );
+                if let Some(attr) = e
+                    .attrs
+                    .iter()
+                    .find(|attr| attr.path().is_ident("extension"))
+                {
+                    match attr.meta {
+                        Meta::Path(_) => {}
+                        Meta::NameValue(_) => {
+                            return syn::Error::new(
+                                name.span(),
+                                "Only `#[extension]` or `#[extension(...)] formats are supported",
+                            )
+                            .to_compile_error()
+                            .into()
+                        }
+                        _ => {
+                            let nested = attr
+                                .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                                .unwrap();
+                            for meta in nested {
+                                match meta {
+                                    Meta::NameValue(nv) => {
+                                        if nv.path.is_ident("executor") {
+                                            executor_name = Ident::new(
+                                                &nv.value.to_token_stream().to_string(),
+                                                Span::call_site().into(),
+                                            );
+                                            Ok(())
+                                        } else if nv.path.is_ident("periphery") {
+                                            periphery_name = Ident::new(
+                                                &nv.value.to_token_stream().to_string(),
+                                                Span::call_site().into(),
+                                            );
+                                            Ok(())
+                                        } else {
+                                            Err("only executor and periphery keys are supported")
+                                        }
+                                    }
+                                    _ => Err("only name = value format is supported"),
+                                }
+                                .expect("wrong attributes format");
+                            }
+                        }
                     }
-                })
-                .collect::<Vec<_>>();
+                };
+                executor_enum_fields.push(quote! {
+                    #[any_enum]
+                    #field_name_upper(#executor_name<F>),
+                });
+                periphery_enum_fields.push(quote! {
+                    #[any_enum]
+                    #field_name_upper(#periphery_name<F>),
+                });
+                create_chip_complex.push(quote! {
+                    let complex: VmChipComplex<F, Self::Executor, Self::Periphery> = complex.extend(&self.#field_name)?;
+                });
+            }
 
-            let mut enum_name = String::from(
-                name.to_string()
-                    .strip_suffix("Config")
-                    .expect("Struct name must end with Config"),
-            );
-            enum_name.push_str("Executor");
-            let enum_name = Ident::new(&enum_name, name.span());
+            let executor_type = Ident::new(&format!("{}Executor", name), name.span());
+            let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
             TokenStream::from(quote! {
                 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-                pub enum #enum_name<F: PrimeField32> {
+                pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
-                    #system_name(SystemExecutor<F>),
-                    #(#extension_enums)*
+                    #system_name_upper(SystemExecutor<F>),
+                    #(#executor_enum_fields)*
+                }
+
+                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+                pub enum #periphery_type<F: PrimeField32> {
+                    #[any_enum]
+                    #system_name_upper(SystemPeriphery<F>),
+                    #(#periphery_enum_fields)*
+                }
+
+                impl<F: PrimeField32> VmGenericConfig<F> for #name {
+                    type Executor = #executor_type<F>;
+                    type Periphery = #periphery_type<F>;
+
+                    fn system(&self) -> &SystemConfig {
+                        &self.#system_name
+                    }
+
+                    fn create_chip_complex(
+                        &self,
+                    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+                        let complex = self.#system_name.create_chip_complex()?;
+                        #(#create_chip_complex)*
+                        Ok(complex)
+                    }
                 }
             })
         }
