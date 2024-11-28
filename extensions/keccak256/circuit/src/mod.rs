@@ -12,6 +12,9 @@ pub mod columns;
 pub mod trace;
 pub mod utils;
 
+mod extension;
+pub use extension::*;
+
 #[cfg(test)]
 mod tests;
 
