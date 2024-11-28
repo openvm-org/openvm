@@ -7,13 +7,17 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::*;
+use axvm_rv32im_circuit::{Rv32HintStore, Rv32I, Rv32M};
 
 use crate::*;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Keccak256Config {
     pub system: SystemConfig,
-    pub base: Keccak256Rv32,
+    pub rv32i: Rv32I,
+    pub rv32m: Rv32M,
+    pub io: Rv32HintStore,
+    pub keccak: Keccak256Rv32,
 }
 
 impl Default for Keccak256Config {
@@ -30,7 +34,7 @@ pub struct Keccak256Rv32;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum Keccak256Rv32Executor<F: PrimeField32> {
-    Keccak256Rv32(KeccakVmChip<F>),
+    Keccak256(KeccakVmChip<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]

@@ -12,6 +12,7 @@ ax-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }
