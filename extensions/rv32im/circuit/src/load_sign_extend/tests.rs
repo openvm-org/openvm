@@ -12,14 +12,14 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::{
-    instructions::{
-        Rv32LoadStoreOpcode::{self, *},
-        UsizeOpcode,
-    },
     testing::{memory::gen_pointer, VmChipTestBuilder},
     VmAdapterChip,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{
+    instruction::Instruction,
+    Rv32LoadStoreOpcode::{self, *},
+    UsizeOpcode,
+};
 use rand::{rngs::StdRng, Rng};
 
 use super::run_write_data_sign_extend;

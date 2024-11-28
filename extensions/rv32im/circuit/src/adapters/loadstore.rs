@@ -18,10 +18,6 @@ use ax_stark_backend::{
 };
 use axvm_circuit::{
     arch::{
-        instructions::{
-            Rv32LoadStoreOpcode::{self, *},
-            UsizeOpcode,
-        },
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
@@ -39,6 +35,8 @@ use axvm_circuit::{
 use axvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    Rv32LoadStoreOpcode::{self, *},
+    UsizeOpcode,
 };
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};

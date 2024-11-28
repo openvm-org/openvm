@@ -18,7 +18,7 @@ use axvm_circuit::{
         testing::{TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, VmAdapterChip, VmChipWrapper, RANGE_TUPLE_CHECKER_BUS,
     },
-    utils::{generate_long_number, rv32_rand_write_register_or_imm},
+    utils::generate_long_number,
 };
 use axvm_instructions::{instruction::Instruction, MulOpcode};
 
@@ -26,6 +26,7 @@ use super::core::run_mul;
 use crate::{
     adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     mul::{MultiplicationCoreChip, MultiplicationCoreCols, Rv32MultiplicationChip},
+    test_utils::rv32_rand_write_register_or_imm,
 };
 
 type F = BabyBear;

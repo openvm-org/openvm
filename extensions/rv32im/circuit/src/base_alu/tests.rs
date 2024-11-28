@@ -20,9 +20,7 @@ use axvm_circuit::{
         testing::{TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
-    utils::{
-        generate_long_number, generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm,
-    },
+    utils::generate_long_number,
 };
 use axvm_instructions::{instruction::Instruction, BaseAluOpcode};
 use rand::Rng;
@@ -31,6 +29,7 @@ use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};
 use crate::{
     adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     base_alu::BaseAluCoreCols,
+    test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
 };
 
 type F = BabyBear;

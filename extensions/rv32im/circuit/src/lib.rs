@@ -32,3 +32,6 @@ pub use shift::*;
 
 mod extension;
 pub use extension::*;
+
+#[cfg(any(test, feature = "test-utils"))]
+mod test_utils;
