@@ -6,15 +6,6 @@ edition.workspace = true
 description = "axVM circuit extension for RISC-V 32-bit IM instruction set"
 
 [dependencies]
-p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-field = { workspace = true }
-p3-keccak-air = { workspace = true }
-p3-matrix = { workspace = true }
-p3-maybe-rayon = { workspace = true }
-p3-symmetric = { workspace = true }
-p3-util = { workspace = true }
-
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
@@ -30,8 +21,6 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
-num-bigint-dig = { workspace = true, features = ["std"] }
-num-traits.workspace = true
 # for div_rem:
 num-bigint.workspace = true
 num-integer.workspace = true

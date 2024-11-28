@@ -1,10 +1,10 @@
+use ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
+    ax_stark_sdk::p3_baby_bear::BabyBear,
     rv32im::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS},
 };
 use axvm_instructions::instruction::Instruction;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
 // Returns (instruction, rd)
