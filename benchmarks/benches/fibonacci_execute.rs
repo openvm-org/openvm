@@ -1,6 +1,7 @@
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_benchmarks::utils::build_bench_program;
-use axvm_circuit::{arch::new_vm::VmExecutor, extensions::rv32im::Rv32ImConfig};
+use axvm_circuit::arch::new_vm::VmExecutor;
+use axvm_rv32im_circuit::Rv32ImConfig;
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 

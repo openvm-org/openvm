@@ -1,9 +1,7 @@
 use std::{fs::read_dir, path::PathBuf};
 
-use axvm_circuit::{
-    arch::new_vm::VmExecutor, extensions::rv32im::Rv32ImConfig,
-    utils::new_air_test_with_min_segments,
-};
+use axvm_circuit::{arch::new_vm::VmExecutor, utils::new_air_test_with_min_segments};
+use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_toolchain_tests::utils::decode_elf;
 use eyre::Result;
 use p3_baby_bear::BabyBear;

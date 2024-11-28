@@ -33,6 +33,7 @@ members = [
     "lib/recursion",
     "axvm-sdk",
     "benchmarks",
+    "extensions/rv32im/circuit",
 ]
 resolver = "2"
 
@@ -98,6 +99,8 @@ ax-circuit-primitives = { path = "circuits/primitives", default-features = false
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
+# Extensions
+axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

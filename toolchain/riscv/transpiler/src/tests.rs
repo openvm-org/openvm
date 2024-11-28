@@ -5,11 +5,11 @@ use std::{
 
 use axvm_circuit::{
     arch::{new_vm, VmConfig, VmExecutor},
-    extensions::rv32im::Rv32ImConfig,
     intrinsics::modular::SECP256K1_COORD_PRIME,
     utils::new_air_test_with_min_segments,
 };
 use axvm_platform::memory::MEM_SIZE;
+use axvm_rv32im_circuit::Rv32ImConfig;
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use test_case::test_case;
