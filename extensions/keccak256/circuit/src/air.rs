@@ -7,28 +7,31 @@ use ax_circuit_primitives::{
 use ax_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::AbstractField,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use axvm_circuit::{
+    arch::{ExecutionBridge, ExecutionState},
+    rv32im::adapters::abstract_compose,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress,
+    },
+};
+use axvm_instructions::{
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    Rv32KeccakOpcode,
+};
 use itertools::{izip, Itertools};
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::AbstractField;
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, U64_LIMBS};
-use p3_matrix::Matrix;
 
 use super::{
     columns::{KeccakVmCols, NUM_KECCAK_VM_COLS},
     KECCAK_ABSORB_READS, KECCAK_DIGEST_BYTES, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES,
     KECCAK_RATE_U16S, KECCAK_REGISTER_READS, KECCAK_WIDTH_U16S, KECCAK_WORD_SIZE,
     NUM_ABSORB_ROUNDS,
-};
-use crate::{
-    arch::{instructions::Rv32KeccakOpcode, ExecutionBridge, ExecutionState},
-    rv32im::adapters::abstract_compose,
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAddress,
-    },
 };
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

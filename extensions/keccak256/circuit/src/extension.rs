@@ -1,3 +1,5 @@
+use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use axvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
@@ -8,6 +10,8 @@ use axvm_circuit::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::*;
 use axvm_rv32im_circuit::{Rv32HintStore, Rv32I, Rv32M};
+use derive_more::derive::From;
+use strum::IntoEnumIterator;
 
 use crate::*;
 
@@ -24,7 +28,10 @@ impl Default for Keccak256Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
-            base: Keccak256Rv32,
+            rv32i: Rv32I::default(),
+            rv32m: Rv32M::default(),
+            io: Rv32HintStore::default(),
+            keccak: Keccak256Rv32,
         }
     }
 }

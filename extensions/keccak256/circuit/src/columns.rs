@@ -2,15 +2,15 @@ use core::mem::size_of;
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::utils::assert_array_eq;
+use ax_stark_backend::p3_air::AirBuilder;
+use axvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use axvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use p3_air::AirBuilder;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 
 use super::{
     KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
     KECCAK_REGISTER_READS, KECCAK_WORD_SIZE,
 };
-use crate::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]

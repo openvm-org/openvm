@@ -2,28 +2,25 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_air::BaseAir,
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
+use axvm_circuit::system::memory::{MemoryReadRecord, MemoryWriteRecord};
 use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use p3_air::BaseAir;
-use p3_field::{AbstractField, PrimeField32};
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
 };
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use tiny_keccak::keccakf;
 
-use super::{KeccakVmChip, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
-use crate::{
-    intrinsics::hashes::keccak256::{
-        columns::{KeccakInstructionCols, KeccakVmCols},
-        KECCAK_ABSORB_READS, KECCAK_RATE_BYTES, KECCAK_RATE_U16S, KECCAK_REGISTER_READS,
-        NUM_ABSORB_ROUNDS,
-    },
-    system::memory::{MemoryReadRecord, MemoryWriteRecord},
+use super::{
+    columns::{KeccakInstructionCols, KeccakVmCols},
+    KeccakVmChip, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES, KECCAK_RATE_U16S,
+    KECCAK_REGISTER_READS, KECCAK_WORD_SIZE, NUM_ABSORB_ROUNDS,
 };
 
 impl<SC: StarkGenericConfig> Chip<SC> for KeccakVmChip<Val<SC>>

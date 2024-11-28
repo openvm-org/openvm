@@ -3,25 +3,27 @@ use std::{borrow::BorrowMut, sync::Arc};
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
-use ax_stark_sdk::{config::baby_bear_blake3::BabyBearBlake3Config, utils::create_seeded_rng};
-use axvm_instructions::instruction::Instruction;
-use hex::FromHex;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_keccak_air::NUM_ROUNDS;
-use rand::Rng;
-use tiny_keccak::Hasher;
-
-use super::{utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
-use crate::{
+use ax_stark_backend::{
+    p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError,
+};
+use ax_stark_sdk::{
+    config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
+};
+use axvm_circuit::{
     arch::{
-        instructions::Rv32KeccakOpcode,
         testing::{VmChipTestBuilder, VmChipTester},
         BITWISE_OP_LOOKUP_BUS,
     },
     intrinsics::hashes::keccak256::columns::KeccakVmCols,
 };
+use axvm_instructions::{instruction::Instruction, Rv32KeccakOpcode};
+use hex::FromHex;
+use p3_keccak_air::NUM_ROUNDS;
+use rand::Rng;
+use tiny_keccak::Hasher;
+
+use super::{utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
 
 type F = BabyBear;
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace

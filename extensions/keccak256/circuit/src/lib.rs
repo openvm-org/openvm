@@ -3,7 +3,7 @@
 use std::{array::from_fn, cmp::min, sync::Arc};
 
 use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -19,20 +19,17 @@ pub use extension::*;
 mod tests;
 
 pub use air::KeccakVmAir;
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
-};
-
-use crate::{
-    arch::{
-        instructions::{Rv32KeccakOpcode, UsizeOpcode},
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-    },
+use axvm_circuit::{
+    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     rv32im::adapters::read_rv32_register,
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::ProgramBus,
     },
+};
+use axvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
+    Rv32KeccakOpcode, UsizeOpcode,
 };
 
 // ==== Constants for register/memory adapter ====
