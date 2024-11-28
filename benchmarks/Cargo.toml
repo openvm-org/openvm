@@ -11,6 +11,7 @@ axvm-sdk.workspace = true
 axvm-circuit = { workspace = true }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
+axvm-rv32im-circuit.workspace = true
 axvm-native-compiler.workspace = true
 axvm-recursion = { workspace = true, features = ["test-utils"] }
 ax-stark-sdk.workspace = true

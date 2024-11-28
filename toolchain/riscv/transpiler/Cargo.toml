@@ -15,6 +15,7 @@ eyre.workspace = true
 elf = "0.7.4"
 rrs-lib = "0.1.0"
 num-bigint-dig.workspace = true
+axvm-rv32im-circuit.workspace = true
 
 [dev-dependencies]
 p3-baby-bear.workspace = true

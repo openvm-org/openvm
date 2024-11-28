@@ -1,10 +1,10 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm, ExecutorName, VmConfig, VmExecutor},
-    extensions::rv32im::{Rv32IConfig, Rv32ImConfig},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
+use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_transpiler::{axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use eyre::Result;
 use p3_baby_bear::BabyBear;

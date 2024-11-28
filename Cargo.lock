@@ -556,6 +556,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
+ "axvm-rv32im-circuit",
  "axvm-sdk",
  "axvm-transpiler",
  "clap",
@@ -840,6 +841,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-rv32im-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "backtrace",
+ "cfg-if",
+ "derivative",
+ "derive-new",
+ "derive_more 1.0.0",
+ "enum-utils",
+ "eyre",
+ "getset",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "once_cell",
+ "parking_lot",
+ "rand 0.8.5",
+ "rustc-hash 2.0.0",
+ "serde",
+ "static_assertions",
+ "strum",
+ "strum_macros",
+ "test-case",
+ "test-log",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-sdk"
 version = "0.1.0"
 dependencies = [
@@ -874,6 +913,7 @@ dependencies = [
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-constants",
+ "axvm-rv32im-circuit",
  "axvm-transpiler",
  "eyre",
  "num-bigint-dig",
@@ -893,6 +933,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-instructions",
  "axvm-platform",
+ "axvm-rv32im-circuit",
  "elf",
  "eyre",
  "num-bigint-dig",

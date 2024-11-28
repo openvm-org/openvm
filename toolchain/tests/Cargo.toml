@@ -11,6 +11,7 @@ description = "Tests for the axVM toolchain starting from Rust"
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
+axvm-rv32im-circuit.workspace = true
 axvm-ecc-constants.workspace = true
 ax-ecc-execution.workspace = true
 ax-stark-sdk.workspace = true
@@ -20,6 +21,7 @@ test-case.workspace = true
 tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
 rand = { workspace = true }
+
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true
 
