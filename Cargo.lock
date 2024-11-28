@@ -545,6 +545,8 @@ dependencies = [
  "axvm-platform",
  "halo2curves-axiom 0.7.0",
  "num-bigint-dig",
+ "serde",
+ "serde-big-array",
 ]
 
 [[package]]
@@ -679,6 +681,7 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "rand 0.8.5",
+ "serde",
  "strum_macros",
 ]
 
@@ -873,6 +876,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",
+ "axvm-ecc",
  "axvm-ecc-constants",
  "axvm-transpiler",
  "eyre",
@@ -903,6 +907,7 @@ dependencies = [
  "strum",
  "tempfile",
  "test-case",
+ "tracing",
 ]
 
 [[package]]
@@ -4357,6 +4362,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f55c3193aca71c12ad7890f1785d2b73e1b9f63a0bbc353c08ef26fe03fc56b5"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-big-array"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

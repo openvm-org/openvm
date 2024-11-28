@@ -12,6 +12,7 @@ use core::{
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+pub use serde_big_array::BigArray;
 
 /// Field traits
 pub mod field;

@@ -221,13 +221,12 @@ mod bn254 {
             BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let config = VmConfig::rv32im()
+            .add_pairing_support(vec![PairingCurve::Bn254])
+            .add_ecc_support(vec![EcCurve::Bn254])
+            .add_modular_support(enabled_moduli.clone())
+            .add_complex_ext_support(enabled_moduli);
+        let executor = VmExecutor::<F>::new(config.clone());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -263,6 +262,7 @@ mod bn254 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         executor.execute(elf, vec![io_all])?;
+        // air_test_with_min_segments(config, elf, vec![io_all], 1);
         Ok(())
     }
 }
@@ -276,7 +276,9 @@ mod bls12_381 {
         },
         curves::bls12_381::Bls12_381,
     };
+    use axvm_ecc::algebra::IntMod;
     use axvm_ecc_constants::BLS12381;
+    use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
 
@@ -404,8 +406,8 @@ mod bls12_381 {
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
         let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
@@ -471,18 +473,17 @@ mod bls12_381 {
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
         let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let config = VmConfig::rv32im()
+            .add_pairing_support(vec![PairingCurve::Bls12_381])
+            .add_ecc_support(vec![EcCurve::Bls12_381])
+            .add_modular_support(enabled_moduli.clone())
+            .add_complex_ext_support(enabled_moduli);
+        let executor = VmExecutor::<F>::new(config.clone());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -518,13 +519,26 @@ mod bls12_381 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         executor.execute(elf, vec![io_all])?;
+        // air_test_with_min_segments(config, elf, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program("final_exp_hint")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im());
+        // FIXME:
+        let enabled_moduli = vec![
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
+            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
+        ];
+
+        let executor = VmExecutor::<F>::new(
+            VmConfig::rv32im()
+                .add_ecc_support(vec![EcCurve::Bls12_381])
+                .add_modular_support(enabled_moduli.clone())
+                .add_complex_ext_support(enabled_moduli),
+        );
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -532,14 +546,29 @@ mod bls12_381 {
         let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
         let f = Bls12_381::multi_miller_loop(&ps, &qs);
         let (c, s) = Bls12_381::final_exp_hint(&f);
-        let io = [f, c, s]
+        let ps = ps
             .into_iter()
-            .flat_map(|fp12| fp12.to_coeffs())
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
-            .map(AbstractField::from_canonical_u8)
+            .map(|pt| {
+                let [x, y] =
+                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
             .collect::<Vec<_>>();
-        executor.execute(elf, vec![io])?;
+        let qs = qs
+            .into_iter()
+            .map(|pt| {
+                let [x, y] =
+                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp2::from_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let [c, s] = [c, s].map(|x| axvm_ecc::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let io = (ps, qs, (c, s));
+        let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
+        executor.execute(
+            elf,
+            vec![io.into_iter().map(F::from_canonical_u8).collect()],
+        )?;
         Ok(())
     }
 }

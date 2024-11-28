@@ -15,8 +15,10 @@ use crate::{
 };
 
 /// Check that all constraints vanish on the subgroup.
+#[allow(clippy::too_many_arguments)]
 pub fn check_constraints<R, SC>(
     rap: &R,
+    rap_name: &str,
     preprocessed: &Option<RowMajorMatrixView<Val<SC>>>,
     partitioned_main: &[RowMajorMatrixView<Val<SC>>],
     after_challenge: &[RowMajorMatrixView<SC::Challenge>],
@@ -77,6 +79,7 @@ pub fn check_constraints<R, SC>(
             .collect::<Vec<_>>();
 
         let mut builder = DebugConstraintBuilder {
+            air_name: rap_name,
             row_index: i,
             preprocessed: VerticalPair::new(
                 RowMajorMatrixView::new_row(preprocessed_local.as_slice()),

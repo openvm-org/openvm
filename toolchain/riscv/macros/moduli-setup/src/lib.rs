@@ -103,9 +103,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             #[used]
             static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
 
-            #[derive(Clone, Eq)]
+            #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
-            pub struct #struct_name([u8; #limbs]);
+            pub struct #struct_name(#[serde(with = "axvm_algebra::BigArray")] [u8; #limbs]);
 
             impl #struct_name {
                 #[inline(always)]

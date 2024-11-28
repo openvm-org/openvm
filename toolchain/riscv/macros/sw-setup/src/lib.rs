@@ -53,7 +53,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
 
-            #[derive(Eq, PartialEq, Clone, Debug)]
+            #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
             pub struct #struct_name {
                 pub x: #intmod_type,

@@ -9,11 +9,20 @@ use axvm_ecc::{pairing::PairingCheck, AffinePoint};
 axvm::entry!(main);
 
 mod bn254 {
-    use axvm_ecc::bn254::{Bn254, Fp, Fp2};
+    use alloc::format;
+
+    use axvm_algebra::IntMod;
+    use axvm_ecc::{
+        bls12_381::{setup_Bls12_381Fp, setup_Bls12_381Fp_fp2},
+        bn254::{Bn254, Fp, Fp2},
+    };
 
     use super::*;
 
     pub fn test_pairing_check(io: &[u8]) {
+        axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
+        setup_Bls12_381Fp();
+        setup_Bls12_381Fp_fp2();
         let s0 = &io[0..32 * 2];
         let s1 = &io[32 * 2..32 * 4];
         let q0 = &io[32 * 4..32 * 8];
@@ -33,11 +42,18 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use axvm_ecc::bls12_381::{Bls12_381, Fp, Fp2};
+
+    use alloc::format;
+
+    use axvm_algebra::IntMod;
+    use axvm_ecc::bls12_381::{setup_Bls12_381Fp, setup_Bls12_381Fp_fp2, Bls12_381, Fp, Fp2};
 
     use super::*;
 
     pub fn test_pairing_check(io: &[u8]) {
+        axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
+        setup_Bls12_381Fp();
+        setup_Bls12_381Fp_fp2();
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];

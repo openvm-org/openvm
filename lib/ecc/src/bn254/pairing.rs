@@ -4,20 +4,17 @@ use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
-    axvm_algebra::DivUnsafe,
+    crate::pairing::shifted_funct7,
     axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1, PAIRING_MAX_KINDS},
     axvm_platform::custom_insn_r,
-    core::mem::{size_of, MaybeUninit},
+    core::mem::MaybeUninit,
 };
 
 use super::{Bn254, Fp, Fp12, Fp2};
-#[cfg(not(target_os = "zkvm"))]
-use crate::pairing::PairingIntrinsics;
 use crate::{
     pairing::{
         Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
-        PairingCheck, PairingCheckError, UnevaluatedLine,
+        PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
     },
     AffinePoint,
 };
@@ -325,7 +322,7 @@ impl PairingCheck for Bn254 {
                     ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
                     opcode = const CUSTOM_1,
                     funct3 = const (Custom1Funct3::Pairing as u8),
-                    funct7 = const (Bn254::PAIRING_IDX * PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    funct7 = const ((Bn254::PAIRING_IDX as u8) * PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
                     rs1 = in(reg) &p_fat_ptr,
                     rs2 = in(reg) &q_fat_ptr
                 );

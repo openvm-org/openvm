@@ -310,13 +310,12 @@ fn process_pairing<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
     let pairing_idx = ((dec_insn.funct7 as u8) / PAIRING_MAX_KINDS) as usize;
     if let Some(PairingBaseFunct7::HintFinalExp) = PairingBaseFunct7::from_repr(base_funct7) {
         assert_eq!(dec_insn.rd, 0);
-        assert_eq!(dec_insn.rs2, 0);
         // Return exits the outermost function
         return Some(Instruction::phantom(
             PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-            F::from_canonical_usize(pairing_idx),
-            0,
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+            pairing_idx as u16,
         ));
     }
     let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {

@@ -1,15 +1,20 @@
 #![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::io::read_vec;
-use axvm_ecc::pairing::final_exp_hint::bls12_381_final_exp_hint;
+extern crate alloc;
+
+use alloc::vec::Vec;
+
+use axvm::io::read;
+use axvm_ecc::{bls12_381::*, pairing::PairingCheck, sw::setup_fp2, AffinePoint};
 
 axvm::entry!(main);
 
 pub fn main() {
-    let io = read_vec();
-    let f = &io[..48 * 12];
-    let expected = &io[48 * 12..];
-    let actual = bls12_381_final_exp_hint(f);
-    assert_eq!(&actual, expected);
+    setup_Bls12_381Fp();
+    setup_Bls12_381Fp_fp2();
+
+    let (p, q, expected): (Vec<AffinePoint<Fp>>, Vec<AffinePoint<Fp2>>, (Fp12, Fp12)) = read();
+    let actual = Bls12_381::pairing_check_hint(&p, &q);
+    assert_eq!(actual, expected);
 }

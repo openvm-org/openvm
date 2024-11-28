@@ -3,7 +3,7 @@ use core::ops::Neg;
 use axvm_algebra::Field;
 use rand::Rng;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct AffinePoint<F> {
     pub x: F,

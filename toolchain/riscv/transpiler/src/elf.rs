@@ -240,7 +240,7 @@ impl Elf {
                 }
             }
         } else {
-            eprintln!("no .axiom section found");
+            tracing::debug!("no .axiom section found");
         }
 
         Ok(Elf::new(

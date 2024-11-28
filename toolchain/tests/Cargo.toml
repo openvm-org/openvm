@@ -20,6 +20,9 @@ test-case.workspace = true
 tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
 rand = { workspace = true }
+
+axvm-ecc = { workspace = true, features = ["halo2curves"] }
+
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true
 
