@@ -27,6 +27,8 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
+derive_more = { workspace = true, features = ["from"] }
+strum = { workspace = true }
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }

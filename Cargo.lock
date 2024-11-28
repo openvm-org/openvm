@@ -429,6 +429,7 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-ecc-constants",
  "axvm-instructions",
+ "derive_more 1.0.0",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
@@ -440,6 +441,7 @@ dependencies = [
  "p3-field",
  "p3-matrix",
  "rand 0.8.5",
+ "strum",
  "tracing",
 ]
 
