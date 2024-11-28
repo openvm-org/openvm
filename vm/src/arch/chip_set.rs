@@ -208,7 +208,7 @@ impl<F: PrimeField32> VmChipSet<F> {
             )
             .chain(self.memory_controller.borrow().current_trace_heights())
             .chain(self.chips.iter().map(|c| c.current_trace_height()))
-            .chain([0]) // [self.range_checker_chip.current_trace_height()])
+            .chain([self.range_checker_chip.current_trace_height()])
             .collect()
     }
     /// Return trace cells of all chips in order.

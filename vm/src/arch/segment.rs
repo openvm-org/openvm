@@ -313,7 +313,8 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             return false;
         }
         self.since_last_segment_check = 0;
-        let heights = self.current_trace_heights();
+        let mut heights = self.current_trace_heights();
+        *heights.last_mut().unwrap() = 0; // range checker
         let mut const_height_idx = 0;
         for (i, (air_name, height)) in izip!(&self.air_names, heights).enumerate() {
             if const_height_idx >= self.const_height_air_ids.len()
