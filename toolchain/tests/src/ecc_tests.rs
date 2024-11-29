@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use axvm_circuit::{
-    arch::{new_vm, ExecutorName, VmConfig, VmExecutor},
-    utils::new_air_test_with_min_segments,
-};
+use axvm_circuit::arch::{new_vm, ExecutorName, VmConfig, VmExecutor};
+use axvm_ecc_circuit::{Rv32WeierstrassConfig, SECP256K1};
 use axvm_mod_circuit::{modular_chip::SECP256K1_COORD_PRIME, Rv32ModularConfig};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
@@ -40,41 +38,41 @@ fn test_modular_runtime() -> Result<()> {
     Ok(())
 }
 
-/*
-#[test]
-fn test_complex_runtime() -> Result<()> {
-    let elf = build_example_program("complex")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_modular_support(vec![SECP256K1_COORD_PRIME.clone()])
-            .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()]),
-    );
-    executor.execute(elf, vec![])?;
-    Ok(())
-}
+// #[test]
+// fn test_complex_runtime() -> Result<()> {
+//     let elf = build_example_program("complex")?;
+//     let executor = VmExecutor::<F>::new(
+//         VmConfig::rv32im()
+//             .add_modular_support(vec![SECP256K1_COORD_PRIME.clone()])
+//             .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()]),
+//     );
+//     executor.execute(elf, vec![])?;
+//     Ok(())
+// }
 
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_canonical_modulus()
-            .add_canonical_ec_curves(),
-    );
+    let config = Rv32WeierstrassConfig::new(vec![SECP256K1.clone()]);
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    // let executor = VmExecutor::<F>::new(
+    //     VmConfig::rv32im()
+    //         .add_canonical_modulus()
+    //         .add_canonical_ec_curves(),
+    // );
     executor.execute(elf, vec![])?;
     Ok(())
 }
 
-#[test]
-fn test_ecdsa_runtime() -> Result<()> {
-    let elf = build_example_program("ecdsa")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_executor(ExecutorName::Keccak256Rv32)
-            .add_canonical_modulus()
-            .add_canonical_ec_curves(),
-    );
-    executor.execute(elf, vec![])?;
-    Ok(())
-}
-*/
+// #[test]
+// fn test_ecdsa_runtime() -> Result<()> {
+//     let elf = build_example_program("ecdsa")?;
+//     let executor = VmExecutor::<F>::new(
+//         VmConfig::rv32im()
+//             .add_executor(ExecutorName::Keccak256Rv32)
+//             .add_canonical_modulus()
+//             .add_canonical_ec_curves(),
+//     );
+//     executor.execute(elf, vec![])?;
+//     Ok(())
+// }

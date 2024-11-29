@@ -13,8 +13,11 @@ use axvm_circuit::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::Rv32WeierstrassOpcode; // TODO: opcode should be in crate too?
 use axvm_instructions::UsizeOpcode;
+use axvm_mod_circuit::modular_chip::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
+use num_traits::Zero;
+use once_cell::sync::Lazy;
 use p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -24,11 +27,19 @@ use super::{EcAddNeChip, EcDoubleChip};
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
     pub modulus: BigUint,
+    /// The scalar field modulus of the curve.
+    pub scalar: BigUint,
     /// The coefficient a of y^2 = x^3 + ax + b.
     pub a: BigUint,
 }
 
-#[derive(Clone, Debug)]
+pub static SECP256K1: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
+    modulus: SECP256K1_COORD_PRIME.clone(),
+    scalar: SECP256K1_SCALAR_PRIME.clone(),
+    a: BigUint::zero(),
+});
+
+#[derive(Clone, Debug, derive_new::new)]
 pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
@@ -73,9 +84,9 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             chip
         };
         let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-            ..(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
+            ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
         let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-            ..(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
+            ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
 
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let class_offset =

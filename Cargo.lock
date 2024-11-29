@@ -374,30 +374,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-ecc-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-ecc-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-constants",
- "axvm-instructions",
- "axvm-mod-circuit",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "num-bigint-dig",
- "num-traits",
- "p3-baby-bear",
- "p3-field",
- "strum",
-]
-
-[[package]]
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
@@ -742,6 +718,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-ecc-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "axvm-mod-circuit",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-baby-bear",
+ "p3-field",
+ "strum",
+]
+
+[[package]]
 name = "axvm-ecc-constants"
 version = "0.1.0"
 dependencies = [
@@ -990,6 +991,7 @@ dependencies = [
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc",
+ "axvm-ecc-circuit",
  "axvm-ecc-constants",
  "axvm-mod-circuit",
  "axvm-rv32im-circuit",

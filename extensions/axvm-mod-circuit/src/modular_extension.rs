@@ -23,17 +23,9 @@ use crate::modular_chip::{
     ModularMulDivChip, ModularMulDivCoreChip,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
-}
-
-impl ModularExtension {
-    pub fn new(moduli: Vec<BigUint>) -> Self {
-        Self {
-            supported_modulus: moduli,
-        }
-    }
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
@@ -81,11 +73,11 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
         };
 
         let addsub_opcodes = (Rv32ModularArithmeticOpcode::ADD as usize)
-            ..(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize);
+            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Rv32ModularArithmeticOpcode::MUL as usize)
-            ..(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize);
+            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize);
         let iseq_opcodes = (Rv32ModularArithmeticOpcode::IS_EQ as usize)
-            ..(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize);
+            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize);
 
         for (i, modulus) in self.supported_modulus.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element

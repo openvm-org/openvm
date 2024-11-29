@@ -106,6 +106,7 @@ ax-stark-sdk = { path = "stark-sdk", default-features = false }
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 ax-mod-circuit-builder = { path = "extensions/ax-mod-circuit-builder", default-features = false }
 axvm-mod-circuit = { path = "extensions/axvm-mod-circuit", default-features = false }
+axvm-ecc-circuit = { path = "extensions/axvm-ecc-circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
