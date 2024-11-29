@@ -7,9 +7,8 @@ use axvm_circuit::{
         VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
         VmInventoryError,
     },
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
-    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
+    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_instructions::*;
