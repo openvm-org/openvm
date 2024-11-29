@@ -7,10 +7,8 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
 };
-use axvm_circuit::{
-    arch::{instructions::program::Program, VmConfig},
-    utils::execute_and_prove_program,
-};
+use axvm_circuit::{arch::instructions::program::Program, utils::execute_and_prove_program};
+use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 use p3_baby_bear::BabyBear;
@@ -28,7 +26,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use axvm_circuit::arch::VmConfig;
+    use axvm_native_circuit::NativeConfig;
     use axvm_native_compiler::conversion::CompilerOptions;
 
     use super::*;
@@ -79,7 +77,7 @@ pub mod inner {
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
-            VmConfig::aggregation(4, 7),
+            NativeConfig::aggregation(4, 7),
             &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
@@ -95,7 +93,7 @@ pub mod inner {
 pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>(
     vparams: VerificationDataWithFriParams<InnerSC>,
     compiler_options: CompilerOptions,
-    vm_config: VmConfig,
+    vm_config: NativeConfig,
     engine: &E,
 ) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
 where

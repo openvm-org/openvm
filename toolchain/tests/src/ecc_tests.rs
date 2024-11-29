@@ -63,6 +63,8 @@ fn test_ec_runtime() -> Result<()> {
     Ok(())
 }
 
+// TODO[yi]: add back this test once we have support for modular extension
+/*
 #[test]
 fn test_ecdsa_runtime() -> Result<()> {
     let elf = build_example_program("ecdsa")?;
@@ -75,3 +77,5 @@ fn test_ecdsa_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+*/

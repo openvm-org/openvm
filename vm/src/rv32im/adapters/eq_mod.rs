@@ -256,7 +256,7 @@ impl<
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
         Self {
             air: Rv32IsEqualModAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
