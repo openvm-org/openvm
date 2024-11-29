@@ -21,19 +21,21 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
+/// Config for a VM with base extension and IO extension
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32IConfig {
     pub system: SystemConfig,
     pub base: Rv32I,
-    pub io: Rv32HintStore,
+    pub io: Rv32Io,
 }
 
+/// Config for a VM with base extension, IO extension, and multiplication extension
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32ImConfig {
     pub system: SystemConfig,
     pub base: Rv32I,
     pub mul: Rv32M,
-    pub io: Rv32HintStore,
+    pub io: Rv32Io,
 }
 
 impl Default for Rv32IConfig {
@@ -65,6 +67,10 @@ impl Default for Rv32ImConfig {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Rv32I;
 
+/// RISC-V Extension for handling IO (not to be confused with I base extension)
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Rv32Io;
+
 /// RISC-V 32-bit Multiplication Extension (RV32M) Extension
 #[derive(Clone, Copy, Debug)]
 pub struct Rv32M {
@@ -78,10 +84,6 @@ impl Default for Rv32M {
         }
     }
 }
-
-/// RISC-V HintStore Extension for handling IO
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Rv32HintStore;
 
 // ============ Executor and Periphery Enums for Extension ============
 
@@ -109,18 +111,31 @@ pub enum Rv32MExecutor<F: PrimeField32> {
     DivRem(Rv32DivRemChip<F>),
 }
 
-/// RISC-V 32-bit HintStore Instruction Executors
+/// RISC-V 32-bit Io Instruction Executors
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Rv32HintStoreExecutor<F: PrimeField32> {
+pub enum Rv32IoExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }
 
-// We share the same enum for all 3 extensions for code brevity
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum Rv32Periphery<F: PrimeField32> {
+pub enum Rv32IPeriphery<F: PrimeField32> {
+    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
+    // We put this only to get the <F> generic to work
+    Phantom(PhantomChip<F>),
+}
+
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+pub enum Rv32MPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     /// Only needed for multiplication extension
     RangeTupleChecker(Arc<RangeTupleCheckerChip<2>>),
+    // We put this only to get the <F> generic to work
+    Phantom(PhantomChip<F>),
+}
+
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
+pub enum Rv32IoPeriphery<F: PrimeField32> {
+    BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
@@ -129,12 +144,12 @@ pub enum Rv32Periphery<F: PrimeField32> {
 
 impl<F: PrimeField32> VmExtension<F> for Rv32I {
     type Executor = Rv32IExecutor<F>;
-    type Periphery = Rv32Periphery<F>;
+    type Periphery = Rv32IPeriphery<F>;
 
     fn build(
         &self,
         builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Rv32IExecutor<F>, Rv32Periphery<F>>, VmInventoryError> {
+    ) -> Result<VmInventory<Rv32IExecutor<F>, Rv32IPeriphery<F>>, VmInventoryError> {
         let mut inventory = VmInventory::new();
         let execution_bus = builder.system_base().execution_bus();
         let program_bus = builder.system_base().program_bus();
@@ -297,12 +312,12 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
 
 impl<F: PrimeField32> VmExtension<F> for Rv32M {
     type Executor = Rv32MExecutor<F>;
-    type Periphery = Rv32Periphery<F>;
+    type Periphery = Rv32MPeriphery<F>;
 
     fn build(
         &self,
         builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Rv32MExecutor<F>, Rv32Periphery<F>>, VmInventoryError> {
+    ) -> Result<VmInventory<Rv32MExecutor<F>, Rv32MPeriphery<F>>, VmInventoryError> {
         let mut inventory = VmInventory::new();
         let execution_bus = builder.system_base().execution_bus();
         let program_bus = builder.system_base().program_bus();
@@ -375,9 +390,9 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
     }
 }
 
-impl<F: PrimeField32> VmExtension<F> for Rv32HintStore {
-    type Executor = Rv32HintStoreExecutor<F>;
-    type Periphery = Rv32Periphery<F>;
+impl<F: PrimeField32> VmExtension<F> for Rv32Io {
+    type Executor = Rv32IoExecutor<F>;
+    type Periphery = Rv32IoPeriphery<F>;
 
     fn build(
         &self,
@@ -497,33 +512,57 @@ mod phantom {
 }
 
 // ============ To be generatede by proc-macro ============
-// TODO: generate this by proc-macro
-/// RISC-V 32-bit IM (Base + Multiplication) Instruction Executors
+
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Rv32ImExecutor<F: PrimeField32> {
+pub enum Rv32IConfigExecutor<F: PrimeField32> {
     #[any_enum]
     System(SystemExecutor<F>),
     #[any_enum]
-    HintStore(Rv32HintStoreExecutor<F>),
+    Base(Rv32IExecutor<F>),
+    #[any_enum]
+    Io(Rv32IoExecutor<F>),
+}
+
+/// RISC-V 32-bit IM (Base + Multiplication) Instruction Executors
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+pub enum Rv32ImConfigExecutor<F: PrimeField32> {
+    #[any_enum]
+    System(SystemExecutor<F>),
     #[any_enum]
     Base(Rv32IExecutor<F>),
+    #[any_enum]
+    Io(Rv32IoExecutor<F>),
     #[any_enum]
     Mul(Rv32MExecutor<F>),
 }
 
-// TODO: generate this by proc-macro
 #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
-pub enum Rv32ImPeriphery<F: PrimeField32> {
+pub enum Rv32IConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     System(SystemPeriphery<F>),
     #[any_enum]
-    Rv32(Rv32Periphery<F>),
+    Base(Rv32IPeriphery<F>),
+    #[any_enum]
+    Io(Rv32IoPeriphery<F>),
+}
+
+// TODO: generate this by proc-macro
+#[derive(ChipUsageGetter, Chip, From, AnyEnum)]
+pub enum Rv32ImConfigPeriphery<F: PrimeField32> {
+    #[any_enum]
+    System(SystemPeriphery<F>),
+    #[any_enum]
+    Base(Rv32IPeriphery<F>),
+    #[any_enum]
+    Io(Rv32IoPeriphery<F>),
+    #[any_enum]
+    Mul(Rv32MPeriphery<F>),
 }
 
 // TODO: generate this by proc-macro
 impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
-    type Executor = Rv32ImExecutor<F>;
-    type Periphery = Rv32ImPeriphery<F>;
+    type Executor = Rv32IConfigExecutor<F>;
+    type Periphery = Rv32IConfigPeriphery<F>;
 
     fn system(&self) -> &SystemConfig {
         &self.system
@@ -533,17 +572,18 @@ impl<F: PrimeField32> VmGenericConfig<F> for Rv32IConfig {
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
         let complex = self.system.create_chip_complex()?;
-        let complex: VmChipComplex<F, Rv32ImExecutor<F>, Rv32ImPeriphery<F>> =
+        let complex: VmChipComplex<F, Self::Executor, Self::Periphery> =
             complex.extend(&self.base)?;
-        let complex = complex.extend(&self.io)?;
+        let complex: VmChipComplex<F, Self::Executor, Self::Periphery> =
+            complex.extend(&self.io)?;
         Ok(complex)
     }
 }
 
 // TODO: generate this by proc-macro
 impl<F: PrimeField32> VmGenericConfig<F> for Rv32ImConfig {
-    type Executor = Rv32ImExecutor<F>;
-    type Periphery = Rv32ImPeriphery<F>;
+    type Executor = Rv32ImConfigExecutor<F>;
+    type Periphery = Rv32ImConfigPeriphery<F>;
 
     fn system(&self) -> &SystemConfig {
         &self.system
@@ -552,13 +592,13 @@ impl<F: PrimeField32> VmGenericConfig<F> for Rv32ImConfig {
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let base = Rv32IConfig {
-            system: self.system,
-            base: self.base,
-            io: self.io,
-        };
-        let complex = base.create_chip_complex()?;
-        let complex = complex.extend(&self.mul)?;
+        let complex = self.system.create_chip_complex()?;
+        let complex: VmChipComplex<F, Self::Executor, Self::Periphery> =
+            complex.extend(&self.base)?;
+        let complex: VmChipComplex<F, Self::Executor, Self::Periphery> =
+            complex.extend(&self.io)?;
+        let complex: VmChipComplex<F, Self::Executor, Self::Periphery> =
+            complex.extend(&self.mul)?;
         Ok(complex)
     }
 }
