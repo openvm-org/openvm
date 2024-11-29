@@ -302,6 +302,8 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 });
             }
 
+            // Tracking Issue: we should be able to get the associated types from the VmExtension trait, but currently
+            // cannot because of a bug in Rust itself: <https://github.com/rust-lang/rust/issues/85576>
             let executor_type = Ident::new(&format!("{}Executor", name), name.span());
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
             TokenStream::from(quote! {
