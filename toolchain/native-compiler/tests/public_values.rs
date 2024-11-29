@@ -1,7 +1,5 @@
-use axvm_circuit::{
-    arch::{ExecutorName, SingleSegmentVmExecutor, VmConfig},
-    system::program::util::execute_program,
-};
+use axvm_circuit::arch::{new_vm::SingleSegmentVmExecutor, SystemConfig};
+use axvm_native_circuit::{execute_program, Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -30,16 +28,11 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let executor = SingleSegmentVmExecutor::new(
-        VmConfig {
-            num_public_values: 2,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::BranchEqual),
-    );
+    let executor = SingleSegmentVmExecutor::new(NativeConfig::new(
+        SystemConfig::default().with_public_values(2),
+        Native::default(),
+    ));
+
     let exe_result = executor.execute(program, vec![]).unwrap();
     assert_eq!(
         exe_result

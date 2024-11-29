@@ -1,7 +1,5 @@
-use axvm_circuit::{
-    arch::{ExecutionError, VmConfig, VmExecutor},
-    system::program::util::execute_program,
-};
+use axvm_circuit::arch::{new_vm::VmExecutor, ExecutionError};
+use axvm_native_circuit::{execute_program, NativeConfig};
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
@@ -424,7 +422,8 @@ fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa();
-    let executor = VmExecutor::new(VmConfig::aggregation(4, 3));
+
+    let executor = VmExecutor::<BabyBear, NativeConfig>::new(NativeConfig::aggregation(4, 3));
     let result = executor.execute(program, vec![]);
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }
