@@ -1,4 +1,4 @@
-//! # axVM
+//! # axVM standard library
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(rustdoc::broken_intra_doc_links)]
@@ -10,6 +10,8 @@ extern crate alloc;
 
 pub mod intrinsics;
 pub mod io;
+#[cfg(all(feature = "std", target_os = "zkvm"))]
+pub mod pal_abi;
 pub mod process;
 
 #[cfg(not(target_os = "zkvm"))]

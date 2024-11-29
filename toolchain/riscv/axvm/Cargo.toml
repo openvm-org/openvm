@@ -23,7 +23,7 @@ tiny-keccak.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
 
 [features]
-default = []
+default = ["std"]
 # The zkVM exposes a getrandom implementation that panics by default. This will
 # expose a getrandom implementation that uses the `sys_random` ecall.
 getrandom = ["axvm-platform/getrandom"]

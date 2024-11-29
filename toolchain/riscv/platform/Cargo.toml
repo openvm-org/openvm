@@ -36,16 +36,19 @@ features = [
     "entrypoint",
     "export-libm",
     "export-getrandom",
+    "export-pal-abi",
     "getrandom",
     "unstable",
 ]
 
 [features]
-default = []
+default = ["export-pal-abi"]
 entrypoint = []
 # exports a `getrandom` implementation that panics
 export-getrandom = ["dep:bytemuck", "dep:getrandom"]
 export-libm = ["dep:libm"]
+# export rust platform abstraction layer ABI for rust std-lib
+export-pal-abi = []
 # exports a `getrandom` implementation that uses sys_random
 getrandom = ["export-getrandom"]
 heap-embedded-alloc = [

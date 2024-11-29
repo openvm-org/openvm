@@ -43,11 +43,16 @@ macro_rules! reveal {
 /// Print UTF-8 string encoded as bytes to host stdout for debugging purposes.
 #[inline(always)]
 pub(crate) fn print_str_from_bytes(str_as_bytes: &[u8]) {
+    raw_print_str_from_bytes(str_as_bytes.as_ptr(), str_as_bytes.len());
+}
+
+#[inline(always)]
+pub(crate) fn raw_print_str_from_bytes(msg_ptr: *const u8, len: usize) {
     axvm_platform::custom_insn_i!(
         CUSTOM_0,
         Custom0Funct3::Phantom as u8,
-        str_as_bytes.as_ptr(),
-        str_as_bytes.len(),
+        msg_ptr,
+        len,
         PhantomImm::PrintStr as u16
     );
 }
