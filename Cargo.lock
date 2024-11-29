@@ -776,6 +776,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-native-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-native-compiler"
 version = "0.1.0"
 dependencies = [

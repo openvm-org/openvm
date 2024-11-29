@@ -34,13 +34,8 @@ use crate::{
         },
         modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
-    kernels::{
-        branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip, fri::FriReducedOpeningChip, jal::KernelJalChip,
-        loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
-    },
     rv32im::*,
-    system::phantom::PhantomChip,
+    system::{phantom::PhantomChip, public_values::PublicValuesChip},
 };
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -51,15 +46,8 @@ use crate::{
 pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     // Native kernel:
-    LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
-    BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
-    Jal(Rc<RefCell<KernelJalChip<F>>>),
-    FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    FriReducedOpening(Rc<RefCell<FriReducedOpeningChip<F>>>),
-    CastF(Rc<RefCell<CastFChip<F>>>),
     // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),

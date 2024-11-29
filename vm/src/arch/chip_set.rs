@@ -56,23 +56,6 @@ use crate::{
             ModularMulDivChip, ModularMulDivCoreChip,
         },
     },
-    kernels::{
-        adapters::{
-            branch_native_adapter::BranchNativeAdapterChip, convert_adapter::ConvertAdapterChip,
-            jal_native_adapter::JalNativeAdapterChip,
-            loadstore_native_adapter::NativeLoadStoreAdapterChip,
-            native_adapter::NativeAdapterChip,
-            native_vectorized_adapter::NativeVectorizedAdapterChip,
-        },
-        branch_eq::KernelBranchEqChip,
-        castf::{CastFChip, CastFCoreChip},
-        field_arithmetic::{FieldArithmeticChip, FieldArithmeticCoreChip},
-        field_extension::{FieldExtensionChip, FieldExtensionCoreChip},
-        fri::FriReducedOpeningChip,
-        jal::{JalCoreChip, KernelJalChip},
-        loadstore::{KernelLoadStoreChip, KernelLoadStoreCoreChip},
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
-    },
     rv32im::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
@@ -89,8 +72,10 @@ use crate::{
             offline_checker::MemoryBus,
             Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
         },
+        native_adapter::NativeAdapterChip,
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
 };
 
@@ -446,96 +431,7 @@ impl VmConfig {
                     }
                     chips.push(AxVmChip::Executor(phantom_chip.into()));
                 }
-                ExecutorName::LoadStore => {
-                    let chip = Rc::new(RefCell::new(KernelLoadStoreChip::<F, 1>::new(
-                        NativeLoadStoreAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            offset,
-                        ),
-                        KernelLoadStoreCoreChip::new(offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::BranchEqual => {
-                    let chip = Rc::new(RefCell::new(KernelBranchEqChip::new(
-                        BranchNativeAdapterChip::<_>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::Jal => {
-                    let chip = Rc::new(RefCell::new(KernelJalChip::new(
-                        JalNativeAdapterChip::<_>::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        JalCoreChip::new(offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::FieldArithmetic => {
-                    let chip = Rc::new(RefCell::new(FieldArithmeticChip::new(
-                        NativeAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        FieldArithmeticCoreChip::new(offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::FieldExtension => {
-                    let chip = Rc::new(RefCell::new(FieldExtensionChip::new(
-                        NativeVectorizedAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        FieldExtensionCoreChip::new(offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::PublicValues => {}
                 ExecutorName::Poseidon2 => {}
-                ExecutorName::FriReducedOpening => {
-                    let chip = Rc::new(RefCell::new(FriReducedOpeningChip::new(
-                        memory_controller.clone(),
-                        execution_bus,
-                        program_bus,
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
                 ExecutorName::BaseAluRv32 => {
                     let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
                         Rv32BaseAluAdapterChip::new(
@@ -860,24 +756,6 @@ impl VmConfig {
                             bitwise_lookup_chip.clone(),
                         ),
                         BranchLessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::CastF => {
-                    let chip = Rc::new(RefCell::new(CastFChip::new(
-                        ConvertAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        CastFCoreChip::new(
-                            memory_controller.borrow().range_checker.clone(),
-                            offset,
-                        ),
                         memory_controller.clone(),
                     )));
                     for opcode in range {
@@ -1846,45 +1724,10 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             1,
             SystemOpcode::default_offset(),
         ),
-        ExecutorName::LoadStore => (
-            NativeLoadStoreOpcode::default_offset(),
-            NativeLoadStoreOpcode::COUNT,
-            NativeLoadStoreOpcode::default_offset(),
-        ),
-        ExecutorName::BranchEqual => (
-            NativeBranchEqualOpcode::default_offset(),
-            BranchEqualOpcode::COUNT,
-            NativeBranchEqualOpcode::default_offset(),
-        ),
-        ExecutorName::Jal => (
-            NativeJalOpcode::default_offset(),
-            NativeJalOpcode::COUNT,
-            NativeJalOpcode::default_offset(),
-        ),
-        ExecutorName::FieldArithmetic => (
-            FieldArithmeticOpcode::default_offset(),
-            FieldArithmeticOpcode::COUNT,
-            FieldArithmeticOpcode::default_offset(),
-        ),
-        ExecutorName::FieldExtension => (
-            FieldExtensionOpcode::default_offset(),
-            FieldExtensionOpcode::COUNT,
-            FieldExtensionOpcode::default_offset(),
-        ),
-        ExecutorName::PublicValues => (
-            PublishOpcode::default_offset(),
-            PublishOpcode::COUNT,
-            PublishOpcode::default_offset(),
-        ),
         ExecutorName::Poseidon2 => (
             Poseidon2Opcode::default_offset(),
             Poseidon2Opcode::COUNT,
             Poseidon2Opcode::default_offset(),
-        ),
-        ExecutorName::FriReducedOpening => (
-            FriOpcode::default_offset(),
-            FriOpcode::COUNT,
-            FriOpcode::default_offset(),
         ),
         ExecutorName::BaseAluRv32 => (
             BaseAluOpcode::default_offset(),
@@ -1987,11 +1830,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Rv32BranchLessThan256Opcode::default_offset(),
             BranchLessThanOpcode::COUNT,
             Rv32BranchLessThan256Opcode::default_offset(),
-        ),
-        ExecutorName::CastF => (
-            CastfOpcode::default_offset(),
-            CastfOpcode::COUNT,
-            CastfOpcode::default_offset(),
         ),
         _ => panic!("Not a default executor"),
     };

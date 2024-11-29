@@ -28,10 +28,6 @@ use super::{
 };
 use crate::{
     intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::{
-        adapters::native_adapter::NativeAdapterChip,
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
-    },
     system::{
         connector::VmConnectorChip,
         memory::{
@@ -40,8 +36,10 @@ use crate::{
             Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
             MERKLE_AIR_OFFSET,
         },
+        native_adapter::NativeAdapterChip,
         phantom::PhantomChip,
         program::{ProgramBus, ProgramChip},
+        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
 };
 
