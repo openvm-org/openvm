@@ -58,7 +58,7 @@ pub struct Int256 {
 impl Default for Int256 {
     fn default() -> Self {
         Self {
-            range_tuple_checker_sizes: [1 << 8, 32],
+            range_tuple_checker_sizes: [1 << 8, 32 * (1 << 8)],
         }
     }
 }
