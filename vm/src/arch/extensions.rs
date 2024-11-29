@@ -26,21 +26,19 @@ use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
     SystemConfig,
 };
-use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    system::{
-        connector::VmConnectorChip,
-        memory::{
-            merkle::{DirectCompressionBus, MemoryMerkleBus},
-            offline_checker::MemoryBus,
-            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
-            MERKLE_AIR_OFFSET,
-        },
-        native_adapter::NativeAdapterChip,
-        phantom::PhantomChip,
-        program::{ProgramBus, ProgramChip},
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
+use crate::system::{
+    connector::VmConnectorChip,
+    memory::{
+        merkle::{DirectCompressionBus, MemoryMerkleBus},
+        offline_checker::MemoryBus,
+        Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
+        MERKLE_AIR_OFFSET,
     },
+    native_adapter::NativeAdapterChip,
+    phantom::PhantomChip,
+    poseidon2::Poseidon2Chip,
+    program::{ProgramBus, ProgramChip},
+    public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
 
 /// Global AIR ID in the VM circuit verifying key.

@@ -27,11 +27,10 @@ use crate::{
             },
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::poseidon2::Poseidon2Chip,
         modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
     rv32im::*,
-    system::{phantom::PhantomChip, public_values::PublicValuesChip},
+    system::{phantom::PhantomChip, poseidon2::Poseidon2Chip, public_values::PublicValuesChip},
 };
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
