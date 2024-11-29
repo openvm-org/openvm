@@ -9,6 +9,7 @@ use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::VmConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_transpiler::axvm_platform::bincode;
 use clap::Parser;
 use eyre::Result;
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
                 let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
                 bench_from_exe(
                     engine,
-                    VmConfig::rv32im(),
+                    Rv32ImConfig::default(),
                     elf,
                     vec![input
                         .into_iter()

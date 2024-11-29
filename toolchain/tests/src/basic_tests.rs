@@ -3,12 +3,15 @@ use std::rc::Rc;
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::AxVmExe, new_vm, ExecutorName,
+        hasher::poseidon2::vm_poseidon2_hasher,
+        instructions::exe::AxVmExe,
+        new_vm::{self, VmExecutor as NewVmExecutor},
         VmConfig, VmExecutor,
     },
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
+use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak_transpiler::KeccakTranspilerExtension;
 use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_transpiler::{
@@ -118,8 +121,7 @@ fn test_keccak256_runtime() -> Result<()> {
         Transpiler::<F>::default_with_intrinsics()
             .with_processor(Rc::new(KeccakTranspilerExtension)),
     );
-    let executor =
-        VmExecutor::<F>::new(VmConfig::rv32i().add_executor(ExecutorName::Keccak256Rv32));
+    let executor = NewVmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
     executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
@@ -141,6 +143,8 @@ fn test_modular_runtime() -> Result<()> {
     Ok(())
 }
 
+// TODO[yi]: add back this test once we have support for modular extension
+/*
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
@@ -166,3 +170,5 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+*/

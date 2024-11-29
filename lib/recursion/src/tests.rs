@@ -21,7 +21,8 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
     utils::to_field_vec,
 };
-use axvm_circuit::{arch::VmConfig, utils::gen_vm_program_test_proof_input};
+use axvm_circuit::utils::gen_vm_program_test_proof_input;
+use axvm_native_circuit::NativeConfig;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -153,7 +154,7 @@ fn test_optional_air() {
     let verifier = engine.verifier();
 
     let m_advice = new_from_inner_multi_vk(&pk.get_vk());
-    let vm_config = VmConfig::aggregation(4, 7);
+    let vm_config = NativeConfig::aggregation(4, 7);
     let program = VerifierProgram::build(m_advice, &fri_params);
 
     // Case 1: All AIRs are present.
@@ -192,7 +193,7 @@ fn test_optional_air() {
             .verify(&mut challenger, &pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
+        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -226,7 +227,7 @@ fn test_optional_air() {
             .verify(&mut challenger, &pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
+        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -254,7 +255,7 @@ fn test_optional_air() {
             .is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
-            gen_vm_program_test_proof_input::<BabyBearPoseidon2Config>(
+            gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
                 program.clone(),
                 proof.write(),
                 vm_config.clone(),

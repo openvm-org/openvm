@@ -15,8 +15,8 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
 use crate::arch::{
-    new_vm::VirtualMachine as NewVirtualMachine, VirtualMachine, VmConfig, VmExecutor,
-    VmGenericConfig, VmMemoryState,
+    new_vm::{VirtualMachine as NewVirtualMachine, VmExecutor as NewVmExecutor},
+    VirtualMachine, VmConfig, VmGenericConfig, VmMemoryState,
 };
 
 pub fn air_test(config: VmConfig, exe: impl Into<AxVmExe<BabyBear>>) {
@@ -75,30 +75,32 @@ where
 /// do any proving. Output is the payload of everything the prover needs.
 ///
 /// The output AIRs and traces are sorted by height in descending order.
-pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig>(
+pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig, VmConfig>(
     program: Program<Val<SC>>,
     input_stream: Vec<Vec<Val<SC>>>,
     config: VmConfig,
 ) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
+    VmConfig: VmGenericConfig<Val<SC>> + Clone,
+    VmConfig::Executor: Chip<SC>,
+    VmConfig::Periphery: Chip<SC>,
 {
     cfg_if::cfg_if! {
         if #[cfg(feature = "bench-metrics")] {
             // Run once with metrics collection enabled, which can improve runtime performance
-            let mut config = config;
-            config.collect_metrics = true;
+            config = config.with_metric_collection();
             {
-                let executor = VmExecutor::<Val<SC>>::new(config.clone());
+                let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config.clone());
                 executor.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
-            config.collect_metrics = false;
+            config = config.without_metric_collection();
             let start = std::time::Instant::now();
         }
     }
 
-    let executor = VmExecutor::<Val<SC>>::new(config);
+    let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config);
 
     let mut result = executor
         .execute_and_generate(program, input_stream)
@@ -123,7 +125,7 @@ where
 type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
 
 /// Executes program and runs simple STARK prover test (keygen, prove, verify).
-pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
+pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VmConfig>(
     program: Program<Val<SC>>,
     input_stream: Vec<Vec<Val<SC>>>,
     config: VmConfig,
@@ -131,6 +133,9 @@ pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>>(
 ) -> ExecuteAndProveResult<SC>
 where
     Val<SC>: PrimeField32,
+    VmConfig: VmGenericConfig<Val<SC>> + Clone,
+    VmConfig::Executor: Chip<SC>,
+    VmConfig::Periphery: Chip<SC>,
 {
     let span = tracing::info_span!("execute_and_prove_program").entered();
     let test_proof_input = gen_vm_program_test_proof_input(program, input_stream, config);

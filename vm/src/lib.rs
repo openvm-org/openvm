@@ -9,8 +9,6 @@ pub use axvm_circuit_derive as derive;
 pub mod arch;
 /// Chips to support axVM intrinsic instructions.
 pub mod intrinsics;
-/// Chips to support axVM kernel instructions.
-pub mod kernels;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
 pub mod prover;

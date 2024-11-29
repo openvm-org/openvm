@@ -27,20 +27,11 @@ use crate::{
             },
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
-        int256::{
-            Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
-            Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
-        },
+        hashes::poseidon2::Poseidon2Chip,
         modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
-    kernels::{
-        branch_eq::KernelBranchEqChip, castf::CastFChip, field_arithmetic::FieldArithmeticChip,
-        field_extension::FieldExtensionChip, fri::FriReducedOpeningChip, jal::KernelJalChip,
-        loadstore::KernelLoadStoreChip, public_values::PublicValuesChip,
-    },
     rv32im::*,
-    system::phantom::PhantomChip,
+    system::{phantom::PhantomChip, public_values::PublicValuesChip},
 };
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of
@@ -51,15 +42,8 @@ use crate::{
 pub enum AxVmExecutor<F: PrimeField32> {
     Phantom(Rc<RefCell<PhantomChip<F>>>),
     // Native kernel:
-    LoadStore(Rc<RefCell<KernelLoadStoreChip<F, 1>>>),
-    BranchEqual(Rc<RefCell<KernelBranchEqChip<F>>>),
-    Jal(Rc<RefCell<KernelJalChip<F>>>),
-    FieldArithmetic(Rc<RefCell<FieldArithmeticChip<F>>>),
-    FieldExtension(Rc<RefCell<FieldExtensionChip<F>>>),
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    FriReducedOpening(Rc<RefCell<FriReducedOpeningChip<F>>>),
-    CastF(Rc<RefCell<CastFChip<F>>>),
     // Rv32 (for standard 32-bit integers):
     BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
     LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
@@ -76,14 +60,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     // Intrinsics:
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
-    Keccak256Rv32(Rc<RefCell<KeccakVmChip<F>>>),
-    // 256Rv32 (for 256-bit integers):
-    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
-    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
-    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
-    BranchEqual256Rv32(Rc<RefCell<Rv32BranchEqual256Chip<F>>>),
-    BranchLessThan256Rv32(Rc<RefCell<Rv32BranchLessThan256Chip<F>>>),
-    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
     // Modular arithmetic:
     // 32-bytes or 48-bytes modulus.
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),

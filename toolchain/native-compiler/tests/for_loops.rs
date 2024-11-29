@@ -1,4 +1,4 @@
-use axvm_circuit::system::program::util::execute_program;
+use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, RVar, SymbolicVar, Var},

@@ -31,8 +31,11 @@ members = [
     "lib/ecc-constants",
     "lib/ecc-execution",
     "lib/recursion",
-    "axvm-sdk",
-    "benchmarks",
+#    "axvm-sdk",
+#    "benchmarks",
+    "extensions/bigint/circuit",
+    "extensions/keccak256/circuit",
+    "extensions/native/circuit",
     "extensions/rv32im/circuit",
     "extensions/keccak/transpiler",
 ]
@@ -75,7 +78,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
-axvm-sdk = { path = "axvm-sdk", default-features = false }
+# axvm-sdk = { path = "axvm-sdk", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }
@@ -103,6 +106,9 @@ ax-stark-sdk = { path = "stark-sdk", default-features = false }
 # Extensions
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 axvm-keccak-transpiler = { path = "extensions/keccak/transpiler", default-features = false }
+axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
+axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
+axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

@@ -134,6 +134,11 @@ impl SystemConfig {
         self
     }
 
+    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
+        self.max_segment_len = max_segment_len;
+        self
+    }
+
     pub fn with_metric_collection(mut self) -> Self {
         self.collect_metrics = true;
         self
@@ -262,21 +267,6 @@ impl VmConfig {
         self
     }
 
-    pub fn add_int256_alu(self) -> Self {
-        self.add_executor(ExecutorName::BaseAlu256Rv32)
-            .add_executor(ExecutorName::LessThan256Rv32)
-            .add_executor(ExecutorName::Shift256Rv32)
-    }
-
-    pub fn add_int256_branch(self) -> Self {
-        self.add_executor(ExecutorName::BranchEqual256Rv32)
-            .add_executor(ExecutorName::BranchLessThan256Rv32)
-    }
-
-    pub fn add_int256_m(self) -> Self {
-        self.add_executor(ExecutorName::Multiplication256Rv32)
-    }
-
     pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
         let mut res = self;
         res.supported_modulus.extend(enabled_modulus);
@@ -390,29 +380,6 @@ impl VmConfig {
             .add_executor(ExecutorName::MultiplicationRv32)
             .add_executor(ExecutorName::MultiplicationHighRv32)
             .add_executor(ExecutorName::DivRemRv32)
-    }
-
-    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
-        VmConfig {
-            poseidon2_max_constraint_degree,
-            continuation_enabled: false,
-            memory_config: MemoryConfig {
-                // By default, eDSL never uses AccessAdapterAir with N > 8.
-                max_access_adapter_n: 8,
-                ..Default::default()
-            },
-            num_public_values,
-            max_segment_len: (1 << 24) - 100,
-            ..VmConfig::default()
-        }
-        .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::FieldExtension)
-        .add_executor(ExecutorName::Poseidon2)
-        .add_executor(ExecutorName::FriReducedOpening)
     }
 
     pub fn read_config_file(file: &str) -> Result<Self, String> {

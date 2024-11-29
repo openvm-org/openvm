@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 ax-stark-backend = { workspace = true }
+axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
 axvm-native-compiler-derive = { workspace = true }
 ax-stark-sdk = { workspace = true }

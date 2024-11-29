@@ -10,6 +10,7 @@ use ax_stark_sdk::{
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, ExecutorName, VmConfig};
+use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak_transpiler::KeccakTranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
@@ -43,12 +44,7 @@ fn main() -> Result<()> {
                 .into_iter()
                 .map(AbstractField::from_canonical_u8)
                 .collect::<Vec<BabyBear>>();
-            bench_from_exe(
-                engine,
-                VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32),
-                exe,
-                vec![fe_bytes],
-            )
+            bench_from_exe(engine, Keccak256Rv32Config::default(), elf, vec![fe_bytes])
         })?;
 
         #[cfg(feature = "aggregation")]
