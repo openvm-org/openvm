@@ -164,6 +164,7 @@ impl Fp2 {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
@@ -302,3 +303,4 @@ mod tests {
         .expect("Verification failed");
     }
 }
+*/

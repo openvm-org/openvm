@@ -35,3 +35,32 @@ impl Rv32ModularConfig {
         }
     }
 }
+
+#[derive(Clone, Debug, VmGenericConfig)]
+pub struct Rv32ModularWithFp2Config {
+    #[system]
+    pub system: SystemConfig,
+    #[extension]
+    pub base: Rv32I,
+    #[extension]
+    pub mul: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub modular: ModularExtension,
+    #[extension]
+    pub fp2: Fp2Extension,
+}
+
+impl Rv32ModularWithFp2Config {
+    pub fn new(moduli: Vec<BigUint>) -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            base: Default::default(),
+            mul: Default::default(),
+            io: Default::default(),
+            modular: ModularExtension::new(moduli.clone()),
+            fp2: Fp2Extension::new(moduli),
+        }
+    }
+}

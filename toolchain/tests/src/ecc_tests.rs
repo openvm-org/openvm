@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use axvm_circuit::arch::{new_vm, ExecutorName, VmConfig, VmExecutor};
 use axvm_ecc_circuit::{Rv32WeierstrassConfig, SECP256K1};
-use axvm_mod_circuit::{modular_chip::SECP256K1_COORD_PRIME, Rv32ModularConfig};
+use axvm_mod_circuit::{
+    modular_chip::SECP256K1_COORD_PRIME, Rv32ModularConfig, Rv32ModularWithFp2Config,
+};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 
@@ -38,17 +40,14 @@ fn test_modular_runtime() -> Result<()> {
     Ok(())
 }
 
-// #[test]
-// fn test_complex_runtime() -> Result<()> {
-//     let elf = build_example_program("complex")?;
-//     let executor = VmExecutor::<F>::new(
-//         VmConfig::rv32im()
-//             .add_modular_support(vec![SECP256K1_COORD_PRIME.clone()])
-//             .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()]),
-//     );
-//     executor.execute(elf, vec![])?;
-//     Ok(())
-// }
+#[test]
+fn test_complex_runtime() -> Result<()> {
+    let elf = build_example_program("complex")?;
+    let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_COORD_PRIME.clone()]);
+    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
 
 #[test]
 fn test_ec_runtime() -> Result<()> {
