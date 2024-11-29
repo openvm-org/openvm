@@ -1055,7 +1055,10 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-bigint-circuit",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-constants",
@@ -1063,6 +1066,7 @@ dependencies = [
  "axvm-mod-circuit",
  "axvm-platform",
  "axvm-rv32im-circuit",
+ "derive_more 1.0.0",
  "elf",
  "eyre",
  "num-bigint-dig",
