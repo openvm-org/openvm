@@ -27,7 +27,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
     let mut prehash = [0u8; 32];
     hasher.finalize(&mut prehash);
     let (signature, recid) = signing_key.sign_prehash_recoverable(&prehash).unwrap();
-
+Input format: https://www.evm.codes/precompiled?fork=cancun#0x01
     let mut input = prehash.to_vec();
     let v = recid.to_byte() + 27u8;
     input.extend_from_slice(&[0; 31]);
