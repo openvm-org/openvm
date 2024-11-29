@@ -51,7 +51,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cargo-
 
 - [`axvm`](../../toolchain/riscv/axvm): The axVM standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
 - [`axvm-platform`](../../toolchain/riscv/platform): Rust runtime for RV32IM target using axVM intrinsic for system termination.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler): Transpiler for converting RISC-V ELF with custom instructions into axVM executable with axVM instructions.
+- [`axvm-transpiler`](../../toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into axVM executable with axVM instructions.
   - currently transpiler extensions for custom transpilation are still in this crate, but they will be refactored into extension crates
 - [`axvm-macros-common`](../../toolchain/riscv/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
 - [`axvm-toolchain-tests`](../../toolchain/tests): Testing of Rust toolchain including all official RISC-V 32-bit IM test vectors.
@@ -63,7 +63,7 @@ The toolchain, ISA, and VM are simultaenously extendable. This repository mainta
 #### RV32IM
 
 - [`axvm-circuit`](../../vm/src/extensions/rv32im): VM extension for RV32IM is currently in the main crate but will be refactored into a standalone crate.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler/src/rrs.rs): Transpiler of RV32IM instructions is in the main transpiler crate but will be refactored out.
+- [`axvm-transpiler`](../../toolchain/transpiler/src/rrs.rs): Transpiler of RV32IM instructions is in the main transpiler crate but will be refactored out.
 
 #### Recursion
 
@@ -74,19 +74,19 @@ The toolchain, ISA, and VM are simultaenously extendable. This repository mainta
 #### Keccak256
 
 - [`axvm-circuit`](../../vm/): To be refactored into a standalone crate.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler/): To be refactored into a standalone crate.
+- [`axvm-transpiler`](../../toolchain/transpiler/): To be refactored into a standalone crate.
 - [`axvm`](../../toolchain/riscv/axvm/): Intrinsic function for `keccak256` to be refactored into a standalone crate.
 
 #### Big Integers
 
 - [`axvm-circuit`](../../vm/): VM extension for `I256, U256` to be refactored into a standalone crate.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler/): To be refactored into a standalone crate.
+- [`axvm-transpiler`](../../toolchain/transpiler/): To be refactored into a standalone crate.
 - [`axvm`](../../toolchain/riscv/axvm/): `I256, U256` struct implementations using intrinsics for underlying operations to be refactored into a standalone crate.
 
 #### Modular Arithmetic
 
 - [`axvm-circuit`](../../vm/): VM extension for modular arithmetic for arbitrary compile-time modulus, to be refactored into a standalone crate.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler/): To be refactored into a standalone crate.
+- [`axvm-transpiler`](../../toolchain/transpiler/): To be refactored into a standalone crate.
 - [`axvm-algebra`](../../lib/algebra): Guest library with traits for algebra (e.g., modular arithmetic, field extension).
 - [`axvm-moduli-setup`](../../toolchain/riscv/toolchain/macros/moduli-setup): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
 
@@ -94,7 +94,7 @@ The toolchain, ISA, and VM are simultaenously extendable. This repository mainta
 
 - [`ax-ecc-primitives`](../../circuits/ecc): VM extension for Weierstrass elliptic curve operations for arbitrary compile-time curve, VM extension for BN254 and BLS12-381 pairing operations, to be refactored.
 - [`ax-ecc-execution`](../../lib/ecc-execution): Elliptic curve operations for use in VM runtime execution.
-- [`axvm-transpiler`](../../toolchain/riscv/transpiler/): To be refactored into a standalone crate.
+- [`axvm-transpiler`](../../toolchain/transpiler/): To be refactored into a standalone crate.
 - [`axvm-ecc`](../../lib/ecc): Guest library with elliptic curve functions using custom intrinsics. Includes ECDSA and pairing.
 - [`axvm-sw-setup`](../../toolchain/riscv/macros/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 
