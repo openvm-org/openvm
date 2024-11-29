@@ -8,17 +8,15 @@ pub use double::*;
 mod tests;
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_ecc_primitives::field_expression::ExprBuilderConfig;
-use axvm_circuit_derive::InstructionExecutor;
-use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
-
-use crate::{
+use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
+use axvm_circuit::{
     arch::{instructions::Rv32WeierstrassOpcode, VmChipWrapper},
-    intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
+use axvm_circuit_derive::InstructionExecutor;
+use num_bigint_dig::BigUint;
+use p3_field::PrimeField32;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output

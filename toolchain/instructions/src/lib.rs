@@ -371,8 +371,8 @@ pub enum Rv32ModularArithmeticOpcode {
 #[repr(usize)]
 pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
-    EC_DOUBLE,
     SETUP_EC_ADD_NE,
+    EC_DOUBLE,
     SETUP_EC_DOUBLE,
 }
 

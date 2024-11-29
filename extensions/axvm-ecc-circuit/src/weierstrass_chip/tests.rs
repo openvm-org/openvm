@@ -4,7 +4,14 @@ use ax_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_ecc_primitives::field_expression::ExprBuilderConfig;
+use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
+use axvm_circuit::{
+    arch::{
+        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    },
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    utils::{biguint_to_limbs, rv32_write_heap_default},
+};
 use axvm_ecc_constants::SampleEcPoints;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use num_bigint_dig::BigUint;
@@ -12,17 +19,7 @@ use num_traits::{Num, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
-use crate::{
-    arch::{
-        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-    },
-    intrinsics::{
-        ecc::weierstrass::{EcAddNeChip, EcDoubleChip},
-        field_expression::FieldExpressionCoreChip,
-    },
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
-};
+use super::{EcAddNeChip, EcDoubleChip};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;

@@ -17,6 +17,7 @@ members = [
     "vm",
     "extensions/ax-mod-circuit-builder",
     "extensions/axvm-mod-circuit",
+    "extensions/axvm-ecc-circuit",
     "toolchain/instructions",
     "toolchain/instructions/derive",
     "toolchain/transpiler",

@@ -374,6 +374,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ax-ecc-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "derive_more 1.0.0",
+ "num-bigint-dig",
+ "num-traits",
+ "p3-baby-bear",
+ "p3-field",
+ "strum",
+]
+
+[[package]]
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
