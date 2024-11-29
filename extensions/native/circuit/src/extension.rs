@@ -7,7 +7,9 @@ use axvm_circuit::{
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
-    system::phantom::PhantomChip,
+    system::{
+        native_adapter::NativeAdapterChip, phantom::PhantomChip, public_values::PublicValuesChip,
+    },
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::*;
@@ -15,7 +17,6 @@ use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
-use native_adapter::NativeAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use program::DEFAULT_PC_STEP;
 use strum::IntoEnumIterator;
@@ -138,7 +139,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             memory_controller.clone(),
             execution_bus,
             program_bus,
-            DEFAULT_PC_STEP,
+            FriOpcode::default_offset(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,

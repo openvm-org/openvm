@@ -15,6 +15,7 @@ use axvm_instructions::{
     instruction::Instruction,
     FieldArithmeticOpcode,
     FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
+    UsizeOpcode,
 };
 use itertools::izip;
 

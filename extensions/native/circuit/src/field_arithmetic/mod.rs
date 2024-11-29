@@ -1,6 +1,7 @@
-use axvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-
-use super::adapters::native_adapter::{NativeAdapterAir, NativeAdapterChip};
+use axvm_circuit::{
+    arch::{VmAirWrapper, VmChipWrapper},
+    system::native_adapter::{NativeAdapterAir, NativeAdapterChip},
+};
 
 #[cfg(test)]
 #[cfg(test)]

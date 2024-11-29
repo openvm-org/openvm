@@ -21,12 +21,11 @@ use axvm_circuit::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
+        native_adapter::NativeReadRecord,
         program::ProgramBus,
     },
 };
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-
-use super::native_adapter::NativeReadRecord;
 
 #[derive(Debug)]
 pub struct BranchNativeAdapterChip<F: Field> {

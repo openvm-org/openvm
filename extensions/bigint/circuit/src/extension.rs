@@ -1,4 +1,10 @@
+use std::sync::Arc;
+
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChip, range_tuple::RangeTupleCheckerChip,
+    var_range::VariableRangeCheckerChip,
+};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::arch::{
     SystemConfig, VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
@@ -10,7 +16,7 @@ use axvm_rv32im_circuit::{
     Rv32HintStore, Rv32I, Rv32ImConfig, Rv32ImExecutor, Rv32ImPeriphery, Rv32M,
 };
 use derive_more::derive::From;
-use strum::IntoEnumIterator;
+use program::DEFAULT_PC_STEP;
 
 use crate::*;
 
@@ -62,7 +68,7 @@ impl<F: PrimeField32> VmGenericConfig<F> for Int256Rv32Config {
 pub struct Int256Rv32;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
-pub enum Keccak256Rv32Executor<F: PrimeField32> {
+pub enum Int256Rv32Executor<F: PrimeField32> {
     #[any_enum]
     Rv32(Rv32ImExecutor<F>),
     BaseAlu256(Rv32BaseAlu256Chip<F>),
@@ -73,7 +79,7 @@ pub enum Keccak256Rv32Executor<F: PrimeField32> {
     Shift256(Rv32Shift256Chip<F>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum)]
+#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Int256Rv32Periphery<F: PrimeField32> {
     #[any_enum]
     Rv32(Rv32ImPeriphery<F>),
@@ -96,104 +102,114 @@ impl<F: PrimeField32> VmExtension<F> for Int256Rv32 {
         let bitwise_lu_chip = Arc::clone(bitwise_lu_chip.first().unwrap());
 
         // TODO[yi]: Check that this is the correct range checker for int256
-        let range_checker_chip = builder.find_chip::<Arc<RangeTupleCheckerChip<2>>>();
-        let range_checker_chip = Arc::clone(range_checker.first().unwrap());
+        let range_checker_chip = builder.find_chip::<Arc<VariableRangeCheckerChip>>();
+        let range_checker_chip = Arc::clone(range_checker_chip.first().unwrap());
+
+        // TODO[yi]: Check that this is the correct range checker for int256
+        let range_tuple_chip = builder.find_chip::<Arc<RangeTupleCheckerChip<2>>>();
+        let range_tuple_chip = Arc::clone(range_tuple_chip.first().unwrap());
 
         let base_alu_chip = Rv32BaseAlu256Chip::new(
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
-            BaseAluCoreChip::new(bitwise_lu_chip, Rv32BaseAluOpcode::default_offset()),
-            memory_controller,
+            BaseAluCoreChip::new(
+                bitwise_lu_chip.clone(),
+                Rv32BaseAlu256Opcode::default_offset(),
+            ),
+            memory_controller.clone(),
         );
         inventory.add_executor(
             base_alu_chip,
-            Rv32BaseAluOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BaseAlu256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         let less_than_chip = Rv32LessThan256Chip::new(
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
-            LessThanCoreChip::new(bitwise_lu_chip, Rv32LessThanOpcode::default_offset()),
-            memory_controller,
+            LessThanCoreChip::new(
+                bitwise_lu_chip.clone(),
+                Rv32LessThan256Opcode::default_offset(),
+            ),
+            memory_controller.clone(),
         );
         inventory.add_executor(
             less_than_chip,
-            Rv32LessThanOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32LessThan256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         let branch_equal_chip = Rv32BranchEqual256Chip::new(
             Rv32HeapBranchAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
-            BranchEqualCoreChip::new(bitwise_lu_chip, DEFAULT_PC_STEP),
-            memory_controller,
+            BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::default_offset(), DEFAULT_PC_STEP),
+            memory_controller.clone(),
         );
         inventory.add_executor(
             branch_equal_chip,
-            Rv32BranchEqualOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BranchEqual256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         let branch_less_than_chip = Rv32BranchLessThan256Chip::new(
             Rv32HeapBranchAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
-            BranchLessThanCoreChip::new(bitwise_lu_chip, Rv32LessThanOpcode::default_offset()),
-            memory_controller,
+            BranchLessThanCoreChip::new(
+                bitwise_lu_chip.clone(),
+                Rv32LessThan256Opcode::default_offset(),
+            ),
+            memory_controller.clone(),
         );
         inventory.add_executor(
             branch_less_than_chip,
-            Rv32BranchLessThanOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BranchLessThan256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         let multiplication_chip = Rv32Multiplication256Chip::new(
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
-            MultiplicationCoreChip::new(
-                range_checker_chip,
-                Rv32MultiplicationOpcode::default_offset(),
-            ),
-            memory_controller,
+            MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::default_offset()),
+            memory_controller.clone(),
         );
         inventory.add_executor(
             multiplication_chip,
-            Rv32MultiplicationOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32Mul256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         let shift_chip = Rv32Shift256Chip::new(
             Rv32HeapAdapterChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
-                bitwise_lu_chip,
+                memory_controller.clone(),
+                bitwise_lu_chip.clone(),
             ),
             ShiftCoreChip::new(
-                bitwise_lu_chip,
+                bitwise_lu_chip.clone(),
                 range_checker_chip,
-                Rv32ShiftOpcode::default_offset(),
+                Rv32Shift256Opcode::default_offset(),
             ),
-            memory_controller,
+            memory_controller.clone(),
         );
         inventory.add_executor(
             shift_chip,
-            Rv32ShiftOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32Shift256Opcode::iter().map(|opcode| opcode.with_default_offset()),
         )?;
 
         Ok(inventory)

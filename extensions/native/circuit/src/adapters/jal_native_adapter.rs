@@ -21,12 +21,12 @@ use axvm_circuit::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
         },
+        native_adapter::NativeWriteRecord,
         program::ProgramBus,
     },
 };
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 
-use super::native_adapter::NativeWriteRecord;
 #[derive(Debug)]
 pub struct JalNativeAdapterChip<F: Field> {
     pub air: JalNativeAdapterAir,

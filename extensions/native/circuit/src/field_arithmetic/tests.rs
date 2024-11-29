@@ -11,15 +11,16 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
-use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use axvm_circuit::{
+    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
+    system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
+};
 use axvm_instructions::{instruction::Instruction, FieldArithmeticOpcode, UsizeOpcode};
 use rand::Rng;
 use strum::EnumCount;
 
 use super::{
-    super::adapters::native_adapter::{NativeAdapterChip, NativeAdapterCols},
-    core::FieldArithmeticCoreChip,
-    FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreCols,
+    core::FieldArithmeticCoreChip, FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreCols,
 };
 
 #[test]
