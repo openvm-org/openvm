@@ -10,6 +10,7 @@ ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
+ax-poseidon2-air = { workspace = true }
 axvm-circuit = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }

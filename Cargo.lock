@@ -775,6 +775,7 @@ version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
  "ax-circuit-primitives",
+ "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",

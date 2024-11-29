@@ -1,9 +1,11 @@
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
-        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension,
-        VmGenericConfig, VmInventory, VmInventoryBuilder, VmInventoryError,
+        vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
+        VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
+        VmInventoryError, POSEIDON2_DIRECT_BUS,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
@@ -67,7 +69,6 @@ pub enum NativeExecutor<F: PrimeField32> {
     Jal(KernelJalChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
-    PublicValues(PublicValuesChip<F>),
     Poseidon2(Poseidon2Chip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
     CastF(CastFChip<F>),
@@ -163,6 +164,23 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         inventory.add_executor(
             fri_reduced_opening_chip,
             FriOpcode::iter().map(|x| x.with_default_offset()),
+        )?;
+
+        let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
+            vm_poseidon2_config(),
+            builder
+                .system_config()
+                .max_constraint_degree
+                .min(SBOX_DEGREE),
+            execution_bus,
+            program_bus,
+            memory_controller.clone(),
+            POSEIDON2_DIRECT_BUS,
+            Poseidon2Opcode::default_offset(),
+        );
+        inventory.add_executor(
+            poseidon2_chip,
+            Poseidon2Opcode::iter().map(|x| x.with_default_offset()),
         )?;
 
         builder.add_phantom_sub_executor(
