@@ -1,5 +1,5 @@
 use ax_stark_sdk::config::baby_bear_poseidon2::default_perm;
-use axvm_circuit::system::program::util::execute_program;
+use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Array, Var, PERMUTATION_WIDTH},

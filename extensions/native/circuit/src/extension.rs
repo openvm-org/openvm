@@ -2,14 +2,12 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
-        SystemConfig, VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension,
+        VmGenericConfig, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
-    system::{
-        native_adapter::NativeAdapterChip, phantom::PhantomChip, public_values::PublicValuesChip,
-    },
+    system::{native_adapter::NativeAdapterChip, public_values::PublicValuesChip},
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::*;
@@ -38,11 +36,47 @@ impl Default for NativeConfig {
     }
 }
 
+impl NativeConfig {
+    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
+        Self {
+            system: SystemConfig::new(
+                poseidon2_max_constraint_degree,
+                MemoryConfig {
+                    max_access_adapter_n: 8,
+                    ..Default::default()
+                },
+                num_public_values,
+            )
+            .with_max_segment_len((1 << 24) - 100),
+            native: Default::default(),
+        }
+    }
+}
+
+impl<F: PrimeField32> VmGenericConfig<F> for NativeConfig {
+    type Executor = NativeExecutor<F>;
+    type Periphery = NativePeriphery<F>;
+
+    fn system(&self) -> &SystemConfig {
+        &self.system
+    }
+
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+        let base = SystemConfig::default().with_continuations();
+        let complex = base.create_chip_complex()?;
+        complex.extend(&self.native)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
+    #[any_enum]
+    System(SystemExecutor<F>),
     LoadStore(KernelLoadStoreChip<F, 1>),
     BranchEqual(KernelBranchEqChip<F>),
     Jal(KernelJalChip<F>),
@@ -56,7 +90,8 @@ pub enum NativeExecutor<F: PrimeField32> {
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
+    #[any_enum]
+    System(SystemPeriphery<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for Native {

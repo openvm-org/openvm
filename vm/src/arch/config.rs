@@ -134,6 +134,11 @@ impl SystemConfig {
         self
     }
 
+    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
+        self.max_segment_len = max_segment_len;
+        self
+    }
+
     pub fn with_metric_collection(mut self) -> Self {
         self.collect_metrics = true;
         self

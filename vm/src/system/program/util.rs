@@ -1,7 +1,7 @@
 use axvm_instructions::program::Program;
 use p3_baby_bear::BabyBear;
 
-use crate::arch::{ExecutorName, VmConfig, VmExecutor};
+use crate::arch::{VmConfig, VmExecutor};
 
 pub fn execute_program_with_config(
     config: VmConfig,
