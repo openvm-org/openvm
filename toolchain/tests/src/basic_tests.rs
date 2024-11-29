@@ -122,6 +122,8 @@ fn test_modular_runtime() -> Result<()> {
     Ok(())
 }
 
+// TODO[yi]: add back this test once we have support for modular extension
+/*
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
@@ -147,3 +149,5 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+
+*/

@@ -62,6 +62,8 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
+// TODO[yi]: add back this test once we have support for modular extension
+/*
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = VmConfig::rv32im()
@@ -74,6 +76,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     executor.execute(elf, vec![])?;
     Ok(())
 }
+    */
 
 #[test]
 fn test_terminate_prove() -> Result<()> {
