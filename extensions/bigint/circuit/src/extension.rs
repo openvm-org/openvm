@@ -4,7 +4,6 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-    var_range::VariableRangeCheckerChip,
 };
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
