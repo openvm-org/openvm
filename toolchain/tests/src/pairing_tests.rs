@@ -7,8 +7,11 @@ use ax_ecc_execution::axvm_ecc::{
     AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::arch::{new_vm, VmConfig, VmExecutor};
-use axvm_pairing_circuit::{PairingCurve, Rv32PairingConfig};
+use axvm_circuit::arch::{new_vm, SystemConfig};
+use axvm_ecc_circuit::WeierstrassExtension;
+use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
+use axvm_mod_circuit::{Fp2Extension, ModularExtension};
+use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
@@ -16,6 +19,29 @@ use rand::SeedableRng;
 use crate::utils::build_example_program;
 
 type F = BabyBear;
+
+// TODO: this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
+pub fn get_testing_config() -> Rv32PairingConfig {
+    let primes = [
+        SECP256K1.MODULUS.clone(),
+        SECP256K1.ORDER.clone(),
+        BLS12381.MODULUS.clone(),
+        BN254.MODULUS.clone(),
+    ];
+    Rv32PairingConfig {
+        system: SystemConfig::default().with_continuations(),
+        base: Default::default(),
+        mul: Default::default(),
+        io: Default::default(),
+        modular: ModularExtension::new(primes.to_vec()),
+        fp2: Fp2Extension::new(primes.to_vec()),
+        weierstrass: WeierstrassExtension::new(vec![
+            PairingCurve::Bn254.curve_config(),
+            PairingCurve::Bls12_381.curve_config(),
+        ]),
+        pairing: PairingExtension::new(vec![PairingCurve::Bn254, PairingCurve::Bls12_381]),
+    }
+}
 
 mod bn254 {
     use std::iter;
@@ -31,15 +57,13 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
-    use axvm_ecc_constants::BN254;
 
     use super::*;
 
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im()
         //         .add_pairing_support(vec![PairingCurve::Bn254])
@@ -67,9 +91,7 @@ mod bn254 {
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -112,8 +134,7 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
         // let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
@@ -159,22 +180,7 @@ mod bn254 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
-
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im()
-        //         .add_pairing_support(vec![PairingCurve::Bn254])
-        //         .add_ecc_support(vec![EcCurve::Bn254])
-        //         .add_modular_support(enabled_moduli.clone())
-        //         .add_complex_ext_support(enabled_moduli),
-        // );
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -223,21 +229,8 @@ mod bn254 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let config = VmConfig::rv32im()
-        //     .add_pairing_support(vec![PairingCurve::Bn254])
-        //     .add_ecc_support(vec![EcCurve::Bn254])
-        //     .add_modular_support(enabled_moduli.clone())
-        //     .add_complex_ext_support(enabled_moduli);
-        // let executor = VmExecutor::<F>::new(config.clone());
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -288,7 +281,6 @@ mod bls12_381 {
         curves::bls12_381::Bls12_381,
     };
     use axvm_ecc::algebra::IntMod;
-    use axvm_ecc_constants::BLS12381;
     use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
@@ -296,8 +288,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im()
         //         .add_pairing_support(vec![PairingCurve::Bls12_381])
@@ -325,8 +316,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
         // );
@@ -373,8 +363,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
         // let executor = VmExecutor::<F>::new(
         //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
         // );
@@ -422,21 +411,8 @@ mod bls12_381 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im()
-        //         .add_pairing_support(vec![PairingCurve::Bls12_381])
-        //         .add_ecc_support(vec![EcCurve::Bls12_381])
-        //         .add_modular_support(enabled_moduli.clone())
-        //         .add_complex_ext_support(enabled_moduli),
-        // );
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -491,20 +467,8 @@ mod bls12_381 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let config = VmConfig::rv32im()
-        //     .add_pairing_support(vec![PairingCurve::Bls12_381])
-        //     .add_ecc_support(vec![EcCurve::Bls12_381])
-        //     .add_modular_support(enabled_moduli.clone())
-        //     .add_complex_ext_support(enabled_moduli);
-        // let executor = VmExecutor::<F>::new(config.clone());
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -547,21 +511,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program("final_exp_hint")?;
-        // FIXME:
-        let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
-
-        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
-        let executor = new_vm::VmExecutor::<F, _>::new(config);
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im()
-        //         .add_ecc_support(vec![EcCurve::Bls12_381])
-        //         .add_modular_support(enabled_moduli.clone())
-        //         .add_complex_ext_support(enabled_moduli),
-        // );
+        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();

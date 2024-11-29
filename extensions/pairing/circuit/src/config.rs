@@ -24,6 +24,8 @@ pub struct Rv32PairingConfig {
     #[extension]
     pub modular: ModularExtension,
     #[extension]
+    pub fp2: Fp2Extension,
+    #[extension]
     pub weierstrass: WeierstrassExtension,
     #[extension]
     pub pairing: PairingExtension,
@@ -41,7 +43,8 @@ impl Rv32PairingConfig {
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
-            modular: ModularExtension::new(primes),
+            modular: ModularExtension::new(primes.to_vec()),
+            fp2: Fp2Extension::new(primes.to_vec()),
             weierstrass: WeierstrassExtension::new(
                 curves.iter().map(|c| c.curve_config()).collect(),
             ),

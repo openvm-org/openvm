@@ -922,6 +922,7 @@ dependencies = [
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
+ "eyre",
  "halo2curves-axiom 0.7.0",
  "itertools 0.13.0",
  "num-bigint-dig",

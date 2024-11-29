@@ -9,6 +9,8 @@ ax-circuit-derive = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
+axvm-ecc = { workspace = true }
+ax-ecc-execution = { workspace = true }
 axvm-ecc-constants = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
@@ -27,6 +29,7 @@ derive-new = { workspace = true }
 once_cell = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
+eyre = { workspace = true }
 
 [dev-dependencies]
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
