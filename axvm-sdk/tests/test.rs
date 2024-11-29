@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fs, sync::Once};
+use std::{borrow::Borrow, fs};
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, prover::types::Proof},
@@ -34,28 +34,26 @@ type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
 type F = BabyBear;
 
-static INIT: Once = Once::new();
 const AGG_PK_FILE: &str = "/tmp/axvm-sdk-it/agg_pk.json";
 const NUM_PUB_VALUES: usize = 16;
 
+#[test]
 fn setup_agg_pk() {
-    INIT.call_once(|| {
-        let config = AggConfig {
-            max_num_user_public_values: NUM_PUB_VALUES,
-            leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
-            internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
-            root_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
-            compiler_options: CompilerOptions {
-                enable_cycle_tracker: true,
-                compile_prints: true,
-                ..Default::default()
-            },
-        };
-        let (pk, dummy) = AggProvingKey::dummy_proof_and_keygen(config.clone(), None);
-        let json = serde_json::to_string(&(config, pk, dummy)).unwrap();
-        fs::write(AGG_PK_FILE, json).expect("Failed to write agg_pk.json");
-        println!("Aggregation proving key written to {}", AGG_PK_FILE);
-    });
+    let config = AggConfig {
+        max_num_user_public_values: NUM_PUB_VALUES,
+        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
+        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
+        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
+        compiler_options: CompilerOptions {
+            enable_cycle_tracker: true,
+            compile_prints: true,
+            ..Default::default()
+        },
+    };
+    let (pk, dummy) = AggProvingKey::dummy_proof_and_keygen(config.clone(), None);
+    let json = serde_json::to_string(&(config, pk, dummy)).unwrap();
+    fs::write(AGG_PK_FILE, json).expect("Failed to write agg_pk.json");
+    println!("Aggregation proving key written to {}", AGG_PK_FILE);
 }
 
 fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<SC>) {

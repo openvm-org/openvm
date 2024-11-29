@@ -66,8 +66,14 @@ jobs:
         run: |
           bash ../lib/recursion/trusted_setup_s3.sh
 
+      - name: Set up downloadable aggregation proving key
+        working-directory: axvm-sdk
+        run: |
+          export RUST_BACKTRACE=1
+          cargo test --cargo-profile=fast --test setup_agg_pk --features parallel,static-verifier
+
       - name: Run axvm-sdk crate tests
         working-directory: axvm-sdk
         run: |
           export RUST_BACKTRACE=1
-          cargo nextest run --cargo-profile=fast  --features parallel,static-verifier
+          cargo nextest run --cargo-profile=fast --features parallel,static-verifier --exclude setup_agg_pk
