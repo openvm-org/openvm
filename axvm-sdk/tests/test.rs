@@ -61,6 +61,7 @@ fn setup_agg_pk() {
 
 fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<SC>) {
     let json = fs::read_to_string(AGG_PK_FILE).expect("Failed to read agg_pk.json");
+    println!("{}", json);
     let (agg_config, agg_pk, dummy) = serde_json::from_str(&json).expect("Failed to deserialize");
 
     let program = {
