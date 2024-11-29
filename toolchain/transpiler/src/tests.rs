@@ -14,8 +14,9 @@ use axvm_circuit::{
     utils::new_air_test_with_min_segments,
 };
 use axvm_mod_circuit::{
-    modular_chip::SECP256K1_COORD_PRIME, ModularExtension, ModularExtensionExecutor,
-    ModularExtensionPeriphery,
+    modular_chip::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
+    ModularExtensionExecutor, ModularExtensionPeriphery,
 };
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::{
@@ -78,7 +79,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 }
 
 #[derive(Clone, Debug, VmGenericConfig)]
-pub struct Rv32ModularInt256Config {
+pub struct Rv32ModularFp2Int256Config {
     #[system]
     pub system: SystemConfig,
     #[extension]
@@ -90,17 +91,20 @@ pub struct Rv32ModularInt256Config {
     #[extension]
     pub modular: ModularExtension,
     #[extension]
+    pub fp2: Fp2Extension,
+    #[extension]
     pub int256: Int256,
 }
 
-impl Rv32ModularInt256Config {
-    pub fn new(moduli: Vec<BigUint>) -> Self {
+impl Rv32ModularFp2Int256Config {
+    pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
-            modular: ModularExtension::new(moduli),
+            modular: ModularExtension::new(modular_moduli),
+            fp2: Fp2Extension::new(fp2_moduli),
             int256: Default::default(),
         }
     }
@@ -108,7 +112,13 @@ impl Rv32ModularInt256Config {
 
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
-    let config = Rv32ModularInt256Config::new(vec![SECP256K1_COORD_PRIME.clone()]);
+    let config = Rv32ModularFp2Int256Config::new(
+        vec![
+            SECP256K1_COORD_PRIME.clone(),
+            SECP256K1_SCALAR_PRIME.clone(),
+        ],
+        vec![SECP256K1_COORD_PRIME.clone()],
+    );
     let elf = get_elf(elf_path)?;
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
