@@ -5,7 +5,7 @@ use axvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
         VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
-        VmInventoryError, POSEIDON2_DIRECT_BUS,
+        VmInventoryError,
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
@@ -174,7 +174,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             memory_controller.clone(),
-            POSEIDON2_DIRECT_BUS,
+            builder.new_bus_idx(),
             Poseidon2Opcode::default_offset(),
         );
         inventory.add_executor(
