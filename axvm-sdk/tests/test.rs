@@ -1,5 +1,4 @@
-#![recursion_limit = "1024"]
-use std::{borrow::Borrow, fs, path::Path};
+use std::borrow::Borrow;
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, prover::types::Proof},
@@ -35,12 +34,11 @@ type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
 type F = BabyBear;
 
-const AGG_PK_FILE: &str = "/tmp/axvm-sdk-it/agg_pk.json";
 const NUM_PUB_VALUES: usize = 16;
 
-#[test]
-fn setup_agg_pk() {
-    let config = AggConfig {
+// TODO: keygen agg_pk once for all IT tests and store in a file
+fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<SC>) {
+    let agg_config = AggConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
         internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
@@ -51,18 +49,6 @@ fn setup_agg_pk() {
             ..Default::default()
         },
     };
-    let (pk, dummy) = AggProvingKey::dummy_proof_and_keygen(config.clone(), None);
-    let json = serde_json::to_string(&(config, pk, dummy)).unwrap();
-    let path = Path::new(AGG_PK_FILE).parent().unwrap();
-    fs::create_dir_all(path).expect("Failed to create directory");
-    fs::write(AGG_PK_FILE, json).expect("Failed to write agg_pk.json");
-    println!("Aggregation proving key written to {}", AGG_PK_FILE);
-}
-
-fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<SC>) {
-    let json = fs::read_to_string(AGG_PK_FILE).expect("Failed to read agg_pk.json");
-    println!("{}", json);
-    let (agg_config, agg_pk, dummy) = serde_json::from_str(&json).expect("Failed to deserialize");
 
     let program = {
         let n = 200;
@@ -80,6 +66,7 @@ fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<
     };
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
+    let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config.clone(), None);
     let app_committed_exe = commit_app_exe(app_config, program);
     let leaf_committed_exe = commit_leaf_exe(agg_config, &app_pk);
     (
@@ -270,6 +257,35 @@ fn test_e2e_proof_generation() {
         root_pvs.leaf_verifier_commit,
         app_exe_commit.leaf_vm_verifier_commit
     );
+
+    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &e2e_prover.agg_pk.root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
+}
+
+#[test]
+fn test_e2e_app_log_blowup_1() {
+    let app_config = AppConfig {
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(1),
+        app_vm_config: VmConfig {
+            max_segment_len: 200,
+            continuation_enabled: true,
+            num_public_values: 16,
+            ..Default::default()
+        }
+        .add_executor(ExecutorName::BranchEqual)
+        .add_executor(ExecutorName::Jal)
+        .add_executor(ExecutorName::LoadStore)
+        .add_executor(ExecutorName::FieldArithmetic),
+    };
+
+    #[allow(unused_variables)]
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
+    #[allow(unused_variables)]
+    let root_proof = e2e_prover.generate_proof(vec![]);
 
     #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(
