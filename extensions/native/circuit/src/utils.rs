@@ -8,7 +8,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: Vec<Vec<BabyBea
     let system_config = SystemConfig::default()
         .with_public_values(4)
         .with_max_segment_len((1 << 25) - 100);
-    let config = NativeConfig::new(system_config, Native::default());
+    let config = NativeConfig::new(system_config, Native);
     let executor = VmExecutor::<BabyBear, NativeConfig>::new(config);
 
     executor.execute(program, input_stream).unwrap();

@@ -69,7 +69,7 @@ pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
 
 impl NativeBranchEqualOpcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        BranchEqualOpcode::iter().map(|x| Self(x))
+        BranchEqualOpcode::iter().map(Self)
     }
 }
 
@@ -332,7 +332,7 @@ pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
 
 impl Rv32BaseAlu256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        BaseAluOpcode::iter().map(|x| Self(x))
+        BaseAluOpcode::iter().map(Self)
     }
 }
 
@@ -342,7 +342,7 @@ pub struct Rv32Shift256Opcode(pub ShiftOpcode);
 
 impl Rv32Shift256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        ShiftOpcode::iter().map(|x| Self(x))
+        ShiftOpcode::iter().map(Self)
     }
 }
 
@@ -352,7 +352,7 @@ pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
 
 impl Rv32LessThan256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        LessThanOpcode::iter().map(|x| Self(x))
+        LessThanOpcode::iter().map(Self)
     }
 }
 
@@ -362,7 +362,7 @@ pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
 
 impl Rv32BranchEqual256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        BranchEqualOpcode::iter().map(|x| Self(x))
+        BranchEqualOpcode::iter().map(Self)
     }
 }
 
@@ -372,7 +372,7 @@ pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
 
 impl Rv32BranchLessThan256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        BranchLessThanOpcode::iter().map(|x| Self(x))
+        BranchLessThanOpcode::iter().map(Self)
     }
 }
 
@@ -382,7 +382,7 @@ pub struct Rv32Mul256Opcode(pub MulOpcode);
 
 impl Rv32Mul256Opcode {
     pub fn iter() -> impl Iterator<Item = Self> {
-        MulOpcode::iter().map(|x| Self(x))
+        MulOpcode::iter().map(Self)
     }
 }
 
