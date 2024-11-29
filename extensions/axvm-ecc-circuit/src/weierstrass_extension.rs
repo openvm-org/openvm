@@ -20,6 +20,7 @@ use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};
 
+#[derive(Clone, Debug)]
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
     pub modulus: BigUint,
@@ -27,12 +28,13 @@ pub struct CurveConfig {
     pub a: BigUint,
 }
 
+#[derive(Clone, Debug)]
 pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
-pub enum WeierstrassExecutor<F: PrimeField32> {
+pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
     EcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
@@ -42,14 +44,14 @@ pub enum WeierstrassExecutor<F: PrimeField32> {
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum WeierstrassPeriphery<F: PrimeField32> {
+pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     Phantom(PhantomChip<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
-    type Executor = WeierstrassExecutor<F>;
-    type Periphery = WeierstrassPeriphery<F>;
+    type Executor = WeierstrassExtensionExecutor<F>;
+    type Periphery = WeierstrassExtensionPeriphery<F>;
 
     fn build(
         &self,
@@ -102,7 +104,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     class_offset,
                 );
                 inventory.add_executor(
-                    WeierstrassExecutor::EcAddNeRv32_32(add_ne_chip),
+                    WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
                     ec_add_ne_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let double_chip = EcDoubleChip::new(
@@ -118,7 +120,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     curve.a.clone(),
                 );
                 inventory.add_executor(
-                    WeierstrassExecutor::EcDoubleRv32_32(double_chip),
+                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
                     ec_double_opcodes.clone().map(|x| x + class_offset),
                 )?;
             } else if bytes <= 48 {
@@ -134,7 +136,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     class_offset,
                 );
                 inventory.add_executor(
-                    WeierstrassExecutor::EcAddNeRv32_48(add_ne_chip),
+                    WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let double_chip = EcDoubleChip::new(
@@ -150,7 +152,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     curve.a.clone(),
                 );
                 inventory.add_executor(
-                    WeierstrassExecutor::EcDoubleRv32_48(double_chip),
+                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
                     ec_double_opcodes.clone().map(|x| x + class_offset),
                 )?;
             } else {

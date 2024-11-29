@@ -29,7 +29,7 @@ pub struct ModularExtension {
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
-pub enum ModularExecutor<F: PrimeField32> {
+pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
     ModularMulDivRv32_32(ModularMulDivChip<F, 1, 32>),
@@ -41,15 +41,15 @@ pub enum ModularExecutor<F: PrimeField32> {
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum ModularPeriphery<F: PrimeField32> {
+pub enum ModularExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(Arc<BitwiseOperationLookupChip<8>>),
     // We put this only to get the <F> generic to work
     Phantom(PhantomChip<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for ModularExtension {
-    type Executor = ModularExecutor<F>;
-    type Periphery = ModularPeriphery<F>;
+    type Executor = ModularExtensionExecutor<F>;
+    type Periphery = ModularExtensionPeriphery<F>;
 
     fn build(
         &self,
@@ -119,7 +119,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularAddSubRv32_32(addsub_chip),
+                    ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
                     addsub_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
@@ -132,7 +132,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularMulDivRv32_32(muldiv_chip),
+                    ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
                     muldiv_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
@@ -150,7 +150,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularIsEqualRv32_32(isequal_chip),
+                    ModularExtensionExecutor::ModularIsEqualRv32_32(isequal_chip),
                     iseq_opcodes.clone().map(|x| x + class_offset),
                 )?;
             } else if bytes <= 48 {
@@ -164,7 +164,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularAddSubRv32_48(addsub_chip),
+                    ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
                     addsub_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularMulDivRv32_48(muldiv_chip),
+                    ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
                     muldiv_opcodes.clone().map(|x| x + class_offset),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
@@ -195,7 +195,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     memory_controller.clone(),
                 );
                 inventory.add_executor(
-                    ModularExecutor::ModularIsEqualRv32_48(isequal_chip),
+                    ModularExtensionExecutor::ModularIsEqualRv32_48(isequal_chip),
                     iseq_opcodes.clone().map(|x| x + class_offset),
                 )?;
             } else {

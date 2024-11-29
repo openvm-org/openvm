@@ -1,36 +1,27 @@
-use std::sync::Arc;
-
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+use axvm_circuit::arch::{
+    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
 };
-use axvm_circuit::{
-    arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
-    },
-    extensions::{
-        rv32_io::{Rv32HintStore, Rv32HintStoreExecutor},
-        rv32im::{Rv32I, Rv32M},
-    },
-    system::phantom::PhantomChip,
-};
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::*;
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_mod_circuit::*;
+use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 use p3_field::PrimeField32;
-use program::DEFAULT_PC_STEP;
-use strum::IntoEnumIterator;
 
-use super::WeierstrassExtension;
+use super::*;
 
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Rv32WeierstrassConfig {
+    #[system]
     pub system: SystemConfig,
+    #[extension]
     pub base: Rv32I,
+    #[extension]
     pub mul: Rv32M,
-    pub io: Rv32HintStore,
-
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
     pub modular: ModularExtension,
+    #[extension]
     pub weierstrass: WeierstrassExtension,
 }

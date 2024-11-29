@@ -386,6 +386,9 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-mod-circuit",
+ "axvm-rv32im-circuit",
+ "derive-new",
  "derive_more 1.0.0",
  "num-bigint-dig",
  "num-traits",
@@ -434,35 +437,6 @@ dependencies = [
  "p3-util",
  "rand 0.8.5",
  "sha3",
- "tracing",
-]
-
-[[package]]
-name = "ax-mod-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-constants",
- "axvm-instructions",
- "derive_more 1.0.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-field",
- "p3-matrix",
- "rand 0.8.5",
- "strum",
  "tracing",
 ]
 
@@ -811,6 +785,35 @@ name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
  "syn 2.0.87",
+]
+
+[[package]]
+name = "axvm-mod-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "rand 0.8.5",
+ "strum",
+ "tracing",
 ]
 
 [[package]]
