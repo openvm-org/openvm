@@ -66,7 +66,7 @@ impl<
         assert!(R <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
         Self {
             air: NativeVecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),

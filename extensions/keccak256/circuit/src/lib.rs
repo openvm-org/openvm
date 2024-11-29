@@ -105,7 +105,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
     ) -> Self {
-        let ptr_max_bits = memory_controller.borrow().mem_config.pointer_max_bits;
+        let ptr_max_bits = memory_controller.borrow().mem_config().pointer_max_bits;
         let memory_bridge = memory_controller.borrow().memory_bridge();
         Self {
             air: KeccakVmAir::new(

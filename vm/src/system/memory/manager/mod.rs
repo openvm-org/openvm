@@ -100,7 +100,7 @@ pub struct MemoryController<F> {
     pub interface_chip: MemoryInterface<F>,
 
     #[getset(get = "pub")]
-    pub mem_config: MemoryConfig,
+    pub(crate) mem_config: MemoryConfig,
     pub range_checker: Arc<VariableRangeCheckerChip>,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
