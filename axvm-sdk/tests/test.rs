@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fs};
+use std::{borrow::Borrow, fs, path::Path};
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, prover::types::Proof},
@@ -52,6 +52,8 @@ fn setup_agg_pk() {
     };
     let (pk, dummy) = AggProvingKey::dummy_proof_and_keygen(config.clone(), None);
     let json = serde_json::to_string(&(config, pk, dummy)).unwrap();
+    let path = Path::new(AGG_PK_FILE).parent().unwrap();
+    fs::create_dir_all(path).expect("Failed to create directory");
     fs::write(AGG_PK_FILE, json).expect("Failed to write agg_pk.json");
     println!("Aggregation proving key written to {}", AGG_PK_FILE);
 }
