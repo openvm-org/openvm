@@ -15,10 +15,14 @@ axvm::moduli_setup! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
+axvm::moduli_define! {
+    "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+    "1000000000000000003",
+    "0x1fffffffffffffff",
+}
+
 pub fn main() {
-    setup_bls12381();
-    setup_Mod1e18();
-    setup_Mersenne61();
+    setup_all_moduli();
     let x = bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
