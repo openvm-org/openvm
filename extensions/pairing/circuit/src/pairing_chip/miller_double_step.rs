@@ -2,19 +2,15 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr},
-    field_extension::Fp2,
-};
-use axvm_circuit_derive::InstructionExecutor;
-use p3_field::PrimeField32;
-
-use crate::{
+use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
+use axvm_circuit::{
     arch::{instructions::PairingOpcode, VmChipWrapper},
-    intrinsics::field_expression::FieldExpressionCoreChip,
     rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
+use axvm_circuit_derive::InstructionExecutor;
+use axvm_mod_circuit::Fp2;
+use p3_field::PrimeField32;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
@@ -94,7 +90,15 @@ mod tests {
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
     use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
-    use ax_ecc_primitives::test_utils::{bls12381_fq_to_biguint, bn254_fq_to_biguint};
+    use ax_mod_circuit_builder::test_utils::{bls12381_fq_to_biguint, bn254_fq_to_biguint};
+    use axvm_circuit::{
+        arch::{
+            instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
+            BITWISE_OP_LOOKUP_BUS,
+        },
+        rv32im::adapters::Rv32VecHeapAdapterChip,
+        utils::{biguint_to_limbs, rv32_write_heap_default},
+    };
     use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -103,15 +107,6 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
-    use crate::{
-        arch::{
-            instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        intrinsics::field_expression::FieldExpressionCoreChip,
-        rv32im::adapters::Rv32VecHeapAdapterChip,
-        utils::{biguint_to_limbs, rv32_write_heap_default},
-    };
 
     type F = BabyBear;
 

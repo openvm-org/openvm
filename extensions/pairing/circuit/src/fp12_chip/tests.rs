@@ -3,9 +3,14 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_primitives::{
-    field_expression::{ExprBuilderConfig, FieldExpr},
+use ax_mod_circuit_builder::{
     test_utils::{bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec},
+    ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
+};
+use axvm_circuit::{
+    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    utils::{biguint_to_limbs, rv32_write_heap_default},
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{
@@ -16,12 +21,6 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
-use crate::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
-    intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
-};
 
 const BN254_NUM_LIMBS: usize = 32;
 const BN254_LIMB_BITS: usize = 8;

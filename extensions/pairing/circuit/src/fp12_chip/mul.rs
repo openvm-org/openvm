@@ -2,20 +2,16 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr},
-    field_extension::Fp12,
+use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
+use axvm_circuit::{
+    arch::{instructions::Fp12Opcode, VmChipWrapper},
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
 use p3_field::PrimeField32;
 
-use crate::{
-    arch::{instructions::Fp12Opcode, VmChipWrapper},
-    intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    system::memory::MemoryControllerRef,
-};
-
+use crate::Fp12;
 // Input: Fp12 * 2
 // Output: Fp12
 #[derive(Chip, ChipUsageGetter, InstructionExecutor)]
@@ -75,9 +71,13 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_primitives::{
-        field_expression::ExprBuilderConfig,
+    use ax_mod_circuit_builder::{
         test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec},
+        ExprBuilderConfig,
+    };
+    use axvm_circuit::{
+        arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        utils::{biguint_to_limbs, rv32_write_heap_default_with_increment},
     };
     use axvm_ecc::algebra::field::FieldExtension;
     use axvm_ecc_constants::BN254;
@@ -89,10 +89,6 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
-    use crate::{
-        arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        utils::{biguint_to_limbs, rv32_write_heap_default_with_increment},
-    };
 
     const LIMB_BITS: usize = 8;
     type F = BabyBear;

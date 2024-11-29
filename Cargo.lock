@@ -850,6 +850,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-pairing-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-execution",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc",
+ "axvm-ecc-circuit",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "axvm-mod-circuit",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-baby-bear",
+ "p3-field",
+ "rand 0.8.5",
+ "strum",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [

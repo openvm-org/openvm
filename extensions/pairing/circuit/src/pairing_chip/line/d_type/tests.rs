@@ -4,9 +4,14 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_ecc_execution::curves::bn254::{tangent_line_013, Bn254};
-use ax_ecc_primitives::{
-    field_expression::ExprBuilderConfig,
+use ax_mod_circuit_builder::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
+    ExprBuilderConfig,
+};
+use axvm_circuit::{
+    arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
+    utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
 };
 use axvm_ecc::{
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
@@ -22,12 +27,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::{
-    arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    intrinsics::ecc::pairing::{EcLineMul013By013Chip, EcLineMulBy01234Chip, EvaluateLineChip},
-    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
-    utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
-};
+use super::{super::EvaluateLineChip, *};
 
 type F = BabyBear;
 const NUM_LIMBS: usize = 32;

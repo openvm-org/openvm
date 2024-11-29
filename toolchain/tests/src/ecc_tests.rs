@@ -54,11 +54,6 @@ fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1.clone()]);
     let executor = new_vm::VmExecutor::<F, _>::new(config);
-    // let executor = VmExecutor::<F>::new(
-    //     VmConfig::rv32im()
-    //         .add_canonical_modulus()
-    //         .add_canonical_ec_curves(),
-    // );
     executor.execute(elf, vec![])?;
     Ok(())
 }

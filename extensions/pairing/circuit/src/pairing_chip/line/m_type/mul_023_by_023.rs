@@ -2,18 +2,15 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_ecc_primitives::{
-    field_expression::{ExprBuilder, ExprBuilderConfig, FieldExpr},
-    field_extension::Fp2,
+use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
+use axvm_circuit::{
+    arch::{instructions::PairingOpcode, VmChipWrapper},
+    rv32im::adapters::Rv32VecHeapAdapterChip,
+    system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_instructions::PairingOpcode;
+use axvm_mod_circuit::Fp2;
 use p3_field::PrimeField32;
-
-use crate::{
-    arch::VmChipWrapper, intrinsics::field_expression::FieldExpressionCoreChip,
-    rv32im::adapters::Rv32VecHeapAdapterChip, system::memory::MemoryControllerRef,
-};
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements

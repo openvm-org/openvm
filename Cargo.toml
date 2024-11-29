@@ -36,6 +36,7 @@ members = [
     "extensions/rv32im/circuit",
     "extensions/algebra/circuit",
     "extensions/ecc/circuit",
+    "extensions/pairing/circuit",
 ]
 resolver = "2"
 
