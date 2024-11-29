@@ -7,9 +7,11 @@ use axvm_circuit::{
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
-    system::{native_adapter::NativeAdapterChip, public_values::PublicValuesChip},
+    system::{
+        native_adapter::NativeAdapterChip, phantom::PhantomChip, public_values::PublicValuesChip,
+    },
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_instructions::*;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
@@ -21,9 +23,11 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
 pub struct NativeConfig {
+    #[system]
     pub system: SystemConfig,
+    #[extension]
     pub native: Native,
 }
 
@@ -53,30 +57,11 @@ impl NativeConfig {
     }
 }
 
-impl<F: PrimeField32> VmGenericConfig<F> for NativeConfig {
-    type Executor = NativeExecutor<F>;
-    type Periphery = NativePeriphery<F>;
-
-    fn system(&self) -> &SystemConfig {
-        &self.system
-    }
-
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let base = SystemConfig::default().with_continuations();
-        let complex = base.create_chip_complex()?;
-        complex.extend(&self.native)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
-    #[any_enum]
-    System(SystemExecutor<F>),
     LoadStore(KernelLoadStoreChip<F, 1>),
     BranchEqual(KernelBranchEqChip<F>),
     Jal(KernelJalChip<F>),
@@ -90,8 +75,7 @@ pub enum NativeExecutor<F: PrimeField32> {
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
-    #[any_enum]
-    System(SystemPeriphery<F>),
+    Phantom(PhantomChip<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for Native {
