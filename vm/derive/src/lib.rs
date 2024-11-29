@@ -235,7 +235,8 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             for &e in extensions.iter() {
                 let (field_name, field_name_upper) =
                     gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
-                // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: https://github.com/rust-lang/rust/issues/85576
+                // TRACKING ISSUE:
+                // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
                 let mut executor_name = Ident::new(
                     &format!("{}Executor", e.ty.to_token_stream()),
                     Span::call_site().into(),
@@ -302,8 +303,6 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                 });
             }
 
-            // Tracking Issue: we should be able to get the associated types from the VmExtension trait, but currently
-            // cannot because of a bug in Rust itself: <https://github.com/rust-lang/rust/issues/85576>
             let executor_type = Ident::new(&format!("{}Executor", name), name.span());
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
             TokenStream::from(quote! {
