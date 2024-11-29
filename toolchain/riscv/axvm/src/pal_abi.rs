@@ -4,22 +4,13 @@
 /// This will be removed once a dedicated rust toolchain is used because axVM does not handle system
 /// operations in the same way: there is no operating system and even the standard library should be
 /// directly handled with intrinsics.
-use axvm_platform::{
-    constants::{Custom0Funct3, PhantomImm, CUSTOM_0},
-    memory::sys_alloc_aligned,
-    rust_rt::terminate,
-    WORD_SIZE,
-};
+use axvm_platform::{memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
 
 use crate::intrinsics::raw_print_str_from_bytes;
 
-pub const DIGEST_WORDS: usize = 8;
-// Limit syscall buffers so that the Executor doesn't get into an infinite
-// split situation.
-pub const MAX_BUF_BYTES: usize = 4 * 1024;
-pub const MAX_BUF_WORDS: usize = MAX_BUF_BYTES / WORD_SIZE;
+const DIGEST_WORDS: usize = 8;
 
-mod exit_code {
+pub mod exit_code {
     pub const SUCCESS: u8 = 0;
     pub const PANIC: u8 = 1;
     // Temporarily use 4 to detect if halt is called.
@@ -40,6 +31,7 @@ pub extern "C" fn sys_halt(_user_exit: u8, _out_state: *const [u32; DIGEST_WORDS
     unreachable!()
 }
 
+/// Not used
 #[no_mangle]
 pub extern "C" fn sys_output(_output_id: u32, _output_value: u32) {
     unimplemented!()
@@ -100,6 +92,7 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
     raw_print_str_from_bytes(msg_ptr, len);
 }
 
+/// Cycle count
 #[no_mangle]
 pub extern "C" fn sys_cycle_count() -> u64 {
     todo!()
@@ -215,6 +208,7 @@ pub unsafe extern "C" fn sys_argv(
     todo!()
 }
 
+/// Deprecated, use `sys_alloc_aligned` instead.
 #[no_mangle]
 #[deprecated]
 pub extern "C" fn sys_alloc_words(nwords: usize) -> *mut u32 {

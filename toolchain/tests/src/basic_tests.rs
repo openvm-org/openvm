@@ -10,7 +10,7 @@ use eyre::Result;
 use p3_baby_bear::BabyBear;
 use test_case::test_case;
 
-use crate::utils::build_example_program;
+use crate::utils::{build_example_program, build_example_program_with_features};
 
 type F = BabyBear;
 
@@ -26,6 +26,15 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test_case("collatz", 1)]
 fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
+    let config = Rv32ImConfig::default();
+    new_air_test_with_min_segments(config, elf, vec![], min_segments);
+    Ok(())
+}
+
+// #[test_case("fibonacci", 1)]
+#[test_case("collatz", 1)]
+fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    let elf = build_example_program_with_features(example_name, ["std"])?;
     let config = Rv32ImConfig::default();
     new_air_test_with_min_segments(config, elf, vec![], min_segments);
     Ok(())
