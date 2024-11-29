@@ -14,7 +14,7 @@ use crate::{
     SC,
 };
 
-pub fn commit_app_exe(
+pub fn generate_app_committed_exe(
     app_config: AppConfig,
     app_exe: impl Into<AxVmExe<Val<SC>>>,
 ) -> Arc<AxVmCommittedExe<SC>> {
@@ -24,7 +24,10 @@ pub fn commit_app_exe(
     Arc::new(AxVmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
 
-pub fn commit_leaf_exe(agg_config: AggConfig, app_pk: &AppProvingKey) -> Arc<AxVmCommittedExe<SC>> {
+pub fn generate_leaf_committed_exe(
+    agg_config: AggConfig,
+    app_pk: &AppProvingKey,
+) -> Arc<AxVmCommittedExe<SC>> {
     let app_vm_vk = app_pk.app_vm_pk.vm_pk.get_vk();
     let leaf_engine = BabyBearPoseidon2Engine::new(agg_config.leaf_fri_params);
     let leaf_program = LeafVmVerifierConfig {

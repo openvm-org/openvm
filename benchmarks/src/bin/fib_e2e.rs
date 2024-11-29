@@ -9,7 +9,7 @@ use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
 use axvm_recursion::witness::Witnessable;
 use axvm_sdk::{
     config::{AggConfig, AppConfig},
-    e2e_prover::{commit_app_exe, commit_leaf_exe, E2EStarkProver},
+    e2e_prover::{generate_app_committed_exe, generate_leaf_committed_exe, E2EStarkProver},
     keygen::{AggProvingKey, AppProvingKey},
 };
 use axvm_transpiler::axvm_platform::bincode;
@@ -53,10 +53,11 @@ async fn main() -> Result<()> {
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
     let agg_pk = AggProvingKey::keygen(agg_config.clone(), None);
-    let app_committed_exe = commit_app_exe(app_config, build_bench_program("fibonacci").unwrap());
-    let leaf_committed_exe = commit_leaf_exe(agg_config, &app_pk);
+    let app_committed_exe =
+        generate_app_committed_exe(app_config, build_bench_program("fibonacci").unwrap());
+    let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
 
-    let prover = E2EStarkProver::new(app_pk, agg_pk, app_committed_exe, leaf_committed_exe);
+    let prover = E2EStarkProver::new(app_pk, agg_pk, app_committed_exe, leaf_committed_exe, 2, 2);
 
     let n = 800_000u64;
     let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?
