@@ -20,7 +20,7 @@ use axvm_recursion::types::InnerConfig;
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AppConfig},
-    e2e_prover::{generate_app_committed_exe, generate_leaf_committed_exe, E2EStarkProver},
+    e2e_prover::{commit_app_exe, generate_leaf_committed_exe, E2EStarkProver},
     keygen::{AggProvingKey, AppProvingKey},
     verifier::{
         common::types::VmVerifierPvs,
@@ -67,7 +67,7 @@ fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
     let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config.clone(), None);
-    let app_committed_exe = generate_app_committed_exe(app_config, program);
+    let app_committed_exe = commit_app_exe(app_config, program);
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
     (
         E2EStarkProver::new(app_pk, agg_pk, app_committed_exe, leaf_committed_exe, 2, 2),

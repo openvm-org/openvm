@@ -14,7 +14,7 @@ use crate::{
     SC,
 };
 
-pub fn generate_app_committed_exe(
+pub fn commit_app_exe(
     app_config: AppConfig,
     app_exe: impl Into<AxVmExe<Val<SC>>>,
 ) -> Arc<AxVmCommittedExe<SC>> {
