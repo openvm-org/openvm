@@ -76,4 +76,4 @@ jobs:
         working-directory: axvm-sdk
         run: |
           export RUST_BACKTRACE=1
-          cargo nextest run --cargo-profile=fast --features parallel,static-verifier --exclude setup_agg_pk
+          cargo nextest run -E 'not test(setup_agg_pk)' --cargo-profile=fast --features parallel,static-verifier
