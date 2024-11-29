@@ -393,30 +393,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-ecc-primitives"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-ecc-execution",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-ecc-constants",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "lazy_static",
- "num-bigint-dig",
- "num-traits",
- "p3-air",
- "p3-baby-bear",
- "p3-field",
- "p3-matrix",
- "p3-util",
- "rand 0.8.5",
- "sha3",
- "tracing",
-]
-
-[[package]]
 name = "ax-mod-circuit-builder"
 version = "0.1.0"
 dependencies = [
@@ -627,7 +603,6 @@ dependencies = [
  "ax-circuit-derive",
  "ax-circuit-primitives",
  "ax-ecc-execution",
- "ax-ecc-primitives",
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
@@ -723,7 +698,6 @@ version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
  "ax-circuit-primitives",
- "ax-ecc-primitives",
  "ax-mod-circuit-builder",
  "ax-stark-backend",
  "axvm-circuit",

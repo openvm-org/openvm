@@ -7,7 +7,6 @@ description = "Elliptic curve circuits."
 [dependencies]
 ax-circuit-derive = { workspace = true }
 ax-circuit-primitives = { workspace = true }
-ax-ecc-primitives = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
 axvm-ecc-constants = { workspace = true }
