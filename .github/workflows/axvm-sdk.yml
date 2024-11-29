@@ -71,6 +71,7 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run setup_agg_pk --cargo-profile=fast --features parallel,static-verifier
+          python3 recursion_depth.py
 
       - name: Run axvm-sdk crate tests
         working-directory: axvm-sdk
