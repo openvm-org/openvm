@@ -4,9 +4,9 @@ use ax_poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use p3_field::Field;
 
 use super::air::Poseidon2VmAir;
-use crate::{
-    intrinsics::hashes::poseidon2::{CHUNK, WIDTH},
-    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+use crate::system::{
+    memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    poseidon2::{CHUNK, WIDTH},
 };
 
 /// Columns for Poseidon2Vm AIR.

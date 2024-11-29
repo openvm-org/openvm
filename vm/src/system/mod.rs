@@ -6,5 +6,6 @@ pub mod native_adapter;
 /// The runtime executor will execute different phantom instructions that may
 /// affect trace generation based on the operand.
 pub mod phantom;
+pub mod poseidon2;
 pub mod program;
 pub mod public_values;

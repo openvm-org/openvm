@@ -13,17 +13,14 @@ use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use rand::Rng;
 
-use super::{Poseidon2Chip, CHUNK, WIDTH};
-use crate::{
-    arch::{
-        instructions::{
-            Poseidon2Opcode::{self, *},
-            UsizeOpcode,
-        },
-        testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-        POSEIDON2_DIRECT_BUS,
+use super::{Poseidon2Chip, Poseidon2VmIoCols, CHUNK, WIDTH};
+use crate::arch::{
+    instructions::{
+        Poseidon2Opcode::{self, *},
+        UsizeOpcode,
     },
-    intrinsics::hashes::poseidon2::Poseidon2VmIoCols,
+    testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
+    POSEIDON2_DIRECT_BUS,
 };
 
 /// Create random instructions for the poseidon2 chip.

@@ -46,7 +46,6 @@ use crate::{
             },
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::poseidon2::Poseidon2Chip,
         modular::{
             ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
             ModularMulDivChip, ModularMulDivCoreChip,
@@ -70,6 +69,7 @@ use crate::{
         },
         native_adapter::NativeAdapterChip,
         phantom::PhantomChip,
+        poseidon2::Poseidon2Chip,
         program::{ProgramBus, ProgramChip},
         public_values::{core::PublicValuesCoreChip, PublicValuesChip},
     },
