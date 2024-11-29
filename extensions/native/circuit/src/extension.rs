@@ -9,9 +9,7 @@ use axvm_circuit::{
     },
     intrinsics::hashes::poseidon2::Poseidon2Chip,
     rv32im::BranchEqualCoreChip,
-    system::{
-        native_adapter::NativeAdapterChip, phantom::PhantomChip, public_values::PublicValuesChip,
-    },
+    system::{native_adapter::NativeAdapterChip, phantom::PhantomChip},
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_instructions::*;

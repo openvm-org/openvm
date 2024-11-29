@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip, Rv32IsEqualModAdapterChip};
+use adapters::Rv32IsEqualModAdapterChip;
 use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},

@@ -5,7 +5,7 @@ use super::adapters::native_vectorized_adapter::{
 };
 
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
 mod core;
 pub use core::*;

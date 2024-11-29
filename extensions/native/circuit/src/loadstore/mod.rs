@@ -1,7 +1,7 @@
 use axvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
 mod core;
 pub use core::*;

@@ -4,8 +4,7 @@ use axvm_circuit::{
 };
 
 #[cfg(test)]
-#[cfg(test)]
-pub mod tests;
+mod tests;
 
 mod core;
 pub use core::*;

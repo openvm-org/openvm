@@ -3,7 +3,7 @@ use axvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use super::adapters::convert_adapter::{ConvertAdapterAir, ConvertAdapterChip};
 
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
 mod core;
 pub use core::*;

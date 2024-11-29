@@ -39,12 +39,10 @@ use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, FriOpcode::FRI_REDUCED_OPENING,
 };
 
-use super::field_extension::FieldExtension;
+use super::field_extension::{FieldExtension, EXT_DEG};
 
 #[cfg(test)]
 mod tests;
-
-pub const EXT_DEG: usize = 4;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
