@@ -1,3 +1,4 @@
+#![recursion_limit = "1024"]
 use std::{borrow::Borrow, fs, path::Path};
 
 use ax_stark_sdk::{
