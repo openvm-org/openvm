@@ -121,7 +121,6 @@ fn test_public_values_and_leaf_verification() {
         .add_executor(ExecutorName::FieldArithmetic),
     };
 
-    setup_agg_pk();
     let (e2e_prover, _) = load_agg_pk_into_e2e_prover(app_config);
 
     let app_engine = BabyBearPoseidon2Engine::new(e2e_prover.app_pk.app_vm_pk.fri_params);
@@ -247,7 +246,6 @@ fn test_e2e_proof_generation() {
         .add_executor(ExecutorName::FieldArithmetic),
     };
 
-    setup_agg_pk();
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
