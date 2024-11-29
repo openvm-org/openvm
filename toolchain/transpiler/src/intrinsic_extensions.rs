@@ -8,8 +8,8 @@ use strum::EnumCount;
 use utils::isize_to_field;
 
 use crate::{
-    custom_processor::CustomInstructionProcessor,
     util::{from_r_type, nop, terminate, unimp},
+    TranspilerExtension,
 };
 
 fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<F>> {
@@ -362,10 +362,11 @@ fn process_pairing<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
     Some(from_r_type(global_opcode, 2, &dec_insn))
 }
 
+// TODO: rename and modularize this and move to separate crates
 #[derive(Default)]
-pub(crate) struct IntrinsicProcessor;
+pub(crate) struct IntrinsicTranspilerExtension;
 
-impl<F: PrimeField32> CustomInstructionProcessor<F> for IntrinsicProcessor {
+impl<F: PrimeField32> TranspilerExtension<F> for IntrinsicTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
         if instruction_stream.is_empty() {
             return None;

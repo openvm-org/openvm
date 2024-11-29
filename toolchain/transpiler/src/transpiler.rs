@@ -4,13 +4,14 @@ use axvm_instructions::instruction::Instruction;
 use p3_field::PrimeField32;
 
 use crate::{
-    custom_processor::CustomInstructionProcessor, intrinsic_processor::IntrinsicProcessor,
-    rrs::BasicInstructionProcessor,
+    intrinsic_extensions::IntrinsicTranspilerExtension, rrs::Rv32TranspilerExtension,
+    TranspilerExtension,
 };
 
-/// Collection of [`CustomInstructionProcessor`]s.
+/// Collection of [`TranspilerExtension`]s.
+/// The transpiler can be configured to transpile any ELF in 32-bit chunks.
 pub struct Transpiler<F> {
-    processors: Vec<Rc<dyn CustomInstructionProcessor<F>>>,
+    processors: Vec<Rc<dyn TranspilerExtension<F>>>,
 }
 
 impl<F: PrimeField32> Default for Transpiler<F> {
@@ -22,15 +23,15 @@ impl<F: PrimeField32> Default for Transpiler<F> {
 impl<F: PrimeField32> Transpiler<F> {
     pub fn new() -> Self {
         Self {
-            processors: vec![Rc::new(BasicInstructionProcessor)],
+            processors: vec![Rc::new(Rv32TranspilerExtension)],
         }
     }
 
     pub fn default_with_intrinsics() -> Self {
-        Self::default().with_processor(Rc::new(IntrinsicProcessor))
+        Self::default().with_processor(Rc::new(IntrinsicTranspilerExtension))
     }
 
-    pub fn with_processor(self, proc: Rc<dyn CustomInstructionProcessor<F>>) -> Self {
+    pub fn with_processor(self, proc: Rc<dyn TranspilerExtension<F>>) -> Self {
         let mut procs = self.processors;
         procs.push(proc);
         Self { processors: procs }

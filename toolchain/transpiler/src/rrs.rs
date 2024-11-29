@@ -7,7 +7,7 @@ use rrs_lib::{
     process_instruction, InstructionProcessor,
 };
 
-use crate::{custom_processor::CustomInstructionProcessor, util::*};
+use crate::{extension::TranspilerExtension, util::*};
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
 pub(crate) struct InstructionTranspiler<F>(PhantomData<F>);
@@ -223,15 +223,16 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        eprintln!("Transpiling fence ({:?}) to nop", dec_insn);
+        tracing::debug!("Transpiling fence ({:?}) to nop", dec_insn);
         nop()
     }
 }
 
+/// Transpiler for standard RISC-V 32-bit IM instruction set.
 #[derive(Default)]
-pub struct BasicInstructionProcessor;
+pub struct Rv32TranspilerExtension;
 
-impl<F: PrimeField32> CustomInstructionProcessor<F> for BasicInstructionProcessor {
+impl<F: PrimeField32> TranspilerExtension<F> for Rv32TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
         let mut transpiler = InstructionTranspiler::<F>(PhantomData);
         if instruction_stream.is_empty() {

@@ -1,4 +1,4 @@
-//! A transpiler from custom RISC-V ELFs to axVM machine code.
+//! A transpiler from custom RISC-V ELFs to axVM executable binaries.
 
 use axvm_instructions::{
     config::{CustomOpConfig, FieldArithmeticOpConfig, IntrinsicsOpConfig},
@@ -13,12 +13,15 @@ use transpiler::Transpiler;
 use crate::util::elf_memory_image_to_axvm_memory_image;
 
 pub mod elf;
-pub mod rrs;
+pub mod transpiler;
 pub mod util;
 
-pub mod custom_processor;
-pub mod intrinsic_processor;
-pub mod transpiler;
+mod extension;
+pub use extension::TranspilerExtension;
+
+// TODO: move to separate crates
+pub mod intrinsic_extensions;
+pub mod rrs;
 
 #[cfg(test)]
 mod tests;
