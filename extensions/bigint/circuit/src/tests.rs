@@ -4,32 +4,31 @@ use ax_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
-use ax_stark_sdk::utils::create_seeded_rng;
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
+use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use axvm_circuit::{
+    arch::{
+        testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
+        RANGE_TUPLE_CHECKER_BUS,
+    },
+    utils::{generate_long_number, rv32_heap_branch_default, rv32_write_heap_default},
+};
 use axvm_instructions::{
     program::PC_BITS, riscv::RV32_CELL_BITS, BaseAluOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode, UsizeOpcode,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use axvm_rv32im_circuit::{
+    adapters::{
+        Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip, INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+    },
+    BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
+    MultiplicationCoreChip, ShiftCoreChip,
+};
 use rand::Rng;
 
 use super::{
     Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip, Rv32LessThan256Chip,
     Rv32Multiplication256Chip, Rv32Shift256Chip,
-};
-use crate::{
-    arch::{
-        testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
-        RANGE_TUPLE_CHECKER_BUS,
-    },
-    rv32im::{
-        adapters::{
-            Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip, INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
-        },
-        BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
-        MultiplicationCoreChip, ShiftCoreChip,
-    },
-    utils::{generate_long_number, rv32_heap_branch_default, rv32_write_heap_default},
 };
 
 type F = BabyBear;

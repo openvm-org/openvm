@@ -33,6 +33,7 @@ members = [
     "lib/recursion",
     "axvm-sdk",
     "benchmarks",
+    "extensions/bigint/circuit",
     "extensions/keccak256/circuit",
     "extensions/native/circuit",
     "extensions/rv32im/circuit",
@@ -103,6 +104,7 @@ ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
 # Extensions
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
+axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 # Plonky3

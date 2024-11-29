@@ -28,10 +28,6 @@ use crate::{
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
         hashes::poseidon2::Poseidon2Chip,
-        int256::{
-            Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
-            Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
-        },
         modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
     },
     rv32im::*,
@@ -64,13 +60,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     // Intrinsics:
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
-    // 256Rv32 (for 256-bit integers):
-    BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
-    Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),
-    LessThan256Rv32(Rc<RefCell<Rv32LessThan256Chip<F>>>),
-    BranchEqual256Rv32(Rc<RefCell<Rv32BranchEqual256Chip<F>>>),
-    BranchLessThan256Rv32(Rc<RefCell<Rv32BranchLessThan256Chip<F>>>),
-    Multiplication256Rv32(Rc<RefCell<Rv32Multiplication256Chip<F>>>),
     // Modular arithmetic:
     // 32-bytes or 48-bytes modulus.
     ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),

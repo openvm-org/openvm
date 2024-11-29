@@ -579,6 +579,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-bigint-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "p3-keccak-air",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-build"
 version = "0.1.0"
 dependencies = [
