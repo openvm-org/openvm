@@ -402,7 +402,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 PublicValuesCoreChip::new(
                     config.num_public_values,
                     PublishOpcode::default_offset(),
-                    config.max_constraint_degree as u32,
+                    config.max_constraint_degree as u32 - 1,
                 ),
                 memory_controller.clone(),
             );
