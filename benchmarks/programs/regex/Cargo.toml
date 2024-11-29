@@ -7,18 +7,6 @@ edition = "2021"
 [dependencies]
 axvm = { path = "../../../toolchain/riscv/axvm" }
 regex = { version = "1.11.1", default-features = false }
-regex-automata = { version = "0.4.9", default-features = false, features = [
-    "dfa",
-    "hybrid",
-    "meta",
-    "nfa",
-    "perf",
-    "syntax",
-    "unicode",
-] }
-
-[build-dependencies]
-regex-automata = { version = "0.4.9" }
 
 [features]
 default = []
