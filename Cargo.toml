@@ -106,6 +106,7 @@ ax-mod-circuit-builder = { path = "circuits/mod-builder", default-features = fal
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 axvm-mod-circuit = { path = "extensions/algebra/circuit", default-features = false }
 axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
+axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

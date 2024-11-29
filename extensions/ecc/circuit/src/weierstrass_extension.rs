@@ -23,7 +23,7 @@ use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
     pub modulus: BigUint,

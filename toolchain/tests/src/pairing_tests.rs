@@ -7,7 +7,8 @@ use ax_ecc_execution::axvm_ecc::{
     AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::arch::{EcCurve, PairingCurve, VmConfig, VmExecutor};
+use axvm_circuit::arch::{new_vm, VmConfig, VmExecutor};
+use axvm_pairing_circuit::{PairingCurve, Rv32PairingConfig};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
@@ -37,13 +38,15 @@ mod bn254 {
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(vec![BN254.MODULUS.clone()])
-                .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bn254])
+        //         .add_ecc_support(vec![EcCurve::Bn254])
+        //         .add_modular_support(vec![BN254.MODULUS.clone()])
+        //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -64,7 +67,9 @@ mod bn254 {
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -107,7 +112,9 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -159,13 +166,15 @@ mod bn254 {
             BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bn254])
+        //         .add_ecc_support(vec![EcCurve::Bn254])
+        //         .add_modular_support(enabled_moduli.clone())
+        //         .add_complex_ext_support(enabled_moduli),
+        // );
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -221,12 +230,14 @@ mod bn254 {
             BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let config = VmConfig::rv32im()
-            .add_pairing_support(vec![PairingCurve::Bn254])
-            .add_ecc_support(vec![EcCurve::Bn254])
-            .add_modular_support(enabled_moduli.clone())
-            .add_complex_ext_support(enabled_moduli);
-        let executor = VmExecutor::<F>::new(config.clone());
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bn254]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let config = VmConfig::rv32im()
+        //     .add_pairing_support(vec![PairingCurve::Bn254])
+        //     .add_ecc_support(vec![EcCurve::Bn254])
+        //     .add_modular_support(enabled_moduli.clone())
+        //     .add_complex_ext_support(enabled_moduli);
+        // let executor = VmExecutor::<F>::new(config.clone());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -285,13 +296,15 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(vec![BLS12381.MODULUS.clone()])
-                .add_complex_ext_support(vec![BLS12381.MODULUS.clone()]),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bls12_381])
+        //         .add_ecc_support(vec![EcCurve::Bls12_381])
+        //         .add_modular_support(vec![BLS12381.MODULUS.clone()])
+        //         .add_complex_ext_support(vec![BLS12381.MODULUS.clone()]),
+        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -312,9 +325,11 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
+        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -358,9 +373,11 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
+        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -411,13 +428,15 @@ mod bls12_381 {
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_pairing_support(vec![PairingCurve::Bls12_381])
+        //         .add_ecc_support(vec![EcCurve::Bls12_381])
+        //         .add_modular_support(enabled_moduli.clone())
+        //         .add_complex_ext_support(enabled_moduli),
+        // );
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -478,12 +497,14 @@ mod bls12_381 {
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let config = VmConfig::rv32im()
-            .add_pairing_support(vec![PairingCurve::Bls12_381])
-            .add_ecc_support(vec![EcCurve::Bls12_381])
-            .add_modular_support(enabled_moduli.clone())
-            .add_complex_ext_support(enabled_moduli);
-        let executor = VmExecutor::<F>::new(config.clone());
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let config = VmConfig::rv32im()
+        //     .add_pairing_support(vec![PairingCurve::Bls12_381])
+        //     .add_ecc_support(vec![EcCurve::Bls12_381])
+        //     .add_modular_support(enabled_moduli.clone())
+        //     .add_complex_ext_support(enabled_moduli);
+        // let executor = VmExecutor::<F>::new(config.clone());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -533,12 +554,14 @@ mod bls12_381 {
             BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
         ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let config = Rv32PairingConfig::new(vec![PairingCurve::Bls12_381]);
+        let executor = new_vm::VmExecutor::<F, _>::new(config);
+        // let executor = VmExecutor::<F>::new(
+        //     VmConfig::rv32im()
+        //         .add_ecc_support(vec![EcCurve::Bls12_381])
+        //         .add_modular_support(enabled_moduli.clone())
+        //         .add_complex_ext_support(enabled_moduli),
+        // );
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();

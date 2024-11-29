@@ -720,6 +720,7 @@ dependencies = [
 name = "axvm-ecc-constants"
 version = "0.1.0"
 dependencies = [
+ "hex-literal",
  "lazy_static",
  "num-bigint-dig",
  "num-traits",
@@ -998,6 +999,7 @@ dependencies = [
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
  "axvm-mod-circuit",
+ "axvm-pairing-circuit",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
  "eyre",

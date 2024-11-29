@@ -3,16 +3,15 @@ pub use addsub::*;
 mod is_eq;
 pub use is_eq::*;
 mod muldiv;
+use axvm_circuit::{
+    arch::{VmAirWrapper, VmChipWrapper},
+    rv32im::adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
+};
 use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use hex_literal::hex;
 pub use muldiv::*;
 use num_bigint_dig::BigUint;
 use once_cell::sync::Lazy;
-
-use axvm_circuit::{
-    arch::{VmAirWrapper, VmChipWrapper},
-    rv32im::adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
-};
 
 #[cfg(test)]
 mod tests;
@@ -54,6 +53,7 @@ pub type ModularIsEqualChip<
     ModularIsEqualCoreChip<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
+// remove
 pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
     BigUint::from_bytes_be(&hex!(
         "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
