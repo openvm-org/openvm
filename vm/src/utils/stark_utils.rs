@@ -89,14 +89,13 @@ where
     cfg_if::cfg_if! {
         if #[cfg(feature = "bench-metrics")] {
             // Run once with metrics collection enabled, which can improve runtime performance
-            let system_config = config.system();
-            let system_config = system_config.with_metric_collection();
+            config = config.with_metric_collection();
             {
                 let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config.clone());
                 executor.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
-            let _ = system_config.without_metric_collection();
+            config = config.without_metric_collection();
             let start = std::time::Instant::now();
         }
     }

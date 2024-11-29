@@ -83,16 +83,15 @@ where
     VmConfig::Periphery: Chip<SC>,
 {
     let exe = exe.into();
-    let system_config = config.system();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).
-    let system_config = system_config.with_metric_collection();
+    config = config.with_metric_collection();
     let executor = VmExecutor::<Val<SC>, VmConfig>::new(config);
     tracing::info_span!("execute_with_metrics", collect_metrics = true)
         .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
     // 2. Generate proving key from config.
-    let _ = system_config.without_metric_collection();
+    config = config.without_metric_collection();
     counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
-    let vm = VirtualMachine::<SC, E, VmConfig>::new(engine, executor.config);
+    let vm = VirtualMachine::<SC, E, VmConfig>::new(engine, config);
     let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
     // 3. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || vm.commit_exe(exe));
