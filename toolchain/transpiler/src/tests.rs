@@ -3,11 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use axvm_circuit::{
-    arch::{new_vm, VmConfig, VmExecutor},
-    utils::new_air_test_with_min_segments,
-};
-use axvm_ecc_constants::SECP256K1;
+use axvm_circuit::{arch::new_vm, utils::new_air_test_with_min_segments};
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::Rv32ImConfig;
 use eyre::Result;

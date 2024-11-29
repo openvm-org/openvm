@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use axvm_circuit::arch::{new_vm, ExecutorName, VmConfig, VmExecutor};
-use axvm_ecc_circuit::{Rv32WeierstrassConfig, SECP256K1_CONFIG};
+use axvm_circuit::arch::new_vm;
+use axvm_ecc_circuit::{Rv32WeierstrassConfig, SECP256K1};
 use axvm_mod_circuit::{Rv32ModularConfig, Rv32ModularWithFp2Config};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
@@ -32,7 +32,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
 #[test]
 fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
-    let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+    let config = Rv32ModularConfig::new(vec![SECP256K1.modulus.clone()]);
     let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
@@ -41,7 +41,7 @@ fn test_modular_runtime() -> Result<()> {
 #[test]
 fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
-    let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+    let config = Rv32ModularWithFp2Config::new(vec![SECP256K1.modulus.clone()]);
     let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
@@ -50,7 +50,7 @@ fn test_complex_runtime() -> Result<()> {
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
-    let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+    let config = Rv32WeierstrassConfig::new(vec![SECP256K1.clone()]);
     let executor = new_vm::VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())

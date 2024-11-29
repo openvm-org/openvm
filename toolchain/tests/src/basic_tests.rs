@@ -1,9 +1,6 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, new_vm, new_vm::VmExecutor as NewVmExecutor,
-        VmConfig, VmExecutor,
-    },
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm, new_vm::VmExecutor as NewVmExecutor},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };

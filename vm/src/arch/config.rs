@@ -6,13 +6,11 @@ use ax_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     ChipUsageGetter,
 };
-use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
-use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
+use strum::{EnumCount, EnumIter, FromRepr};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,

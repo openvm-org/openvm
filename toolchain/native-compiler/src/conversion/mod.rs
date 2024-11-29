@@ -1,13 +1,9 @@
-use axvm_circuit::arch::{
-    instructions::{program::Program, *},
-    Modulus,
-};
+use axvm_circuit::arch::instructions::{program::Program, *};
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
     FriOpcode::FRI_REDUCED_OPENING,
 };
-use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
 use serde::{Deserialize, Serialize};
