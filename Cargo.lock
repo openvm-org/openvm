@@ -1029,7 +1029,9 @@ dependencies = [
 name = "axvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
+ "ax-circuit-derive",
  "ax-ecc-execution",
+ "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-bigint-circuit",
  "axvm-build",
@@ -1042,9 +1044,11 @@ dependencies = [
  "axvm-pairing-circuit",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
+ "derive_more 1.0.0",
  "eyre",
  "num-bigint-dig",
  "p3-baby-bear",
+ "p3-field",
  "rand 0.8.5",
  "serde",
  "tempfile",
