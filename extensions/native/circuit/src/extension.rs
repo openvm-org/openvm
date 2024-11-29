@@ -71,7 +71,6 @@ pub enum NativeExecutor<F: PrimeField32> {
     FieldExtension(FieldExtensionChip<F>),
     Poseidon2(Poseidon2Chip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
-    CastF(CastFChip<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
