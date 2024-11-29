@@ -10,12 +10,9 @@ use ax_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use axvm_circuit::{
-    arch::{
-        testing::{VmChipTestBuilder, VmChipTester},
-        BITWISE_OP_LOOKUP_BUS,
-    },
-    intrinsics::hashes::keccak256::columns::KeccakVmCols,
+use axvm_circuit::arch::{
+    testing::{VmChipTestBuilder, VmChipTester},
+    BITWISE_OP_LOOKUP_BUS,
 };
 use axvm_instructions::{instruction::Instruction, Rv32KeccakOpcode};
 use hex::FromHex;
@@ -23,7 +20,7 @@ use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
-use super::{utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
+use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip, KECCAK_WORD_SIZE};
 
 type F = BabyBear;
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace

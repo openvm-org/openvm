@@ -46,7 +46,7 @@ use crate::{
             },
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
+        hashes::poseidon2::Poseidon2Chip,
         int256::{
             Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
             Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
@@ -524,19 +524,6 @@ impl VmConfig {
                 }
                 ExecutorName::PublicValues => {}
                 ExecutorName::Poseidon2 => {}
-                ExecutorName::Keccak256Rv32 => {
-                    let chip = Rc::new(RefCell::new(KeccakVmChip::new(
-                        execution_bus,
-                        program_bus,
-                        memory_controller.clone(),
-                        bitwise_lookup_chip.clone(),
-                        offset,
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
                 ExecutorName::FriReducedOpening => {
                     let chip = Rc::new(RefCell::new(FriReducedOpeningChip::new(
                         memory_controller.clone(),
@@ -1893,11 +1880,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Poseidon2Opcode::default_offset(),
             Poseidon2Opcode::COUNT,
             Poseidon2Opcode::default_offset(),
-        ),
-        ExecutorName::Keccak256Rv32 => (
-            Rv32KeccakOpcode::KECCAK256.with_default_offset(),
-            Rv32KeccakOpcode::COUNT,
-            Rv32KeccakOpcode::default_offset(),
         ),
         ExecutorName::FriReducedOpening => (
             FriOpcode::default_offset(),

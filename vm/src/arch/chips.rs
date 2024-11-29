@@ -27,7 +27,7 @@ use crate::{
             },
             weierstrass::{EcAddNeChip, EcDoubleChip},
         },
-        hashes::{keccak256::KeccakVmChip, poseidon2::Poseidon2Chip},
+        hashes::poseidon2::Poseidon2Chip,
         int256::{
             Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip,
             Rv32LessThan256Chip, Rv32Multiplication256Chip, Rv32Shift256Chip,
@@ -76,7 +76,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     // Intrinsics:
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
-    Keccak256Rv32(Rc<RefCell<KeccakVmChip<F>>>),
     // 256Rv32 (for 256-bit integers):
     BaseAlu256Rv32(Rc<RefCell<Rv32BaseAlu256Chip<F>>>),
     Shift256Rv32(Rc<RefCell<Rv32Shift256Chip<F>>>),

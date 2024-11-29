@@ -1,9 +1,13 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm, ExecutorName, VmConfig, VmExecutor},
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, new_vm, new_vm::VmExecutor as NewVmExecutor,
+        VmConfig, VmExecutor,
+    },
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
+use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_transpiler::{axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use eyre::Result;
@@ -96,8 +100,7 @@ fn test_reveal_runtime() -> Result<()> {
 #[test]
 fn test_keccak256_runtime() -> Result<()> {
     let elf = build_example_program("keccak")?;
-    let executor =
-        VmExecutor::<F>::new(VmConfig::rv32i().add_executor(ExecutorName::Keccak256Rv32));
+    let executor = NewVmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
     executor.execute(elf, vec![])?;
     Ok(())
 }
