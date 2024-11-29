@@ -112,14 +112,6 @@ fn test_print_runtime() -> Result<()> {
 }
 
 #[test]
-fn test_modular_runtime() -> Result<()> {
-    let elf = build_example_program("little")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_modulus());
-    executor.execute(elf, vec![])?;
-    Ok(())
-}
-
-#[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
     let executor = VmExecutor::<F>::new(

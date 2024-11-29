@@ -14,6 +14,7 @@ axvm-ecc-constants = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -29,6 +30,7 @@ tracing = { workspace = true }
 rand = { workspace = true }
 derive_more = { workspace = true, features = ["from"] }
 strum = { workspace = true }
+derive-new = { workspace = true }
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }

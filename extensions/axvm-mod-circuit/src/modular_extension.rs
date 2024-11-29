@@ -28,6 +28,14 @@ pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }
 
+impl ModularExtension {
+    pub fn new(moduli: Vec<BigUint>) -> Self {
+        Self {
+            supported_modulus: moduli,
+        }
+    }
+}
+
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
