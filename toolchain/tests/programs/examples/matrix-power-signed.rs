@@ -1,8 +1,9 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::{intrinsics::I256, io::print};
 use core::array;
+
+use axvm::{intrinsics::I256, io::print};
 axvm::entry!(main);
 
 const N: usize = 16;

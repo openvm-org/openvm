@@ -18,7 +18,7 @@ The guest program also needs `#![no_main]` because `no_std` does not have certai
 To support host machine execution, the top of your guest program should have:
 
 ```rust
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 

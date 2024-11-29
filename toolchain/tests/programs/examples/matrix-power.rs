@@ -1,9 +1,10 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 axvm::entry!(main);
-use axvm::{intrinsics::U256, io::print};
 use core::array;
+
+use axvm::{intrinsics::U256, io::print};
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
