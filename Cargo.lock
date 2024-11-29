@@ -1031,6 +1031,7 @@ version = "0.1.0"
 dependencies = [
  "ax-ecc-execution",
  "ax-stark-sdk",
+ "axvm-bigint-circuit",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc",
