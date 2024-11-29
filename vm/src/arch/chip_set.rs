@@ -401,18 +401,6 @@ impl VmConfig {
                         PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
                     );
                     phantom_chip.add_sub_executor(
-                        crate::extensions::native::phantom::NativeHintInputSubEx,
-                        PhantomDiscriminant(NativePhantom::HintInput as u16),
-                    );
-                    phantom_chip.add_sub_executor(
-                        crate::extensions::native::phantom::NativePrintSubEx,
-                        PhantomDiscriminant(NativePhantom::Print as u16),
-                    );
-                    phantom_chip.add_sub_executor(
-                        crate::extensions::native::phantom::NativeHintBitsSubEx,
-                        PhantomDiscriminant(NativePhantom::HintBits as u16),
-                    );
-                    phantom_chip.add_sub_executor(
                         crate::extensions::pairing::phantom::PairingHintSubEx,
                         PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
                     );
