@@ -316,13 +316,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
 
     match instruction {
         AsmInstruction::PrintV(src) => vec![Instruction::phantom(
-            PhantomInstruction::PrintF,
+            PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
             2,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
-            PhantomInstruction::PrintF,
+            PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
             2,
@@ -330,7 +330,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
             .map(|i| {
                 Instruction::phantom(
-                    PhantomInstruction::PrintF,
+                    PhantomDiscriminant(NativePhantom::Print as u16),
                     i32_f(src + i * word_size_i32),
                     F::ZERO,
                     2,
@@ -518,7 +518,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ))
             .collect(),
         AsmInstruction::Trap => vec![
-            Instruction::phantom(PhantomInstruction::DebugPanic, F::ZERO, F::ZERO, 0),
+            Instruction::phantom(PhantomDiscriminant(SysPhantom::DebugPanic as u16), F::ZERO, F::ZERO, 0),
         ],
         AsmInstruction::Halt => vec![
             // terminate
@@ -532,10 +532,10 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             ),
         ],
         AsmInstruction::HintInputVec() => vec![
-            Instruction::phantom(PhantomInstruction::HintInput, F::ZERO, F::ZERO, 0)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintInput as u16), F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::HintBits(src, len) => vec![
-            Instruction::phantom(PhantomInstruction::HintBits, i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Memory as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
@@ -618,14 +618,14 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
         )],
         AsmInstruction::CycleTrackerStart() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtStart)]
+                vec![Instruction::debug(PhantomDiscriminant(SysPhantom::CtStart as u16))]
             } else {
                 vec![]
             }
         }
         AsmInstruction::CycleTrackerEnd() => {
             if options.enable_cycle_tracker {
-                vec![Instruction::debug(PhantomInstruction::CtEnd)]
+                vec![Instruction::debug(PhantomDiscriminant(SysPhantom::CtEnd as u16))]
             } else {
                 vec![]
             }

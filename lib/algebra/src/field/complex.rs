@@ -10,6 +10,7 @@ use axvm_platform::{
     constants::{ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1},
     custom_insn_r,
 };
+use serde::{Deserialize, Serialize};
 
 use super::{ComplexConjugate, Field};
 use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
@@ -19,7 +20,7 @@ use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
 ///
 /// Memory alignment follows alignment of `F`.
 /// Memory layout is concatenation of `c0` and `c1`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Complex<F> {
     /// Real coordinate

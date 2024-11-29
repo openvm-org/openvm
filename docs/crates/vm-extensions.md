@@ -33,6 +33,12 @@ Think of `VmInventory<Executor, Periphery>` as the collection of all chips, whic
 
     pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<Periphery>);
 
+    pub fn add_phantom_sub_executor<F: 'static, PE: PhantomSubExecutor<F> + 'static>(
+        &mut self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError>;
+
     pub fn executors(&self) -> &[Executor] {
         &self.executors
     }
@@ -64,6 +70,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn find_chip<C: 'static>(&self) -> Vec<&C>;
     /// Shareable streams. Clone to get a shared mutable reference.
     pub fn streams(&self) -> &Arc<Mutex<Streams<F>>>;
+    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+        &self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), VmInventoryError>;
 }
 ```
 

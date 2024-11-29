@@ -208,7 +208,7 @@ mod tests {
         }
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr::new(builder, range_checker.bus());
+        let air = FieldExpr::new(builder, range_checker.bus(), false);
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(1);
@@ -269,7 +269,7 @@ mod tests {
         // no need to save as div auto save.
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr::new(builder, range_checker.bus());
+        let air = FieldExpr::new(builder, range_checker.bus(), false);
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(5);

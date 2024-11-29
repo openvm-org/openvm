@@ -35,7 +35,7 @@ fn test_add() {
     x3.save();
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
@@ -69,7 +69,7 @@ fn test_div() {
     let x2 = ExprBuilder::new_input(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
     let builder = builder.borrow().clone();
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
@@ -111,7 +111,7 @@ fn test_auto_carry_mul() {
 
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
@@ -153,7 +153,7 @@ fn test_auto_carry_intmul() {
 
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
@@ -204,7 +204,7 @@ fn test_auto_carry_add() {
 
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
@@ -245,7 +245,7 @@ fn test_auto_carry_div() {
     let builder = builder.borrow().clone();
     assert_eq!(builder.num_variables, 2); // numerator autosaved, and the final division
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
@@ -294,7 +294,7 @@ fn test_select() {
     let (range_checker, builder) = setup(&prime);
     let builder = make_addsub_chip(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), true);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);
@@ -326,7 +326,7 @@ fn test_select2() {
     let (range_checker, builder) = setup(&prime);
     let builder = make_addsub_chip(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus());
+    let expr = FieldExpr::new(builder, range_checker.bus(), true);
     let width = BaseAir::<BabyBear>::width(&expr);
 
     let x = generate_random_biguint(&prime);

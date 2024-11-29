@@ -22,10 +22,22 @@ pub struct FieldExpressionCoreAir {
 
     /// The global opcode offset.
     pub offset: usize,
-    /// All the opcode indices supported by this Air.
+
+    /// All the opcode indices (including setup) supported by this Air.
+    /// The last one must be the setup opcode if it's a chip needs setup.
     pub local_opcode_idx: Vec<usize>,
-    /// Opcode flag idx for all except last local opcode
+    /// Opcode flag idx (indices from builder.new_flag()) for all except setup opcode. Empty if single op chip.
     pub opcode_flag_idx: Vec<usize>,
+    // Example 1: 1-op chip EcAdd that nees setup
+    //   local_opcode_idx = [0, 2], where 0 is EcAdd, 2 is setup
+    //   opcode_flag_idx = [], not needed for single op chip.
+    // Example 2: 1-op chip EvaluateLine that doesn't need setup
+    //   local_opcode_idx = [2], the id within PairingOpcodeEnum
+    //   opcode_flag_idx = [], not needed
+    // Example 3: 2-op chip MulDiv that needs setup
+    //   local_opcode_idx = [2, 3, 4], where 2 is Mul, 3 is Div, 4 is setup
+    //   opcode_flag_idx = [0, 1], where 0 is mul_flag, 1 is div_flag, in the builder
+    // We don't support 2-op chip that doesn't need setup right now.
 }
 
 impl FieldExpressionCoreAir {
@@ -35,6 +47,13 @@ impl FieldExpressionCoreAir {
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
     ) -> Self {
+        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
+            // single op chip that needs setup, so there is only one default flag, must be 0.
+            vec![0]
+        } else {
+            // multi ops chip or no-setup chip, use as is.
+            opcode_flag_idx
+        };
         assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
         Self {
             expr,
@@ -50,10 +69,6 @@ impl FieldExpressionCoreAir {
 
     pub fn num_vars(&self) -> usize {
         self.expr.builder.num_variables
-    }
-
-    pub fn num_op_flags(&self) -> usize {
-        self.expr.builder.num_op_flags()
     }
 
     pub fn num_flags(&self) -> usize {
@@ -108,9 +123,6 @@ where
             .map(|x| (*x).into())
             .collect();
 
-        // Currently `flags` from the framework are boolean used in "Select", If true {a} else {b}.
-        // Later we might change it to be generic boolean variables like indicators for opcode flags.
-        // But in both cases, the below logic works.
         let opcode_flags_except_last = self.opcode_flag_idx.iter().map(|&i| flags[i]).collect_vec();
         let last_opcode_flag = is_valid
             - opcode_flags_except_last
@@ -163,12 +175,7 @@ impl FieldExpressionCoreChip {
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
     ) -> Self {
-        let air = FieldExpressionCoreAir {
-            expr,
-            offset,
-            local_opcode_idx,
-            opcode_flag_idx,
-        };
+        let air = FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx);
         Self {
             air,
             range_checker,
@@ -214,14 +221,20 @@ where
 
         let Instruction { opcode, .. } = instruction.clone();
         let local_opcode_index = opcode - self.air.offset;
-        let mut flags = vec![false; self.air.num_op_flags()];
-        self.air
-            .opcode_flag_idx
-            .iter()
-            .enumerate()
-            .for_each(|(i, &flag_idx)| {
-                flags[flag_idx] = local_opcode_index == self.air.local_opcode_idx[i]
-            });
+        let mut flags = vec![];
+
+        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is needed.
+        // Otherwise, there is a flag for each opcode and will be derived by is_valid - sum(flags).
+        if self.expr().needs_setup() {
+            flags = vec![false; self.air.num_flags()];
+            self.air
+                .opcode_flag_idx
+                .iter()
+                .enumerate()
+                .for_each(|(i, &flag_idx)| {
+                    flags[flag_idx] = local_opcode_index == self.air.local_opcode_idx[i]
+                });
+        }
 
         let vars = self.air.expr.execute(inputs.clone(), flags.clone());
         assert_eq!(vars.len(), self.air.num_vars());

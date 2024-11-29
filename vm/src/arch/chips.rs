@@ -18,6 +18,7 @@ use crate::{
     derive::InstructionExecutor,
     intrinsics::{
         ecc::{
+            fp12::Fp12MulChip,
             fp2::{Fp2AddSubChip, Fp2MulDivChip},
             pairing::{
                 EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
@@ -101,6 +102,9 @@ pub enum AxVmExecutor<F: PrimeField32> {
     Fp2AddSubRv32_48(Rc<RefCell<Fp2AddSubChip<F, 6, 16>>>),
     Fp2MulDivRv32_32(Rc<RefCell<Fp2MulDivChip<F, 2, 32>>>),
     Fp2MulDivRv32_48(Rc<RefCell<Fp2MulDivChip<F, 6, 16>>>),
+    // Fp12 for 32-bytes or 48-bytes prime.
+    Fp12MulRv32_32(Rc<RefCell<Fp12MulChip<F, 12, 32>>>),
+    Fp12MulRv32_48(Rc<RefCell<Fp12MulChip<F, 36, 16>>>),
     /// Only for BN254 for now
     EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
     /// Only for BN254 for now

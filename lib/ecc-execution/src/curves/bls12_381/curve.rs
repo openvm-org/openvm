@@ -20,15 +20,4 @@ lazy_static! {
     pub static ref SEED_NEG: BigUint = BigUint::from_str_radix("15132376222941642752", 10).unwrap();
 }
 
-// curve seed x = -0xd201000000010000
-pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
-
-// BLS12-381 pseudo-binary encoding. This encoding represents the absolute value of the curve seed.
-// from gnark implementation: https://github.com/Consensys/gnark/blob/42dcb0c3673b2394bf1fd82f5128f7a121d7d48e/std/algebra/emulated/sw_bls12381/pairing.go#L322
-pub const BLS12_381_PBE_LEN: usize = 64;
-pub const BLS12_381_PBE: [i8; BLS12_381_PBE_LEN] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
-];
-
 pub struct Bls12_381;

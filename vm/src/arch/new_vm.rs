@@ -13,13 +13,13 @@ use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
 use thiserror::Error;
 
-use super::{VmGenericConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{ExecutionError, VmGenericConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::new_segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
-        program::{trace::AxVmCommittedExe, ExecutionError},
+        program::trace::AxVmCommittedExe,
     },
 };
 

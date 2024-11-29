@@ -21,6 +21,7 @@ use ax_stark_backend::{
     rap::AnyRap,
 };
 use axvm_instructions::exe::MemoryImage;
+use getset::Getters;
 use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
@@ -93,12 +94,14 @@ pub type TimestampedEquipartition<F, const N: usize> =
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
 
-#[derive(Debug)]
+#[derive(Debug, Getters)]
 pub struct MemoryController<F> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
+
+    #[getset(get = "pub")]
     pub(crate) mem_config: MemoryConfig,
-    pub(crate) range_checker: Arc<VariableRangeCheckerChip>,
+    pub range_checker: Arc<VariableRangeCheckerChip>,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
 

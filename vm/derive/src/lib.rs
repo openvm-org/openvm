@@ -237,11 +237,11 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
                 // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: https://github.com/rust-lang/rust/issues/85576
                 let mut executor_name = Ident::new(
-                    &format!("{}ConfigExecutor", e.ty.to_token_stream()),
+                    &format!("{}Executor", e.ty.to_token_stream()),
                     Span::call_site().into(),
                 );
                 let mut periphery_name = Ident::new(
-                    &format!("{}ConfigPeriphery", e.ty.to_token_stream()),
+                    &format!("{}Periphery", e.ty.to_token_stream()),
                     Span::call_site().into(),
                 );
                 if let Some(attr) = e
@@ -312,7 +312,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     #(#executor_enum_fields)*
                 }
 
-                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+                #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
                 pub enum #periphery_type<F: PrimeField32> {
                     #[any_enum]
                     #system_name_upper(SystemPeriphery<F>),

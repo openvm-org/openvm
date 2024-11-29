@@ -406,6 +406,7 @@ fn debug_constraints_and_interactions<SC: StarkGenericConfig>(
                     tracing::debug!("Checking constraints for {}", rap.name());
                     check_constraints(
                         rap.as_ref(),
+                        &rap.name(),
                         &preprocessed_trace,
                         main,
                         &perm_trace.iter().map(|m| m.as_view()).collect_vec(),

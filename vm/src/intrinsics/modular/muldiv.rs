@@ -64,7 +64,7 @@ impl ModularMulDivCoreAir {
 
         let builder = builder.borrow().clone();
 
-        let expr = FieldExpr::new(builder, range_bus);
+        let expr = FieldExpr::new(builder, range_bus, true);
         Self { expr, offset }
     }
 }

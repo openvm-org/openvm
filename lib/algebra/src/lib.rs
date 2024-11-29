@@ -12,6 +12,7 @@ use core::{
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+pub use serde_big_array::BigArray;
 
 /// Field traits
 pub mod field;
@@ -20,6 +21,10 @@ pub mod field;
 /// These should **only** be importable on a host machine.
 #[cfg(all(not(target_os = "zkvm"), feature = "halo2curves"))]
 mod halo2curves;
+
+/// Exponentiation by bytes
+mod exp_bytes;
+pub use exp_bytes::*;
 
 /// Division operation that is undefined behavior when the denominator is not invertible.
 pub trait DivUnsafe<Rhs = Self>: Sized {

@@ -33,6 +33,28 @@ Together, these perform the following functionalities:
 
 **Todo:** make `struct AxVmOpcode(usize)` to protect the global opcode usize.
 
+### Phantom Sub-Instructions
+
+You can specify phantom sub-instruction executors by implementing the trait:
+
+```rust
+pub trait PhantomSubExecutor<F> {
+    fn phantom_execute(
+        &mut self,
+        memory: &MemoryController<F>,
+        streams: &mut Streams<F>,
+        discriminant: PhantomDiscriminant,
+        a: F,
+        b: F,
+        c_upper: u16,
+    ) -> eyre::Result<()>;
+}
+
+pub struct PhantomDiscriminant(pub u16);
+```
+
+The `PhantomChip<F>` maintains a map `FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>` to handle different phantom sub-instructions.
+
 ### VM Configuration
 
 **This section needs to be updated for extensions.**

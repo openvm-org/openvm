@@ -14,6 +14,7 @@ mod vec_heap_two_reads;
 use std::ops::Mul;
 
 pub use alu::*;
+use axvm_instructions::riscv::RV32_REGISTER_AS;
 pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
 pub use eq_mod::*;
@@ -68,7 +69,8 @@ pub fn read_rv32_register<F: PrimeField32>(
 
 /// Peeks at the value of a register without updating the memory state or incrementing the timestamp.
 pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
-    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
+    let data = memory
+        .unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::from_canonical_u32(RV32_REGISTER_AS), pointer);
     compose(data)
 }
 

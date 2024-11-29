@@ -172,52 +172,89 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                 }
                 Some(ShortWeierstrass) => {
                     // short weierstrass ec
+                    assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
                     let dec_insn = RType::new(instruction_u32);
                     let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
-                    let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                        Some(SwBaseFunct7::SwAddNe) => {
-                            Rv32WeierstrassOpcode::EC_ADD_NE as usize
-                                + Rv32WeierstrassOpcode::default_offset()
-                        }
-                        Some(SwBaseFunct7::SwDouble) => {
-                            assert!(dec_insn.rs2 == 0);
-                            Rv32WeierstrassOpcode::EC_DOUBLE as usize
-                                + Rv32WeierstrassOpcode::default_offset()
-                        }
-                        _ => unimplemented!(),
-                    };
-                    assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
                     let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS)
                         as usize
                         * Rv32WeierstrassOpcode::COUNT;
-                    let global_opcode = global_opcode + curve_idx_shift;
-                    Some(from_r_type(global_opcode, 2, &dec_insn))
+                    if base_funct7 == SwBaseFunct7::SwSetup as u8 {
+                        let local_opcode = match dec_insn.rs2 {
+                            0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
+                            _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+                        };
+                        Some(Instruction::new(
+                            local_opcode.with_default_offset() + curve_idx_shift,
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                            F::ONE, // d_as = 1
+                            F::TWO, // e_as = 2
+                            F::ZERO,
+                            F::ZERO,
+                        ))
+                    } else {
+                        let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
+                            Some(SwBaseFunct7::SwAddNe) => {
+                                Rv32WeierstrassOpcode::EC_ADD_NE as usize
+                                    + Rv32WeierstrassOpcode::default_offset()
+                            }
+                            Some(SwBaseFunct7::SwDouble) => {
+                                assert!(dec_insn.rs2 == 0);
+                                Rv32WeierstrassOpcode::EC_DOUBLE as usize
+                                    + Rv32WeierstrassOpcode::default_offset()
+                            }
+                            _ => unimplemented!(),
+                        };
+                        let global_opcode = global_opcode + curve_idx_shift;
+                        Some(from_r_type(global_opcode, 2, &dec_insn))
+                    }
                 }
                 Some(ComplexExtField) => {
                     // complex operations
+                    assert!(Fp2Opcode::COUNT <= COMPLEX_EXT_FIELD_MAX_KINDS as usize);
                     let dec_insn = RType::new(instruction_u32);
                     let base_funct7 = (dec_insn.funct7 as u8) % COMPLEX_EXT_FIELD_MAX_KINDS;
-                    let global_opcode = match ComplexExtFieldBaseFunct7::from_repr(base_funct7) {
-                        Some(ComplexExtFieldBaseFunct7::Add) => {
-                            Fp2Opcode::ADD as usize + Fp2Opcode::default_offset()
-                        }
-                        Some(ComplexExtFieldBaseFunct7::Sub) => {
-                            Fp2Opcode::SUB as usize + Fp2Opcode::default_offset()
-                        }
-                        Some(ComplexExtFieldBaseFunct7::Mul) => {
-                            Fp2Opcode::MUL as usize + Fp2Opcode::default_offset()
-                        }
-                        Some(ComplexExtFieldBaseFunct7::Div) => {
-                            Fp2Opcode::DIV as usize + Fp2Opcode::default_offset()
-                        }
-                        _ => unimplemented!(),
-                    };
-                    assert!(Fp2Opcode::COUNT <= COMPLEX_EXT_FIELD_MAX_KINDS as usize);
                     let complex_idx_shift = ((dec_insn.funct7 as u8) / COMPLEX_EXT_FIELD_MAX_KINDS)
                         as usize
                         * Fp2Opcode::COUNT;
-                    let global_opcode = global_opcode + complex_idx_shift;
-                    Some(from_r_type(global_opcode, 2, &dec_insn))
+
+                    if base_funct7 == ComplexExtFieldBaseFunct7::Setup as u8 {
+                        let local_opcode = match dec_insn.rs2 {
+                            0 => Fp2Opcode::SETUP_ADDSUB,
+                            1 => Fp2Opcode::SETUP_MULDIV,
+                            _ => panic!("invalid opcode"),
+                        };
+                        Some(Instruction::new(
+                            local_opcode.with_default_offset() + complex_idx_shift,
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                            F::ZERO, // rs2 = 0
+                            F::ONE,  // d_as = 1
+                            F::TWO,  // e_as = 2
+                            F::ZERO,
+                            F::ZERO,
+                        ))
+                    } else {
+                        let global_opcode = match ComplexExtFieldBaseFunct7::from_repr(base_funct7)
+                        {
+                            Some(ComplexExtFieldBaseFunct7::Add) => {
+                                Fp2Opcode::ADD as usize + Fp2Opcode::default_offset()
+                            }
+                            Some(ComplexExtFieldBaseFunct7::Sub) => {
+                                Fp2Opcode::SUB as usize + Fp2Opcode::default_offset()
+                            }
+                            Some(ComplexExtFieldBaseFunct7::Mul) => {
+                                Fp2Opcode::MUL as usize + Fp2Opcode::default_offset()
+                            }
+                            Some(ComplexExtFieldBaseFunct7::Div) => {
+                                Fp2Opcode::DIV as usize + Fp2Opcode::default_offset()
+                            }
+                            _ => unimplemented!(),
+                        };
+                        let global_opcode = global_opcode + complex_idx_shift;
+                        Some(from_r_type(global_opcode, 2, &dec_insn))
+                    }
                 }
                 Some(Pairing) => process_pairing(instruction_u32),
                 _ => unimplemented!(),
@@ -252,11 +289,14 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
 fn process_phantom<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<F>> {
     let dec_insn = IType::new(instruction_u32);
     PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
-        PhantomImm::HintInput => {
-            Instruction::phantom(PhantomInstruction::HintInputRv32, F::ZERO, F::ZERO, 0)
-        }
+        PhantomImm::HintInput => Instruction::phantom(
+            PhantomDiscriminant(Rv32Phantom::HintInput as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
+        ),
         PhantomImm::PrintStr => Instruction::phantom(
-            PhantomInstruction::PrintStrRv32,
+            PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
             0,
@@ -270,13 +310,12 @@ fn process_pairing<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
     let pairing_idx = ((dec_insn.funct7 as u8) / PAIRING_MAX_KINDS) as usize;
     if let Some(PairingBaseFunct7::HintFinalExp) = PairingBaseFunct7::from_repr(base_funct7) {
         assert_eq!(dec_insn.rd, 0);
-        assert_eq!(dec_insn.rs2, 0);
         // Return exits the outermost function
         return Some(Instruction::phantom(
-            PhantomInstruction::HintFinalExp,
+            PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
             F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-            F::from_canonical_usize(pairing_idx),
-            0,
+            F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+            pairing_idx as u16,
         ));
     }
     let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {

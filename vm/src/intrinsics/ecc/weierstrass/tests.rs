@@ -16,7 +16,10 @@ use crate::{
     arch::{
         instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    intrinsics::ecc::weierstrass::{EcAddNeChip, EcDoubleChip},
+    intrinsics::{
+        ecc::weierstrass::{EcAddNeChip, EcDoubleChip},
+        field_expression::FieldExpressionCoreChip,
+    },
     rv32im::adapters::Rv32VecHeapAdapterChip,
     utils::{biguint_to_limbs, rv32_write_heap_default},
 };
@@ -25,6 +28,14 @@ const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
 type F = BabyBear;
+
+fn prime_limbs(chip: &FieldExpressionCoreChip) -> Vec<BabyBear> {
+    chip.expr()
+        .prime_limbs
+        .iter()
+        .map(|n| BabyBear::from_canonical_usize(*n))
+        .collect::<Vec<_>>()
+}
 
 #[test]
 fn test_add_ne() {
@@ -71,6 +82,17 @@ fn test_add_ne() {
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
+
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
+    one_limbs[0] = BabyBear::ONE;
+    let setup_instruction = rv32_write_heap_default(
+        &mut tester,
+        vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
+        vec![one_limbs, one_limbs],
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+    );
+    tester.execute(&mut chip, setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -123,6 +145,17 @@ fn test_double() {
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
+
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
+    one_limbs[0] = BabyBear::ONE;
+    let setup_instruction = rv32_write_heap_default(
+        &mut tester,
+        vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
+        vec![],
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+    );
+    tester.execute(&mut chip, setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
@@ -199,6 +232,17 @@ fn test_p256_double() {
     .unwrap();
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
+
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
+    one_limbs[0] = BabyBear::ONE;
+    let setup_instruction = rv32_write_heap_default(
+        &mut tester,
+        vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
+        vec![],
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+    );
+    tester.execute(&mut chip, setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,

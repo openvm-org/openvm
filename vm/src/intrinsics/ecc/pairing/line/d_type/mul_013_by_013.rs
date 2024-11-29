@@ -92,5 +92,5 @@ pub fn mul_013_by_013_expr(
     [l0, l1, l2, l3, l4].map(|mut l| l.save_output());
 
     let builder = builder.borrow().clone();
-    FieldExpr::new(builder, range_bus)
+    FieldExpr::new(builder, range_bus, false)
 }

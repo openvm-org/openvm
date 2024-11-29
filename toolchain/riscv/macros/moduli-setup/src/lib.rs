@@ -90,6 +90,8 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             span.into(),
         );
         let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+        let setup_function_fp2 =
+            syn::Ident::new(&format!("setup_{}_fp2", struct_name), span.into());
         let serialized_len = serialized_modulus.len();
 
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
@@ -101,9 +103,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             #[used]
             static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
 
-            #[derive(Clone, Eq)]
+            #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
-            pub struct #struct_name([u8; #limbs]);
+            pub struct #struct_name(#[serde(with = "axvm_algebra::BigArray")] [u8; #limbs]);
 
             impl #struct_name {
                 #[inline(always)]
@@ -722,6 +724,39 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
+                    );
+                }
+            }
+
+            #[allow(non_snake_case)]
+            pub fn #setup_function_fp2() {
+                #[cfg(target_os = "zkvm")]
+                {
+
+                    let modulus_bytes = &#serialized_name[6..];
+
+                    // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
+                    // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
+                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    axvm_platform::custom_insn_r!(
+                        axvm_platform::constants::CUSTOM_1,
+                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
+                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
+                            + #mod_idx
+                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        modulus_bytes.as_ptr(),
+                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                    );
+                    axvm_platform::custom_insn_r!(
+                        axvm_platform::constants::CUSTOM_1,
+                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
+                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
+                            + #mod_idx
+                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        modulus_bytes.as_ptr(),
+                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                 }
             }

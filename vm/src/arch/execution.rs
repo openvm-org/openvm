@@ -2,12 +2,62 @@ use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant};
 use p3_field::AbstractField;
+use thiserror::Error;
 
-use crate::system::program::{ExecutionError, ProgramBus};
+use super::Streams;
+use crate::system::{memory::MemoryController, program::ProgramBus};
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
+
+#[derive(Error, Debug)]
+pub enum ExecutionError {
+    #[error("execution failed at pc {pc}")]
+    Fail { pc: u32 },
+    #[error("pc {pc} not found for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    PcNotFound {
+        pc: u32,
+        step: u32,
+        pc_base: u32,
+        program_len: usize,
+    },
+    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    PcOutOfBounds {
+        pc: u32,
+        step: u32,
+        pc_base: u32,
+        program_len: usize,
+    },
+    #[error("at pc {pc}, opcode {opcode:?} was not enabled")]
+    DisabledOperation { pc: u32, opcode: usize },
+    #[error("at pc = {pc}")]
+    HintOutOfBounds { pc: u32 },
+    #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
+    PublicValueIndexOutOfBounds {
+        pc: u32,
+        num_public_values: usize,
+        public_value_index: usize,
+    },
+    #[error("at pc {pc}, tried to publish {new_value} into index {public_value_index} but already had {existing_value}")]
+    PublicValueNotEqual {
+        pc: u32,
+        public_value_index: usize,
+        existing_value: usize,
+        new_value: usize,
+    },
+    #[error("at pc {pc}, phantom sub-instruction not found for discriminant {}", .discriminant.0)]
+    PhantomNotFound {
+        pc: u32,
+        discriminant: PhantomDiscriminant,
+    },
+    #[error("at pc {pc}, discriminant {}, phantom error: {inner}", .discriminant.0)]
+    Phantom {
+        pc: u32,
+        discriminant: PhantomDiscriminant,
+        inner: eyre::Error,
+    },
+}
 
 pub trait InstructionExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
@@ -21,6 +71,20 @@ pub trait InstructionExecutor<F> {
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
+}
+
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
+    fn execute(
+        &mut self,
+        instruction: Instruction<F>,
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        self.borrow_mut().execute(instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
 }
 
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
@@ -216,4 +280,23 @@ impl<T: AbstractField> From<(u32, Option<T>)> for PcIncOrSet<T> {
             Some(to_pc) => PcIncOrSet::Set(to_pc),
         }
     }
+}
+
+/// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
+/// However they all have no AIR constraints besides advancing the pc by [DEFAULT_PC_STEP](super::program::DEFAULT_PC_STEP).
+///
+/// They should not mutate memory, but they can mutate the input & hint streams.
+///
+/// Phantom sub-instructions are only allowed to use operands
+/// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+pub trait PhantomSubExecutor<F> {
+    fn phantom_execute(
+        &mut self,
+        memory: &MemoryController<F>,
+        streams: &mut Streams<F>,
+        discriminant: PhantomDiscriminant,
+        a: F,
+        b: F,
+        c_upper: u16,
+    ) -> eyre::Result<()>;
 }

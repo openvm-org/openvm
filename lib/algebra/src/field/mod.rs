@@ -5,6 +5,8 @@ use core::{
 
 /// Complex quadratic extension of any ring.
 mod complex;
+use alloc::vec::Vec;
+
 pub use complex::*;
 
 use crate::{DivAssignUnsafe, DivUnsafe};
@@ -59,11 +61,17 @@ pub trait FieldExtension<BaseField> {
     /// This should be [BaseField; D]. It is an associated type due to rust const generic limitations.
     type Coeffs: Sized;
 
-    /// Generate an extension field element from its base field coefficients.
+    /// Create an extension field element from its base field coefficients.
     fn from_coeffs(coeffs: Self::Coeffs) -> Self;
+
+    /// Create an extension field element from little-endian bytes.
+    fn from_bytes(bytes: &[u8]) -> Self;
 
     /// Convert an extension field element to its base field coefficients.
     fn to_coeffs(self) -> Self::Coeffs;
+
+    /// Convert an extension field element to little-endian bytes.
+    fn to_bytes(&self) -> Vec<u8>;
 
     /// Embed a base field element into an extension field element.
     fn embed(base_elem: BaseField) -> Self;

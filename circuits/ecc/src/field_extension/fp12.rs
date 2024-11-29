@@ -254,7 +254,7 @@ mod tests {
         let indices = r.save();
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr::new(builder, range_checker.bus());
+        let air = FieldExpr::new(builder, range_checker.bus(), false);
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fq12 = x;

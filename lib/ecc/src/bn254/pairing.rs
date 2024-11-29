@@ -1,16 +1,23 @@
-use axvm_algebra::field::FieldExtension;
+use alloc::vec::Vec;
+
+use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
+use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
+    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1, PAIRING_MAX_KINDS},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
 
 use super::{Bn254, Fp, Fp12, Fp2};
-#[cfg(not(target_os = "zkvm"))]
-use crate::pairing::PairingIntrinsics;
-use crate::pairing::{Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, UnevaluatedLine};
+use crate::{
+    pairing::{
+        Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep, MultiMillerLoop,
+        PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
+    },
+    AffinePoint,
+};
 
 // TODO[jpw]: make macro
 impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
@@ -91,23 +98,7 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
 
     /// Multiplies a line in 013-form with a Fp12 element to get an Fp12 element
     fn mul_by_013(f: &Fp12, l: &EvaluatedLine<Fp2>) -> Fp12 {
-        #[cfg(not(target_os = "zkvm"))]
-        {
-            Fp12::from_evaluated_line_d_type(l.clone()) * f
-        }
-        #[cfg(target_os = "zkvm")]
-        {
-            let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
-            custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
-                shifted_funct7::<Bn254>(PairingBaseFunct7::MulBy013),
-                uninit.as_mut_ptr(),
-                f as *const Fp12,
-                l as *const EvaluatedLine<Fp2>
-            );
-            unsafe { uninit.assume_init() }
-        }
+        Fp12::from_evaluated_line_d_type(l.clone()) * f
     }
 
     /// Multiplies a line in 01234-form with a Fp12 element to get an Fp12 element
@@ -171,6 +162,205 @@ impl LineMulDType<Fp2, Fp12> for Bn254 {
                 x as *const [Fp2; 5]
             );
             unsafe { uninit.assume_init() }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+impl MultiMillerLoop for Bn254 {
+    type Fp = Fp;
+    type Fp12 = Fp12;
+
+    const SEED_ABS: u64 = 0x44e992b44a6909f1;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &[
+        0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0,
+        0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0,
+        -1, 0, 0, 0, 1, 0, -1, 0, 1,
+    ];
+
+    fn evaluate_lines_vec(f: Self::Fp12, lines: Vec<EvaluatedLine<Self::Fp2>>) -> Self::Fp12 {
+        let mut f = f;
+        let mut lines = lines;
+        if lines.len() % 2 == 1 {
+            f = Self::mul_by_013(&f, &lines.pop().unwrap());
+        }
+        for chunk in lines.chunks(2) {
+            if let [line0, line1] = chunk {
+                let prod = Self::mul_013_by_013(line0, line1);
+                f = Self::mul_by_01234(&f, &prod);
+            } else {
+                panic!("lines.len() % 2 should be 0 at this point");
+            }
+        }
+        f
+    }
+
+    fn pre_loop(
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        _Q: &[AffinePoint<Self::Fp2>],
+        c: Option<Self::Fp12>,
+        xy_fracs: &[(Self::Fp, Self::Fp)],
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
+        let mut f = if let Some(mut c) = c {
+            c.square_assign();
+            c
+        } else {
+            Self::Fp12::ONE
+        };
+
+        let mut Q_acc = Q_acc;
+        let mut initial_lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
+
+        let (Q_out_double, lines_2S) = Q_acc
+            .into_iter()
+            .map(|Q| Self::miller_double_step(&Q))
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        Q_acc = Q_out_double;
+
+        let lines_iter = izip!(lines_2S.iter(), xy_fracs.iter());
+        for (line_2S, xy_frac) in lines_iter {
+            let line = line_2S.evaluate(xy_frac);
+            initial_lines.push(line);
+        }
+
+        f = Self::evaluate_lines_vec(f, initial_lines);
+
+        (f, Q_acc)
+    }
+
+    fn post_loop(
+        f: &Self::Fp12,
+        Q_acc: Vec<AffinePoint<Self::Fp2>>,
+        Q: &[AffinePoint<Self::Fp2>],
+        _c: Option<Self::Fp12>,
+        xy_fracs: &[(Self::Fp, Self::Fp)],
+    ) -> (Self::Fp12, Vec<AffinePoint<Self::Fp2>>) {
+        let mut Q_acc = Q_acc;
+        let mut lines = Vec::<EvaluatedLine<Self::Fp2>>::new();
+
+        let x_to_q_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[1];
+        let x_to_q_sq_minus_1_over_3 = &Self::FROBENIUS_COEFF_FQ6_C1[2];
+
+        // twisted frobenius calculation: `frob_p(twist(q)) = twist(q1)`
+        let q1_vec = Q
+            .iter()
+            .map(|Q| {
+                let x = Q.x.frobenius_map(1);
+                let x = x * x_to_q_minus_1_over_3;
+                let y = Q.y.frobenius_map(1);
+                let y = y * &Self::XI_TO_Q_MINUS_1_OVER_2;
+                AffinePoint { x, y }
+            })
+            .collect::<Vec<_>>();
+
+        let (Q_out_add, lines_S_plus_Q) = Q_acc
+            .iter()
+            .zip(q1_vec.iter())
+            .map(|(Q_acc, q1)| Self::miller_add_step(Q_acc, q1))
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        Q_acc = Q_out_add;
+
+        let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
+            lines.push(line);
+        }
+
+        // twisted frobenius calculation: `-frob_p^2(twist(q)) = twist(q2)`
+        let q2_vec = Q
+            .iter()
+            .map(|Q| {
+                // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to the identity mapping
+                let x = &Q.x * x_to_q_sq_minus_1_over_3;
+                AffinePoint { x, y: Q.y.clone() }
+            })
+            .collect::<Vec<_>>();
+
+        let (Q_out_add, lines_S_plus_Q) = Q_acc
+            .iter()
+            .zip(q2_vec.iter())
+            .map(|(Q_acc, q2)| Self::miller_add_step(Q_acc, q2))
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        Q_acc = Q_out_add;
+
+        let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
+            lines.push(line);
+        }
+
+        let mut f = f.clone();
+        f = Self::evaluate_lines_vec(f, lines);
+
+        (f, Q_acc)
+    }
+}
+
+#[allow(non_snake_case)]
+impl PairingCheck for Bn254 {
+    type Fp = Fp;
+    type Fp2 = Fp2;
+    type Fp12 = Fp12;
+
+    #[allow(unused_variables)]
+    fn pairing_check_hint(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> (Self::Fp12, Self::Fp12) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            todo!()
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            let hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
+            // We do not rely on the slice P's memory layout since rust does not guarantee it across compiler versions.
+            let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
+            let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
+            unsafe {
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                    opcode = const CUSTOM_1,
+                    funct3 = const (Custom1Funct3::Pairing as u8),
+                    funct7 = const ((Bn254::PAIRING_IDX as u8) * PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    rs1 = in(reg) &p_fat_ptr,
+                    rs2 = in(reg) &q_fat_ptr
+                );
+                let mut ptr = hint.as_ptr() as *const u8;
+                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                for _ in (0..32 * 12 * 2).step_by(4) {
+                    axvm::hint_store_u32!(ptr, 0);
+                    ptr = ptr.add(4);
+                }
+                hint.assume_init()
+            }
+        }
+    }
+
+    fn pairing_check(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> Result<(), PairingCheckError> {
+        let (c, u) = Self::pairing_check_hint(P, Q);
+        let c_inv = Fp12::ONE.div_unsafe(&c);
+
+        // f * u == c^λ
+        // f * u == c^{6x + 2 + q^3 - q^2 + q}
+        // f * c^-{6x + 2} * u * c^-{q^3 - q^2 + q} == 1
+        // where fc == f * c^-{6x + 2}
+        // c_mul = c^-{q^3 - q^2 + q}
+        let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+        let c_q2 = FieldExtension::frobenius_map(&c, 2);
+        let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+        let c_mul = c_q3_inv * c_q2 * c_q_inv;
+
+        // Compute miller loop with c_inv
+        let fc = Self::multi_miller_loop_embedded_exp(P, Q, Some(c_inv));
+
+        if fc * c_mul * u == Fp12::ONE {
+            Ok(())
+        } else {
+            Err(PairingCheckError)
         }
     }
 }
