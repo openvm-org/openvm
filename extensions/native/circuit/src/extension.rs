@@ -92,7 +92,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let program_bus = builder.system_base().program_bus();
         let memory_controller = builder.memory_controller().clone();
 
-        let load_store_chip = KernelLoadStoreChip::<F, 1>::new(
+        let mut load_store_chip = KernelLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
@@ -102,6 +102,8 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             KernelLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
             memory_controller.clone(),
         );
+        load_store_chip.core.set_streams(builder.streams().clone());
+
         inventory.add_executor(
             load_store_chip,
             NativeLoadStoreOpcode::iter().map(|x| x.with_default_offset()),
