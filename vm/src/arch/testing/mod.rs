@@ -45,7 +45,7 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::{intrinsics::hashes::poseidon2::Poseidon2Chip, system::memory::MemoryControllerRef};
+use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2Chip};
 
 const RANGE_CHECKER_BUS: usize = 4;
 
