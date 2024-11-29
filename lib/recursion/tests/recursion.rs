@@ -3,7 +3,8 @@ use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     engine::ProofInputForTest,
 };
-use axvm_circuit::arch::{instructions::program::Program, ExecutorName, VmConfig, VmExecutor};
+use axvm_circuit::arch::{instructions::program::Program, new_vm::VmExecutor, SystemConfig};
+use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use axvm_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
@@ -45,17 +46,12 @@ where
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
 {
     let fib_program = fibonacci_program(a, b, n);
+    let vm_config = NativeConfig::new(
+        SystemConfig::default().with_public_values(3),
+        Native::default(),
+    );
 
-    let vm_config = VmConfig {
-        num_public_values: 3,
-        ..Default::default()
-    }
-    .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::BranchEqual)
-    .add_executor(ExecutorName::LoadStore)
-    .add_executor(ExecutorName::Jal);
-
-    let executor = VmExecutor::new(vm_config);
+    let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
 
     let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");

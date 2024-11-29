@@ -62,18 +62,21 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-// #[test_case("data/rv32im-intrin-from-as")]
-// fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
-//     let config = VmConfig::rv32im()
-//         .add_canonical_modulus()
-//         .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()])
-//         .add_int256_alu()
-//         .add_int256_m();
-//     let elf = get_elf(elf_path)?;
-//     let executor = VmExecutor::<F>::new(config);
-//     executor.execute(elf, vec![])?;
-//     Ok(())
-// }
+// TODO[yi]: add back this test once we have support for modular extension
+/*
+#[test_case("data/rv32im-intrin-from-as")]
+fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
+    let config = VmConfig::rv32im()
+        .add_canonical_modulus()
+        .add_complex_ext_support(vec![SECP256K1_COORD_PRIME.clone()])
+        .add_int256_alu()
+        .add_int256_m();
+    let elf = get_elf(elf_path)?;
+    let executor = VmExecutor::<F>::new(config);
+    executor.execute(elf, vec![])?;
+    Ok(())
+}
+    */
 
 #[test]
 fn test_terminate_prove() -> Result<()> {

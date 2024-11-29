@@ -15,9 +15,11 @@ use super::{AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGen
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
     metrics::cycle_tracker::CycleTracker,
-    system::memory::{Equipartition, CHUNK},
+    system::{
+        memory::{Equipartition, CHUNK},
+        poseidon2::Poseidon2Chip,
+    },
 };
 
 /// Check segment every 100 instructions.

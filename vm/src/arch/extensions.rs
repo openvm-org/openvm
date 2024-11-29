@@ -26,23 +26,19 @@ use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
     SystemConfig,
 };
-use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::{
-        adapters::native_adapter::NativeAdapterChip,
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
+use crate::system::{
+    connector::VmConnectorChip,
+    memory::{
+        merkle::{DirectCompressionBus, MemoryMerkleBus},
+        offline_checker::MemoryBus,
+        Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
+        MERKLE_AIR_OFFSET,
     },
-    system::{
-        connector::VmConnectorChip,
-        memory::{
-            merkle::{DirectCompressionBus, MemoryMerkleBus},
-            offline_checker::MemoryBus,
-            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
-            MERKLE_AIR_OFFSET,
-        },
-        phantom::PhantomChip,
-        program::{ProgramBus, ProgramChip},
-    },
+    native_adapter::NativeAdapterChip,
+    phantom::PhantomChip,
+    poseidon2::Poseidon2Chip,
+    program::{ProgramBus, ProgramChip},
+    public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -87,6 +83,7 @@ pub trait VmExtension<F: PrimeField32> {
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
+    system_config: &'a SystemConfig,
     system: &'a SystemBase<F>,
     streams: &'a Arc<Mutex<Streams<F>>>,
     /// Bus indices are in range [0, bus_idx_max)
@@ -99,11 +96,13 @@ pub struct VmInventoryBuilder<'a, F: PrimeField32> {
 
 impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn new(
+        system_config: &'a SystemConfig,
         system: &'a SystemBase<F>,
         streams: &'a Arc<Mutex<Streams<F>>>,
         bus_idx_max: usize,
     ) -> Self {
         Self {
+            system_config,
             system,
             streams,
             bus_idx_max,
@@ -113,6 +112,10 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
+    }
+
+    pub fn system_config(&self) -> &SystemConfig {
+        self.system_config
     }
 
     pub fn system_base(&self) -> &SystemBase<F> {
@@ -402,7 +405,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 PublicValuesCoreChip::new(
                     config.num_public_values,
                     PublishOpcode::default_offset(),
-                    config.max_constraint_degree as u32,
+                    config.max_constraint_degree as u32 - 1,
                 ),
                 memory_controller.clone(),
             );
@@ -476,7 +479,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder = VmInventoryBuilder::new(&self.base, &self.streams, self.bus_idx_max);
+        let mut builder =
+            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_max);
         // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {

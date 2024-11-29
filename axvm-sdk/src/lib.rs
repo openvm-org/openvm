@@ -9,6 +9,7 @@ use p3_baby_bear::BabyBear;
 
 pub mod commit;
 pub mod config;
+pub mod e2e_prover;
 #[cfg(feature = "static-verifier")]
 pub mod static_verifier;
 

@@ -69,4 +69,5 @@ jobs:
       - name: Run axvm-sdk crate tests
         working-directory: axvm-sdk
         run: |
-          cargo nextest run --cargo-profile=fast  --features parallel,static-verifier
+          export RUST_BACKTRACE=1
+          cargo nextest run --cargo-profile=fast --features parallel,static-verifier

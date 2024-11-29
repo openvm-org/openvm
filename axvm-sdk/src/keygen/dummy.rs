@@ -2,7 +2,10 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use ax_stark_sdk::{
     ax_stark_backend::{config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof},
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+    },
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::{
@@ -62,6 +65,18 @@ pub(super) fn dummy_internal_proof(
     SingleSegmentVmProver::prove(&internal_prover, internal_input.write())
 }
 
+pub(super) fn dummy_internal_proof_riscv_app_vm(
+    leaf_vm_pk: VmProvingKey<SC>,
+    internal_vm_pk: VmProvingKey<SC>,
+    internal_exe: Arc<AxVmCommittedExe<SC>>,
+    num_public_values: usize,
+) -> Proof<SC> {
+    let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
+    let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params);
+    dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
+}
+
+#[allow(dead_code)]
 pub fn dummy_leaf_proof(
     leaf_vm_pk: VmProvingKey<SC>,
     app_vm_pk: &VmProvingKey<SC>,
@@ -71,7 +86,6 @@ pub fn dummy_leaf_proof(
     dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
 }
 
-#[allow(dead_code)]
 pub(super) fn dummy_leaf_proof_riscv_app_vm(
     leaf_vm_pk: VmProvingKey<SC>,
     num_public_values: usize,
@@ -98,7 +112,7 @@ fn dummy_leaf_proof_impl(
         1,
         "Dummy proof should only have 1 segment"
     );
-    let e = BabyBearPoseidon2Engine::new(app_vm_pk.fri_params);
+    let e = BabyBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
     let leaf_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
         leaf_program.into(),
         e.config.pcs(),
