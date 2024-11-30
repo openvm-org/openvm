@@ -7,7 +7,7 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::SingleSegmentVmExecutor,
+    arch::new_vm::SingleSegmentVmExecutor,
     prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
 };
 
@@ -32,7 +32,10 @@ impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
         let input = input.into();
         let vm = SingleSegmentVmExecutor::new(self.root_verifier_pk.vm_pk.vm_config.clone());
         let mut proof_input = vm
-            .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
+            .execute_and_generate(
+                self.root_verifier_pk.root_committed_exe.clone(),
+                input.into(),
+            )
             .unwrap();
         assert_eq!(
             proof_input.per_air.len(),

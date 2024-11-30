@@ -1,18 +1,22 @@
 use std::sync::Arc;
 
 use ax_stark_sdk::{
-    ax_stark_backend::{config::Val, prover::types::Proof},
+    ax_stark_backend::{config::Val, prover::types::Proof, Chip},
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::StarkFriEngine,
 };
-#[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::{SingleSegmentVmExecutor, VmExecutor};
+// #[cfg(feature = "bench-metrics")]
+use axvm_circuit::arch::{
+    new_vm::{SingleSegmentVmExecutor, VmExecutor},
+    VmGenericConfig,
+};
 use axvm_circuit::{
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
     system::program::trace::AxVmCommittedExe,
 };
+use axvm_native_circuit::NativeConfig;
 use axvm_recursion::hints::Hintable;
 use metrics::counter;
 use tracing::info_span;
@@ -30,8 +34,8 @@ use crate::{
 mod exe;
 pub use exe::*;
 
-pub struct E2EStarkProver {
-    pub app_pk: AppProvingKey,
+pub struct E2EStarkProver<VmConfig: VmGenericConfig<F>> {
+    pub app_pk: AppProvingKey<VmConfig>,
     pub agg_pk: AggProvingKey,
     pub app_committed_exe: Arc<AxVmCommittedExe<SC>>,
     pub leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
@@ -39,15 +43,19 @@ pub struct E2EStarkProver {
     pub num_children_leaf: usize,
     pub num_children_internal: usize,
 
-    app_prover: VmLocalProver<SC, BabyBearPoseidon2Engine>,
-    leaf_prover: VmLocalProver<SC, BabyBearPoseidon2Engine>,
-    internal_prover: VmLocalProver<SC, BabyBearPoseidon2Engine>,
+    app_prover: VmLocalProver<SC, VmConfig, BabyBearPoseidon2Engine>,
+    leaf_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
+    internal_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
     root_prover: RootVerifierLocalProver,
 }
 
-impl E2EStarkProver {
+impl<VmConfig: VmGenericConfig<F>> E2EStarkProver<VmConfig>
+where
+    VmConfig::Executor: Chip<SC>,
+    VmConfig::Periphery: Chip<SC>,
+{
     pub fn new(
-        app_pk: AppProvingKey,
+        app_pk: AppProvingKey<VmConfig>,
         agg_pk: AggProvingKey,
         app_committed_exe: Arc<AxVmCommittedExe<SC>>,
         leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
@@ -55,15 +63,15 @@ impl E2EStarkProver {
         num_children_internal: usize,
     ) -> Self {
         assert_eq!(app_pk.num_public_values(), agg_pk.num_public_values());
-        let app_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
+        let app_prover = VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new(
             app_pk.app_vm_pk.clone(),
             app_committed_exe.clone(),
         );
-        let leaf_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
+        let leaf_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
             agg_pk.leaf_vm_pk.clone(),
             leaf_committed_exe.clone(),
         );
-        let internal_prover = VmLocalProver::<SC, BabyBearPoseidon2Engine>::new(
+        let internal_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
             agg_pk.internal_vm_pk.clone(),
             agg_pk.internal_committed_exe.clone(),
         );
@@ -115,10 +123,10 @@ impl E2EStarkProver {
     }
 
     fn generate_app_proof(&self, input: Vec<F>) -> ContinuationVmProof<SC> {
-        #[cfg(feature = "bench-metrics")]
+        // #[cfg(feature = "bench-metrics")]
         {
             let mut vm_config = self.app_pk.app_vm_pk.vm_config.clone();
-            vm_config.collect_metrics = true;
+            vm_config.system_mut().collect_metrics = true;
             let vm = VmExecutor::new(vm_config);
             vm.execute_segments(self.app_committed_exe.exe.clone(), vec![input.clone()])
                 .unwrap();
@@ -185,10 +193,10 @@ impl E2EStarkProver {
             public_values: app_proofs.user_public_values.public_values,
         };
         let input = root_input.write();
-        #[cfg(feature = "bench-metrics")]
+        // #[cfg(feature = "bench-metrics")]
         {
             let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-            vm_config.collect_metrics = true;
+            vm_config.system.collect_metrics = true;
             let vm = SingleSegmentVmExecutor::new(vm_config);
             let exe = self
                 .root_prover
@@ -203,13 +211,13 @@ impl E2EStarkProver {
 }
 
 fn single_segment_prove<E: StarkFriEngine<SC>>(
-    prover: &VmLocalProver<SC, E>,
+    prover: &VmLocalProver<SC, NativeConfig, E>,
     input: Vec<Vec<Val<SC>>>,
 ) -> Proof<SC> {
-    #[cfg(feature = "bench-metrics")]
+    // #[cfg(feature = "bench-metrics")]
     {
         let mut vm_config = prover.pk.vm_config.clone();
-        vm_config.collect_metrics = true;
+        vm_config.system.collect_metrics = true;
         let vm = SingleSegmentVmExecutor::new(vm_config);
         vm.execute(prover.committed_exe.exe.clone(), input.clone())
             .unwrap();

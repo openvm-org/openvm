@@ -18,11 +18,12 @@ use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use program::DEFAULT_PC_STEP;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, phantom::*, *};
 
-#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, Serialize, Deserialize, VmGenericConfig, derive_new::new)]
 pub struct NativeConfig {
     #[system]
     pub system: SystemConfig,
@@ -61,7 +62,7 @@ impl NativeConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]

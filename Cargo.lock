@@ -865,6 +865,7 @@ dependencies = [
  "lazy_static",
  "parking_lot",
  "rand 0.8.5",
+ "serde",
  "strum",
  "test-case",
  "test-log",
@@ -1029,6 +1030,27 @@ dependencies = [
  "strum",
  "test-case",
  "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ax-poseidon2-air",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-circuit",
+ "axvm-native-compiler",
+ "axvm-recursion",
+ "axvm-rv32im-circuit",
+ "derivative",
+ "metrics",
+ "p3-baby-bear",
+ "serde",
+ "serde_json",
+ "static_assertions",
  "tracing",
 ]
 

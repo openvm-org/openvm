@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, VmConfig},
+    arch::{instructions::program::Program, VmGenericConfig},
     system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -32,18 +32,17 @@ pub mod types;
 mod vars;
 
 /// Config to generate leaf VM verifier program.
-pub struct LeafVmVerifierConfig {
+pub struct LeafVmVerifierConfig<VmConfig: VmGenericConfig<F>> {
     pub app_fri_params: FriParameters,
     pub app_vm_config: VmConfig,
     pub compiler_options: CompilerOptions,
 }
 
-impl LeafVmVerifierConfig {
+impl<VmConfig: VmGenericConfig<F>> LeafVmVerifierConfig<VmConfig> {
     pub fn build_program(
         &self,
         app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> Program<F> {
-        self.app_vm_config.memory_config.memory_dimensions();
         let m_advice = new_from_inner_multi_vk(app_vm_vk);
         let mut builder = Builder::<C>::default();
 
@@ -110,12 +109,17 @@ impl LeafVmVerifierConfig {
         &self,
         builder: &mut Builder<C>,
     ) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
-        let memory_dimensions = self.app_vm_config.memory_config.memory_dimensions();
+        let memory_dimensions = self
+            .app_vm_config
+            .system()
+            .memory_config
+            .memory_dimensions();
         let pv_as = F::from_canonical_usize(
             PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset,
         );
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
-        let pv_height = log2_strict_usize(self.app_vm_config.num_public_values / DIGEST_SIZE);
+        let pv_height =
+            log2_strict_usize(self.app_vm_config.system().num_public_values / DIGEST_SIZE);
         let proof_len = memory_dimensions.overall_height() - pv_height;
         let idx_prefix = pv_start_idx >> pv_height;
 
