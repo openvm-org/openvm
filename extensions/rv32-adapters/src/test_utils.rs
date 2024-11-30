@@ -5,6 +5,19 @@ use axvm_instructions::instruction::Instruction;
 use axvm_rv32im_circuit::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use rand::{rngs::StdRng, Rng};
 
+pub fn write_ptr_reg(
+    tester: &mut VmChipTestBuilder<BabyBear>,
+    ptr_as: usize,
+    reg_addr: usize,
+    value: u32,
+) {
+    tester.write(
+        ptr_as,
+        reg_addr,
+        value.to_le_bytes().map(BabyBear::from_canonical_u8),
+    );
+}
+
 pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
     tester: &mut VmChipTestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
