@@ -327,6 +327,9 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     fn system(&self) -> &SystemConfig {
                         &self.#system_name
                     }
+                    fn system_mut(&mut self) -> &mut SystemConfig {
+                        &mut self.#system_name
+                    }
 
                     fn create_chip_complex(
                         &self,

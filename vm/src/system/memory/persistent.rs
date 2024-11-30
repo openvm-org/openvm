@@ -150,10 +150,19 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         initial_memory: &Equipartition<F, CHUNK>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
+        overridden_height: Option<usize>,
     ) -> RowMajorMatrix<F> {
         let width = PersistentBoundaryCols::<F, CHUNK>::width();
         // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-        let height = (2 * self.touched_labels.len()).next_power_of_two();
+        let mut height = (2 * self.touched_labels.len()).next_power_of_two();
+        if let Some(mut oh) = overridden_height {
+            oh = oh.next_power_of_two();
+            assert!(
+                oh >= height,
+                "Overridden height is less than the required height"
+            );
+            height = oh;
+        }
         let mut rows = F::zero_vec(height * width);
 
         for (row, &(address_space, label)) in

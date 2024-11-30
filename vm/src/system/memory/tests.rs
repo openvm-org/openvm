@@ -234,8 +234,12 @@ fn test_memory_controller() {
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let mut memory_controller =
-        MemoryController::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
+    let mut memory_controller = MemoryController::with_volatile_memory(
+        memory_bus,
+        memory_config,
+        range_checker.clone(),
+        None,
+    );
     let aux_factory = memory_controller.aux_cols_factory();
 
     let mut rng = create_seeded_rng();
@@ -273,6 +277,7 @@ fn test_memory_controller_persistent() {
         merkle_bus,
         compression_bus,
         Equipartition::new(),
+        None,
     );
     let aux_factory = memory_controller.aux_cols_factory();
 
@@ -289,6 +294,7 @@ fn test_memory_controller_persistent() {
         MemoryBus(MEMORY_BUS),
         MemoryConfig::default(),
         range_checker.clone(),
+        None,
     );
 
     let mut poseidon_chip = Poseidon2Chip::from_poseidon2_config(
