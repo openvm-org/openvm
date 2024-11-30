@@ -11,7 +11,6 @@ use derive_new::new;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumIter, FromRepr};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
@@ -215,10 +214,6 @@ pub struct VmConfig {
     /// List of all supported Complex extensions, stored as indices of supported_modulus.
     /// The supported modulus must exist in order for the complex extension to be supported.
     pub supported_complex_ext: Vec<usize>,
-    /// List of all supported EC curves
-    pub supported_ec_curves: Vec<EcCurve>,
-    /// List of all supported pairing curves
-    pub supported_pairing_curves: Vec<PairingCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
@@ -254,8 +249,6 @@ impl VmConfig {
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
         supported_complex_ext: Vec<usize>,
-        supported_ec_curves: Vec<EcCurve>,
-        supported_pairing_curves: Vec<PairingCurve>,
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
@@ -268,8 +261,6 @@ impl VmConfig {
             collect_metrics,
             supported_modulus,
             supported_complex_ext,
-            supported_ec_curves,
-            supported_pairing_curves,
         }
     }
 
@@ -317,8 +308,6 @@ impl Default for VmConfig {
             false,
             vec![],
             vec![],
-            vec![],
-            vec![],
         )
     }
 }
@@ -358,27 +347,4 @@ impl VmConfig {
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
     }
-}
-
-// TO BE DELETED:
-#[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
-#[repr(usize)]
-pub enum Modulus {
-    Secp256k1Coord = 0,
-    Secp256k1Scalar = 1,
-}
-
-// TO BE DELETED:
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EcCurve {
-    Secp256k1,
-    Bn254,
-    Bls12_381,
-}
-
-// TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
-pub enum PairingCurve {
-    Bn254,
-    Bls12_381,
 }

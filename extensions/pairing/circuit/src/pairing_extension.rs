@@ -20,12 +20,12 @@ use axvm_instructions::{
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
-use strum::EnumCount;
+use strum::{EnumCount, FromRepr};
 
 use super::*;
 
 // All the supported pairing curves.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, FromRepr)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,
@@ -337,7 +337,7 @@ pub(crate) mod phantom {
     use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
     use ax_stark_backend::p3_field::PrimeField32;
     use axvm_circuit::{
-        arch::{PairingCurve, PhantomSubExecutor, Streams},
+        arch::{PhantomSubExecutor, Streams},
         rv32im::adapters::{compose, unsafe_read_rv32_register},
         system::memory::MemoryController,
     };
@@ -353,6 +353,8 @@ pub(crate) mod phantom {
         PhantomDiscriminant,
     };
     use eyre::bail;
+
+    use super::PairingCurve;
 
     pub struct PairingHintSubEx;
 

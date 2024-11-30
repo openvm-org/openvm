@@ -96,13 +96,17 @@ pub struct Rv32ModularKeccak256Config {
 }
 
 impl Rv32ModularKeccak256Config {
-    pub fn new(moduli: Vec<BigUint>, curves: Vec<CurveConfig>) -> Self {
+    pub fn new(curves: Vec<CurveConfig>) -> Self {
+        let primes: Vec<BigUint> = curves
+            .iter()
+            .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
+            .collect();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
-            modular: ModularExtension::new(moduli),
+            modular: ModularExtension::new(primes),
             keccak: Default::default(),
             weierstrass: WeierstrassExtension::new(curves),
         }
@@ -112,13 +116,7 @@ impl Rv32ModularKeccak256Config {
 #[test]
 fn test_ecdsa_runtime() -> Result<()> {
     let elf = build_example_program("ecdsa")?;
-    let config = Rv32ModularKeccak256Config::new(
-        vec![
-            SECP256K1_CONFIG.modulus.clone(),
-            SECP256K1_CONFIG.scalar.clone(),
-        ],
-        vec![SECP256K1_CONFIG.clone()],
-    );
+    let config = Rv32ModularKeccak256Config::new(vec![SECP256K1_CONFIG.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())

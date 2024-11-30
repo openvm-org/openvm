@@ -20,7 +20,7 @@ use crate::utils::build_example_program;
 
 type F = BabyBear;
 
-// TODO: this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
+// TODO(INT-2746): this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
 pub fn get_testing_config() -> Rv32PairingConfig {
     let primes = [
         SECP256K1.MODULUS.clone(),
@@ -64,13 +64,6 @@ mod bn254 {
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im()
-        //         .add_pairing_support(vec![PairingCurve::Bn254])
-        //         .add_ecc_support(vec![EcCurve::Bn254])
-        //         .add_modular_support(vec![BN254.MODULUS.clone()])
-        //         .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
-        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -135,7 +128,6 @@ mod bn254 {
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
-        // let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -266,7 +258,6 @@ mod bn254 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         executor.execute(elf, vec![io_all])?;
-        // air_test_with_min_segments(config, elf, vec![io_all], 1);
         Ok(())
     }
 }
@@ -317,9 +308,6 @@ mod bls12_381 {
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
-        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -364,9 +352,6 @@ mod bls12_381 {
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
-        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -504,7 +489,6 @@ mod bls12_381 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         executor.execute(elf, vec![io_all])?;
-        // air_test_with_min_segments(config, elf, vec![io_all], 1);
         Ok(())
     }
 
