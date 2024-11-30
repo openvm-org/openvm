@@ -53,7 +53,10 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     }
 }
 
-pub fn axvm_exe_from_elf_transpiler<F: PrimeField32>(elf: Elf, transpiler: Transpiler<F>) -> AxVmExe<F> {
+pub fn axvm_exe_from_elf_transpiler<F: PrimeField32>(
+    elf: Elf,
+    transpiler: Transpiler<F>,
+) -> AxVmExe<F> {
     let program = Program::new_without_debug_infos(
         &transpiler.transpile(&elf.instructions),
         DEFAULT_PC_STEP,
