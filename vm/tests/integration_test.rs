@@ -238,7 +238,7 @@ fn test_vm_public_values() {
         .with_metric_collection();
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let vm = VirtualMachine::new(engine, config.clone());
+    let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
 
     {

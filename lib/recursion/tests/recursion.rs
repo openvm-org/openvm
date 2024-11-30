@@ -46,10 +46,7 @@ where
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
 {
     let fib_program = fibonacci_program(a, b, n);
-    let vm_config = NativeConfig::new(
-        SystemConfig::default().with_public_values(3),
-        Native::default(),
-    );
+    let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
 
     let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
 
