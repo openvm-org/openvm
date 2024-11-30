@@ -33,7 +33,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 features = [
     "rust-runtime",
     "panic-handler",
-    "entrypoint",
     "export-libm",
     "export-getrandom",
     "export-pal-abi",
@@ -45,10 +44,10 @@ features = [
 default = []
 entrypoint = []
 # exports a `getrandom` implementation that panics
-export-getrandom = ["dep:bytemuck", "dep:getrandom"]
+export-getrandom = ["dep:getrandom"]
 export-libm = ["dep:libm"]
-# exports a `getrandom` implementation that uses sys_random
-getrandom = ["export-getrandom"]
+# Currently unimplemented: exports a `getrandom` implementation that uses sys_random
+getrandom = ["export-getrandom", "dep:bytemuck"]
 heap-embedded-alloc = [
     "dep:critical-section",
     "dep:embedded-alloc",
