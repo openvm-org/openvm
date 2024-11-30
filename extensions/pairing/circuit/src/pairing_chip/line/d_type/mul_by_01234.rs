@@ -11,6 +11,7 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_instructions::PairingOpcode;
+use axvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 
 use crate::Fp12;
 

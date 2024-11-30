@@ -21,7 +21,6 @@ mod tests;
 pub use air::KeccakVmAir;
 use axvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    rv32im::adapters::read_rv32_register,
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::ProgramBus,
@@ -31,6 +30,7 @@ use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
     Rv32KeccakOpcode, UsizeOpcode,
 };
+use axvm_rv32im_circuit::adapters::read_rv32_register;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len

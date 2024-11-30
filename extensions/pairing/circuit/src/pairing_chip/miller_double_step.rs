@@ -7,10 +7,10 @@ use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::Fp2;
 use axvm_circuit::{
     arch::{instructions::PairingOpcode, VmChipWrapper},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
+use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
@@ -98,12 +98,12 @@ mod tests {
             instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
             BITWISE_OP_LOOKUP_BUS,
         },
-        rv32im::adapters::Rv32VecHeapAdapterChip,
-        utils::{biguint_to_limbs, rv32_write_heap_default},
+        utils::biguint_to_limbs,
     };
     use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;

@@ -12,14 +12,9 @@ pub mod intrinsics;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
 pub mod prover;
-/// Chips to support RV32IM instructions.
-pub mod rv32im;
 /// System chips that are always required by the architecture.
 /// (The [PhantomChip](system::phantom::PhantomChip) is not technically required for a functioning VM,
 /// but there is almost always a need for it.)
 pub mod system;
 /// Utility functions and test utils
 pub mod utils;
-
-// temporary: should be separate crates
-pub mod extensions;

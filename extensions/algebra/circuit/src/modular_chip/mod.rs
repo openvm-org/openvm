@@ -3,11 +3,11 @@ pub use addsub::*;
 mod is_eq;
 pub use is_eq::*;
 mod muldiv;
-use axvm_circuit::{
-    arch::{VmAirWrapper, VmChipWrapper},
-    rv32im::adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
-};
+use axvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use axvm_rv32_adapters::{
+    Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip,
+};
 pub use muldiv::*;
 
 #[cfg(test)]

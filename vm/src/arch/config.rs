@@ -313,33 +313,6 @@ impl Default for VmConfig {
 }
 
 impl VmConfig {
-    pub fn rv32i() -> Self {
-        VmConfig {
-            poseidon2_max_constraint_degree: 3,
-            continuation_enabled: true,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::BaseAluRv32)
-        .add_executor(ExecutorName::LessThanRv32)
-        .add_executor(ExecutorName::ShiftRv32)
-        .add_executor(ExecutorName::LoadStoreRv32)
-        .add_executor(ExecutorName::LoadSignExtendRv32)
-        .add_executor(ExecutorName::HintStoreRv32)
-        .add_executor(ExecutorName::BranchEqualRv32)
-        .add_executor(ExecutorName::BranchLessThanRv32)
-        .add_executor(ExecutorName::JalLuiRv32)
-        .add_executor(ExecutorName::JalrRv32)
-        .add_executor(ExecutorName::AuipcRv32)
-    }
-
-    pub fn rv32im() -> Self {
-        Self::rv32i()
-            .add_executor(ExecutorName::MultiplicationRv32)
-            .add_executor(ExecutorName::MultiplicationHighRv32)
-            .add_executor(ExecutorName::DivRemRv32)
-    }
-
     pub fn read_config_file(file: &str) -> Result<Self, String> {
         let file_str = std::fs::read_to_string(file)
             .map_err(|_| format!("Could not load config file from: {file}"))?;
