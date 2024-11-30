@@ -53,29 +53,34 @@ impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     }
 }
 
-pub fn axvm_exe_from_elf_transpiler<F: PrimeField32>(
-    elf: Elf,
-    transpiler: Transpiler<F>,
-) -> AxVmExe<F> {
-    let program = Program::new_without_debug_infos(
-        &transpiler.transpile(&elf.instructions),
-        DEFAULT_PC_STEP,
-        elf.pc_base,
-        elf.max_num_public_values,
-    );
-    let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
+pub trait FromElf {
+    type ElfContext;
+    fn from_elf(elf: Elf, ctx: Self::ElfContext) -> Self;
+}
 
-    AxVmExe {
-        program,
-        pc_start: elf.pc_start,
-        init_memory,
-        custom_op_config: CustomOpConfig {
-            intrinsics: IntrinsicsOpConfig {
-                field_arithmetic: FieldArithmeticOpConfig {
-                    primes: elf.supported_moduli,
+impl<F: PrimeField32> FromElf for AxVmExe<F> {
+    type ElfContext = Transpiler<F>;
+    fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Self {
+        let program = Program::new_without_debug_infos(
+            &transpiler.transpile(&elf.instructions),
+            DEFAULT_PC_STEP,
+            elf.pc_base,
+            elf.max_num_public_values,
+        );
+        let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
+
+        AxVmExe {
+            program,
+            pc_start: elf.pc_start,
+            init_memory,
+            custom_op_config: CustomOpConfig {
+                intrinsics: IntrinsicsOpConfig {
+                    field_arithmetic: FieldArithmeticOpConfig {
+                        primes: elf.supported_moduli,
+                    },
                 },
             },
-        },
-        fn_bounds: elf.fn_bounds,
+            fn_bounds: elf.fn_bounds,
+        }
     }
 }
