@@ -13,8 +13,8 @@ use axvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
     utils::new_air_test_with_min_segments,
 };
+use axvm_ecc_constants::SECP256K1;
 use axvm_mod_circuit::{
-    modular_chip::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
 };
@@ -113,11 +113,8 @@ impl Rv32ModularFp2Int256Config {
 #[test_case("data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
-        vec![
-            SECP256K1_COORD_PRIME.clone(),
-            SECP256K1_SCALAR_PRIME.clone(),
-        ],
-        vec![SECP256K1_COORD_PRIME.clone()],
+        vec![SECP256K1.MODULUS.clone(), SECP256K1.ORDER.clone()],
+        vec![SECP256K1.MODULUS.clone()],
     );
     let elf = get_elf(elf_path)?;
     let executor = VmExecutor::<F, _>::new(config);

@@ -10,11 +10,10 @@ use axvm_circuit::{
 };
 use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
-    WeierstrassExtensionPeriphery, SECP256K1,
+    WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
 };
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use axvm_mod_circuit::{
-    modular_chip::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
 };
@@ -54,7 +53,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
 #[test]
 fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
-    let config = Rv32ModularConfig::new(vec![SECP256K1_COORD_PRIME.clone()]);
+    let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
@@ -63,7 +62,7 @@ fn test_modular_runtime() -> Result<()> {
 #[test]
 fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
-    let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_COORD_PRIME.clone()]);
+    let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
@@ -72,7 +71,7 @@ fn test_complex_runtime() -> Result<()> {
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
-    let config = Rv32WeierstrassConfig::new(vec![SECP256K1.clone()]);
+    let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
@@ -115,10 +114,10 @@ fn test_ecdsa_runtime() -> Result<()> {
     let elf = build_example_program("ecdsa")?;
     let config = Rv32ModularKeccak256Config::new(
         vec![
-            SECP256K1_COORD_PRIME.clone(),
-            SECP256K1_SCALAR_PRIME.clone(),
+            SECP256K1_CONFIG.modulus.clone(),
+            SECP256K1_CONFIG.scalar.clone(),
         ],
-        vec![SECP256K1.clone()],
+        vec![SECP256K1_CONFIG.clone()],
     );
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
