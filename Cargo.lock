@@ -894,6 +894,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
