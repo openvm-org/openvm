@@ -21,8 +21,6 @@ axvm-ecc-circuit = { workspace = true }
 
 num-bigint-dig = { workspace = true }
 num-traits = { workspace = true }
-p3-field = { workspace = true }
-p3-baby-bear = { workspace = true }
 strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
@@ -32,6 +30,7 @@ itertools = { workspace = true }
 eyre = { workspace = true }
 
 [dev-dependencies]
+ax-stark-sdk = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }

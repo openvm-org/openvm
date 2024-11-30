@@ -7,6 +7,8 @@ use ax_mod_circuit_builder::{
     test_utils::{bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec},
     ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
     rv32im::adapters::Rv32VecHeapAdapterChip,
@@ -17,8 +19,6 @@ use axvm_instructions::{
     riscv::RV32_CELL_BITS, Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode,
 };
 use num_bigint_dig::BigUint;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 

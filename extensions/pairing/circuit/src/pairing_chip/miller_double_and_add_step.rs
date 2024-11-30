@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{instructions::PairingOpcode, VmChipWrapper},
     rv32im::adapters::Rv32VecHeapAdapterChip,
@@ -10,7 +11,6 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_mod_circuit::Fp2;
-use p3_field::PrimeField32;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -105,6 +105,8 @@ mod tests {
     };
     use ax_ecc_execution::curves::bn254::Bn254;
     use ax_mod_circuit_builder::test_utils::bn254_fq_to_biguint;
+    use ax_stark_backend::p3_field::AbstractField;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use axvm_circuit::{
         arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         rv32im::adapters::Rv32VecHeapAdapterChip,
@@ -114,8 +116,6 @@ mod tests {
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use halo2curves_axiom::bn256::G2Affine;
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;

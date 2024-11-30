@@ -5,6 +5,8 @@ use ax_circuit_primitives::bitwise_op_lookup::{
 };
 use ax_ecc_execution::curves::bls12_381::{tangent_line_023, Bls12_381};
 use ax_mod_circuit_builder::{test_utils::*, ExprBuilderConfig};
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
@@ -17,8 +19,6 @@ use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::*;

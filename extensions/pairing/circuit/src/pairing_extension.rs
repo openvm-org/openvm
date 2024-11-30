@@ -5,6 +5,7 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
@@ -19,7 +20,6 @@ use axvm_instructions::{
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
-use p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::*;
@@ -335,6 +335,7 @@ pub(crate) mod phantom {
     use std::collections::VecDeque;
 
     use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
+    use ax_stark_backend::p3_field::PrimeField32;
     use axvm_circuit::{
         arch::{PairingCurve, PhantomSubExecutor, Streams},
         rv32im::adapters::{compose, unsafe_read_rv32_register},
@@ -352,7 +353,6 @@ pub(crate) mod phantom {
         PhantomDiscriminant,
     };
     use eyre::bail;
-    use p3_field::PrimeField32;
 
     pub struct PairingHintSubEx;
 

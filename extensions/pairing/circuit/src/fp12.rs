@@ -200,26 +200,22 @@ impl Fp12 {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
     use ax_ecc_execution::axvm_ecc::algebra::field::FieldExtension;
+    use ax_mod_circuit_builder::{test_utils::*, *};
+    use ax_stark_backend::{
+        p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+    };
     use ax_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        utils::create_seeded_rng,
+        p3_baby_bear::BabyBear, utils::create_seeded_rng,
     };
     use axvm_ecc_constants::BN254;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
-    use p3_air::BaseAir;
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
-    use p3_matrix::dense::RowMajorMatrix;
 
-    use super::{
-        super::super::{field_expression::*, test_utils::*},
-        *,
-    };
+    use super::*;
 
     fn generate_random_fq12() -> Fq12 {
         let mut rng = create_seeded_rng();
@@ -330,4 +326,3 @@ mod tests {
         );
     }
 }
-*/

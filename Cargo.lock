@@ -919,6 +919,7 @@ dependencies = [
  "ax-ecc-execution",
  "ax-mod-circuit-builder",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-ecc",
@@ -935,8 +936,6 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "once_cell",
- "p3-baby-bear",
- "p3-field",
  "rand 0.8.5",
  "strum",
 ]

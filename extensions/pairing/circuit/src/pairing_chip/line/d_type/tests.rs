@@ -8,6 +8,8 @@ use ax_mod_circuit_builder::{
     test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
     ExprBuilderConfig,
 };
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
@@ -23,8 +25,6 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{super::EvaluateLineChip, *};
