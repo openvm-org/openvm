@@ -28,3 +28,4 @@ once_cell = { workspace = true }
 [dev-dependencies]
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
