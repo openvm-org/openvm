@@ -1,6 +1,8 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use std::rc::Rc;
+
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -9,9 +11,10 @@ use ax_stark_sdk::{
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, ExecutorName, VmConfig};
+use axvm_keccak_transpiler::KeccakTranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
-use axvm_transpiler::axvm_platform::bincode;
+use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
@@ -43,7 +46,10 @@ fn main() -> Result<()> {
     let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("ecrecover")?;
-    let exe = AxVmExe::<BabyBear>::from(elf.clone());
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::default_with_intrinsics().with_processor(Rc::new(KeccakTranspilerExtension)),
+    );
     let vm_config = VmConfig::rv32im()
         .add_executor(ExecutorName::Keccak256Rv32)
         .add_modular_support(exe.custom_op_config.primes())
@@ -79,7 +85,7 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, vm_config, elf, input_stream)
+                bench_from_exe(engine, vm_config, exe, input_stream)
             })?;
 
         Ok(())
