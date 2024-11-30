@@ -35,8 +35,7 @@ use crate::{
         adapters::{
             Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
             Rv32HintStoreAdapterChip, Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip,
-            Rv32MultAdapterChip, Rv32RdWriteAdapterChip, Rv32VecHeapAdapterChip,
-            Rv32VecHeapTwoReadsAdapterChip,
+            Rv32MultAdapterChip, Rv32RdWriteAdapterChip,
         },
         *,
     },
