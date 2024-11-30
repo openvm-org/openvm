@@ -78,11 +78,8 @@ impl<F: PrimeField32> VmChipSet<F> {
     }
     pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
         for chip in self.chips.iter_mut() {
-            if let AxVmChip::Executor(chip) = chip {
-                match chip {
-                    AxVmExecutor::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
-                    _ => {}
-                }
+            if let AxVmChip::Executor(AxVmExecutor::Phantom(chip)) = chip {
+                chip.borrow_mut().set_streams(streams.clone());
             }
         }
     }
@@ -355,7 +352,7 @@ impl VmConfig {
             }
             match executor {
                 ExecutorName::Phantom => {
-                    let mut phantom_chip = PhantomChip::new(
+                    let phantom_chip = PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
