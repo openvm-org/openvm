@@ -132,7 +132,6 @@ pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     touched_addresses: HashSet<(F, F)>,
     range_checker: Arc<VariableRangeCheckerChip>,
-    overridden_height: Option<usize>,
 }
 
 impl<F: Field> VolatileBoundaryChip<F> {
@@ -141,7 +140,6 @@ impl<F: Field> VolatileBoundaryChip<F> {
         addr_space_max_bits: usize,
         pointer_max_bits: usize,
         range_checker: Arc<VariableRangeCheckerChip>,
-        overridden_height: Option<usize>,
     ) -> Self {
         let range_bus = range_checker.bus();
         Self {
@@ -153,7 +151,6 @@ impl<F: Field> VolatileBoundaryChip<F> {
             ),
             touched_addresses: HashSet::new(),
             range_checker,
-            overridden_height,
         }
     }
 
@@ -176,8 +173,13 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     pub fn generate_trace(
         &self,
         final_memory: &TimestampedEquipartition<F, 1>,
+        overridden_height: Option<usize>,
     ) -> RowMajorMatrix<F> {
-        let trace_height = if let Some(height) = self.overridden_height {
+        let trace_height = if let Some(height) = overridden_height {
+            assert!(
+                height >= final_memory.len(),
+                "Overridden height is less than the required height"
+            );
             height
         } else {
             final_memory.len()
@@ -185,7 +187,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         self.generate_trace_with_height(final_memory, trace_height.next_power_of_two())
     }
 
-    pub fn generate_trace_with_height(
+    fn generate_trace_with_height(
         &self,
         final_memory: &TimestampedEquipartition<F, 1>,
         trace_height: usize,

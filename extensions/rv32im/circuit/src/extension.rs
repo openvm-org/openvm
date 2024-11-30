@@ -22,7 +22,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 /// Config for a VM with base extension and IO extension
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Rv32IConfig {
     #[system]
     pub system: SystemConfig,
@@ -33,7 +33,7 @@ pub struct Rv32IConfig {
 }
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Rv32ImConfig {
     #[system]
     pub system: SystemConfig,

@@ -18,7 +18,16 @@ impl<F: PrimeField32> MemoryController<F> {
         match self.adapter_records.get(&N) {
             None => RowMajorMatrix::new(vec![], width),
             Some(records) => {
-                let height = next_power_of_two_or_zero(records.len());
+                let height = if let Some(oh) = self.get_access_adapter_overridden_height(N) {
+                    assert!(
+                        oh >= records.len(),
+                        "Overridden height is less than the required height"
+                    );
+                    oh
+                } else {
+                    records.len()
+                };
+                let height = next_power_of_two_or_zero(height);
                 let mut values = F::zero_vec(height * width);
 
                 for (row, record) in values.chunks_mut(width).zip(records) {
@@ -49,5 +58,10 @@ impl<F: PrimeField32> MemoryController<F> {
                 RowMajorMatrix::new(values, width)
             }
         }
+    }
+    fn get_access_adapter_overridden_height(&self, n: usize) -> Option<usize> {
+        self.overridden_heights
+            .as_ref()
+            .and_then(|oh| oh.access_adapters_ref().get(&n).copied())
     }
 }
