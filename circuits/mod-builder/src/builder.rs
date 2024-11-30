@@ -16,8 +16,9 @@ use ax_stark_backend::{
 };
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
-use p3_air::{AirBuilder, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField64};
+use p3_matrix::Matrix;
 
 use super::{FieldVariable, SymbolicExpr};
 
@@ -247,6 +248,14 @@ impl<F: Field> BaseAir<F> for FieldExpr {
             + self.builder.carry_limbs.iter().sum::<usize>()
             + self.builder.num_flags
             + 1 // is_valid
+    }
+}
+
+impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        SubAir::eval(self, builder, &local);
     }
 }
 

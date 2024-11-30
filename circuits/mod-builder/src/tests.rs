@@ -1,27 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_primitives::{bigint::utils::*, SubAir, TraceSubRowGenerator};
-use ax_stark_backend::interaction::InteractionBuilder;
+use ax_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
 };
 use num_bigint_dig::BigUint;
-use p3_air::{Air, BaseAir};
+use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr};
 
 const LIMB_BITS: usize = 8;
-
-impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        SubAir::eval(self, builder, &local);
-    }
-}
 
 #[test]
 fn test_add() {
