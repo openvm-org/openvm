@@ -381,10 +381,6 @@ impl VmConfig {
                         crate::extensions::rv32im::phantom::Rv32PrintStrSubEx,
                         PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
                     );
-                    phantom_chip.add_sub_executor(
-                        crate::extensions::pairing::phantom::PairingHintSubEx,
-                        PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
-                    );
 
                     let phantom_chip = Rc::new(RefCell::new(phantom_chip));
                     for opcode in range {

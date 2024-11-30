@@ -280,52 +280,6 @@ impl VmConfig {
         self
     }
 
-    /*
-    pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
-        let mut res = self;
-        res.supported_modulus.extend(enabled_modulus);
-        res
-    }
-
-    pub fn add_canonical_modulus(self) -> Self {
-        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
-        self.add_modular_support(primes)
-    }
-
-    pub fn add_complex_ext_support(mut self, enabled_moduli: Vec<BigUint>) -> Self {
-        for modulus in enabled_moduli {
-            let (mod_idx, _) = self
-                .supported_modulus
-                .iter()
-                .find_position(|&m| m == &modulus)
-                .expect("Modulus must be supported to enable complex extension");
-            self.supported_complex_ext.push(mod_idx);
-        }
-        self
-    }
-
-    pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
-        let mut res = self;
-        res.supported_ec_curves.extend(ec_curves);
-        res
-    }
-
-    // TODO: remove canonical ec curves altogether
-    pub fn add_canonical_ec_curves(self) -> Self {
-        self.add_ecc_support(vec![EcCurve::Secp256k1])
-    }
-
-    pub fn add_pairing_support(self, pairing_curves: Vec<PairingCurve>) -> Self {
-        let mut res = self;
-        res.supported_pairing_curves.extend(pairing_curves);
-        res
-    }
-
-    pub fn add_canonical_pairing_curves(self) -> Self {
-        self.add_pairing_support(vec![PairingCurve::Bn254])
-    }
-    */
-
     pub fn with_num_public_values(mut self, n: usize) -> Self {
         self.num_public_values = n;
         self
@@ -428,41 +382,3 @@ pub enum PairingCurve {
     Bn254,
     Bls12_381,
 }
-
-/*
-impl Modulus {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
-            Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
-        }
-    }
-
-    pub fn all() -> Vec<Self> {
-        Modulus::iter().collect()
-    }
-}
-
-
-
-impl EcCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
-            EcCurve::Bn254 => BN254.MODULUS.clone(),
-            EcCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
-    }
-}
-
-
-
-impl PairingCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            PairingCurve::Bn254 => BN254.MODULUS.clone(),
-            PairingCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
-    }
-}
-*/
