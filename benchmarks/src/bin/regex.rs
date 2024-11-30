@@ -1,5 +1,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
+use std::rc::Rc;
+
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -7,9 +9,11 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::{ExecutorName, VmConfig};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, ExecutorName, VmConfig};
+use axvm_keccak_transpiler::KeccakTranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 use p3_field::AbstractField;
@@ -21,6 +25,10 @@ fn main() -> Result<()> {
     let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("regex")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::default_with_intrinsics().with_processor(Rc::new(KeccakTranspilerExtension)),
+    );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {
             let engine = BabyBearPoseidon2Engine::new(
@@ -38,7 +46,7 @@ fn main() -> Result<()> {
             bench_from_exe(
                 engine,
                 VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32),
-                elf,
+                exe,
                 vec![fe_bytes],
             )
         })?;
