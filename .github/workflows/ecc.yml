@@ -46,7 +46,7 @@ jobs:
       - name: Run ecc-circuits crate tests
         working-directory: extensions/ecc/circuit
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel,test-utils
+          cargo nextest run --cargo-profile=fast 
 
       - name: Run pairing-circuits crate tests
         working-directory: extensions/pairing/circuit
