@@ -11,14 +11,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    rv32im::adapters::RV32_REGISTER_NUM_LIMBS,
+use axvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 use axvm_instructions::{instruction::Instruction, CastfOpcode};
+use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 // LIMB_BITS is the size of the limbs in bits.
 pub(crate) const LIMB_BITS: usize = 8;
 // the final limb has only 6 bits

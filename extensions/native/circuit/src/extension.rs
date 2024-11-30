@@ -7,11 +7,11 @@ use axvm_circuit::{
         VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
         VmInventoryError,
     },
-    rv32im::BranchEqualCoreChip,
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_instructions::*;
+use axvm_rv32im_circuit::BranchEqualCoreChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
