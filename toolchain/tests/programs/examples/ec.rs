@@ -13,8 +13,10 @@ use hex_literal::hex;
 
 axvm::entry!(main);
 
+axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+
 pub fn main() {
-    setup_curves();
+    setup_all_moduli();
 
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add

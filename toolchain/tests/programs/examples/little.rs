@@ -6,7 +6,10 @@ use axvm_ecc::sw::Secp256k1Coord;
 
 axvm::entry!(main);
 
+axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+
 pub fn main() {
+    setup_all_moduli();
     let mut pow = Secp256k1Coord::MODULUS;
     pow[0] -= 2;
 
