@@ -9,4 +9,4 @@ description = "Transpiler extension for Keccak"
 axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
-rrs-lib = "0.1.0"
+rrs-lib = { workspace = true }
