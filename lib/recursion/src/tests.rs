@@ -196,7 +196,7 @@ fn test_optional_air() {
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
-            vm_config,
+            vm_config.clone(),
         );
     }
     // Case 2: The second AIR is not presented.
@@ -230,7 +230,7 @@ fn test_optional_air() {
         gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
-            vm_config,
+            vm_config.clone(),
         );
     }
     // Case 3: Negative - unbalanced interactions.
