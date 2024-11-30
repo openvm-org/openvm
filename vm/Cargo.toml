@@ -19,11 +19,6 @@ ax-poseidon2-air = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
-axvm-ecc = { workspace = true, features = [
-    "halo2curves",
-] } # TODO: move ecc chips to separate crate
-ax-ecc-execution = { workspace = true } # needed for hint_final_exp
-axvm-ecc-constants = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-stark-sdk = { workspace = true }
