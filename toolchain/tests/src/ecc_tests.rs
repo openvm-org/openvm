@@ -1,9 +1,11 @@
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 use axvm_circuit::{
     arch::{ExecutorName, VmConfig, VmExecutor},
     intrinsics::modular::SECP256K1_COORD_PRIME,
 };
+use axvm_keccak_transpiler::KeccakTranspilerExtension;
+use axvm_transpiler::{axvm_exe_from_elf_transpiler, transpiler::Transpiler};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 
@@ -72,6 +74,11 @@ fn test_ecdsa_runtime() -> Result<()> {
             .add_canonical_modulus()
             .add_canonical_ec_curves(),
     );
-    executor.execute(elf, vec![])?;
+    let exe = axvm_exe_from_elf_transpiler(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(KeccakTranspilerExtension)),
+    );
+    executor.execute(exe, vec![])?;
     Ok(())
 }
