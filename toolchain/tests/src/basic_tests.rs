@@ -1,9 +1,7 @@
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use axvm_bigint_circuit::Int256Rv32Config;
 use axvm_circuit::{
-    arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, new_vm, new_vm::VmExecutor as NewVmExecutor,
-        VmConfig, VmExecutor,
-    },
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm::VmExecutor},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
@@ -18,7 +16,6 @@ use crate::utils::{build_example_program, build_example_program_with_features};
 
 type F = BabyBear;
 
-/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
@@ -48,7 +45,7 @@ fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> 
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
     let config = Rv32IConfig::default();
-    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
     Ok(())
 }
@@ -57,7 +54,7 @@ fn test_read_vec_runtime() -> Result<()> {
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
     let config = Rv32IConfig::default();
-    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    let executor = VmExecutor::<F, _>::new(config);
 
     #[derive(serde::Serialize)]
     struct Foo {
@@ -86,7 +83,7 @@ fn test_read_runtime() -> Result<()> {
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
     let config = Rv32IConfig::default();
-    let executor = new_vm::VmExecutor::<F, _>::new(config.clone());
+    let executor = VmExecutor::<F, _>::new(config.clone());
     let final_memory = executor.execute(elf, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
     let pv_proof = UserPublicValuesProof::compute(
@@ -109,7 +106,7 @@ fn test_reveal_runtime() -> Result<()> {
 #[test]
 fn test_keccak256_runtime() -> Result<()> {
     let elf = build_example_program("keccak")?;
-    let executor = NewVmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
+    let executor = VmExecutor::<F, _>::new(Keccak256Rv32Config::default());
     executor.execute(elf, vec![])?;
     Ok(())
 }
@@ -118,30 +115,16 @@ fn test_keccak256_runtime() -> Result<()> {
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
     let config = Rv32IConfig::default();
-    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }
 
-#[test]
-fn test_modular_runtime() -> Result<()> {
-    let elf = build_example_program("little")?;
-    let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_modulus());
-    executor.execute(elf, vec![])?;
-    Ok(())
-}
-
-// TODO[yi]: add back this test once we have support for modular extension
-/*
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_int256_alu()
-            .add_int256_m()
-            .add_int256_branch(),
-    );
+    let config = Int256Rv32Config::default();
+    let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }
@@ -149,14 +132,8 @@ fn test_matrix_power_runtime() -> Result<()> {
 #[test]
 fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
-    let executor = VmExecutor::<F>::new(
-        VmConfig::rv32im()
-            .add_int256_alu()
-            .add_int256_m()
-            .add_int256_branch(),
-    );
+    let config = Int256Rv32Config::default();
+    let executor = VmExecutor::<F, _>::new(config);
     executor.execute(elf, vec![])?;
     Ok(())
 }
-
-*/

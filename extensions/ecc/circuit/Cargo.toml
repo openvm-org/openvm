@@ -1,0 +1,29 @@
+[package]
+name = "axvm-ecc-circuit"
+version = "0.1.0"
+edition = "2021"
+description = "Elliptic curve circuits."
+
+[dependencies]
+ax-circuit-derive = { workspace = true }
+ax-circuit-primitives = { workspace = true }
+axvm-circuit-derive = { workspace = true }
+axvm-circuit = { workspace = true }
+axvm-ecc-constants = { workspace = true }
+axvm-instructions = { workspace = true }
+ax-mod-circuit-builder = { workspace = true }
+ax-stark-backend = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
+axvm-mod-circuit = { workspace = true }
+
+num-bigint-dig = { workspace = true }
+num-traits = { workspace = true }
+p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
+strum = { workspace = true }
+derive_more = { workspace = true }
+derive-new = { workspace = true }
+once_cell = { workspace = true }
+[dev-dependencies]
+ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+axvm-circuit = { workspace = true, features = ["test-utils"] }

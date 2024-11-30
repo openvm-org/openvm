@@ -1,0 +1,38 @@
+[package]
+name = "axvm-mod-circuit"
+version = "0.1.0"
+edition = "2021"
+description = "Modular arithmetic circuits."
+
+[dependencies]
+ax-circuit-primitives = { workspace = true }
+ax-circuit-derive = { workspace = true }
+axvm-instructions = { workspace = true }
+axvm-circuit-derive = { workspace = true }
+axvm-circuit = { workspace = true }
+axvm-ecc-constants = { workspace = true }
+ax-stark-backend = { workspace = true }
+ax-mod-circuit-builder = { workspace = true }
+ax-stark-sdk = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
+
+p3-air = { workspace = true }
+p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-matrix = { workspace = true }
+
+itertools = { workspace = true }
+hex-literal = { workspace = true }
+num-bigint-dig = { workspace = true }
+num-traits = { workspace = true }
+once_cell = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+derive_more = { workspace = true, features = ["from"] }
+strum = { workspace = true }
+derive-new = { workspace = true }
+
+[dev-dependencies]
+halo2curves-axiom = { workspace = true }
+ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+axvm-circuit = { workspace = true, features = ["test-utils"] }

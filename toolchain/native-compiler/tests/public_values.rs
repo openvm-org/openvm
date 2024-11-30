@@ -30,7 +30,7 @@ fn test_compiler_public_values() {
     let program = builder.compile_isa();
     let executor = SingleSegmentVmExecutor::new(NativeConfig::new(
         SystemConfig::default().with_public_values(2),
-        Native::default(),
+        Native,
     ));
 
     let exe_result = executor.execute(program, vec![]).unwrap();

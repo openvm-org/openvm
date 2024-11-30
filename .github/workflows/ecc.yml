@@ -10,10 +10,11 @@ on:
       - "circuits/primitives/**"
       - "vm/**"
       - "toolchain/native-compiler/**"
-      - "circuits/ecc/**"
       - "lib/ecc/**"
       - "lib/ecc-execution/**"
       - "cargo-axiom/**"
+      - "extensions/ecc/circuit/**"
+      - "extensions/pairing/circuit/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -43,9 +44,14 @@ jobs:
           cargo nextest run --cargo-profile=fast
 
       - name: Run ecc-circuits crate tests
-        working-directory: circuits/ecc
+        working-directory: extensions/ecc/circuit
         run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel,test-utils
+          cargo nextest run --cargo-profile=fast 
+
+      - name: Run pairing-circuits crate tests
+        working-directory: extensions/pairing/circuit
+        run: |
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast 
 
       - name: Run axvm-ecc crate tests
         working-directory: lib/ecc

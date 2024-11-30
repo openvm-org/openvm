@@ -1,0 +1,38 @@
+[package]
+name = "axvm-pairing-circuit"
+version = "0.1.0"
+edition = "2021"
+description = "Elliptic curve pairing circuits."
+
+[dependencies]
+ax-circuit-derive = { workspace = true }
+ax-circuit-primitives = { workspace = true }
+axvm-circuit-derive = { workspace = true }
+axvm-circuit = { workspace = true }
+axvm-ecc = { workspace = true }
+ax-ecc-execution = { workspace = true }
+axvm-ecc-constants = { workspace = true }
+axvm-instructions = { workspace = true }
+ax-mod-circuit-builder = { workspace = true }
+ax-stark-backend = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
+axvm-mod-circuit = { workspace = true }
+axvm-ecc-circuit = { workspace = true }
+
+num-bigint-dig = { workspace = true }
+num-traits = { workspace = true }
+strum = { workspace = true }
+derive_more = { workspace = true }
+derive-new = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+itertools = { workspace = true }
+eyre = { workspace = true }
+
+[dev-dependencies]
+ax-stark-sdk = { workspace = true }
+ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+axvm-circuit = { workspace = true, features = ["test-utils"] }
+halo2curves-axiom = { workspace = true }
+axvm-ecc = { workspace = true }
+ax-ecc-execution = { workspace = true }

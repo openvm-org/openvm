@@ -258,7 +258,7 @@ fn test_optional_air() {
             gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
                 program.clone(),
                 proof.write(),
-                vm_config.clone(),
+                vm_config,
             )
         });
         assert!(unwind_res.is_err());

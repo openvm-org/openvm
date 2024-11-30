@@ -7,13 +7,10 @@ use ax_stark_backend::{
     ChipUsageGetter,
 };
 use axvm_circuit::system::memory::MemoryTraceHeights;
-use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
-use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
@@ -21,7 +18,7 @@ use super::{
 };
 use crate::{
     arch::ExecutorName,
-    intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
+    // intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
     system::memory::BOUNDARY_AIR_OFFSET,
 };
 
@@ -217,10 +214,6 @@ pub struct VmConfig {
     /// List of all supported Complex extensions, stored as indices of supported_modulus.
     /// The supported modulus must exist in order for the complex extension to be supported.
     pub supported_complex_ext: Vec<usize>,
-    /// List of all supported EC curves
-    pub supported_ec_curves: Vec<EcCurve>,
-    /// List of all supported pairing curves
-    pub supported_pairing_curves: Vec<PairingCurve>,
 
     pub poseidon2_max_constraint_degree: usize,
     /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
@@ -256,8 +249,6 @@ impl VmConfig {
         // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
         supported_modulus: Vec<BigUint>,
         supported_complex_ext: Vec<usize>,
-        supported_ec_curves: Vec<EcCurve>,
-        supported_pairing_curves: Vec<PairingCurve>,
     ) -> Self {
         VmConfig {
             executors: Vec::new(),
@@ -270,8 +261,6 @@ impl VmConfig {
             collect_metrics,
             supported_modulus,
             supported_complex_ext,
-            supported_ec_curves,
-            supported_pairing_curves,
         }
     }
 
@@ -280,50 +269,6 @@ impl VmConfig {
         // Adding these will cause a panic in the `create_chip_set` function.
         self.executors.push(executor);
         self
-    }
-
-    pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
-        let mut res = self;
-        res.supported_modulus.extend(enabled_modulus);
-        res
-    }
-
-    pub fn add_canonical_modulus(self) -> Self {
-        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
-        self.add_modular_support(primes)
-    }
-
-    pub fn add_complex_ext_support(mut self, enabled_moduli: Vec<BigUint>) -> Self {
-        for modulus in enabled_moduli {
-            let (mod_idx, _) = self
-                .supported_modulus
-                .iter()
-                .find_position(|&m| m == &modulus)
-                .expect("Modulus must be supported to enable complex extension");
-            self.supported_complex_ext.push(mod_idx);
-        }
-        self
-    }
-
-    pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
-        let mut res = self;
-        res.supported_ec_curves.extend(ec_curves);
-        res
-    }
-
-    // TODO: remove canonical ec curves altogether
-    pub fn add_canonical_ec_curves(self) -> Self {
-        self.add_ecc_support(vec![EcCurve::Secp256k1])
-    }
-
-    pub fn add_pairing_support(self, pairing_curves: Vec<PairingCurve>) -> Self {
-        let mut res = self;
-        res.supported_pairing_curves.extend(pairing_curves);
-        res
-    }
-
-    pub fn add_canonical_pairing_curves(self) -> Self {
-        self.add_pairing_support(vec![PairingCurve::Bn254])
     }
 
     pub fn with_num_public_values(mut self, n: usize) -> Self {
@@ -361,8 +306,6 @@ impl Default for VmConfig {
             0,
             DEFAULT_MAX_SEGMENT_LEN,
             false,
-            vec![],
-            vec![],
             vec![],
             vec![],
         )
@@ -403,60 +346,5 @@ impl VmConfig {
         let config: Self = toml::from_str(file_str.as_str())
             .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
         Ok(config)
-    }
-}
-
-// TO BE DELETED:
-#[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
-#[repr(usize)]
-pub enum Modulus {
-    Secp256k1Coord = 0,
-    Secp256k1Scalar = 1,
-}
-
-impl Modulus {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
-            Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
-        }
-    }
-
-    pub fn all() -> Vec<Self> {
-        Modulus::iter().collect()
-    }
-}
-
-// TO BE DELETED:
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EcCurve {
-    Secp256k1,
-    Bn254,
-    Bls12_381,
-}
-
-impl EcCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
-            EcCurve::Bn254 => BN254.MODULUS.clone(),
-            EcCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
-    }
-}
-
-// TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
-pub enum PairingCurve {
-    Bn254,
-    Bls12_381,
-}
-
-impl PairingCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            PairingCurve::Bn254 => BN254.MODULUS.clone(),
-            PairingCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
     }
 }
