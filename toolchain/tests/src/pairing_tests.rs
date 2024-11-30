@@ -280,13 +280,6 @@ mod bls12_381 {
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
-        // let executor = VmExecutor::<F>::new(
-        //     VmConfig::rv32im()
-        //         .add_pairing_support(vec![PairingCurve::Bls12_381])
-        //         .add_ecc_support(vec![EcCurve::Bls12_381])
-        //         .add_modular_support(vec![BLS12381.MODULUS.clone()])
-        //         .add_complex_ext_support(vec![BLS12381.MODULUS.clone()]),
-        // );
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
