@@ -78,7 +78,7 @@ where
 pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig, VmConfig>(
     program: Program<Val<SC>>,
     input_stream: Vec<Vec<Val<SC>>>,
-    config: VmConfig,
+    #[allow(unused_mut)] mut config: VmConfig,
 ) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
@@ -89,13 +89,13 @@ where
     cfg_if::cfg_if! {
         if #[cfg(feature = "bench-metrics")] {
             // Run once with metrics collection enabled, which can improve runtime performance
-            config = config.with_metric_collection();
+            config.system_mut().collect_metrics = true;
             {
                 let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config.clone());
                 executor.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
-            config = config.without_metric_collection();
+            config.system_mut().collect_metrics = false;
             let start = std::time::Instant::now();
         }
     }

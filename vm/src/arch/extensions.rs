@@ -21,10 +21,11 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
 use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
-    SystemConfig,
+    SystemConfig, SystemTraceHeights,
 };
 use crate::system::{
     connector::VmConnectorChip,
@@ -176,12 +177,17 @@ pub struct VmInventory<E, P> {
     insertion_order: Vec<ChipId>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VmInventoryTraceHeights {
+    pub chips: FxHashMap<ChipId, usize>,
+}
+
 type ExecutorId = usize;
 /// TODO: create newtype
 type AxVmOpcode = usize;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ChipId {
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChipId {
     Executor(usize),
     Periphery(usize),
 }
@@ -300,6 +306,27 @@ impl<E, P> VmInventory<E, P> {
     pub fn num_airs(&self) -> usize {
         self.executors.len() + self.periphery.len()
     }
+
+    pub fn get_trace_heights(&self) -> VmInventoryTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmInventoryTraceHeights {
+            chips: self
+                .executors
+                .iter()
+                .enumerate()
+                .map(|(i, chip)| (ChipId::Executor(i), chip.current_trace_height()))
+                .chain(
+                    self.periphery
+                        .iter()
+                        .enumerate()
+                        .map(|(i, chip)| (ChipId::Periphery(i), chip.current_trace_height())),
+                )
+                .collect(),
+        }
+    }
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
@@ -316,6 +343,7 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
     pub inventory: VmInventory<E, P>,
+    overridden_inventory_heights: Option<VmInventoryTraceHeights>,
 
     streams: Arc<Mutex<Streams<F>>>,
     /// System buses use indices [0, bus_idx_max)
@@ -338,7 +366,7 @@ pub struct SystemBase<F> {
     range_checker_bus: VariableRangeCheckerBus,
 }
 
-impl<F> SystemBase<F> {
+impl<F: PrimeField32> SystemBase<F> {
     pub fn range_checker_bus(&self) -> VariableRangeCheckerBus {
         self.range_checker_bus
     }
@@ -353,6 +381,14 @@ impl<F> SystemBase<F> {
 
     pub fn execution_bus(&self) -> ExecutionBus {
         EXECUTION_BUS
+    }
+
+    /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for
+    /// regular users.
+    pub fn get_system_trace_heights(&self) -> SystemTraceHeights {
+        SystemTraceHeights {
+            memory: self.memory_controller.borrow().get_memory_trace_heights(),
+        }
     }
 }
 
@@ -375,6 +411,10 @@ impl<F: PrimeField32> SystemComplex<F> {
         let mut bus_idx_max = RANGE_CHECKER_BUS;
 
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let mem_overridden_heights = config
+            .overridden_heights
+            .as_ref()
+            .map(|oh| oh.memory.clone());
         let memory_controller = if config.continuation_enabled {
             bus_idx_max += 2;
             MemoryController::with_persistent_memory(
@@ -384,12 +424,14 @@ impl<F: PrimeField32> SystemComplex<F> {
                 MemoryMerkleBus(bus_idx_max - 2),
                 DirectCompressionBus(bus_idx_max - 1),
                 Equipartition::<F, CHUNK>::new(),
+                mem_overridden_heights,
             )
         } else {
             MemoryController::with_volatile_memory(
                 MEMORY_BUS,
                 config.memory_config,
                 range_checker.clone(),
+                mem_overridden_heights,
             )
         };
         let memory_controller = Rc::new(RefCell::new(memory_controller));
@@ -463,6 +505,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory,
             bus_idx_max,
             streams,
+            overridden_inventory_heights: None,
         }
     }
 }
@@ -525,6 +568,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             inventory: self.inventory.transmute(),
             bus_idx_max: self.bus_idx_max,
             streams: self.streams,
+            overridden_inventory_heights: self.overridden_inventory_heights,
         }
     }
 
@@ -668,6 +712,22 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().current_trace_height()])
             .collect()
     }
+
+    /// Return trace heights of (SystemBase, Inventory). Usually this is for aggregation and not
+    /// useful for regular users.
+    pub fn get_system_and_inventory_trace_heights(
+        &self,
+    ) -> (SystemTraceHeights, VmInventoryTraceHeights)
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        (
+            self.base.get_system_trace_heights(),
+            self.inventory.get_trace_heights(),
+        )
+    }
+
     /// Return dynamic trace heights of all chips in order, or 0 if
     /// chip has constant height.
     // Used for continuation segmentation logic, so this is performance-sensitive.
@@ -769,13 +829,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         insertion_order.reverse();
         let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
         for chip_id in insertion_order {
-            let height = None;
-            // let height = self.overridden_executor_heights.as_ref().and_then(
-            //     |overridden_heights| {
-            //         let executor_name: ExecutorName = (&executor).into();
-            //         overridden_heights.get(&executor_name).copied()
-            //     },
-            // );
+            let mut height = None;
+            if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
+                height = overridden_heights.chips.get(&chip_id).copied();
+            }
             let air_proof_input = match chip_id {
                 ChipId::Executor(id) => {
                     let chip = self.inventory.executors.pop().unwrap();

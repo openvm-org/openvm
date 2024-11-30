@@ -25,7 +25,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             println!("Running: {}", file_name);
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
-                let executor = VmExecutor::<F, _>::new(config);
+                let executor = VmExecutor::<F, _>::new(config.clone());
                 let res = executor.execute(elf, vec![])?;
                 Ok(res)
             });
@@ -59,7 +59,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             let elf = decode_elf(&path)?;
 
             let result = std::panic::catch_unwind(|| {
-                new_air_test_with_min_segments(config, elf, vec![], 1);
+                new_air_test_with_min_segments(config.clone(), elf, vec![], 1);
             });
 
             match result {

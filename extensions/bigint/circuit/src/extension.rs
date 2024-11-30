@@ -24,7 +24,7 @@ use program::DEFAULT_PC_STEP;
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Int256Rv32Config {
     #[system]
     pub system: SystemConfig,

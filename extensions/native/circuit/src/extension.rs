@@ -22,7 +22,7 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, phantom::*, *};
 
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct NativeConfig {
     #[system]
     pub system: SystemConfig,
