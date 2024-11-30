@@ -19,7 +19,7 @@ use strum::IntoEnumIterator;
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Keccak256Rv32Config {
     #[system]
     pub system: SystemConfig,

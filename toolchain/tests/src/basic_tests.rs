@@ -93,7 +93,7 @@ fn test_read_runtime() -> Result<()> {
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
     let config = Rv32IConfig::default();
-    let executor = new_vm::VmExecutor::<F, _>::new(config);
+    let executor = new_vm::VmExecutor::<F, _>::new(config.clone());
     let final_memory = executor.execute(elf, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
     let pv_proof = UserPublicValuesProof::compute(

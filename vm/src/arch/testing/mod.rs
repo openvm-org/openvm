@@ -218,6 +218,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             MemoryBus(MEMORY_BUS),
             mem_config,
             range_checker,
+            None,
         );
         Self {
             memory: MemoryTester::new(Rc::new(RefCell::new(memory_controller))),

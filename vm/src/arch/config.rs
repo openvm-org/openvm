@@ -6,6 +6,7 @@ use ax_stark_backend::{
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     ChipUsageGetter,
 };
+use axvm_circuit::system::memory::MemoryTraceHeights;
 use axvm_ecc_constants::{BLS12381, BN254};
 use derive_new::new;
 use itertools::Itertools;
@@ -41,6 +42,7 @@ pub trait VmGenericConfig<F: PrimeField32> {
 
     /// Must contain system config
     fn system(&self) -> &SystemConfig;
+    fn system_mut(&mut self) -> &mut SystemConfig;
 
     fn create_chip_complex(
         &self,
@@ -60,6 +62,7 @@ pub struct MemoryConfig {
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
     /// If set, the height of the trace of boundary AIR(for volatile memory) will be overridden.
+    // TODO: remove this because we have MemoryTraceHeights
     pub boundary_air_height: Option<usize>,
 }
 
@@ -71,7 +74,7 @@ impl Default for MemoryConfig {
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
     pub max_constraint_degree: usize,
@@ -96,6 +99,14 @@ pub struct SystemConfig {
     /// Whether to collect metrics.
     /// **Warning**: this slows down the runtime.
     pub collect_metrics: bool,
+    /// If set, the height of the traces will be overridden.
+    pub overridden_heights: Option<SystemTraceHeights>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemTraceHeights {
+    pub memory: MemoryTraceHeights,
+    // All other chips have constant heights.
 }
 
 impl SystemConfig {
@@ -111,6 +122,7 @@ impl SystemConfig {
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
+            overridden_heights: None,
         }
     }
 
@@ -181,11 +193,14 @@ impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
     fn system(&self) -> &SystemConfig {
         self
     }
+    fn system_mut(&mut self) -> &mut SystemConfig {
+        self
+    }
 
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = SystemComplex::new(*self);
+        let complex = SystemComplex::new(self.clone());
         Ok(complex)
     }
 }
