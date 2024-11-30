@@ -7,7 +7,7 @@ use axvm_circuit::{
     arch::{new_vm, VmConfig, VmExecutor},
     utils::new_air_test_with_min_segments,
 };
-use axvm_mod_circuit::modular_chip::SECP256K1_COORD_PRIME;
+use axvm_ecc_constants::SECP256K1;
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::Rv32ImConfig;
 use eyre::Result;

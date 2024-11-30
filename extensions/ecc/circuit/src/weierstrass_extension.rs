@@ -11,9 +11,9 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use axvm_ecc_constants::SECP256K1;
 use axvm_instructions::Rv32WeierstrassOpcode; // TODO: opcode should be in crate too?
 use axvm_instructions::UsizeOpcode;
-use axvm_mod_circuit::modular_chip::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
@@ -33,9 +33,9 @@ pub struct CurveConfig {
     pub a: BigUint,
 }
 
-pub static SECP256K1: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    modulus: SECP256K1_COORD_PRIME.clone(),
-    scalar: SECP256K1_SCALAR_PRIME.clone(),
+pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
+    modulus: SECP256K1.MODULUS.clone(),
+    scalar: SECP256K1.ORDER.clone(),
     a: BigUint::zero(),
 });
 

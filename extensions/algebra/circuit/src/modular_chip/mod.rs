@@ -8,10 +8,7 @@ use axvm_circuit::{
     rv32im::adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterChip},
 };
 use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use hex_literal::hex;
 pub use muldiv::*;
-use num_bigint_dig::BigUint;
-use once_cell::sync::Lazy;
 
 #[cfg(test)]
 mod tests;
@@ -52,16 +49,3 @@ pub type ModularIsEqualChip<
     Rv32IsEqualModAdapterChip<F, 2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
     ModularIsEqualCoreChip<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
-
-// remove
-pub static SECP256K1_COORD_PRIME: Lazy<BigUint> = Lazy::new(|| {
-    BigUint::from_bytes_be(&hex!(
-        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-    ))
-});
-
-pub static SECP256K1_SCALAR_PRIME: Lazy<BigUint> = Lazy::new(|| {
-    BigUint::from_bytes_be(&hex!(
-        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-    ))
-});

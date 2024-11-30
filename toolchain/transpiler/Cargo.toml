@@ -18,6 +18,7 @@ num-bigint-dig.workspace = true
 tracing.workspace = true
 axvm-rv32im-circuit.workspace = true
 axvm-mod-circuit.workspace = true
+axvm-ecc-constants.workspace = true
 
 [dev-dependencies]
 p3-baby-bear.workspace = true
