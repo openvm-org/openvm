@@ -16,23 +16,33 @@ use p3_field::PrimeField32;
 
 use crate::arch::{
     new_vm::{VirtualMachine as NewVirtualMachine, VmExecutor as NewVmExecutor},
-    VirtualMachine, VmConfig, VmGenericConfig, VmMemoryState,
+    VmGenericConfig, VmMemoryState,
 };
 
-pub fn air_test(config: VmConfig, exe: impl Into<AxVmExe<BabyBear>>) {
+pub fn air_test<VmConfig>(config: VmConfig, exe: impl Into<AxVmExe<BabyBear>>)
+where
+    VmConfig: VmGenericConfig<BabyBear>,
+    VmConfig::Executor: Chip<BabyBearPoseidon2Config>,
+    VmConfig::Periphery: Chip<BabyBearPoseidon2Config>,
+{
     air_test_with_min_segments(config, exe, vec![], 1);
 }
 
 /// Executes the VM and returns the final memory state.
-pub fn air_test_with_min_segments(
+pub fn air_test_with_min_segments<VmConfig>(
     config: VmConfig,
     exe: impl Into<AxVmExe<BabyBear>>,
     input: Vec<Vec<BabyBear>>,
     min_segments: usize,
-) -> Option<VmMemoryState<BabyBear>> {
+) -> Option<VmMemoryState<BabyBear>>
+where
+    VmConfig: VmGenericConfig<BabyBear>,
+    VmConfig::Executor: Chip<BabyBearPoseidon2Config>,
+    VmConfig::Periphery: Chip<BabyBearPoseidon2Config>,
+{
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, config);
+    let vm = NewVirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();

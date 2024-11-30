@@ -13,7 +13,8 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        ExecutorName, ExitCode, MemoryConfig, SingleSegmentVmExecutor, VirtualMachine, VmConfig,
+        new_vm::{SingleSegmentVmExecutor, VirtualMachine},
+        ExecutorName, ExitCode, MemoryConfig, SystemConfig, VmGenericConfig,
     },
     prover::{local::VmLocalProver, types::VmProvingKey, SingleSegmentVmProver},
     system::{
@@ -40,6 +41,8 @@ use axvm_instructions::{
     SystemOpcode::*,
     UsizeOpcode,
 };
+use axvm_keccak256_circuit::utils::keccak256;
+use axvm_native_circuit::NativeConfig;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
@@ -53,17 +56,6 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
-}
-
-// TODO[yi]: add back this test back after extension refactor
-/*
-fn vm_config_with_field_arithmetic() -> VmConfig {
-    VmConfig::default()
-        .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
 }
 
 // log_blowup = 3 for poseidon2 chip
@@ -83,14 +75,12 @@ fn air_test_with_compress_poseidon2(
     };
     let engine = BabyBearPoseidon2Engine::new(fri_params);
 
-    let vm_config = VmConfig {
-        poseidon2_max_constraint_degree,
-        continuation_enabled,
-        ..VmConfig::default()
-    }
-    .add_executor(ExecutorName::LoadStore)
-    .add_executor(ExecutorName::Poseidon2);
-    let vm = VirtualMachine::new(engine, vm_config);
+    let config = if continuation_enabled {
+        NativeConfig::aggregation(0, poseidon2_max_constraint_degree).with_continuations()
+    } else {
+        NativeConfig::aggregation(0, poseidon2_max_constraint_degree)
+    };
+    let vm = VirtualMachine::new(engine, config);
 
     let pk = vm.keygen();
     let result = vm.execute_and_generate(program, vec![]).unwrap();
@@ -141,7 +131,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(vm_config_with_field_arithmetic(), program);
+    air_test(NativeConfig::default(), program);
 }
 
 #[test]
@@ -194,10 +184,10 @@ fn test_vm_1_override_executor_height() {
 fn test_vm_1_optional_air() {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program only
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
-    let vm_config = VmConfig::aggregation(4, 3);
+    let config = NativeConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let vm = VirtualMachine::new(engine, vm_config);
+    let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let num_airs = pk.per_air.len();
 
@@ -237,14 +227,13 @@ fn test_vm_1_optional_air() {
 fn test_vm_public_values() {
     setup_tracing();
     let num_public_values = 100;
-    let vm_config = VmConfig {
-        num_public_values,
-        collect_metrics: true,
-        ..Default::default()
-    };
+    let config = SystemConfig::default()
+        .with_public_values(num_public_values)
+        .with_metric_collection();
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let pk = vm_config.generate_pk(engine.keygen_builder());
+    let vm = VirtualMachine::new(engine, config.clone());
+    let pk = vm.keygen();
 
     {
         let instructions = vec![
@@ -255,10 +244,10 @@ fn test_vm_public_values() {
         let program = Program::from_instructions(&instructions);
         let committed_exe = Arc::new(AxVmCommittedExe::commit(
             program.clone().into(),
-            engine.config.pcs(),
+            vm.engine.config.pcs(),
         ));
-        let vm = SingleSegmentVmExecutor::new(vm_config);
-        let exe_result = vm.execute(program, vec![]).unwrap();
+        let single_vm = SingleSegmentVmExecutor::new(config);
+        let exe_result = single_vm.execute(program, vec![]).unwrap();
         assert_eq!(
             exe_result.public_values,
             [
@@ -267,8 +256,10 @@ fn test_vm_public_values() {
             ]
             .concat(),
         );
-        let proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
-        engine
+        let proof_input = single_vm
+            .execute_and_generate(committed_exe, vec![])
+            .unwrap();
+        vm.engine
             .prove_then_verify(&pk, proof_input)
             .expect("Verification failed");
     }
@@ -304,13 +295,7 @@ fn test_vm_initial_memory() {
     .into_iter()
     .collect();
 
-    let config = VmConfig {
-        poseidon2_max_constraint_degree: 3,
-        continuation_enabled: true,
-        ..VmConfig::default()
-    }
-    .add_executor(ExecutorName::BranchEqual)
-    .add_executor(ExecutorName::Jal);
+    let config = NativeConfig::aggregation(0, 3).with_continuations();
     let exe = AxVmExe {
         program,
         pc_start: 0,
@@ -324,16 +309,14 @@ fn test_vm_initial_memory() {
 #[test]
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let config = VmConfig {
-        poseidon2_max_constraint_degree: 3,
-        continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
-        ..VmConfig::default()
+    let config = NativeConfig {
+        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, None), 0),
+        native: Default::default(),
     }
-    .add_executor(ExecutorName::LoadStore)
-    .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::BranchEqual);
-    let pk = config.generate_pk(engine.keygen_builder());
+    .with_continuations();
+
+    let vm = VirtualMachine::new(engine, config);
+    let pk = vm.keygen();
 
     let n = 6;
     let instructions = vec![
@@ -352,7 +335,6 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let vm = VirtualMachine::new(engine, config);
     let result = vm.execute_and_generate(program.clone(), vec![]).unwrap();
     {
         let proof_input = result.per_segment.into_iter().next().unwrap();
@@ -435,16 +417,11 @@ fn test_vm_continuations() {
         ),
     ]);
 
-    let config = VmConfig {
-        num_public_values: 0,
-        poseidon2_max_constraint_degree: 3,
-        continuation_enabled: true,
-        max_segment_len: 200000,
-        ..VmConfig::default()
+    let config = NativeConfig {
+        system: SystemConfig::new(3, MemoryConfig::default(), 0).with_max_segment_len(200000),
+        native: Default::default(),
     }
-    .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::BranchEqual)
-    .add_executor(ExecutorName::Jal);
+    .with_continuations();
 
     let expected_output = {
         let mut a = 0;
@@ -456,7 +433,7 @@ fn test_vm_continuations() {
         BabyBear::from_canonical_u32(a)
     };
 
-    let memory_dimensions = config.memory_config.memory_dimensions();
+    let memory_dimensions = config.system.memory_config.memory_dimensions();
     let final_state = air_test_with_min_segments(config, program, vec![], 3).unwrap();
     let hasher = vm_poseidon2_hasher();
     let num_public_values = 8;
@@ -511,13 +488,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
-        VmConfig::default()
-            .add_executor(ExecutorName::LoadStore)
-            .add_executor(ExecutorName::BranchEqual)
-            .add_executor(ExecutorName::Jal),
-        program,
-    );
+    air_test(NativeConfig::default(), program);
 }
 
 #[test]
@@ -554,7 +525,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(vm_config_with_field_arithmetic(), program);
+    air_test(NativeConfig::default(), program);
 }
 
 #[test]
@@ -600,7 +571,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(vm_config_with_field_arithmetic(), program);
+    air_test(NativeConfig::default(), program);
 }
 
 #[test]
@@ -624,15 +595,11 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    let config = VmConfig::default()
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::FieldExtension);
-    air_test(config, program);
+    air_test(NativeConfig::default(), program);
 }
 
 #[test]
-fn test_vm_max_access_adapater_8() {
+fn test_vm_max_access_adapter_8() {
     let instructions = vec![
         Instruction::from_isize(STOREW.with_default_offset(), 1, 0, 0, 0, 1),
         Instruction::from_isize(STOREW.with_default_offset(), 2, 1, 0, 0, 1),
@@ -696,15 +663,11 @@ fn test_vm_field_extension_arithmetic_persistent() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let config = VmConfig {
-        poseidon2_max_constraint_degree: 3,
-        continuation_enabled: true,
-        memory_config: MemoryConfig::new(1, 1, 16, 10, 6, 64, None),
-        ..VmConfig::default()
-    }
-    .add_executor(ExecutorName::LoadStore)
-    .add_executor(ExecutorName::FieldArithmetic)
-    .add_executor(ExecutorName::FieldExtension);
+    let config = NativeConfig {
+        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, None), 0)
+            .with_continuations(),
+        native: Default::default(),
+    };
     air_test(config, program);
 }
 
@@ -765,7 +728,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = vm_config_with_field_arithmetic();
+    let config = NativeConfig::default();
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 
@@ -1006,5 +969,3 @@ fn test_vm_keccak_non_full_round() {
         program,
     );
 }
-
-*/
