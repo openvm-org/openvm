@@ -50,14 +50,6 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                 ))
             }
             Some(Phantom) => process_phantom(instruction_u32),
-            Some(Keccak256) => {
-                let dec_insn = RType::new(instruction_u32);
-                Some(from_r_type(
-                    Rv32KeccakOpcode::KECCAK256.with_default_offset(),
-                    2,
-                    &dec_insn,
-                ))
-            }
             Some(Int256) => {
                 let dec_insn = RType::new(instruction_u32);
                 let global_opcode = match Int256Funct7::from_repr(dec_insn.funct7 as u8) {
@@ -111,7 +103,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                     F::ZERO,
                 ))
             }
-            _ => unimplemented!(),
+            _ => None,
         },
         CUSTOM_1 => {
             match Custom1Funct3::from_repr(funct3) {
@@ -257,7 +249,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
                     }
                 }
                 Some(Pairing) => process_pairing(instruction_u32),
-                _ => unimplemented!(),
+                _ => None,
             }
         }
         _ => None,

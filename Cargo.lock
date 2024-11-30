@@ -730,6 +730,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-keccak-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+]
+
+[[package]]
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
@@ -911,6 +921,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-ecc",
  "axvm-ecc-constants",
+ "axvm-keccak-transpiler",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
  "eyre",

@@ -1,0 +1,12 @@
+[package]
+name = "axvm-keccak-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for Keccak"
+
+[dependencies]
+axvm-instructions = { workspace = true }
+axvm-transpiler = { workspace = true }
+p3-field = { workspace = true }
+rrs-lib = "0.1.0"
