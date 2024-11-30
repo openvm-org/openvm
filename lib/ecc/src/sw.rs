@@ -43,7 +43,7 @@ pub trait IntrinsicCurve {
     type Point: SwPoint + CyclicGroup;
 }
 
-axvm::moduli_setup! {
+axvm::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },
     Secp256k1Scalar { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141" },
 }

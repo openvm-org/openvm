@@ -17,14 +17,14 @@ static MOD_IDX: AtomicUsize = AtomicUsize::new(0);
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
 /// ```
-/// moduli_setup! {
+/// moduli_declare! {
 ///     Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
 ///     Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
 /// }
 /// ```
 /// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on).
 #[proc_macro]
-pub fn moduli_setup(input: TokenStream) -> TokenStream {
+pub fn moduli_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
 
     let mut output = Vec::new();
@@ -685,7 +685,7 @@ impl Parse for ModuliDefine {
 }
 
 #[proc_macro]
-pub fn moduli_define(input: TokenStream) -> TokenStream {
+pub fn moduli_init(input: TokenStream) -> TokenStream {
     let ModuliDefine { items } = parse_macro_input!(input as ModuliDefine);
 
     let mut externs = Vec::new();
