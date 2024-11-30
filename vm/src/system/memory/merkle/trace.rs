@@ -20,6 +20,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
+        overridden_height: Option<usize>,
     ) -> (RowMajorMatrix<F>, MemoryNode<CHUNK, F>) {
         // there needs to be a touched node with `height_section` = 0
         // shouldn't be a leaf because
@@ -47,7 +48,15 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         rows.sort_by_key(|row| Reverse(row.parent_height));
 
         let width = MemoryMerkleCols::<F, CHUNK>::width();
-        let height = rows.len().next_power_of_two();
+        let mut height = rows.len().next_power_of_two();
+        if let Some(mut oh) = overridden_height {
+            oh = oh.next_power_of_two();
+            assert!(
+                oh >= height,
+                "Overridden height is less than the required height"
+            );
+            height = oh;
+        }
         let mut trace = F::zero_vec(width * height);
 
         for (trace_row, row) in trace.chunks_exact_mut(width).zip(rows) {

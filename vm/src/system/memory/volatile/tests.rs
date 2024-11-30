@@ -41,8 +41,7 @@ fn boundary_air_test() {
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let boundary_chip =
-        VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone(), None);
+    let boundary_chip = VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
 
     let mut final_memory = TimestampedEquipartition::new();
 
@@ -104,19 +103,14 @@ fn boundary_air_test() {
         6,
     );
 
-    let boundary_trace = boundary_chip.generate_trace(&final_memory);
+    let boundary_trace = boundary_chip.generate_trace(&final_memory, None);
     // test trace height override
     {
         let overridden_height = boundary_trace.height() * 2;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let boundary_chip = VolatileBoundaryChip::new(
-            memory_bus,
-            2,
-            LIMB_BITS,
-            range_checker.clone(),
-            Some(overridden_height),
-        );
-        let boundary_trace = boundary_chip.generate_trace(&final_memory);
+        let boundary_chip =
+            VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
+        let boundary_trace = boundary_chip.generate_trace(&final_memory, Some(overridden_height));
         assert_eq!(
             boundary_trace.height(),
             overridden_height.next_power_of_two()

@@ -2,6 +2,7 @@ use std::{
     array::{self, from_fn},
     cell::RefCell,
     collections::BTreeMap,
+    iter,
     marker::PhantomData,
     rc::Rc,
     sync::Arc,
@@ -22,13 +23,14 @@ use ax_stark_backend::{
 };
 use axvm_instructions::exe::MemoryImage;
 use getset::Getters;
-use itertools::{izip, zip_eq};
+use itertools::{izip, zip_eq, Itertools};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_util::log2_strict_usize;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
@@ -110,8 +112,61 @@ pub struct MemoryController<F> {
     /// Maps a length to a list of access adapters with that block length as th larger size.
     adapter_records: FxHashMap<usize, Vec<AccessAdapterRecord<F>>>,
 
+    /// If set, the height of the traces will be overridden.
+    overridden_heights: Option<MemoryTraceHeights>,
+
     // Filled during finalization.
     result: Option<MemoryControllerResult<F>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MemoryTraceHeights {
+    Volatile(VolatileMemoryTraceHeights),
+    Persistent(PersistentMemoryTraceHeights),
+}
+
+impl MemoryTraceHeights {
+    fn access_adapters_ref(&self) -> &FxHashMap<usize, usize> {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => &oh.access_adapters,
+            MemoryTraceHeights::Persistent(oh) => &oh.access_adapters,
+        }
+    }
+    fn flatten(&self) -> Vec<usize> {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => oh.flatten(),
+            MemoryTraceHeights::Persistent(oh) => oh.flatten(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VolatileMemoryTraceHeights {
+    boundary: usize,
+    access_adapters: FxHashMap<usize, usize>,
+}
+
+impl VolatileMemoryTraceHeights {
+    pub fn flatten(&self) -> Vec<usize> {
+        iter::once(self.boundary)
+            .chain(self.access_adapters.iter().sorted().map(|(_, &v)| v))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistentMemoryTraceHeights {
+    boundary: usize,
+    merkle: usize,
+    access_adapters: FxHashMap<usize, usize>,
+}
+impl PersistentMemoryTraceHeights {
+    pub fn flatten(&self) -> Vec<usize> {
+        vec![self.boundary, self.merkle]
+            .into_iter()
+            .chain(self.access_adapters.iter().sorted().map(|(_, v)| *v))
+            .collect()
+    }
 }
 
 impl<F: PrimeField32> MemoryController<F> {
@@ -125,7 +180,27 @@ impl<F: PrimeField32> MemoryController<F> {
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
+        mut overridden_heights: Option<MemoryTraceHeights>,
     ) -> Self {
+        if let Some(overridden_heights) = overridden_heights.as_ref() {
+            match overridden_heights {
+                MemoryTraceHeights::Volatile { .. } => {}
+                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
+            }
+            assert!(
+                mem_config.boundary_air_height.is_none(),
+                "Both mem_config.boundary_air_height and overridden_heights are set"
+            );
+        } else {
+            // A temporary hack to support the old code.
+            if let Some(boundary_air_height) = mem_config.boundary_air_height {
+                overridden_heights =
+                    Some(MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                        boundary: boundary_air_height,
+                        access_adapters: FxHashMap::default(),
+                    }));
+            }
+        }
         let range_checker_bus = range_checker.bus();
         Self {
             memory_bus,
@@ -136,7 +211,6 @@ impl<F: PrimeField32> MemoryController<F> {
                     mem_config.as_height,
                     mem_config.pointer_max_bits,
                     range_checker.clone(),
-                    mem_config.boundary_air_height,
                 ),
             },
             memory: Memory::new(&Equipartition::<_, 1>::new()),
@@ -144,6 +218,7 @@ impl<F: PrimeField32> MemoryController<F> {
             range_checker,
             range_checker_bus,
             result: None,
+            overridden_heights,
         }
     }
 
@@ -154,7 +229,14 @@ impl<F: PrimeField32> MemoryController<F> {
         merkle_bus: MemoryMerkleBus,
         compression_bus: DirectCompressionBus,
         initial_memory: Equipartition<F, CHUNK>,
+        overridden_heights: Option<MemoryTraceHeights>,
     ) -> Self {
+        if let Some(overridden_heights) = overridden_heights.as_ref() {
+            match overridden_heights {
+                MemoryTraceHeights::Persistent { .. } => {}
+                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
+            }
+        }
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
@@ -181,6 +263,7 @@ impl<F: PrimeField32> MemoryController<F> {
             range_checker,
             range_checker_bus,
             result: None,
+            overridden_heights,
         }
     }
 
@@ -353,9 +436,16 @@ impl<F: PrimeField32> MemoryController<F> {
 
         let (records, final_memory) = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
+                let overridden_heights = self.overridden_heights.as_ref().map(|oh| match oh {
+                    MemoryTraceHeights::Volatile(oh) => oh,
+                    _ => unreachable!(),
+                });
                 let (final_memory, records) = self.memory.finalize::<1>();
                 debug_assert_eq!(traces.len(), BOUNDARY_AIR_OFFSET);
-                traces.push(boundary_chip.generate_trace(&final_memory));
+                traces.push(
+                    boundary_chip
+                        .generate_trace(&final_memory, overridden_heights.map(|oh| oh.boundary)),
+                );
                 debug_assert_eq!(pvs.len(), BOUNDARY_AIR_OFFSET);
                 pvs.push(vec![]);
 
@@ -366,10 +456,19 @@ impl<F: PrimeField32> MemoryController<F> {
                 boundary_chip,
                 initial_memory,
             } => {
+                let overridden_heights = self.overridden_heights.as_ref().map(|oh| match oh {
+                    MemoryTraceHeights::Persistent(oh) => oh,
+                    _ => unreachable!(),
+                });
                 let hasher = hasher.unwrap();
 
                 let (final_partition, records) = self.memory.finalize::<8>();
-                traces.push(boundary_chip.generate_trace(initial_memory, &final_partition, hasher));
+                traces.push(boundary_chip.generate_trace(
+                    initial_memory,
+                    &final_partition,
+                    hasher,
+                    overridden_heights.map(|oh| oh.boundary),
+                ));
                 pvs.push(vec![]);
 
                 let final_memory_values = final_partition
@@ -386,6 +485,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     &initial_node,
                     &final_memory_values,
                     hasher,
+                    overridden_heights.map(|oh| oh.merkle),
                 );
 
                 debug_assert_eq!(traces.len(), MERKLE_AIR_OFFSET);
@@ -517,30 +617,42 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn current_trace_heights(&self) -> Vec<usize> {
-        let mut heights = vec![];
+        self.get_memory_trace_heights().flatten()
+    }
+
+    pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
+        let access_adapters = [2, 4, 8, 16, 32, 64]
+            .iter()
+            .flat_map(|&n| {
+                if self.mem_config.max_access_adapter_n >= n {
+                    Some((
+                        n,
+                        self.adapter_records
+                            .get(&n)
+                            .map_or(0, |records| records.len()),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                heights.push(boundary_chip.current_height());
+                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                    boundary: boundary_chip.current_height(),
+                    access_adapters,
+                })
             }
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
                 ..
-            } => {
-                heights.push(boundary_chip.current_height());
-                heights.push(merkle_chip.current_height());
-            }
-        };
-        for n in [2, 4, 8, 16, 32, 64] {
-            if self.mem_config.max_access_adapter_n >= n {
-                heights.push(
-                    self.adapter_records
-                        .get(&n)
-                        .map_or(0, |records| records.len()),
-                );
-            }
+            } => MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
+                boundary: boundary_chip.current_height(),
+                merkle: merkle_chip.current_height(),
+                access_adapters,
+            }),
         }
-        heights
     }
 
     fn trace_widths(&self) -> Vec<usize> {
@@ -693,6 +805,7 @@ mod tests {
             memory_bus,
             memory_config,
             range_checker.clone(),
+            None,
         );
 
         let mut rng = thread_rng();
