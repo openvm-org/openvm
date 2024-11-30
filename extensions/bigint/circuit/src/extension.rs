@@ -41,7 +41,7 @@ pub struct Int256Rv32Config {
 impl Default for Int256Rv32Config {
     fn default() -> Self {
         Self {
-            system: SystemConfig::default(),
+            system: SystemConfig::default().with_continuations(),
             rv32i: Rv32I::default(),
             rv32m: Rv32M::default(),
             io: Rv32Io::default(),
