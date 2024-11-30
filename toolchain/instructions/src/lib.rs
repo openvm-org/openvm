@@ -414,8 +414,8 @@ pub enum Rv32ModularArithmeticOpcode {
 #[repr(usize)]
 pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
-    EC_DOUBLE,
     SETUP_EC_ADD_NE,
+    EC_DOUBLE,
     SETUP_EC_DOUBLE,
 }
 
@@ -457,10 +457,8 @@ pub enum PairingOpcode {
     MILLER_DOUBLE_AND_ADD_STEP,
     EVALUATE_LINE,
     MUL_013_BY_013,
-    MUL_BY_013,
     MUL_BY_01234,
     MUL_023_BY_023,
-    MUL_BY_023,
     MUL_BY_02345,
 }
 

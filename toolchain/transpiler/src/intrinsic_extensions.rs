@@ -325,17 +325,11 @@ fn process_pairing<F: PrimeField32>(instruction_u32: u32) -> Option<Instruction<
         Some(PairingBaseFunct7::Mul013By013) => {
             PairingOpcode::MUL_013_BY_013 as usize + PairingOpcode::default_offset()
         }
-        Some(PairingBaseFunct7::MulBy013) => {
-            PairingOpcode::MUL_BY_013 as usize + PairingOpcode::default_offset()
-        }
         Some(PairingBaseFunct7::MulBy01234) => {
             PairingOpcode::MUL_BY_01234 as usize + PairingOpcode::default_offset()
         }
         Some(PairingBaseFunct7::Mul023By023) => {
             PairingOpcode::MUL_023_BY_023 as usize + PairingOpcode::default_offset()
-        }
-        Some(PairingBaseFunct7::MulBy023) => {
-            PairingOpcode::MUL_BY_023 as usize + PairingOpcode::default_offset()
         }
         Some(PairingBaseFunct7::MulBy02345) => {
             PairingOpcode::MUL_BY_02345 as usize + PairingOpcode::default_offset()

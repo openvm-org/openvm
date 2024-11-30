@@ -1,13 +1,9 @@
-use axvm_circuit::arch::{
-    instructions::{program::Program, *},
-    Modulus,
-};
+use axvm_circuit::arch::instructions::{program::Program, *};
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
     FriOpcode::FRI_REDUCED_OPENING,
 };
-use num_bigint_dig::BigUint;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use program::DEFAULT_PC_STEP;
 use serde::{Deserialize, Serialize};
@@ -22,7 +18,6 @@ pub struct CompilerOptions {
     pub enable_cycle_tracker: bool,
     pub field_arithmetic_enabled: bool,
     pub field_extension_enabled: bool,
-    pub enabled_modulus: Vec<BigUint>,
 }
 
 impl Default for CompilerOptions {
@@ -33,7 +28,6 @@ impl Default for CompilerOptions {
             enable_cycle_tracker: false,
             field_arithmetic_enabled: true,
             field_extension_enabled: true,
-            enabled_modulus: Modulus::all().iter().map(|m| m.prime()).collect(),
         }
     }
 }

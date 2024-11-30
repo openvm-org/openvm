@@ -37,9 +37,9 @@ impl Default for Keccak256Rv32Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
-            rv32i: Rv32I::default(),
+            rv32i: Rv32I,
             rv32m: Rv32M::default(),
-            io: Rv32Io::default(),
+            io: Rv32Io,
             keccak: Keccak256,
         }
     }

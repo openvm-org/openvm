@@ -16,19 +16,6 @@ use strum::EnumDiscriminants;
 
 use crate::{
     derive::InstructionExecutor,
-    intrinsics::{
-        ecc::{
-            fp12::Fp12MulChip,
-            fp2::{Fp2AddSubChip, Fp2MulDivChip},
-            pairing::{
-                EcLineMul013By013Chip, EcLineMul023By023Chip, EcLineMulBy01234Chip,
-                EcLineMulBy02345Chip, EvaluateLineChip, MillerDoubleAndAddStepChip,
-                MillerDoubleStepChip,
-            },
-            weierstrass::{EcAddNeChip, EcDoubleChip},
-        },
-        modular::{ModularAddSubChip, ModularIsEqualChip, ModularMulDivChip},
-    },
     rv32im::*,
     system::{phantom::PhantomChip, poseidon2::Poseidon2Chip, public_values::PublicValuesChip},
 };
@@ -59,41 +46,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
     DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
     // Intrinsics:
     HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
-    // Modular arithmetic:
-    // 32-bytes or 48-bytes modulus.
-    ModularAddSubRv32_1x32(Rc<RefCell<ModularAddSubChip<F, 1, 32>>>),
-    ModularMulDivRv32_1x32(Rc<RefCell<ModularMulDivChip<F, 1, 32>>>),
-    ModularAddSubRv32_3x16(Rc<RefCell<ModularAddSubChip<F, 3, 16>>>),
-    ModularMulDivRv32_3x16(Rc<RefCell<ModularMulDivChip<F, 3, 16>>>),
-    ModularIsEqualRv32_1x32(Rc<RefCell<ModularIsEqualChip<F, 1, 32, 32>>>),
-    ModularIsEqualRv32_3x16(Rc<RefCell<ModularIsEqualChip<F, 3, 16, 48>>>),
-    EcAddNeRv32_2x32(Rc<RefCell<EcAddNeChip<F, 2, 32>>>),
-    EcDoubleRv32_2x32(Rc<RefCell<EcDoubleChip<F, 2, 32>>>),
-    EcAddNeRv32_6x16(Rc<RefCell<EcAddNeChip<F, 6, 16>>>),
-    EcDoubleRv32_6x16(Rc<RefCell<EcDoubleChip<F, 6, 16>>>),
-    // Pairing:
-    // Fp2 for 32-bytes or 48-bytes prime.
-    Fp2AddSubRv32_32(Rc<RefCell<Fp2AddSubChip<F, 2, 32>>>),
-    Fp2AddSubRv32_48(Rc<RefCell<Fp2AddSubChip<F, 6, 16>>>),
-    Fp2MulDivRv32_32(Rc<RefCell<Fp2MulDivChip<F, 2, 32>>>),
-    Fp2MulDivRv32_48(Rc<RefCell<Fp2MulDivChip<F, 6, 16>>>),
-    // Fp12 for 32-bytes or 48-bytes prime.
-    Fp12MulRv32_32(Rc<RefCell<Fp12MulChip<F, 12, 32>>>),
-    Fp12MulRv32_48(Rc<RefCell<Fp12MulChip<F, 36, 16>>>),
-    /// Only for BN254 for now
-    EcLineMul013By013(Rc<RefCell<EcLineMul013By013Chip<F, 4, 10, 32>>>),
-    /// Only for BN254 for now
-    EcLineMulBy01234(Rc<RefCell<EcLineMulBy01234Chip<F, 12, 10, 12, 32>>>),
-    /// Only for BLS12-381 for now
-    EcLineMul023By023(Rc<RefCell<EcLineMul023By023Chip<F, 12, 30, 16>>>),
-    /// Only for BLS12-381 for now
-    EcLineMulBy02345(Rc<RefCell<EcLineMulBy02345Chip<F, 36, 30, 36, 16>>>),
-    MillerDoubleStepRv32_32(Rc<RefCell<MillerDoubleStepChip<F, 4, 8, 32>>>),
-    MillerDoubleStepRv32_48(Rc<RefCell<MillerDoubleStepChip<F, 12, 24, 16>>>),
-    MillerDoubleAndAddStepRv32_32(Rc<RefCell<MillerDoubleAndAddStepChip<F, 4, 12, 32>>>),
-    MillerDoubleAndAddStepRv32_48(Rc<RefCell<MillerDoubleAndAddStepChip<F, 12, 36, 16>>>),
-    EvaluateLineRv32_32(Rc<RefCell<EvaluateLineChip<F, 4, 2, 4, 32>>>),
-    EvaluateLineRv32_48(Rc<RefCell<EvaluateLineChip<F, 12, 6, 12, 16>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of

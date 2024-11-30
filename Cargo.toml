@@ -10,10 +10,10 @@ repository = "https://github.com/axiom-crypto/"
 members = [
     "stark-backend",
     "stark-sdk",
-    "circuits/ecc",
     "circuits/hashes/poseidon2-air",
     "circuits/primitives",
     "circuits/derive",
+    "circuits/mod-builder",
     "vm",
     "toolchain/instructions",
     "toolchain/instructions/derive",
@@ -38,6 +38,9 @@ members = [
     "extensions/native/circuit",
     "extensions/rv32im/circuit",
     "extensions/keccak/transpiler",
+    "extensions/algebra/circuit",
+    "extensions/ecc/circuit",
+    "extensions/pairing/circuit",
 ]
 resolver = "2"
 
@@ -98,14 +101,17 @@ axvm-circuit = { path = "vm", default-features = false }
 axvm-circuit-derive = { path = "vm/derive", default-features = false }
 ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
 ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
-ax-ecc-primitives = { path = "circuits/ecc", default-features = false }
 ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
 ax-circuit-derive = { path = "circuits/derive", default-features = false }
 ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
+ax-mod-circuit-builder = { path = "circuits/mod-builder", default-features = false }
 # Extensions
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 axvm-keccak-transpiler = { path = "extensions/keccak/transpiler", default-features = false }
+axvm-mod-circuit = { path = "extensions/algebra/circuit", default-features = false }
+axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
+axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }

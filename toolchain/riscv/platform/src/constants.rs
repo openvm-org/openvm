@@ -107,10 +107,8 @@ pub enum PairingBaseFunct7 {
     Fp12Mul,
     EvaluateLine,
     Mul013By013,
-    MulBy013,
     MulBy01234,
     Mul023By023,
-    MulBy023,
     MulBy02345,
     HintFinalExp,
 }
