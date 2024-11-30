@@ -15,11 +15,10 @@ use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        ExecutorName, ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmGenericConfig, VmInventoryError,
+        ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        VmGenericConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
-    prover::{local::VmLocalProver, types::VmProvingKey, SingleSegmentVmProver},
     system::{
         memory::{tree::public_values::UserPublicValuesProof, CHUNK},
         program::trace::AxVmCommittedExe,
@@ -605,8 +604,6 @@ fn test_vm_field_extension_arithmetic() {
     air_test(NativeConfig::default(), program);
 }
 
-// TODO[yi]: Fix this test
-/*
 #[test]
 fn test_vm_max_access_adapter_8() {
     let instructions = vec![
@@ -628,16 +625,13 @@ fn test_vm_max_access_adapter_8() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut config = VmConfig::default()
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::FieldExtension);
+    let mut config = NativeConfig::default();
     {
-        let chip_set1 = config.create_chip_set::<BabyBear>();
-        let mem_ctrl1 = chip_set1.memory_controller.borrow();
-        config.memory_config.max_access_adapter_n = 8;
-        let chip_set2 = config.create_chip_set::<BabyBear>();
-        let mem_ctrl2 = chip_set2.memory_controller.borrow();
+        let chip_complex1 = config.create_chip_complex().unwrap();
+        let mem_ctrl1 = chip_complex1.base.memory_controller.borrow();
+        config.system.memory_config.max_access_adapter_n = 8;
+        let chip_complex2 = config.create_chip_complex().unwrap();
+        let mem_ctrl2 = chip_complex2.base.memory_controller.borrow();
         // AccessAdapterAir with N=16/32/64 are disabled.
         assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
         assert_eq!(
@@ -651,7 +645,6 @@ fn test_vm_max_access_adapter_8() {
     }
     air_test(config, program);
 }
-*/
 
 #[test]
 fn test_vm_field_extension_arithmetic_persistent() {
