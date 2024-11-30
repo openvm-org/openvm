@@ -12,25 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains the components required to link a Rust binary.
-//!
-//! In particular:
-//! * It defines an entrypoint ensuring initialization and finalization are done
-//!   properly.
-//! * It includes a panic handler.
-//! * It includes an allocator.
+use getrandom::{register_custom_getrandom, Error};
 
-#[cfg(target_os = "zkvm")]
-use crate::constants::CUSTOM_0;
-
-extern crate alloc;
-
-#[inline(always)]
-pub fn terminate<const EXIT_CODE: u8>() {
-    #[cfg(target_os = "zkvm")]
-    crate::custom_insn_i!(CUSTOM_0, 0, "x0", "x0", EXIT_CODE);
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        unimplemented!()
-    }
+/// This is a getrandom handler for the zkvm. It's intended to hook into a
+/// getrandom crate or a dependent of the getrandom crate used by the guest code.
+#[cfg(feature = "getrandom")]
+pub fn zkvm_getrandom(dest: &mut [u8]) -> Result<(), Error> {
+    todo!()
+    // Randomness would come from the host
 }
+
+#[cfg(not(feature = "getrandom"))]
+pub fn zkvm_getrandom(dest: &mut [u8]) -> Result<(), Error> {
+    panic!("getrandom is not enabled in the current build");
+}
+
+register_custom_getrandom!(zkvm_getrandom);

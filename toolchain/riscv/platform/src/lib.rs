@@ -21,16 +21,16 @@
 // Re-export bincode for consistent version for serialization and deserialization across crates.
 pub use bincode;
 
-pub mod memory;
-// #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
-// mod getrandom;
 pub mod constants;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod custom_insn;
+#[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
+mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
+pub mod memory;
 #[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 
