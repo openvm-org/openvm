@@ -11,17 +11,12 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
 };
-use itertools::izip;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
-
-use super::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use crate::{
+use axvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -36,6 +31,12 @@ use crate::{
         program::ProgramBus,
     },
 };
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use axvm_rv32im_circuit::adapters::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use itertools::izip;
 
 /// This adapter reads from NUM_READS <= 2 pointers.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -187,7 +188,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge: memory_controller.memory_bridge(),
                 bus: bitwise_lookup_chip.bus(),
-                address_bits: memory_controller.mem_config.pointer_max_bits,
+                address_bits: memory_controller.mem_config().pointer_max_bits,
             },
             bitwise_lookup_chip,
             _marker: PhantomData,

@@ -15,6 +15,7 @@ ax-stark-backend = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
+axvm-rv32-adapters = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }
@@ -36,3 +37,4 @@ derive-new = { workspace = true }
 halo2curves-axiom = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }

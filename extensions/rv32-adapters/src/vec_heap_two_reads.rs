@@ -11,17 +11,12 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
 };
-use itertools::izip;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
-
-use super::{abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use crate::{
+use axvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VecHeapTwoReadsAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -35,6 +30,14 @@ use crate::{
         program::ProgramBus,
     },
 };
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use axvm_rv32im_circuit::adapters::{
+    abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
+use itertools::izip;
 
 /// This adapter reads from 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -89,7 +92,7 @@ impl<
     ) -> Self {
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
         Self {
             air: Rv32VecHeapTwoReadsAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),

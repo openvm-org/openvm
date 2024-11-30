@@ -16,7 +16,6 @@ use strum::EnumDiscriminants;
 
 use crate::{
     derive::InstructionExecutor,
-    rv32im::*,
     system::{phantom::PhantomChip, poseidon2::Poseidon2Chip, public_values::PublicValuesChip},
 };
 
@@ -30,22 +29,6 @@ pub enum AxVmExecutor<F: PrimeField32> {
     // Native kernel:
     PublicValues(Rc<RefCell<PublicValuesChip<F>>>),
     Poseidon2(Rc<RefCell<Poseidon2Chip<F>>>),
-    // Rv32 (for standard 32-bit integers):
-    BaseAluRv32(Rc<RefCell<Rv32BaseAluChip<F>>>),
-    LessThanRv32(Rc<RefCell<Rv32LessThanChip<F>>>),
-    ShiftRv32(Rc<RefCell<Rv32ShiftChip<F>>>),
-    LoadStoreRv32(Rc<RefCell<Rv32LoadStoreChip<F>>>),
-    LoadSignExtendRv32(Rc<RefCell<Rv32LoadSignExtendChip<F>>>),
-    BranchEqualRv32(Rc<RefCell<Rv32BranchEqualChip<F>>>),
-    BranchLessThanRv32(Rc<RefCell<Rv32BranchLessThanChip<F>>>),
-    JalLuiRv32(Rc<RefCell<Rv32JalLuiChip<F>>>),
-    JalrRv32(Rc<RefCell<Rv32JalrChip<F>>>),
-    AuipcRv32(Rc<RefCell<Rv32AuipcChip<F>>>),
-    MultiplicationRv32(Rc<RefCell<Rv32MultiplicationChip<F>>>),
-    MultiplicationHighRv32(Rc<RefCell<Rv32MulHChip<F>>>),
-    DivRemRv32(Rc<RefCell<Rv32DivRemChip<F>>>),
-    // Intrinsics:
-    HintStoreRv32(Rc<RefCell<Rv32HintStoreChip<F>>>),
 }
 
 /// ATTENTION: CAREFULLY MODIFY THE ORDER OF ENTRIES. the order of entries determines the AIR ID of

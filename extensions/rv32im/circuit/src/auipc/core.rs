@@ -14,18 +14,17 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip,
-    },
-    rv32im::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+use axvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
 };
 use axvm_instructions::{
     instruction::Instruction,
     Rv32AuipcOpcode::{self, *},
     UsizeOpcode,
 };
+
+use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 

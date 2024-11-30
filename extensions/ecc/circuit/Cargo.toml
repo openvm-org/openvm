@@ -14,6 +14,7 @@ axvm-instructions = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-backend = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
+axvm-rv32-adapters = { workspace = true }
 axvm-mod-circuit = { workspace = true }
 
 num-bigint-dig = { workspace = true }

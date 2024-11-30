@@ -6,11 +6,11 @@ use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExp
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{instructions::PairingOpcode, VmChipWrapper},
-    rv32im::adapters::Rv32VecHeapTwoReadsAdapterChip,
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_mod_circuit::Fp2;
+use axvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 
 use crate::Fp12;
 
