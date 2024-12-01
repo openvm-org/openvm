@@ -34,7 +34,7 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
         elf,
         Transpiler::<F>::default()
             .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension)) // TODO[yi]: Investigate why this is necessary,
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
             .with_processor(Rc::new(Rv32IoTranspilerExtension)),
     );
     let config = Rv32IConfig::default();
