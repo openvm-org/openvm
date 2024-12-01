@@ -21,13 +21,12 @@ pub use extension::TranspilerExtension;
 
 // TODO: move to separate crates
 pub mod intrinsic_extensions;
-pub mod rrs;
 
 // TODO: remove this trait implementation after all the tests are changed to use `get_axvm_exe_from_elf`
 impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     fn from(elf: Elf) -> Self {
         let program = Program::new_without_debug_infos(
-            &Transpiler::default_with_intrinsics().transpile(&elf.instructions),
+            &Transpiler::default().transpile(&elf.instructions),
             DEFAULT_PC_STEP,
             elf.pc_base,
             elf.max_num_public_values,

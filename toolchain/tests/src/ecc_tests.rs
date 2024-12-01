@@ -24,6 +24,9 @@ use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
@@ -40,7 +43,10 @@ fn test_moduli_setup_runtime() -> Result<()> {
     let elf = build_example_program("moduli_setup")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(ModularTranspilerExtension)),
     );
 
@@ -64,7 +70,10 @@ fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(ModularTranspilerExtension)),
     );
     let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
@@ -78,7 +87,10 @@ fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(Fp2TranspilerExtension))
             .with_processor(Rc::new(ModularTranspilerExtension)),
     );
@@ -93,7 +105,10 @@ fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(EccTranspilerExtension))
             .with_processor(Rc::new(ModularTranspilerExtension)),
     );
@@ -147,7 +162,10 @@ fn test_ecdsa_runtime() -> Result<()> {
 
     let exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(Keccak256TranspilerExtension))
             .with_processor(Rc::new(EccTranspilerExtension))
             .with_processor(Rc::new(ModularTranspilerExtension)),

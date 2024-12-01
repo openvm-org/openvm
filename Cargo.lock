@@ -1113,6 +1113,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-rv32im-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-sw-setup"
 version = "0.1.0"
 dependencies = [
@@ -1144,6 +1155,7 @@ dependencies = [
  "axvm-pairing-circuit",
  "axvm-pairing-transpiler",
  "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "axvm-transpiler",
  "derive_more 1.0.0",
  "eyre",
@@ -1172,6 +1184,7 @@ dependencies = [
  "axvm-instructions",
  "axvm-platform",
  "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "derive_more 1.0.0",
  "elf",
  "eyre",

@@ -13,6 +13,9 @@ use axvm_circuit::{
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use axvm_transpiler::{
     axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
 };
@@ -116,8 +119,11 @@ fn test_keccak256_runtime() -> Result<()> {
     let elf = build_example_program("keccak")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(Keccak256TranspilerExtension)),
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Keccak256TranspilerExtension))
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
     );
     let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
     executor.execute(axvm_exe, vec![])?;
@@ -138,7 +144,10 @@ fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(Int256TranspilerExtension)),
     );
     let config = Int256Rv32Config::default();
@@ -152,7 +161,10 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics()
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(Int256TranspilerExtension)),
     );
     let config = Int256Rv32Config::default();
