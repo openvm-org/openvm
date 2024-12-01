@@ -11,7 +11,10 @@ use eyre::Result;
 use hex_literal::hex;
 use p3_baby_bear::BabyBear;
 
-use crate::utils::{build_example_program, ecdsa_sign, generate_keystore_address, generate_salt};
+use crate::utils::{
+    build_example_program, calculate_data_hash, ecdsa_sign, generate_keystore_address,
+    generate_salt,
+};
 
 type F = BabyBear;
 
@@ -98,6 +101,8 @@ fn test_m_of_n_ecdsa() -> Result<()> {
         keystore_address: [u8; 32],
         /// message hash
         msg_hash: [u8; 32],
+        /// data hash
+        data_hash: [u8; 32],
         /// m number of signatures
         m: u32,
         /// n number of EOAs
@@ -110,6 +115,8 @@ fn test_m_of_n_ecdsa() -> Result<()> {
         eoa_addrs: Vec<[u8; 20]>,
     }
 
+    let m = 2;
+    let n = 3;
     let msg = "message";
     let msg_hash = keccak256(msg.as_bytes());
 
@@ -129,17 +136,19 @@ fn test_m_of_n_ecdsa() -> Result<()> {
         "0000000000000000000000000000000000000000000000000000000000000000"
     ));
     let salt = generate_salt(0);
-    let keystore_address = generate_keystore_address(salt, eoa_addrs.clone(), vk_hash);
+    let data_hash = calculate_data_hash(m, n, eoa_addrs.clone());
+    let keystore_address = generate_keystore_address(salt, data_hash, vk_hash);
     let signatures: Vec<[u8; 65]> = private_keys
         .iter()
-        .map(|k| ecdsa_sign(*k, keystore_address.clone(), eoa_addrs.clone(), &msg_hash))
+        .map(|k| ecdsa_sign(*k, keystore_address, data_hash, &msg_hash))
         .collect::<Vec<_>>();
 
     let inputs = Inputs {
         keystore_address,
+        data_hash,
         msg_hash,
-        m: 2,
-        n: 3,
+        m,
+        n,
         signatures: signatures.clone(),
         eoa_addrs,
     };

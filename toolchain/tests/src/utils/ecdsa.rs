@@ -9,14 +9,14 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 /// keystore_address = keccak256(salt, keccak256([eoa_addrs]), keccak256(vk))
 pub fn generate_keystore_address(
     salt: [u8; 32],
-    eoa_addrs: Vec<[u8; 20]>,
+    data_hash: [u8; 32],
     vk_hash: [u8; 32],
 ) -> [u8; 32] {
-    // concatenate EOAs
-    let data_hash = calculate_data_hash(eoa_addrs);
-
-    let concat_all = [salt.to_vec(), data_hash.to_vec(), vk_hash.to_vec()].concat();
-    keccak256(concat_all.as_slice())
+    keccak256(
+        [salt.to_vec(), data_hash.to_vec(), vk_hash.to_vec()]
+            .concat()
+            .as_slice(),
+    )
 }
 
 pub fn generate_salt(seed: u64) -> [u8; 32] {
@@ -30,11 +30,10 @@ pub fn generate_salt(seed: u64) -> [u8; 32] {
 pub fn ecdsa_sign(
     pk: [u8; 32],
     keystore_address: [u8; 32],
-    eoa_addrs: Vec<[u8; 20]>,
+    data_hash: [u8; 32],
     msg_hash: &[u8],
 ) -> [u8; 65] {
     let mut sk = SigningKey::from_bytes(&pk.into()).unwrap();
-    let data_hash = calculate_data_hash(eoa_addrs);
     let signature = sk.sign(
         [
             keystore_address.to_vec(),
@@ -53,8 +52,16 @@ pub fn ecdsa_sign(
         .expect("Signature with recovery id must be 65 bytes")
 }
 
-pub fn calculate_data_hash(eoa_addrs: Vec<[u8; 20]>) -> [u8; 32] {
-    keccak256(eoa_addrs.concat().as_slice())
+pub fn calculate_data_hash(m: u32, n: u32, eoa_addrs: Vec<[u8; 20]>) -> [u8; 32] {
+    keccak256(
+        [
+            m.to_be_bytes().to_vec(),
+            n.to_be_bytes().to_vec(),
+            eoa_addrs.concat().to_vec(),
+        ]
+        .concat()
+        .as_slice(),
+    )
 }
 
 /// Calculates the recovery id from a signature

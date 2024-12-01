@@ -19,6 +19,8 @@ struct Inputs {
     keystore_address: [u8; 32],
     /// message hash
     msg_hash: [u8; 32],
+    /// data hash
+    data_hash: [u8; 32],
     /// m number of signatures
     m: u32,
     /// n number of EOAs
@@ -42,23 +44,18 @@ pub fn main() {
     // read IO
     let io: Inputs = read();
 
-    let keystore_address = io.keystore_address;
-    let msg_hash = io.msg_hash;
-    let m = io.m;
-    let n = io.n;
-
     // Validate there are m signatures and that each is distinct
     let signatures = io
         .signatures
         .iter()
         .map(|s| s.to_vec())
         .collect::<Vec<Vec<u8>>>();
-    assert!(signatures.len() as u32 == m);
+    assert!(signatures.len() as u32 == io.m);
     let mut signature_set = BTreeSet::new();
     for sig in signatures.iter() {
         signature_set.insert(sig.clone());
     }
-    assert!(signature_set.len() as u32 == m);
+    assert!(signature_set.len() as u32 == io.m);
 
     // Concatenate all EOA addresses into a single Vec<u8>
     let mut concat_eoa_addrs = Vec::<u8>::with_capacity(io.eoa_addrs.len() * 20);
@@ -69,24 +66,26 @@ pub fn main() {
     // NOTE: data_hash is currently defined as `keccak256([m, n, concat(eoa_addrs)])`
     let data_hash = keccak256(
         [
-            m.to_be_bytes().to_vec(),
-            n.to_be_bytes().to_vec(),
+            io.m.to_be_bytes().to_vec(),
+            io.n.to_be_bytes().to_vec(),
             concat_eoa_addrs,
         ]
         .concat()
         .as_slice(),
     );
+    assert_eq!(data_hash, io.data_hash);
 
     // Verify the signatures are valid
     for sig in signatures.iter() {
         // Reconstruct Signature struct
+        // Signature is for `keccak256(keystoreAddress || dataHash || msgHash)`
         let signature = Signature::from_slice(&sig[..64]).expect("Invalid signature");
         let recovery_id = RecoveryId::new((sig[64] & 1) == 1, (sig[64] >> 1) == 1);
 
-        // Get verifying key from signature
-        let vk = VerifyingKey::recover_from_prehash(&msg_hash, &signature, recovery_id)
+        // Get verifying key from signature and verify the signature
+        let vk = VerifyingKey::recover_from_prehash(&io.msg_hash, &signature, recovery_id)
             .expect("Unable to recover from prehash");
-        vk.verify_prehashed(&msg_hash, &signature).unwrap();
+        vk.verify_prehashed(&io.msg_hash, &signature).unwrap();
 
         // Get ethereum address from verifying key (public key)
         let enc_pt = vk.0.to_encoded_point(false);
@@ -94,11 +93,9 @@ pub fn main() {
             .try_into()
             .expect("Invalid ethereum address");
 
-        // Check that the ethereum address is in the list of EOA addresses
+        // Check that the ethereum address calculated from the public key is in the list of EOA addresses
         assert!(io.eoa_addrs.contains(&eth_addr));
     }
-
-    // check that the EOA addresses correspond to pub_keys
 }
 
 pub fn deserialize_u8_65_vec<'de, D>(deserializer: D) -> Result<Vec<[u8; 65]>, D::Error>
