@@ -51,8 +51,13 @@ impl RootVerifierProvingKey {
     pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<OuterSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
-        let num_public_values =
-            prover.root_verifier_pk.vm_pk.vm_config.num_public_values - 2 * DIGEST_SIZE;
+        let num_public_values = prover
+            .root_verifier_pk
+            .vm_pk
+            .vm_config
+            .system
+            .num_public_values
+            - 2 * DIGEST_SIZE;
         SingleSegmentVmProver::prove(
             &prover,
             RootVmVerifierInput {
