@@ -1,4 +1,4 @@
-use std::{fs::read, path::PathBuf, str::FromStr, time::Instant};
+use std::{fs::read, path::PathBuf, rc::Rc, str::FromStr, time::Instant};
 
 use anstyle::*;
 use ax_stark_sdk::{
@@ -12,7 +12,11 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm::VirtualMachine, VmGenericConfig};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 
@@ -93,7 +97,14 @@ impl BenchCmd {
 
         let data = read(elf_path)?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-
+        let exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
+                .with_processor(Rc::new(Keccak256TranspilerExtension)),
+        );
         // TODO: read from axiom.toml
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(
@@ -101,7 +112,7 @@ impl BenchCmd {
         );
         let config = Keccak256Rv32Config::default();
 
-        let total_proving_time_ms = bench_from_exe(engine, config, elf, vec![])?;
+        let total_proving_time_ms = bench_from_exe(engine, config, exe, vec![])?;
 
         let green = AnsiColor::Green.on_default().effects(Effects::BOLD);
         write_status(

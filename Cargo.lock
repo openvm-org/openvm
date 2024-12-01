@@ -1452,6 +1452,8 @@ dependencies = [
  "axvm-build",
  "axvm-circuit",
  "axvm-keccak256-circuit",
+ "axvm-keccak256-transpiler",
+ "axvm-rv32im-transpiler",
  "axvm-transpiler",
  "capstone",
  "cargo_metadata",
