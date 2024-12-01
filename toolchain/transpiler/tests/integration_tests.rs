@@ -9,7 +9,7 @@ use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
 };
-use axvm_algebra_transpiler::ModTranspilerExtension;
+use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_circuit::{
     arch::{
@@ -64,7 +64,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let program = Transpiler::<BabyBear>::default_with_intrinsics()
-        .with_processor(Rc::new(ModTranspilerExtension))
+        .with_processor(Rc::new(ModularTranspilerExtension))
         .transpile(&elf.instructions);
     for instruction in program {
         println!("{:?}", instruction);
@@ -123,7 +123,9 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(ModTranspilerExtension)),
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(ModularTranspilerExtension))
+            .with_processor(Rc::new(Fp2TranspilerExtension)),
     );
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(axvm_exe, vec![])?;
@@ -136,7 +138,8 @@ fn test_terminate_prove() -> Result<()> {
     let elf = get_elf("data/rv32im-terminate-from-as")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(ModTranspilerExtension)),
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(ModularTranspilerExtension)),
     );
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1);
     Ok(())

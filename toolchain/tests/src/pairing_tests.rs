@@ -58,7 +58,7 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
-    use axvm_algebra_transpiler::ModTranspilerExtension;
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_transpiler::transpiler::Transpiler;
 
@@ -71,7 +71,8 @@ mod bn254 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -98,7 +99,8 @@ mod bn254 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -147,7 +149,8 @@ mod bn254 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -187,7 +190,8 @@ mod bn254 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -242,7 +246,8 @@ mod bn254 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -307,8 +312,8 @@ mod bls12_381 {
         },
         curves::bls12_381::Bls12_381,
     };
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_ecc::algebra::IntMod;
-    use axvm_algebra_transpiler::ModTranspilerExtension;
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_transpiler::axvm_platform::bincode;
 
@@ -321,7 +326,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -348,7 +354,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -398,7 +405,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
@@ -438,7 +446,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -500,7 +509,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -560,7 +570,8 @@ mod bls12_381 {
             elf,
             Transpiler::<F>::default_with_intrinsics()
                 .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModTranspilerExtension)),
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
