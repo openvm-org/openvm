@@ -7,11 +7,11 @@ use ax_circuit_primitives::bitwise_op_lookup::{
 use ax_mod_circuit_builder::ExprBuilderConfig;
 use axvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{Fp2Opcode, UsizeOpcode};
+use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;

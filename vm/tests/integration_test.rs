@@ -15,12 +15,16 @@ use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
-        VmGenericConfig, VmInventoryError,
+        ChipId, ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
+        SystemTraceHeights, VmChipComplex, VmComplexTraceHeights, VmGenericConfig,
+        VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
     system::{
-        memory::{tree::public_values::UserPublicValuesProof, CHUNK},
+        memory::{
+            tree::public_values::UserPublicValuesProof, MemoryTraceHeights,
+            VolatileMemoryTraceHeights, CHUNK,
+        },
         program::trace::AxVmCommittedExe,
     },
     utils::{air_test, air_test_with_min_segments},
@@ -137,54 +141,97 @@ fn test_vm_1() {
     air_test(NativeConfig::default(), program);
 }
 
-// TODO[yi]: Fix this test
-/*
 #[test]
-fn test_vm_1_override_executor_height() {
-    // If height of an executor is overridden, the AIR should:
-    // - Present even if there is no record
-    // - The height of the main trace` should be the overridden height
+fn test_vm_override_executor_height() {
     let fri_params = FriParameters::standard_fast();
     let e = BabyBearPoseidon2Engine::new(fri_params);
-    let program = Program::from_instructions(&[Instruction::from_isize(
-        TERMINATE.with_default_offset(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    )]);
-    let committed_exe = Arc::new(AxVmCommittedExe::commit(program.into(), e.config().pcs()));
+    let program = Program::<BabyBear>::from_instructions(&[
+        Instruction::from_isize(STOREW.with_default_offset(), 4, 0, 0, 0, 1),
+        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+    ]);
+    let committed_exe = Arc::new(AxVmCommittedExe::<BabyBearPoseidon2Config>::commit(
+        program.into(),
+        e.config().pcs(),
+    ));
 
-    let mut vm_config = vm_config_with_field_arithmetic();
-    vm_config.overridden_executor_heights =
-        Some(BTreeMap::from([(ExecutorName::FieldArithmetic, 100)]));
-    let chip_set = vm_config.create_chip_set::<BabyBear>();
-    let field_air_id = chip_set
-        .get_executor_air_id(ExecutorName::FieldArithmetic)
-        .unwrap();
-    let vm_pk = vm_config.generate_pk(e.keygen_builder());
-    let prover = VmLocalProver::<BabyBearPoseidon2Config, BabyBearPoseidon2Engine>::new(
-        VmProvingKey {
-            fri_params,
-            vm_config,
-            vm_pk,
-        },
-        committed_exe,
+    // Test getting heights.
+    let vm_config = NativeConfig::aggregation(8, 3);
+
+    let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+    let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
+    assert_eq!(
+        res.system_heights,
+        SystemTraceHeights {
+            memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                boundary: 1,
+                access_adapters: vec![(2, 0), (4, 0), (8, 0)].into_iter().collect(),
+            }),
+        }
+    );
+    assert_eq!(
+        res.inventory_heights,
+        VmInventoryTraceHeights {
+            chips: vec![
+                (ChipId::Executor(0), 0),
+                (ChipId::Executor(1), 0),
+                (ChipId::Executor(2), 1),
+                (ChipId::Executor(3), 0),
+                (ChipId::Executor(4), 0),
+                (ChipId::Executor(5), 0),
+                (ChipId::Executor(6), 0),
+                (ChipId::Executor(7), 0),
+                (ChipId::Executor(8), 0),
+            ]
+            .into_iter()
+            .collect(),
+        }
     );
 
-    let proof = prover.prove(vec![]);
-    let mut found = false;
-    for proof_input in proof.per_air {
-        if proof_input.air_id == field_air_id {
-            found = true;
-            // 128 == 100.next_power_of_two()
-            assert_eq!(proof_input.degree, 128);
-        }
-    }
-    assert!(found, "FieldArithmetic AIR should be present");
+    // Test overriding heights.
+    let system_overridden_heights = SystemTraceHeights {
+        memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+            boundary: 1,
+            access_adapters: vec![(2, 8), (4, 4), (8, 2)].into_iter().collect(),
+        }),
+    };
+    let inventory_overridden_heights = VmInventoryTraceHeights {
+        chips: vec![
+            (ChipId::Executor(0), 1),
+            (ChipId::Executor(1), 2),
+            (ChipId::Executor(2), 4),
+            (ChipId::Executor(3), 8),
+            (ChipId::Executor(4), 16),
+            (ChipId::Executor(5), 8),
+            (ChipId::Executor(6), 4),
+            (ChipId::Executor(7), 2),
+            (ChipId::Executor(8), 1),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let overridden_heights = VmComplexTraceHeights::new(
+        system_overridden_heights.clone(),
+        inventory_overridden_heights.clone(),
+    );
+    let executor = SingleSegmentVmExecutor::new_with_overridden_inventory_heights(
+        vm_config,
+        Some(overridden_heights),
+    );
+    let proof_input = executor
+        .execute_and_generate(committed_exe, vec![])
+        .unwrap();
+    let air_heights: Vec<_> = proof_input
+        .per_air
+        .iter()
+        .map(|(_, api)| api.main_trace_height())
+        .collect();
+    // It's hard to define the mapping semantically. Please recompute the following magical AIR
+    // heights by hands whenever something changes.
+    assert_eq!(
+        air_heights,
+        vec![2, 2, 1, 1, 8, 4, 2, 1, 2, 4, 8, 16, 8, 4, 2, 262144]
+    );
 }
-    */
 
 #[test]
 fn test_vm_1_optional_air() {

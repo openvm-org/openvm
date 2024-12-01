@@ -1,8 +1,15 @@
-use std::{fs::read_dir, path::PathBuf};
+use std::{fs::read_dir, path::PathBuf, rc::Rc};
 
-use axvm_circuit::{arch::new_vm::VmExecutor, utils::new_air_test_with_min_segments};
+use axvm_circuit::{
+    arch::{instructions::exe::AxVmExe, new_vm::VmExecutor},
+    utils::new_air_test_with_min_segments,
+};
 use axvm_rv32im_circuit::Rv32ImConfig;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use axvm_toolchain_tests::utils::decode_elf;
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 
@@ -25,8 +32,15 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             println!("Running: {}", file_name);
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
+                let exe = AxVmExe::from_elf(
+                    elf,
+                    Transpiler::<F>::default()
+                        .with_processor(Rc::new(Rv32ITranspilerExtension))
+                        .with_processor(Rc::new(Rv32MTranspilerExtension))
+                        .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+                );
                 let executor = VmExecutor::<F, _>::new(config.clone());
-                let res = executor.execute(elf, vec![])?;
+                let res = executor.execute(exe, vec![])?;
                 Ok(res)
             });
 
@@ -57,9 +71,16 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             }
             println!("Running: {}", file_name);
             let elf = decode_elf(&path)?;
+            let exe = AxVmExe::from_elf(
+                elf,
+                Transpiler::<F>::default()
+                    .with_processor(Rc::new(Rv32ITranspilerExtension))
+                    .with_processor(Rc::new(Rv32MTranspilerExtension))
+                    .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            );
 
             let result = std::panic::catch_unwind(|| {
-                new_air_test_with_min_segments(config.clone(), elf, vec![], 1);
+                new_air_test_with_min_segments(config.clone(), exe, vec![], 1);
             });
 
             match result {

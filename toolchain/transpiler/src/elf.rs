@@ -33,7 +33,7 @@ pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 #[derive(Debug, Clone)]
 pub struct Elf {
     /// The instructions of the program encoded as 32-bits.
-    pub(crate) instructions: Vec<u32>,
+    pub instructions: Vec<u32>,
     /// The start address of the program.
     pub(crate) pc_start: u32,
     /// The base address of the program.

@@ -177,9 +177,15 @@ pub struct VmInventory<E, P> {
     insertion_order: Vec<ChipId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VmInventoryTraceHeights {
     pub chips: FxHashMap<ChipId, usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
+pub struct VmComplexTraceHeights {
+    pub system: SystemTraceHeights,
+    pub inventory: VmInventoryTraceHeights,
 }
 
 type ExecutorId = usize;
@@ -327,6 +333,28 @@ impl<E, P> VmInventory<E, P> {
                 .collect(),
         }
     }
+    /// Return the dummy trace heights of the inventory. This is used for generating a dummy proof.
+    /// Regular users should not need this.
+    pub fn get_dummy_trace_heights(&self) -> VmInventoryTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmInventoryTraceHeights {
+            chips: self
+                .executors
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (ChipId::Executor(i), 1))
+                .chain(self.periphery.iter().enumerate().map(|(i, chip)| {
+                    (
+                        ChipId::Periphery(i),
+                        chip.constant_trace_height().unwrap_or(1),
+                    )
+                }))
+                .collect(),
+        }
+    }
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
@@ -390,6 +418,17 @@ impl<F: PrimeField32> SystemBase<F> {
             memory: self.memory_controller.borrow().get_memory_trace_heights(),
         }
     }
+
+    /// Return dummy trace heights of SystemBase. Usually this is for aggregation to generate a
+    /// dummy proof and not useful for regular users.
+    pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
+        SystemTraceHeights {
+            memory: self
+                .memory_controller
+                .borrow()
+                .get_dummy_memory_trace_heights(),
+        }
+    }
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
@@ -411,10 +450,6 @@ impl<F: PrimeField32> SystemComplex<F> {
         let mut bus_idx_max = RANGE_CHECKER_BUS;
 
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let mem_overridden_heights = config
-            .overridden_heights
-            .as_ref()
-            .map(|oh| oh.memory.clone());
         let memory_controller = if config.continuation_enabled {
             bus_idx_max += 2;
             MemoryController::with_persistent_memory(
@@ -424,14 +459,12 @@ impl<F: PrimeField32> SystemComplex<F> {
                 MemoryMerkleBus(bus_idx_max - 2),
                 DirectCompressionBus(bus_idx_max - 1),
                 Equipartition::<F, CHUNK>::new(),
-                mem_overridden_heights,
             )
         } else {
             MemoryController::with_volatile_memory(
                 MEMORY_BUS,
                 config.memory_config,
                 range_checker.clone(),
-                mem_overridden_heights,
             )
         };
         let memory_controller = Rc::new(RefCell::new(memory_controller));
@@ -726,6 +759,37 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             self.base.get_system_trace_heights(),
             self.inventory.get_trace_heights(),
         )
+    }
+    /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
+    /// generate a dummy proof and not useful for regular users.
+    pub fn get_dummy_system_and_inventory_trace_heights(
+        &self,
+    ) -> (SystemTraceHeights, VmInventoryTraceHeights)
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        (
+            self.base.get_dummy_system_trace_heights(),
+            self.inventory.get_dummy_trace_heights(),
+        )
+    }
+
+    /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
+    /// generate a dummy proof and not useful for regular users.
+    pub fn set_override_inventory_trace_heights(
+        &mut self,
+        overridden_inventory_heights: VmInventoryTraceHeights,
+    ) {
+        self.overridden_inventory_heights = Some(overridden_inventory_heights);
+    }
+
+    pub fn set_override_system_trace_heights(
+        &mut self,
+        overridden_system_heights: SystemTraceHeights,
+    ) {
+        let mut memory_controller = self.base.memory_controller.borrow_mut();
+        memory_controller.set_override_trace_heights(overridden_system_heights.memory);
     }
 
     /// Return dynamic trace heights of all chips in order, or 0 if

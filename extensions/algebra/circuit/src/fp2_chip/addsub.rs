@@ -5,10 +5,10 @@ use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use axvm_circuit::{
     arch::{instructions::Fp2Opcode, VmChipWrapper},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
+use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use p3_field::PrimeField32;
 
 use crate::Fp2;
@@ -91,11 +91,11 @@ mod tests {
     };
     use axvm_circuit::{
         arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        rv32im::adapters::Rv32VecHeapAdapterChip,
-        utils::{biguint_to_limbs, rv32_write_heap_default},
+        utils::biguint_to_limbs,
     };
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;

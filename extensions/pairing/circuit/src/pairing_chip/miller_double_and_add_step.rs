@@ -4,13 +4,13 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
+use axvm_algebra_circuit::Fp2;
 use axvm_circuit::{
     arch::{instructions::PairingOpcode, VmChipWrapper},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_mod_circuit::Fp2;
+use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -109,12 +109,12 @@ mod tests {
     use ax_stark_sdk::p3_baby_bear::BabyBear;
     use axvm_circuit::{
         arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        rv32im::adapters::Rv32VecHeapAdapterChip,
-        utils::{biguint_to_limbs, rv32_write_heap_default},
+        utils::biguint_to_limbs,
     };
     use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::bn256::G2Affine;
     use rand::{rngs::StdRng, SeedableRng};
 

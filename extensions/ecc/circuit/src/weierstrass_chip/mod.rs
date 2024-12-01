@@ -9,12 +9,10 @@ mod tests;
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
-use axvm_circuit::{
-    arch::{instructions::Rv32WeierstrassOpcode, VmChipWrapper},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    system::memory::MemoryControllerRef,
-};
+use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
+use axvm_instructions::Rv32WeierstrassOpcode;
+use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 

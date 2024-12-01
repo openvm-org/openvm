@@ -1,9 +1,9 @@
 [package]
-name = "axvm-keccak-transpiler"
+name = "axvm-keccak256-transpiler"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for Keccak"
+description = "Transpiler extension for Keccak256"
 
 [dependencies]
 axvm-instructions = { workspace = true }
