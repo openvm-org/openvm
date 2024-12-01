@@ -4,7 +4,11 @@ use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
     Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom, SystemOpcode, UsizeOpcode,
 };
-use axvm_transpiler::{axvm_platform::constants::PhantomImm, TranspilerExtension};
+use axvm_transpiler::{
+    axvm_platform::constants::PhantomImm,
+    util::{nop, unimp},
+    TranspilerExtension,
+};
 use p3_field::PrimeField32;
 use rrs::InstructionTranspiler;
 use rrs_lib::{
@@ -24,7 +28,8 @@ pub struct Rv32MTranspilerExtension;
 pub struct Rv32IoTranspilerExtension;
 
 // TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x0b;
+pub(crate) const SYSTEM_OPCODE: u8 = 0x0b;
+pub(crate) const CSR_OPCODE: u8 = 0b1110011;
 pub(crate) const RV32M_OPCODE: u8 = 0b0110011;
 pub(crate) const RV32M_FUNCT7: u8 = 0x01;
 
@@ -32,6 +37,7 @@ pub(crate) const TERMINATE_FUNCT3: u8 = 0b000;
 pub(crate) const HINT_STORE_W_FUNCT3: u8 = 0b001;
 pub(crate) const REVEAL_FUNCT3: u8 = 0b010;
 pub(crate) const PHANTOM_FUNCT3: u8 = 0b011;
+pub(crate) const CSRRW_FUNCT3: u8 = 0b001;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
@@ -45,7 +51,22 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or B-type
 
         let instruction = match (opcode, funct3) {
-            (OPCODE, TERMINATE_FUNCT3) => {
+            (CSR_OPCODE, _) => {
+                let dec_insn = IType::new(instruction_u32);
+                if dec_insn.funct3 as u8 == CSRRW_FUNCT3 {
+                    // CSRRW
+                    if dec_insn.rs1 == 0 && dec_insn.rd == 0 {
+                        // This resets the CSR counter to zero. Since we don't have any CSR registers, this is a nop.
+                        return Some((nop(), 1));
+                    }
+                }
+                eprintln!(
+                    "Transpiling system / CSR instruction: {:b} (opcode = {:07b}, funct3 = {:03b}) to unimp",
+                    instruction_u32, opcode, funct3
+                );
+                return Some((unimp(), 1));
+            }
+            (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
                 Some(Instruction {
                     opcode: SystemOpcode::TERMINATE.with_default_offset(),
@@ -55,7 +76,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                     ..Default::default()
                 })
             }
-            (OPCODE, PHANTOM_FUNCT3) => {
+            (SYSTEM_OPCODE, PHANTOM_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
                 PhantomImm::from_repr(dec_insn.imm as u16).map(|phantom| match phantom {
                     PhantomImm::HintInput => Instruction::phantom(
@@ -125,7 +146,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or B-type
 
-        if opcode != OPCODE {
+        if opcode != SYSTEM_OPCODE {
             return None;
         }
         if funct3 != HINT_STORE_W_FUNCT3 && funct3 != REVEAL_FUNCT3 {
