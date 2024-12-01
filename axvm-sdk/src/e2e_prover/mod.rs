@@ -5,12 +5,10 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::StarkFriEngine,
 };
-// #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::{
-    new_vm::{SingleSegmentVmExecutor, VmExecutor},
-    VmGenericConfig,
-};
+#[cfg(feature = "bench-metrics")]
+use axvm_circuit::arch::new_vm::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
+    arch::VmGenericConfig,
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
@@ -123,7 +121,7 @@ where
     }
 
     fn generate_app_proof(&self, input: Vec<F>) -> ContinuationVmProof<SC> {
-        // #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "bench-metrics")]
         {
             let mut vm_config = self.app_pk.app_vm_pk.vm_config.clone();
             vm_config.system_mut().collect_metrics = true;
@@ -193,7 +191,7 @@ where
             public_values: app_proofs.user_public_values.public_values,
         };
         let input = root_input.write();
-        // #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "bench-metrics")]
         {
             let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
             vm_config.system.collect_metrics = true;
@@ -214,7 +212,7 @@ fn single_segment_prove<E: StarkFriEngine<SC>>(
     prover: &VmLocalProver<SC, NativeConfig, E>,
     input: Vec<Vec<Val<SC>>>,
 ) -> Proof<SC> {
-    // #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "bench-metrics")]
     {
         let mut vm_config = prover.pk.vm_config.clone();
         vm_config.system.collect_metrics = true;
