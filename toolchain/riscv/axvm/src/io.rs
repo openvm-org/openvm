@@ -5,12 +5,12 @@ use alloc::vec::Vec;
 use core::alloc::Layout;
 
 use axvm_platform::bincode;
+#[cfg(target_os = "zkvm")]
+use axvm_rv32im_guest::{hint_input, hint_store_u32};
 use serde::de::DeserializeOwned;
 
 #[cfg(not(target_os = "zkvm"))]
 use crate::host::{hint_input, read_n_bytes, read_u32};
-#[cfg(target_os = "zkvm")]
-use crate::{hint_store_u32, intrinsics::hint_input};
 
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
@@ -75,7 +75,7 @@ fn read_vec_by_len(len: usize) -> Vec<u8> {
 pub fn reveal(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
     #[cfg(target_os = "zkvm")]
-    crate::reveal!(byte_index, x, 0);
+    axvm_rv32im_guest::reveal!(byte_index, x, 0);
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 4);
 }
@@ -86,5 +86,5 @@ pub fn print<S: AsRef<str>>(s: S) {
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     println!("{}", s.as_ref());
     #[cfg(target_os = "zkvm")]
-    crate::intrinsics::print_str_from_bytes(s.as_ref().as_bytes());
+    axvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes());
 }
