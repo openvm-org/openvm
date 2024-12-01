@@ -82,9 +82,16 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 #[test_case("data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
