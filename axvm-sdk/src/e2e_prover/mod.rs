@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ax_stark_sdk::{
-    ax_stark_backend::{config::Val, prover::types::Proof, Chip},
+    ax_stark_backend::{prover::types::Proof, Chip},
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::StarkFriEngine,
 };
@@ -210,7 +210,7 @@ where
 
 fn single_segment_prove<E: StarkFriEngine<SC>>(
     prover: &VmLocalProver<SC, NativeConfig, E>,
-    input: Vec<Vec<Val<SC>>>,
+    input: Vec<Vec<F>>,
 ) -> Proof<SC> {
     #[cfg(feature = "bench-metrics")]
     {

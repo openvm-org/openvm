@@ -72,10 +72,14 @@ where
     ///
     /// The VM will start with a single segment, which is created from the initial state.
     pub fn new(config: VmConfig) -> Self {
-        Self::new_with_overridden_inventory_heights(config, None)
+        Self::new_with_overridden_trace_heights(config, None)
     }
 
-    pub fn new_with_overridden_inventory_heights(
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn new_with_overridden_trace_heights(
         config: VmConfig,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
@@ -266,9 +270,10 @@ where
     VmConfig: VmGenericConfig<F>,
 {
     pub fn new(config: VmConfig) -> Self {
-        Self::new_with_overridden_inventory_heights(config, None)
+        Self::new_with_overridden_trace_heights(config, None)
     }
-    pub fn new_with_overridden_inventory_heights(
+
+    pub fn new_with_overridden_trace_heights(
         config: VmConfig,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
@@ -281,6 +286,10 @@ where
             overridden_heights,
             _marker: Default::default(),
         }
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
     }
 
     /// Executes a program and returns the public values. None means the public value is not set.

@@ -17,7 +17,7 @@ use axvm_circuit::{
             UsizeOpcode,
         },
         new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        SystemTraceHeights, VmGenericConfig,
+        SystemTraceHeights, VmComplexTraceHeights, VmGenericConfig,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
@@ -151,7 +151,7 @@ fn dummy_riscv_app_vm_pk(
 
 fn dummy_app_proof_impl<VmConfig: VmGenericConfig<F>>(
     mut app_vm_pk: VmProvingKey<SC, VmConfig>,
-    overridden_heights: Option<SystemTraceHeights>,
+    overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
     VmConfig::Executor: Chip<SC>,

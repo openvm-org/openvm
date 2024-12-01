@@ -213,7 +213,7 @@ fn test_vm_override_executor_height() {
         system_overridden_heights.clone(),
         inventory_overridden_heights.clone(),
     );
-    let executor = SingleSegmentVmExecutor::new_with_overridden_inventory_heights(
+    let executor = SingleSegmentVmExecutor::new_with_overridden_trace_heights(
         vm_config,
         Some(overridden_heights),
     );

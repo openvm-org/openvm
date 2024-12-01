@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use ax_stark_sdk::{
-    ax_stark_backend::config::{StarkGenericConfig, Val},
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    engine::StarkFriEngine,
+    ax_stark_backend::config::StarkGenericConfig,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, VmGenericConfig},
@@ -14,12 +13,12 @@ use crate::{
     config::{AggConfig, AppConfig},
     keygen::AppProvingKey,
     verifier::leaf::LeafVmVerifierConfig,
-    SC,
+    F, SC,
 };
 
-pub fn commit_app_exe<VmConfig: VmGenericConfig<Val<SC>>>(
+pub fn commit_app_exe<VmConfig: VmGenericConfig<F>>(
     app_config: AppConfig<VmConfig>,
-    app_exe: impl Into<AxVmExe<Val<SC>>>,
+    app_exe: impl Into<AxVmExe<F>>,
 ) -> Arc<AxVmCommittedExe<SC>> {
     let mut exe: AxVmExe<_> = app_exe.into();
     exe.program.max_num_public_values = app_config.app_vm_config.system().num_public_values;
@@ -27,7 +26,7 @@ pub fn commit_app_exe<VmConfig: VmGenericConfig<Val<SC>>>(
     Arc::new(AxVmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
 
-pub fn generate_leaf_committed_exe<VmConfig: VmGenericConfig<Val<SC>>>(
+pub fn generate_leaf_committed_exe<VmConfig: VmGenericConfig<F>>(
     agg_config: AggConfig,
     app_pk: &AppProvingKey<VmConfig>,
 ) -> Arc<AxVmCommittedExe<SC>> {
