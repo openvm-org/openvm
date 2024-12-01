@@ -532,7 +532,6 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "serde",
- "tiny-keccak",
 ]
 
 [[package]]
@@ -853,6 +852,15 @@ dependencies = [
  "test-log",
  "tiny-keccak",
  "tracing",
+]
+
+[[package]]
+name = "axvm-keccak256-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
+ "serde",
+ "tiny-keccak",
 ]
 
 [[package]]

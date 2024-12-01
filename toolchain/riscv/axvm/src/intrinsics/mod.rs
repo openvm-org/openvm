@@ -1,8 +1,5 @@
 //! Functions that call custom instructions that use axVM intrinsic instructions.
 
-mod hash;
-pub use hash::*;
-
 /// Library functions for user input/output.
 #[cfg(target_os = "zkvm")]
 mod io;
