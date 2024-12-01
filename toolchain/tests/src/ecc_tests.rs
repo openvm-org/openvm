@@ -18,6 +18,7 @@ use axvm_mod_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
 };
+use axvm_mod_transpiler::ModTranspilerExtension;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -36,8 +37,12 @@ type F = BabyBear;
 #[test]
 fn test_moduli_setup_runtime() -> Result<()> {
     let elf = build_example_program("moduli_setup")?;
-    let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-    let moduli = exe
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(ModTranspilerExtension)),
+    );
+
+    let moduli = axvm_exe
         .custom_op_config
         .intrinsics
         .field_arithmetic
@@ -47,7 +52,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
         .collect();
     let config = Rv32ModularConfig::new(moduli);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     assert!(!executor.config.modular.supported_modulus.is_empty());
     Ok(())
 }
@@ -55,18 +60,26 @@ fn test_moduli_setup_runtime() -> Result<()> {
 #[test]
 fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(ModTranspilerExtension)),
+    );
     let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(ModTranspilerExtension)),
+    );
     let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 

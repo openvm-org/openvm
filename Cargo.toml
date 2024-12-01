@@ -40,6 +40,7 @@ members = [
     "extensions/native/circuit",
     "extensions/rv32im/circuit",
     "extensions/algebra/circuit",
+    "extensions/algebra/transpiler",
     "extensions/ecc/circuit",
     "extensions/pairing/circuit",
 ]
@@ -108,6 +109,7 @@ ax-stark-backend = { path = "stark-backend", default-features = false }
 ax-stark-sdk = { path = "stark-sdk", default-features = false }
 ax-mod-circuit-builder = { path = "circuits/mod-builder", default-features = false }
 # Extensions
+axvm-mod-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 axvm-mod-circuit = { path = "extensions/algebra/circuit", default-features = false }
 axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
