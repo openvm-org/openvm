@@ -547,6 +547,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "rand 0.8.5",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-algebra-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-bigint-circuit"
 version = "0.1.0"
 dependencies = [
@@ -576,6 +619,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-bigint-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-build"
 version = "0.1.0"
 dependencies = [
@@ -601,6 +655,7 @@ dependencies = [
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
  "axvm-bigint-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
@@ -609,7 +664,6 @@ dependencies = [
  "axvm-ecc-constants",
  "axvm-instructions",
  "axvm-keccak256-circuit",
- "axvm-mod-circuit",
  "axvm-native-circuit",
  "axvm-pairing-circuit",
  "axvm-rv32im-circuit",
@@ -702,11 +756,11 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-mod-circuit-builder",
  "ax-stark-backend",
+ "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-ecc-constants",
  "axvm-instructions",
- "axvm-mod-circuit",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -726,6 +780,18 @@ dependencies = [
  "lazy_static",
  "num-bigint-dig",
  "num-traits",
+]
+
+[[package]]
+name = "axvm-ecc-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -759,16 +825,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-keccak-transpiler"
-version = "0.1.0"
-dependencies = [
- "axvm-instructions",
- "axvm-transpiler",
- "p3-field",
- "rrs-lib",
-]
-
-[[package]]
 name = "axvm-keccak256-circuit"
 version = "0.1.0"
 dependencies = [
@@ -798,41 +854,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-keccak256-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+]
+
+[[package]]
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
  "syn 2.0.87",
-]
-
-[[package]]
-name = "axvm-mod-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-constants",
- "axvm-instructions",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-field",
- "p3-matrix",
- "rand 0.8.5",
- "strum",
- "tracing",
 ]
 
 [[package]]
@@ -930,13 +965,13 @@ dependencies = [
  "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-ecc",
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
  "axvm-instructions",
- "axvm-mod-circuit",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -948,6 +983,18 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "strum",
+]
+
+[[package]]
+name = "axvm-pairing-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1049,16 +1096,20 @@ dependencies = [
  "ax-ecc-execution",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
  "axvm-bigint-circuit",
+ "axvm-bigint-transpiler",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc",
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
- "axvm-keccak-transpiler",
+ "axvm-ecc-transpiler",
  "axvm-keccak256-circuit",
- "axvm-mod-circuit",
+ "axvm-keccak256-transpiler",
  "axvm-pairing-circuit",
+ "axvm-pairing-transpiler",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
  "derive_more 1.0.0",
@@ -1079,12 +1130,13 @@ dependencies = [
  "ax-circuit-derive",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
  "axvm-bigint-circuit",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-constants",
  "axvm-instructions",
- "axvm-mod-circuit",
  "axvm-platform",
  "axvm-rv32im-circuit",
  "derive_more 1.0.0",

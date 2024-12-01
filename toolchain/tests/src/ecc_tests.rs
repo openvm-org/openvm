@@ -1,6 +1,11 @@
 use std::{rc::Rc, str::FromStr};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use axvm_algebra_circuit::{
+    ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
+    Rv32ModularWithFp2Config,
+};
+use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use axvm_circuit::{
     arch::{
         instructions::exe::AxVmExe, new_vm::VmExecutor, SystemConfig, SystemExecutor,
@@ -12,12 +17,9 @@ use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
 };
+use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
-use axvm_mod_circuit::{
-    ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
-    Rv32ModularWithFp2Config,
-};
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -36,8 +38,13 @@ type F = BabyBear;
 #[test]
 fn test_moduli_setup_runtime() -> Result<()> {
     let elf = build_example_program("moduli_setup")?;
-    let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-    let moduli = exe
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(ModularTranspilerExtension)),
+    );
+
+    let moduli = axvm_exe
         .custom_op_config
         .intrinsics
         .field_arithmetic
@@ -47,7 +54,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
         .collect();
     let config = Rv32ModularConfig::new(moduli);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     assert!(!executor.config.modular.supported_modulus.is_empty());
     Ok(())
 }
@@ -55,27 +62,44 @@ fn test_moduli_setup_runtime() -> Result<()> {
 #[test]
 fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(ModularTranspilerExtension)),
+    );
     let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(Fp2TranspilerExtension))
+            .with_processor(Rc::new(ModularTranspilerExtension)),
+    );
     let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(EccTranspilerExtension))
+            .with_processor(Rc::new(ModularTranspilerExtension)),
+    );
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
@@ -124,7 +148,9 @@ fn test_ecdsa_runtime() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+            .with_processor(Rc::new(Keccak256TranspilerExtension))
+            .with_processor(Rc::new(EccTranspilerExtension))
+            .with_processor(Rc::new(ModularTranspilerExtension)),
     );
     executor.execute(exe, vec![])?;
     Ok(())

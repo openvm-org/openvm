@@ -7,11 +7,12 @@ use ax_ecc_execution::axvm_ecc::{
     AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::arch::{new_vm, SystemConfig};
+use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm, SystemConfig};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
-use axvm_mod_circuit::{Fp2Extension, ModularExtension};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
@@ -44,7 +45,7 @@ pub fn get_testing_config() -> Rv32PairingConfig {
 }
 
 mod bn254 {
-    use std::iter;
+    use std::{iter, rc::Rc};
 
     use ax_ecc_execution::{
         axvm_ecc::{
@@ -57,12 +58,22 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use axvm_pairing_transpiler::PairingTranspilerExtension;
+    use axvm_transpiler::transpiler::Transpiler;
 
     use super::*;
 
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
@@ -77,13 +88,20 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(axvm_exe, vec![io])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
@@ -120,13 +138,20 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
@@ -154,13 +179,20 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -203,13 +235,20 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -257,12 +296,14 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 }
 
 mod bls12_381 {
+    use std::rc::Rc;
+
     use ax_ecc_execution::{
         axvm_ecc::{
             halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
@@ -271,7 +312,9 @@ mod bls12_381 {
         },
         curves::bls12_381::Bls12_381,
     };
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_ecc::algebra::IntMod;
+    use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
@@ -279,6 +322,13 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
@@ -293,13 +343,20 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(axvm_exe, vec![io])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
@@ -337,13 +394,20 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
@@ -371,13 +435,20 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -427,13 +498,20 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -481,13 +559,20 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program("final_exp_hint")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default_with_intrinsics()
+                .with_processor(Rc::new(PairingTranspilerExtension))
+                .with_processor(Rc::new(ModularTranspilerExtension))
+                .with_processor(Rc::new(Fp2TranspilerExtension)),
+        );
         let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
 
         let P = G1Affine::generator();
@@ -516,7 +601,7 @@ mod bls12_381 {
         let io = (ps, qs, (c, s));
         let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
         executor.execute(
-            elf,
+            axvm_exe,
             vec![io.into_iter().map(F::from_canonical_u8).collect()],
         )?;
         Ok(())

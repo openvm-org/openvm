@@ -79,7 +79,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-native-circuit.workspace = true
 axvm-bigint-circuit.workspace = true
 axvm-rv32im-circuit.workspace = true
-axvm-mod-circuit.workspace = true
+axvm-algebra-circuit.workspace = true
 axvm-ecc-circuit.workspace = true
 axvm-pairing-circuit.workspace = true
 axvm-keccak256-circuit.workspace = true

@@ -4,13 +4,13 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
+use axvm_algebra_circuit::Fp2;
 use axvm_circuit::{
     arch::VmChipWrapper, rv32im::adapters::Rv32VecHeapAdapterChip,
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_instructions::PairingOpcode;
-use axvm_mod_circuit::Fp2;
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements

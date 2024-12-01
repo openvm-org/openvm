@@ -11,7 +11,7 @@ ax-circuit-derive.workspace = true
 ax-stark-backend.workspace = true
 axvm-rv32im-circuit.workspace = true
 axvm-bigint-circuit.workspace = true
-axvm-mod-circuit.workspace = true
+axvm-algebra-circuit.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
 axvm-ecc-constants.workspace = true
@@ -34,6 +34,7 @@ axvm-build.workspace = true
 ax-stark-sdk.workspace = true
 tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
+axvm-algebra-transpiler = { workspace = true }
 
 [features]
 parallel = ["axvm-circuit/parallel"]

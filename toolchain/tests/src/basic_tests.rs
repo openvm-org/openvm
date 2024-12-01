@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_bigint_circuit::Int256Rv32Config;
+use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::AxVmExe, new_vm::VmExecutor,
@@ -10,7 +11,7 @@ use axvm_circuit::{
     utils::new_air_test_with_min_segments,
 };
 use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_transpiler::{
     axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
@@ -116,7 +117,7 @@ fn test_keccak256_runtime() -> Result<()> {
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+            .with_processor(Rc::new(Keccak256TranspilerExtension)),
     );
     let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
     executor.execute(axvm_exe, vec![])?;
@@ -135,17 +136,27 @@ fn test_print_runtime() -> Result<()> {
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(Int256TranspilerExtension)),
+    );
     let config = Int256Rv32Config::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(Int256TranspilerExtension)),
+    );
     let config = Int256Rv32Config::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
