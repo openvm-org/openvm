@@ -19,9 +19,6 @@ pub mod util;
 mod extension;
 pub use extension::TranspilerExtension;
 
-// TODO: move to separate crates
-pub mod intrinsic_extensions;
-
 // TODO: remove this trait implementation after all the tests are changed to use `get_axvm_exe_from_elf`
 impl<F: PrimeField32> From<Elf> for AxVmExe<F> {
     fn from(elf: Elf) -> Self {
