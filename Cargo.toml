@@ -35,9 +35,9 @@ members = [
 #    "benchmarks",
     "extensions/bigint/circuit",
     "extensions/keccak256/circuit",
+    "extensions/keccak256/transpiler",
     "extensions/native/circuit",
     "extensions/rv32im/circuit",
-    "extensions/keccak/transpiler",
     "extensions/algebra/circuit",
     "extensions/ecc/circuit",
     "extensions/pairing/circuit",
@@ -108,12 +108,12 @@ ax-stark-sdk = { path = "stark-sdk", default-features = false }
 ax-mod-circuit-builder = { path = "circuits/mod-builder", default-features = false }
 # Extensions
 axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-axvm-keccak-transpiler = { path = "extensions/keccak/transpiler", default-features = false }
 axvm-mod-circuit = { path = "extensions/algebra/circuit", default-features = false }
 axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
+axvm-keccak-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
