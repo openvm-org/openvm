@@ -16,6 +16,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
 axvm-keccak-transpiler.workspace = true
+axvm-bigint-transpiler.workspace = true
 axvm-bigint-circuit.workspace = true
 axvm-rv32im-circuit.workspace = true
 axvm-mod-circuit.workspace = true

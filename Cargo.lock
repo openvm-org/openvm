@@ -576,6 +576,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-bigint-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-build"
 version = "0.1.0"
 dependencies = [
@@ -1050,6 +1061,7 @@ dependencies = [
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-bigint-circuit",
+ "axvm-bigint-transpiler",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc",
