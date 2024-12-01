@@ -35,8 +35,10 @@ members = [
 #    "benchmarks",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
+    "extensions/bigint/guest",
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
+    "extensions/keccak256/guest",
     "extensions/native/circuit",
     "extensions/rv32im/circuit",
     "extensions/algebra/circuit",
@@ -121,8 +123,10 @@ axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features =
 axvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
+axvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
+axvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 axvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 # Plonky3

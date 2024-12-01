@@ -3,7 +3,8 @@
 
 use core::array;
 
-use axvm::{intrinsics::I256, io::print};
+use axvm::io::print;
+use axvm_bigint_guest::I256;
 axvm::entry!(main);
 
 const N: usize = 16;

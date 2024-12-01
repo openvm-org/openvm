@@ -4,7 +4,8 @@
 axvm::entry!(main);
 use core::array;
 
-use axvm::{intrinsics::U256, io::print};
+use axvm::io::print;
+use axvm_bigint_guest::U256;
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
