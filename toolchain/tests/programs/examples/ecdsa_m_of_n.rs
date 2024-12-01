@@ -26,7 +26,7 @@ struct Inputs {
     /// vector of signatures
     #[serde(deserialize_with = "deserialize_u8_65_vec")]
     signatures: Vec<[u8; 65]>,
-    /// vector of EOAs
+    /// vector of lowercased EOAs
     #[serde(deserialize_with = "deserialize_u8_20_vec")]
     eoa_addrs: Vec<[u8; 20]>,
 }
@@ -35,7 +35,7 @@ struct Inputs {
 /// Outputs: none; panics if invalid
 ///
 /// Circuit statement:
-/// * keccak256(concat([eoa_addrs])) == dataHash
+/// * keccak256([m, n, concat(eoa_addrs)]) == dataHash
 /// * there are [ECDSA signatures] for keccak256(keystoreAddress || dataHash || msgHash) which verifies against [pub_keys]
 /// * [eoa_addrs] corresponds to [pub_keys]
 pub fn main() {
@@ -80,13 +80,22 @@ pub fn main() {
     // Verify the signatures are valid
     for sig in signatures.iter() {
         // Reconstruct Signature struct
-        // let signature = Signature::from(sig[..64].try_into().unwrap());
-        let signature = Signature::from_slice(&sig[..64]).unwrap();
+        let signature = Signature::from_slice(&sig[..64]).expect("Invalid signature");
         let recovery_id = RecoveryId::new((sig[64] & 1) == 1, (sig[64] >> 1) == 1);
 
         // Get verifying key from signature
-        let vk = VerifyingKey::recover_from_prehash(&msg_hash, &signature, recovery_id).unwrap();
+        let vk = VerifyingKey::recover_from_prehash(&msg_hash, &signature, recovery_id)
+            .expect("Unable to recover from prehash");
         vk.verify_prehashed(&msg_hash, &signature).unwrap();
+
+        // Get ethereum address from verifying key (public key)
+        let enc_pt = vk.0.to_encoded_point(false);
+        let eth_addr: [u8; 20] = keccak256(&enc_pt.as_bytes()[1..])[12..]
+            .try_into()
+            .expect("Invalid ethereum address");
+
+        // Check that the ethereum address is in the list of EOA addresses
+        assert!(io.eoa_addrs.contains(&eth_addr));
     }
 
     // check that the EOA addresses correspond to pub_keys
