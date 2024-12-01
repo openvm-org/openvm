@@ -1110,6 +1110,7 @@ dependencies = [
  "axvm-ecc-constants",
  "axvm-instructions",
  "axvm-mod-circuit",
+ "axvm-mod-transpiler",
  "axvm-platform",
  "axvm-rv32im-circuit",
  "derive_more 1.0.0",
