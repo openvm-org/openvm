@@ -27,7 +27,7 @@ fn main() -> Result<()> {
 
     let elf = build_bench_program("regex")?;
     let exe = AxVmExe::from_elf(
-        elf,
+        elf.clone(),
         Transpiler::<BabyBear>::default_with_intrinsics()
             .with_processor(Rc::new(KeccakTranspilerExtension)),
     );
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
                 .into_iter()
                 .map(AbstractField::from_canonical_u8)
                 .collect::<Vec<BabyBear>>();
-            bench_from_exe(engine, Keccak256Rv32Config::default(), elf, vec![fe_bytes])
+            bench_from_exe(engine, Keccak256Rv32Config::default(), exe, vec![fe_bytes])
         })?;
 
         #[cfg(feature = "aggregation")]
