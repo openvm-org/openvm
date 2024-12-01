@@ -30,7 +30,7 @@ pub struct Rv32IoTranspilerExtension;
 // TODO: the opcode and func3 will be imported from `guest` crate
 pub(crate) const SYSTEM_OPCODE: u8 = 0x0b;
 pub(crate) const CSR_OPCODE: u8 = 0b1110011;
-pub(crate) const RV32M_OPCODE: u8 = 0b0110011;
+pub(crate) const RV32_ALU_OPCODE: u8 = 0b0110011;
 pub(crate) const RV32M_FUNCT7: u8 = 0x01;
 
 pub(crate) const TERMINATE_FUNCT3: u8 = 0b000;
@@ -93,7 +93,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                     ),
                 })
             }
-            (RV32M_OPCODE, _) => {
+            (RV32_ALU_OPCODE, _) => {
                 // Exclude RV32M instructions from this transpiler extension
                 let dec_insn = RType::new(instruction_u32);
                 let funct7 = dec_insn.funct7 as u8;
@@ -117,7 +117,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32MTranspilerExtension {
         let instruction_u32 = instruction_stream[0];
 
         let opcode = (instruction_u32 & 0x7f) as u8;
-        if opcode != RV32M_OPCODE {
+        if opcode != RV32_ALU_OPCODE {
             return None;
         }
 
