@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ax_stark_sdk::{
     ax_stark_backend::{
-        config::{Com, StarkGenericConfig, Val},
+        config::{Com, StarkGenericConfig},
         prover::types::Proof,
         Chip,
     },
@@ -20,12 +20,12 @@ use axvm_circuit::{
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use derivative::Derivative;
-use dummy::dummy_internal_proof_riscv_app_vm;
+use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{AggConfig, AppConfig},
-    keygen::{dummy::compute_root_proof_height, perm::AirIdPermutation},
+    keygen::perm::AirIdPermutation,
     verifier::{internal::InternalVmVerifierConfig, root::RootVmVerifierConfig},
     OuterSC, F, SC,
 };
@@ -80,7 +80,7 @@ impl AggProvingKey {
     pub fn dummy_proof_and_keygen(config: AggConfig) -> (Self, Proof<SC>) {
         let leaf_vm_config = config.leaf_vm_config();
         let internal_vm_config = config.internal_vm_config();
-        let mut root_vm_config = config.root_verifier_vm_config();
+        let root_vm_config = config.root_verifier_vm_config();
 
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
         let leaf_vm_pk = {
@@ -147,22 +147,13 @@ impl AggProvingKey {
             let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
-            let heights = compute_root_proof_height(
+            let (air_heights, _internal_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
             );
-            let root_air_perm = AirIdPermutation::compute(&heights);
+            let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);
-
-            root_vm_config.system.overridden_heights = Some(
-                <NativeConfig as VmGenericConfig<Val<OuterSC>>>::create_chip_complex(
-                    &root_vm_config,
-                )
-                .unwrap()
-                .base
-                .get_system_trace_heights(),
-            );
 
             RootVerifierProvingKey {
                 vm_pk: VmProvingKey {
@@ -171,7 +162,7 @@ impl AggProvingKey {
                     vm_pk,
                 },
                 root_committed_exe,
-                heights,
+                air_heights,
             }
         };
 
@@ -214,12 +205,15 @@ pub struct RootVerifierProvingKey {
     pub vm_pk: VmProvingKey<OuterSC, NativeConfig>,
     /// Committed executable for the root VM.
     pub root_committed_exe: Arc<AxVmCommittedExe<OuterSC>>,
-    /// Heights of each AIR in the root VM in the original AIR order.
-    pub heights: Vec<usize>,
+    /// The constant trace heights, ordered by AIR ID.
+    pub air_heights: Vec<usize>,
+    // The following is currently not used:
+    // The constant trace heights, ordered according to an internal ordering determined by the `NativeConfig`.
+    // pub internal_heights: VmComplexTraceHeights,
 }
 
 impl RootVerifierProvingKey {
     pub fn air_id_permutation(&self) -> AirIdPermutation {
-        AirIdPermutation::compute(&self.heights)
+        AirIdPermutation::compute(&self.air_heights)
     }
 }

@@ -180,6 +180,13 @@ impl Default for SystemConfig {
     }
 }
 
+impl SystemTraceHeights {
+    /// Round all trace heights to the next power of two or zero.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.memory.round_to_next_power_of_two();
+    }
+}
+
 impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
     type Periphery = SystemPeriphery<F>;

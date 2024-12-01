@@ -12,6 +12,7 @@ use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_less_than::IsLtSubAir,
     is_zero::IsZeroSubAir,
+    utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
@@ -138,6 +139,12 @@ impl MemoryTraceHeights {
             MemoryTraceHeights::Persistent(oh) => oh.flatten(),
         }
     }
+    pub fn round_to_next_power_of_two(&mut self) {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two(),
+            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -151,6 +158,13 @@ impl VolatileMemoryTraceHeights {
         iter::once(self.boundary)
             .chain(self.access_adapters.iter().sorted().map(|(_, &v)| v))
             .collect()
+    }
+
+    fn round_to_next_power_of_two(&mut self) {
+        self.boundary = next_power_of_two_or_zero(self.boundary);
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
 
@@ -166,6 +180,14 @@ impl PersistentMemoryTraceHeights {
             .into_iter()
             .chain(self.access_adapters.iter().sorted().map(|(_, v)| *v))
             .collect()
+    }
+
+    fn round_to_next_power_of_two(&mut self) {
+        self.boundary = next_power_of_two_or_zero(self.boundary);
+        self.merkle = next_power_of_two_or_zero(self.merkle);
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
 

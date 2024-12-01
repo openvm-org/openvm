@@ -10,7 +10,10 @@ use ax_stark_sdk::engine::StarkFriEngine;
 use p3_field::PrimeField32;
 
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, new_vm::VirtualMachine, VmGenericConfig},
+    arch::{
+        hasher::poseidon2::vm_poseidon2_hasher, new_vm::VirtualMachine, VmComplexTraceHeights,
+        VmGenericConfig,
+    },
     prover::{
         types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
         ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
@@ -29,6 +32,7 @@ pub struct VmLocalProver<
 {
     pub pk: VmProvingKey<SC, VmConfig>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
+    overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<E>,
 }
 
@@ -41,8 +45,26 @@ where
         Self {
             pk,
             committed_exe,
+            overridden_heights: None,
             _marker: PhantomData,
         }
+    }
+
+    pub fn new_with_overridden_trace_heights(
+        pk: VmProvingKey<SC, VmConfig>,
+        committed_exe: Arc<AxVmCommittedExe<SC>>,
+        overridden_heights: Option<VmComplexTraceHeights>,
+    ) -> Self {
+        Self {
+            pk,
+            committed_exe,
+            overridden_heights,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
     }
 }
 
@@ -56,7 +78,11 @@ where
     fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new(e, self.pk.vm_config.clone());
+        let vm = VirtualMachine::new_with_overridden_trace_heights(
+            e,
+            self.pk.vm_config.clone(),
+            self.overridden_heights.clone(),
+        );
         let results = vm
             .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
             .unwrap();

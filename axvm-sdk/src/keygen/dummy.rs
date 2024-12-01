@@ -17,7 +17,7 @@ use axvm_circuit::{
             UsizeOpcode,
         },
         new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        SystemTraceHeights, VmComplexTraceHeights, VmGenericConfig,
+        VmComplexTraceHeights, VmGenericConfig,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
@@ -39,19 +39,31 @@ use crate::{
     F, SC,
 };
 
-pub(super) fn compute_root_proof_height(
+/// Returns:
+/// - trace heights ordered by AIR ID
+/// - internal ordering of trace heights.
+///
+/// All trace heights are rounded to the next power of two (or 0 -> 0).
+pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: AxVmExe<F>,
     dummy_internal_proof: &Proof<SC>,
-) -> Vec<usize> {
+) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
         proofs: vec![dummy_internal_proof.clone()],
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
-    let heights = vm.execute(root_exe, root_input.write()).unwrap().heights;
-    heights.into_iter().map(|h| h.next_power_of_two()).collect()
+    let res = vm.execute(root_exe, root_input.write()).unwrap();
+    let air_heights: Vec<_> = res
+        .air_heights
+        .into_iter()
+        .map(|h| h.next_power_of_two())
+        .collect();
+    let mut internal_heights = res.internal_heights;
+    internal_heights.round_to_next_power_of_two();
+    (air_heights, internal_heights)
 }
 
 pub(super) fn dummy_internal_proof(
@@ -87,13 +99,13 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
 pub fn dummy_leaf_proof<VmConfig: VmGenericConfig<F>>(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
     app_vm_pk: &VmProvingKey<SC, VmConfig>,
-    overridden_executor_heights: Option<SystemTraceHeights>,
+    overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
     VmConfig::Executor: Chip<SC>,
     VmConfig::Periphery: Chip<SC>,
 {
-    let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_executor_heights);
+    let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_heights);
     dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
 }
 
@@ -150,7 +162,7 @@ fn dummy_riscv_app_vm_pk(
 }
 
 fn dummy_app_proof_impl<VmConfig: VmGenericConfig<F>>(
-    mut app_vm_pk: VmProvingKey<SC, VmConfig>,
+    app_vm_pk: VmProvingKey<SC, VmConfig>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
@@ -158,15 +170,18 @@ where
     VmConfig::Periphery: Chip<SC>,
 {
     // Enforce each AIR to have at least 1 row.
-    app_vm_pk.vm_config.system_mut().overridden_heights = overridden_heights.or(Some({
+    let overridden_heights = overridden_heights.unwrap_or_else(|| {
         let chip_complex = app_vm_pk.vm_config.create_chip_complex().unwrap();
-        chip_complex.base.get_system_trace_heights()
-    }));
+        chip_complex.get_dummy_internal_trace_heights()
+    });
     let fri_params = app_vm_pk.fri_params;
-    let app_prover = VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new(
-        app_vm_pk,
-        dummy_app_committed_exe(fri_params),
-    );
+    // For the dummy proof, we must override the trace heights.
+    let app_prover =
+        VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
+            app_vm_pk,
+            dummy_app_committed_exe(fri_params),
+            Some(overridden_heights),
+        );
     ContinuationVmProver::prove(&app_prover, vec![])
 }
 
