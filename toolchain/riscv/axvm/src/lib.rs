@@ -15,6 +15,8 @@ use core::arch::asm;
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;
+#[cfg(target_os = "zkvm")]
+pub use axvm_rv32im_guest::*;
 
 pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
