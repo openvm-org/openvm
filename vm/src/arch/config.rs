@@ -96,11 +96,9 @@ pub struct SystemConfig {
     /// Whether to collect metrics.
     /// **Warning**: this slows down the runtime.
     pub collect_metrics: bool,
-    /// If set, the height of the traces will be overridden.
-    pub overridden_heights: Option<SystemTraceHeights>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SystemTraceHeights {
     pub memory: MemoryTraceHeights,
     // All other chips have constant heights.
@@ -119,7 +117,6 @@ impl SystemConfig {
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
             collect_metrics: false,
-            overridden_heights: None,
         }
     }
 
