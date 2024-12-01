@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 axvm = { path = "../../riscv/axvm" }
+axvm-bigint-guest = { path = "../../../extensions/bigint/guest" }
 axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 axvm-platform = { path = "../../riscv/platform" }
 axvm-ecc = { path = "../../../lib/ecc", default-features = false }
