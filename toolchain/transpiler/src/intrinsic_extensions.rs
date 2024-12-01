@@ -51,9 +51,7 @@ fn process_custom_instruction<F: PrimeField32>(instruction_u32: u32) -> Option<I
 
             _ => None,
         },
-        CUSTOM_1 => match Custom1Funct3::from_repr(funct3) {
-            _ => None,
-        },
+        CUSTOM_1 => None,
         _ => None,
     };
 
