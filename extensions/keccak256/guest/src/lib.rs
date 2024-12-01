@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
 
