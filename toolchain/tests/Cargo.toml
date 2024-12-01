@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Tests for the axVM toolchain starting from Rust"
 
 [dependencies]
+axvm = { workspace = true }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
@@ -19,8 +20,9 @@ eyre.workspace = true
 test-case.workspace = true
 tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
-serde-arrays = "0.1"
 rand = { workspace = true }
+hex-literal = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa-core", "ecdsa"] }
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true
 

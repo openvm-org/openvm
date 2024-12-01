@@ -1,14 +1,18 @@
 use std::str::FromStr;
 
+use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use axvm::intrinsics::keccak256;
 use axvm_circuit::{
     arch::{ExecutorName, VmConfig, VmExecutor},
     intrinsics::modular::SECP256K1_COORD_PRIME,
 };
+use axvm_transpiler::axvm_platform::bincode;
 use eyre::Result;
-use serde_arrays::*;
+use hex_literal::hex;
+use k256::ecdsa::Signature;
 use p3_baby_bear::BabyBear;
 
-use crate::utils::{build_example_program, generate_keystore_address, generate_msg_hash, generate_vk_hash};
+use crate::utils::{build_example_program, ecdsa_sign, generate_keystore_address, generate_salt};
 
 type F = BabyBear;
 
@@ -79,7 +83,7 @@ fn test_ecdsa_runtime() -> Result<()> {
 
 #[test]
 fn test_m_of_n_ecdsa() -> Result<()> {
-    
+    use crate::utils::{serialize_u8_20_vec, serialize_u8_65_vec};
 
     let elf = build_example_program("ecdsa_m_of_n")?;
     let executor = VmExecutor::<F>::new(
@@ -100,22 +104,44 @@ fn test_m_of_n_ecdsa() -> Result<()> {
         /// n number of EOAs
         n: u32,
         /// vector of signatures
-        #[serde(with = "BigArray")]
-        signatures: Vec<[u8; 64]>,
+        #[serde(serialize_with = "serialize_u8_65_vec")]
+        signatures: Vec<[u8; 65]>,
         /// vector of EOAs
-        #[serde(with = "BigArray")]
+        #[serde(serialize_with = "serialize_u8_20_vec")]
         eoa_addrs: Vec<[u8; 20]>,
     }
 
-    let eoa_addrs = vec![];
-    let vk_hash = generate_vk_hash(vk);
+    let msg = "message";
+    let msg_hash = keccak256(msg.as_bytes());
+
+    #[allow(clippy::useless_vec)]
+    let private_keys = vec![
+        hex!("a62970f3597fe2a380571fd51e3f962b2d13eb97219beee4cc360165b21d74df"),
+        hex!("0c7580ce67946a4480e671cfa63d68eb9692e59f289a08b1fd114b4fccd18a3b"),
+        hex!("15b11c59e8755155ff74f035a97abce181c33c756329337752eeaf5228f49ea8"),
+    ];
+    let eoa_addrs = vec![
+        hex!("4f7a43FF0E4E4224c724cDD39AE69db06E6D3410"),
+        hex!("130eb76AB81B76a74CF6820ECF3820Cdc5179609"),
+        hex!("B7f1d32f02Bd66d25c9ff1F60B67ACc4790b0930"),
+    ];
+    let signatures: Vec<[u8; 65]> = private_keys
+        .iter()
+        .map(|k| ecdsa_sign(*k, &msg_hash))
+        .collect::<Vec<_>>();
+
+    let vk_hash = keccak256(&hex!(
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    ));
+    let salt = generate_salt(0);
+    let keystore_address = generate_keystore_address(salt, eoa_addrs.clone(), vk_hash);
 
     let inputs = Inputs {
-        keystore_address: generate_keystore_address(salt, eoa_addrs, vk_hash),
-        msg_hash: generate_msg_hash("message"),
+        keystore_address,
+        msg_hash,
         m: 2,
         n: 3,
-        signatures: vec![],
+        signatures,
         eoa_addrs,
     };
     let serialized_inputs = bincode::serde::encode_to_vec(&inputs, bincode::config::standard())
@@ -123,14 +149,11 @@ fn test_m_of_n_ecdsa() -> Result<()> {
     executor
         .execute(
             elf,
-            vec![serialized_foo
+            vec![serialized_inputs
                 .into_iter()
                 .map(F::from_canonical_u8)
                 .collect()],
         )
         .unwrap();
-    Ok(())
-
-    executor.execute(elf, vec![])?;
     Ok(())
 }

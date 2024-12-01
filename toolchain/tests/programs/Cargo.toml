@@ -13,7 +13,6 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
-serde_arrays = "0.1"
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
 k256 = { version = "0.13.3", default-features = false, features = [

@@ -11,6 +11,9 @@ use tempfile::tempdir;
 mod ecdsa;
 pub use ecdsa::*;
 
+mod serialize;
+pub use serialize::*;
+
 fn get_programs_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     dir.push("programs");
