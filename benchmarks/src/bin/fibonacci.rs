@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::VmConfig;
+use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_circuit::Rv32ImConfig;
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
             // Leaf aggregation: 1->1 proof "aggregation"
             // TODO[jpw]: put real user public values number, placeholder=0
             let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-            let config = VmConfig::aggregation(0, max_constraint_degree);
+            let config = NativeConfig::aggregation(0, max_constraint_degree);
             let compiler_options = CompilerOptions {
                 enable_cycle_tracker: true,
                 ..Default::default()

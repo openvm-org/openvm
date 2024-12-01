@@ -6,7 +6,6 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::{ExecutorName, VmConfig};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;

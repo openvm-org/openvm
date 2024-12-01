@@ -79,11 +79,33 @@ impl Rv32IConfig {
             io: Default::default(),
         }
     }
+
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
+        let system = SystemConfig::default()
+            .with_continuations()
+            .with_public_values(public_values)
+            .with_max_segment_len(segment_len);
+        Self {
+            system,
+            base: Default::default(),
+            io: Default::default(),
+        }
+    }
 }
 
 impl Rv32ImConfig {
     pub fn with_public_values(public_values: usize) -> Self {
         let inner = Rv32IConfig::with_public_values(public_values);
+        Self {
+            system: inner.system,
+            base: inner.base,
+            mul: Default::default(),
+            io: Default::default(),
+        }
+    }
+
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
+        let inner = Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len);
         Self {
             system: inner.system,
             base: inner.base,

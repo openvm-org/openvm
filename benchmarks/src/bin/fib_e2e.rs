@@ -4,7 +4,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::{instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES, VmConfig};
+use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
 use axvm_recursion::witness::Witnessable;
 use axvm_sdk::{
@@ -34,9 +34,10 @@ async fn main() -> Result<()> {
 
     let app_config = AppConfig {
         app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
-        app_vm_config: VmConfig::rv32im()
-            .with_num_public_values(NUM_PUBLIC_VALUES)
-            .with_max_segment_len(segment_len),
+        app_vm_config: Rv32ImConfig::with_public_values_and_segment_len(
+            NUM_PUBLIC_VALUES,
+            segment_len,
+        ),
     };
     let agg_config = AggConfig {
         max_num_user_public_values: NUM_PUBLIC_VALUES,
@@ -52,7 +53,7 @@ async fn main() -> Result<()> {
     };
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
-    let agg_pk = AggProvingKey::keygen(agg_config.clone(), None);
+    let agg_pk = AggProvinigKey::keygen(agg_config.clone());
     let app_committed_exe = commit_app_exe(app_config, build_bench_program("fibonacci").unwrap());
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
 

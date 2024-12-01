@@ -70,7 +70,7 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 /// Returns the data necessary for proof aggregation.
 pub fn bench_from_exe<SC, E, VmConfig>(
     engine: E,
-    config: VmConfig,
+    mut config: VmConfig,
     exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
@@ -84,12 +84,12 @@ where
 {
     let exe = exe.into();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).
-    config = config.with_metric_collection();
-    let executor = VmExecutor::<Val<SC>, VmConfig>::new(config);
+    config.system_mut().collect_metrics = true;
+    let executor = VmExecutor::<Val<SC>, VmConfig>::new(config.clone());
     tracing::info_span!("execute_with_metrics", collect_metrics = true)
         .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
     // 2. Generate proving key from config.
-    config = config.without_metric_collection();
+    config.system_mut().collect_metrics = false;
     counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
     let vm = VirtualMachine::<SC, E, VmConfig>::new(engine, config);
     let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
