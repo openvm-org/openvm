@@ -28,7 +28,8 @@ fn main() -> Result<()> {
     let elf = build_bench_program("regex")?;
     let exe = AxVmExe::from_elf(
         elf,
-        Transpiler::default_with_intrinsics().with_processor(Rc::new(KeccakTranspilerExtension)),
+        Transpiler::<BabyBear>::default_with_intrinsics()
+            .with_processor(Rc::new(KeccakTranspilerExtension)),
     );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {

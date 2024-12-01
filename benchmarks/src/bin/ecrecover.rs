@@ -48,7 +48,8 @@ fn main() -> Result<()> {
     let elf = build_bench_program("ecrecover")?;
     let exe = AxVmExe::from_elf(
         elf,
-        Transpiler::default_with_intrinsics().with_processor(Rc::new(KeccakTranspilerExtension)),
+        Transpiler::<BabyBear>::default_with_intrinsics()
+            .with_processor(Rc::new(KeccakTranspilerExtension)),
     );
     let vm_config = VmConfig::rv32im()
         .add_executor(ExecutorName::Keccak256Rv32)
