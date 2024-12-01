@@ -15,7 +15,7 @@ ax-stark-sdk.workspace = true
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-transpiler.workspace = true
 axvm-build.workspace = true
-axvm-keccak-transpiler.workspace = true
+axvm-keccak256-transpiler.workspace = true
 axvm-mod-transpiler.workspace = true
 axvm-bigint-transpiler.workspace = true
 axvm-ecc-transpiler.workspace = true

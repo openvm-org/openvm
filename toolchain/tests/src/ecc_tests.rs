@@ -14,7 +14,7 @@ use axvm_ecc_circuit::{
 };
 use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_mod_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
@@ -144,7 +144,7 @@ fn test_ecdsa_runtime() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension))
+            .with_processor(Rc::new(Keccak256TranspilerExtension))
             .with_processor(Rc::new(EccTranspilerExtension))
             .with_processor(Rc::new(ModTranspilerExtension)),
     );

@@ -11,7 +11,7 @@ use axvm_circuit::{
     utils::new_air_test_with_min_segments,
 };
 use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_transpiler::{
     axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
@@ -117,7 +117,7 @@ fn test_keccak256_runtime() -> Result<()> {
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+            .with_processor(Rc::new(Keccak256TranspilerExtension)),
     );
     let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
     executor.execute(axvm_exe, vec![])?;

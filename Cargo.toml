@@ -121,7 +121,7 @@ axvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-feat
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
-axvm-keccak-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
+axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

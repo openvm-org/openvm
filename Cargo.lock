@@ -782,16 +782,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-keccak-transpiler"
-version = "0.1.0"
-dependencies = [
- "axvm-instructions",
- "axvm-transpiler",
- "p3-field",
- "rrs-lib",
-]
-
-[[package]]
 name = "axvm-keccak256-circuit"
 version = "0.1.0"
 dependencies = [
@@ -818,6 +808,16 @@ dependencies = [
  "test-log",
  "tiny-keccak",
  "tracing",
+]
+
+[[package]]
+name = "axvm-keccak256-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
 ]
 
 [[package]]
@@ -1104,8 +1104,8 @@ dependencies = [
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
  "axvm-ecc-transpiler",
- "axvm-keccak-transpiler",
  "axvm-keccak256-circuit",
+ "axvm-keccak256-transpiler",
  "axvm-mod-circuit",
  "axvm-mod-transpiler",
  "axvm-pairing-circuit",

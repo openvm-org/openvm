@@ -4,13 +4,13 @@ use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
 
 #[derive(Default)]
-pub struct KeccakTranspilerExtension;
+pub struct Keccak256TranspilerExtension;
 
 // TODO: the opcode and func3 will be imported from `guest` crate
 pub(crate) const OPCODE: u8 = 0x0b;
 pub(crate) const FUNCT3: u8 = 0b100;
 
-impl<F: PrimeField32> TranspilerExtension<F> for KeccakTranspilerExtension {
+impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
         if instruction_stream.is_empty() {
             return None;
