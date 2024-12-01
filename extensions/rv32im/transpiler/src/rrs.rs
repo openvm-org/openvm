@@ -1,16 +1,18 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, *};
+use axvm_transpiler::util::{
+    from_b_type, from_i_type, from_i_type_shamt, from_j_type, from_load, from_r_type, from_s_type,
+    from_u_type, nop,
+};
 use p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
-    process_instruction, InstructionProcessor,
+    InstructionProcessor,
 };
 
-use crate::{extension::TranspilerExtension, util::*};
-
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
-pub(crate) struct InstructionTranspiler<F>(PhantomData<F>);
+pub(crate) struct InstructionTranspiler<F>(pub PhantomData<F>);
 
 impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     type InstructionResult = Instruction<F>;
@@ -225,21 +227,5 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
         tracing::debug!("Transpiling fence ({:?}) to nop", dec_insn);
         nop()
-    }
-}
-
-/// Transpiler for standard RISC-V 32-bit IM instruction set.
-#[derive(Default)]
-pub struct Rv32TranspilerExtension;
-
-impl<F: PrimeField32> TranspilerExtension<F> for Rv32TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
-        let mut transpiler = InstructionTranspiler::<F>(PhantomData);
-        if instruction_stream.is_empty() {
-            return None;
-        }
-        let instruction_u32 = instruction_stream[0];
-        let instruction = process_instruction(&mut transpiler, instruction_u32);
-        instruction.map(|ret| (ret, 1))
     }
 }

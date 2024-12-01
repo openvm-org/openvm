@@ -60,6 +60,9 @@ mod bn254 {
     };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
+    use axvm_rv32im_transpiler::{
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    };
     use axvm_transpiler::transpiler::Transpiler;
 
     use super::*;
@@ -69,7 +72,10 @@ mod bn254 {
         let elf = build_example_program("fp12_mul")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -97,7 +103,10 @@ mod bn254 {
         let elf = build_example_program("pairing_line")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -147,7 +156,10 @@ mod bn254 {
         let elf = build_example_program("pairing_miller_step")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -188,7 +200,10 @@ mod bn254 {
         let elf = build_example_program("pairing_miller_loop")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -244,7 +259,10 @@ mod bn254 {
         let elf = build_example_program("pairing_check")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -315,6 +333,9 @@ mod bls12_381 {
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_ecc::algebra::IntMod;
     use axvm_pairing_transpiler::PairingTranspilerExtension;
+    use axvm_rv32im_transpiler::{
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    };
     use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
@@ -324,7 +345,10 @@ mod bls12_381 {
         let elf = build_example_program("fp12_mul")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -352,7 +376,10 @@ mod bls12_381 {
         let elf = build_example_program("pairing_line")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -403,7 +430,10 @@ mod bls12_381 {
         let elf = build_example_program("pairing_miller_step")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -444,7 +474,10 @@ mod bls12_381 {
         let elf = build_example_program("pairing_miller_loop")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -507,7 +540,10 @@ mod bls12_381 {
         let elf = build_example_program("pairing_check")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
@@ -568,7 +604,10 @@ mod bls12_381 {
         let elf = build_example_program("final_exp_hint")?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
-            Transpiler::<F>::default_with_intrinsics()
+            Transpiler::<F>::default()
+                .with_processor(Rc::new(Rv32ITranspilerExtension))
+                .with_processor(Rc::new(Rv32MTranspilerExtension))
+                .with_processor(Rc::new(Rv32IoTranspilerExtension))
                 .with_processor(Rc::new(PairingTranspilerExtension))
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
