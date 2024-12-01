@@ -7,7 +7,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::hint::black_box;
 
-use axvm::intrinsics::keccak256;
+use axvm_keccak256_guest::keccak256;
 use hex::FromHex;
 
 axvm::entry!(main);
