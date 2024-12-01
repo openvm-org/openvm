@@ -10,7 +10,7 @@ use axvm_circuit::{
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_mod_circuit::Fp2;
+use axvm_algebra_circuit::Fp2;
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements

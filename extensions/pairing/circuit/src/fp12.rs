@@ -1,7 +1,7 @@
 use std::{array::from_fn, cell::RefCell, rc::Rc};
 
 use ax_mod_circuit_builder::{ExprBuilder, FieldVariable};
-use axvm_mod_circuit::Fp2;
+use axvm_algebra_circuit::Fp2;
 
 /// Field extension Fp12 defined with coefficients in Fp2.
 /// Represents the element `c0 + c1 w + ... + c5 w^5` in Fp12.

@@ -10,7 +10,7 @@ use axvm_circuit::{
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_mod_circuit::Fp2;
+use axvm_algebra_circuit::Fp2;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements

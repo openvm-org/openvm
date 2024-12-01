@@ -3,7 +3,7 @@ use axvm_circuit::arch::{
     SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
-use axvm_mod_circuit::*;
+use axvm_algebra_circuit::*;
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 use p3_field::PrimeField32;

@@ -7,10 +7,10 @@ use ax_ecc_execution::axvm_ecc::{
     AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm, SystemConfig};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
-use axvm_mod_circuit::{Fp2Extension, ModularExtension};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
@@ -58,7 +58,7 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
-    use axvm_mod_transpiler::ModTranspilerExtension;
+    use axvm_algebra_transpiler::ModTranspilerExtension;
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_transpiler::transpiler::Transpiler;
 
@@ -308,7 +308,7 @@ mod bls12_381 {
         curves::bls12_381::Bls12_381,
     };
     use axvm_ecc::algebra::IntMod;
-    use axvm_mod_transpiler::ModTranspilerExtension;
+    use axvm_algebra_transpiler::ModTranspilerExtension;
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_transpiler::axvm_platform::bincode;
 

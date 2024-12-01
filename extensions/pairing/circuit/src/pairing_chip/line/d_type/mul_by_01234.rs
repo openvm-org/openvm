@@ -10,7 +10,7 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_instructions::PairingOpcode;
-use axvm_mod_circuit::Fp2;
+use axvm_algebra_circuit::Fp2;
 
 use crate::Fp12;
 

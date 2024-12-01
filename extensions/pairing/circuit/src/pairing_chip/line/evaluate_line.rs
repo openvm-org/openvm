@@ -10,7 +10,7 @@ use axvm_circuit::{
     system::memory::MemoryControllerRef,
 };
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_mod_circuit::Fp2;
+use axvm_algebra_circuit::Fp2;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>

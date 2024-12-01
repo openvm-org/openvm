@@ -1,5 +1,5 @@
 [package]
-name = "axvm-mod-circuit"
+name = "axvm-algebra-circuit"
 version = "0.1.0"
 edition = "2021"
 description = "Modular arithmetic circuits."

@@ -5,6 +5,11 @@ use std::{
 };
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use axvm_algebra_circuit::{
+    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
+    ModularExtensionExecutor, ModularExtensionPeriphery,
+};
+use axvm_algebra_transpiler::ModTranspilerExtension;
 use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_circuit::{
     arch::{
@@ -16,11 +21,6 @@ use axvm_circuit::{
 };
 use axvm_ecc_constants::SECP256K1;
 use axvm_instructions::exe::AxVmExe;
-use axvm_mod_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
-};
-use axvm_mod_transpiler::ModTranspilerExtension;
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
