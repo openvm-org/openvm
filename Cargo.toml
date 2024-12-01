@@ -44,7 +44,7 @@ members = [
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/pairing/circuit",
-    "extensions/pairing/transpiler"
+    "extensions/pairing/transpiler",
     "extensions/rv32-adapters"
 ]
 resolver = "2"

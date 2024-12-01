@@ -5,10 +5,7 @@ use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::Fp2;
-use axvm_circuit::{
-    arch::VmChipWrapper, rv32im::adapters::Rv32VecHeapAdapterChip,
-    system::memory::MemoryControllerRef,
-};
+use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_instructions::PairingOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
