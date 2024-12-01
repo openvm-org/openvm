@@ -333,9 +333,8 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
 
                     fn create_chip_complex(
                         &self,
-                        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
                     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-                        let complex = self.#system_name.create_chip_complex(overridden_inventory_heights)?;
+                        let complex = self.#system_name.create_chip_complex()?;
                         #(#create_chip_complex)*
                         Ok(complex)
                     }

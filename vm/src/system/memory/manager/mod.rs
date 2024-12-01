@@ -180,26 +180,14 @@ impl<F: PrimeField32> MemoryController<F> {
         memory_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
-        mut overridden_heights: Option<MemoryTraceHeights>,
     ) -> Self {
-        if let Some(overridden_heights) = overridden_heights.as_ref() {
-            match overridden_heights {
-                MemoryTraceHeights::Volatile { .. } => {}
-                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
-            }
-            assert!(
-                mem_config.boundary_air_height.is_none(),
-                "Both mem_config.boundary_air_height and overridden_heights are set"
-            );
-        } else {
-            // A temporary hack to support the old code.
-            if let Some(boundary_air_height) = mem_config.boundary_air_height {
-                overridden_heights =
-                    Some(MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                        boundary: boundary_air_height,
-                        access_adapters: FxHashMap::default(),
-                    }));
-            }
+        let mut overridden_heights = None;
+        // A temporary hack to support the old code.
+        if let Some(boundary_air_height) = mem_config.boundary_air_height {
+            overridden_heights = Some(MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                boundary: boundary_air_height,
+                access_adapters: FxHashMap::default(),
+            }));
         }
         let range_checker_bus = range_checker.bus();
         Self {
@@ -229,14 +217,7 @@ impl<F: PrimeField32> MemoryController<F> {
         merkle_bus: MemoryMerkleBus,
         compression_bus: DirectCompressionBus,
         initial_memory: Equipartition<F, CHUNK>,
-        overridden_heights: Option<MemoryTraceHeights>,
     ) -> Self {
-        if let Some(overridden_heights) = overridden_heights.as_ref() {
-            match overridden_heights {
-                MemoryTraceHeights::Persistent { .. } => {}
-                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
-            }
-        }
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
@@ -263,8 +244,22 @@ impl<F: PrimeField32> MemoryController<F> {
             range_checker,
             range_checker_bus,
             result: None,
-            overridden_heights,
+            overridden_heights: None,
         }
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
+        match self.interface_chip {
+            MemoryInterface::Volatile { .. } => match overridden_heights {
+                MemoryTraceHeights::Volatile(_) => {}
+                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
+            },
+            MemoryInterface::Persistent { .. } => match overridden_heights {
+                MemoryTraceHeights::Persistent(_) => {}
+                _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
+            },
+        }
+        self.overridden_heights = Some(overridden_heights);
     }
 
     pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
@@ -832,7 +827,6 @@ mod tests {
             memory_bus,
             memory_config,
             range_checker.clone(),
-            None,
         );
 
         let mut rng = thread_rng();

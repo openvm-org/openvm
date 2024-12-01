@@ -9,7 +9,7 @@ use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension
 use axvm_circuit::{
     arch::{
         instructions::exe::AxVmExe, new_vm::VmExecutor, SystemConfig, SystemExecutor,
-        SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError, VmInventoryTraceHeights,
+        SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
 };

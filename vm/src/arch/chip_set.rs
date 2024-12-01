@@ -290,14 +290,12 @@ impl VmConfig {
                 merkle_bus,
                 DirectCompressionBus(POSEIDON2_DIRECT_BUS),
                 Equipartition::<F, CHUNK>::new(),
-                None,
             )))
         } else {
             Rc::new(RefCell::new(MemoryController::with_volatile_memory(
                 memory_bus,
                 self.memory_config,
                 range_checker.clone(),
-                None,
             )))
         };
         let program_chip = ProgramChip::new(program_bus);

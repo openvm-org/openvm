@@ -11,8 +11,8 @@ use backtrace::Backtrace;
 use p3_field::PrimeField32;
 
 use super::{
-    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGenericConfig,
-    VmInventoryTraceHeights,
+    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmGenericConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -62,11 +62,8 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
         fn_bounds: FnBounds,
-        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     ) -> Self {
-        let mut chip_complex = config
-            .create_chip_complex(overridden_inventory_heights)
-            .unwrap();
+        let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
         let program = if config.system().collect_metrics {
             program.strip_debug_infos()
@@ -97,6 +94,13 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
 
     pub fn system_config(&self) -> &SystemConfig {
         self.chip_complex.config()
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.chip_complex
+            .set_override_system_trace_heights(overridden_heights.system);
+        self.chip_complex
+            .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
     /// Stopping is triggered by should_segment()

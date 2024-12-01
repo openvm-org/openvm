@@ -14,8 +14,8 @@ use p3_field::PrimeField32;
 use thiserror::Error;
 
 use super::{
-    ExecutionError, SystemTraceHeights, VmGenericConfig, VmInventoryTraceHeights, CONNECTOR_AIR_ID,
-    MERKLE_AIR_ID,
+    ExecutionError, SystemTraceHeights, VmComplexTraceHeights, VmGenericConfig,
+    VmInventoryTraceHeights, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
 };
 use crate::{
     arch::new_segment::ExecutionSegment,
@@ -46,7 +46,7 @@ impl<F> Streams<F> {
 
 pub struct VmExecutor<F, VmConfig> {
     pub config: VmConfig,
-    pub overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+    pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
 
@@ -77,11 +77,11 @@ where
 
     pub fn new_with_overridden_inventory_heights(
         config: VmConfig,
-        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+        overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
         Self {
             config,
-            overridden_inventory_heights,
+            overridden_heights,
             _marker: Default::default(),
         }
     }
@@ -107,8 +107,10 @@ where
             streams,
             Some(memory_image_to_equipartition(exe.init_memory)),
             exe.fn_bounds.clone(),
-            self.overridden_inventory_heights.clone(),
         );
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
         let mut pc = exe.pc_start;
 
         loop {
@@ -145,8 +147,10 @@ where
                 streams,
                 Some(final_memory),
                 exe.fn_bounds.clone(),
-                self.overridden_inventory_heights.clone(),
             );
+            if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+                segment.set_override_trace_heights(overridden_heights.clone());
+            }
             segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
@@ -242,7 +246,7 @@ where
 /// A single segment VM.
 pub struct SingleSegmentVmExecutor<F, VmConfig> {
     pub config: VmConfig,
-    pub overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+    pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
 
@@ -266,7 +270,7 @@ where
     }
     pub fn new_with_overridden_inventory_heights(
         config: VmConfig,
-        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+        overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
         assert!(
             !config.system().continuation_enabled,
@@ -274,7 +278,7 @@ where
         );
         Self {
             config,
-            overridden_inventory_heights,
+            overridden_heights,
             _marker: Default::default(),
         }
     }
@@ -330,8 +334,10 @@ where
             Streams::new(input),
             None,
             exe.fn_bounds,
-            self.overridden_inventory_heights.clone(),
         );
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
     }
@@ -394,7 +400,7 @@ where
 
     pub fn keygen(&self) -> MultiStarkProvingKey<SC> {
         let mut keygen_builder = self.engine.keygen_builder();
-        let chip_complex = self.config().create_chip_complex(None).unwrap();
+        let chip_complex = self.config().create_chip_complex().unwrap();
         for air in chip_complex.airs() {
             keygen_builder.add_air(air);
         }

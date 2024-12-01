@@ -9,7 +9,7 @@ use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
-        VmInventory, VmInventoryBuilder, VmInventoryError, VmInventoryTraceHeights,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };

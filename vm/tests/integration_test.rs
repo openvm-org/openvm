@@ -16,8 +16,8 @@ use axvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         new_vm::{SingleSegmentVmExecutor, VirtualMachine},
         ChipId, ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        SystemTraceHeights, VmChipComplex, VmGenericConfig, VmInventoryError,
-        VmInventoryTraceHeights,
+        SystemTraceHeights, VmChipComplex, VmComplexTraceHeights, VmGenericConfig,
+        VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
     system::{
@@ -155,7 +155,7 @@ fn test_vm_override_executor_height() {
     ));
 
     // Test getting heights.
-    let mut vm_config = NativeConfig::aggregation(8, 3);
+    let vm_config = NativeConfig::aggregation(8, 3);
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
@@ -194,7 +194,6 @@ fn test_vm_override_executor_height() {
             access_adapters: vec![(2, 8), (4, 4), (8, 2)].into_iter().collect(),
         }),
     };
-    vm_config.system.overridden_heights = Some(system_overridden_heights.clone());
     let inventory_overridden_heights = VmInventoryTraceHeights {
         chips: vec![
             (ChipId::Executor(0), 1),
@@ -210,9 +209,13 @@ fn test_vm_override_executor_height() {
         .into_iter()
         .collect(),
     };
+    let overridden_heights = VmComplexTraceHeights::new(
+        system_overridden_heights.clone(),
+        inventory_overridden_heights.clone(),
+    );
     let executor = SingleSegmentVmExecutor::new_with_overridden_inventory_heights(
         vm_config,
-        Some(inventory_overridden_heights.clone()),
+        Some(overridden_heights),
     );
     let proof_input = executor
         .execute_and_generate(committed_exe, vec![])
@@ -671,10 +674,10 @@ fn test_vm_max_access_adapter_8() {
 
     let mut config = NativeConfig::default();
     {
-        let chip_complex1 = config.create_chip_complex(None).unwrap();
+        let chip_complex1 = config.create_chip_complex().unwrap();
         let mem_ctrl1 = chip_complex1.base.memory_controller.borrow();
         config.system.memory_config.max_access_adapter_n = 8;
-        let chip_complex2 = config.create_chip_complex(None).unwrap();
+        let chip_complex2 = config.create_chip_complex().unwrap();
         let mem_ctrl2 = chip_complex2.base.memory_controller.borrow();
         // AccessAdapterAir with N=16/32/64 are disabled.
         assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
