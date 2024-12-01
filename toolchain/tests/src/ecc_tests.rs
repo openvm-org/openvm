@@ -12,6 +12,7 @@ use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
 };
+use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use axvm_keccak_transpiler::KeccakTranspilerExtension;
 use axvm_mod_circuit::{
@@ -86,9 +87,15 @@ fn test_complex_runtime() -> Result<()> {
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program("ec")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(EccTranspilerExtension))
+            .with_processor(Rc::new(ModTranspilerExtension)),
+    );
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(axvm_exe, vec![])?;
     Ok(())
 }
 
@@ -137,7 +144,9 @@ fn test_ecdsa_runtime() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+            .with_processor(Rc::new(KeccakTranspilerExtension))
+            .with_processor(Rc::new(EccTranspilerExtension))
+            .with_processor(Rc::new(ModTranspilerExtension)),
     );
     executor.execute(exe, vec![])?;
     Ok(())

@@ -740,6 +740,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-ecc-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
@@ -974,6 +986,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-pairing-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
@@ -1079,11 +1103,13 @@ dependencies = [
  "axvm-ecc",
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
+ "axvm-ecc-transpiler",
  "axvm-keccak-transpiler",
  "axvm-keccak256-circuit",
  "axvm-mod-circuit",
  "axvm-mod-transpiler",
  "axvm-pairing-circuit",
+ "axvm-pairing-transpiler",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
  "derive_more 1.0.0",
