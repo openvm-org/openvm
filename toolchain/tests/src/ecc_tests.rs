@@ -78,7 +78,9 @@ fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<F>::default_with_intrinsics().with_processor(Rc::new(Fp2TranspilerExtension)),
+        Transpiler::<F>::default_with_intrinsics()
+            .with_processor(Rc::new(Fp2TranspilerExtension))
+            .with_processor(Rc::new(ModularTranspilerExtension)),
     );
     let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
