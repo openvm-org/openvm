@@ -620,6 +620,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-bigint-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-platform",
+ "num-bigint-dig",
+ "num-traits",
+ "serde",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "axvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [

@@ -7,7 +7,7 @@ use core::{
 };
 
 #[cfg(not(target_os = "zkvm"))]
-use {super::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
+use {axvm::intrinsics::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
 #[cfg(target_os = "zkvm")]
 use {
     axvm_platform::constants::{Custom0Funct3, Int256Funct7, CUSTOM_0},

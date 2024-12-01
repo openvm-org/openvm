@@ -1,0 +1,30 @@
+[package]
+name = "axvm-bigint-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Guest extension for Int256"
+
+[dependencies]
+axvm = { workspace = true }
+axvm-platform = { workspace = true, features = [
+    "rust-runtime",
+    "export-getrandom",
+] }
+
+serde = { workspace = true, features = ["alloc"] }
+tiny-keccak.workspace = true
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+
+[features]
+default = []
+# The zkVM exposes a getrandom implementation that panics by default. This will
+# expose a getrandom implementation that uses the `sys_random` ecall.
+getrandom = ["axvm-platform/getrandom"]
+# The zkVM uses a bump-pointer heap allocator by default which does not free
+# memory. This will use a slower linked-list heap allocator to reclaim memory.
+heap-embedded-alloc = ["axvm-platform/heap-embedded-alloc"]
+std = ["serde/std"]

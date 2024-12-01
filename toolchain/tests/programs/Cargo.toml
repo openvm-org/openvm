@@ -20,7 +20,7 @@ k256 = { version = "0.13.3", default-features = false, features = ["ecdsa-core",
 
 [features]
 default = []
-std = ["axvm/std", "axvm-ecc/std"]
+std = ["axvm/std", "axvm-ecc/std", "axvm-keccak256-guest/std"]
 
 [profile.release]
 panic = "abort"
