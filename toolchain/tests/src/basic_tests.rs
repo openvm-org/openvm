@@ -30,16 +30,29 @@ type F = BabyBear;
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32IConfig::default();
-    new_air_test_with_min_segments(config, elf, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments);
     Ok(())
 }
 
 #[test_case("collatz", 1)]
 fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension)),
+    );
     let config = Rv32ImConfig::default();
-    new_air_test_with_min_segments(config, elf, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments);
     Ok(())
 }
 
@@ -47,23 +60,44 @@ fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test_case("collatz", 1)]
 fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program_with_features(example_name, ["std"])?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension)),
+    );
     let config = Rv32ImConfig::default();
-    new_air_test_with_min_segments(config, elf, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments);
     Ok(())
 }
 
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32IConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
+    executor.execute(exe, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
     Ok(())
 }
 
 #[test]
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32IConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
 
@@ -80,7 +114,7 @@ fn test_read_runtime() -> Result<()> {
         .expect("serialize to vec failed");
     executor
         .execute(
-            elf,
+            exe,
             vec![serialized_foo
                 .into_iter()
                 .map(F::from_canonical_u8)
@@ -93,9 +127,16 @@ fn test_read_runtime() -> Result<()> {
 #[test]
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32IConfig::default();
     let executor = VmExecutor::<F, _>::new(config.clone());
-    let final_memory = executor.execute(elf, vec![])?.unwrap();
+    let final_memory = executor.execute(exe, vec![])?.unwrap();
     let hasher = vm_poseidon2_hasher();
     let pv_proof = UserPublicValuesProof::compute(
         config.system.memory_config.memory_dimensions(),
@@ -133,9 +174,16 @@ fn test_keccak256_runtime() -> Result<()> {
 #[test]
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     let config = Rv32IConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(elf, vec![])?;
+    executor.execute(exe, vec![])?;
     Ok(())
 }
 
