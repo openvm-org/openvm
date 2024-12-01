@@ -25,20 +25,11 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
-use program::DEFAULT_PC_STEP;
 use strum::EnumCount;
 
 use super::{vm_poseidon2_config, Streams};
 use crate::{
     arch::{AxVmChip, AxVmExecutor, ExecutionBus, ExecutorName, VmConfig},
-    rv32im::{
-        adapters::{
-            Rv32BaseAluAdapterChip, Rv32BranchAdapterChip, Rv32CondRdWriteAdapterChip,
-            Rv32HintStoreAdapterChip, Rv32JalrAdapterChip, Rv32LoadStoreAdapterChip,
-            Rv32MultAdapterChip, Rv32RdWriteAdapterChip,
-        },
-        *,
-    },
     system::{
         connector::VmConnectorChip,
         memory::{
@@ -87,14 +78,8 @@ impl<F: PrimeField32> VmChipSet<F> {
     }
     pub(crate) fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
         for chip in self.chips.iter_mut() {
-            if let AxVmChip::Executor(chip) = chip {
-                match chip {
-                    AxVmExecutor::HintStoreRv32(chip) => {
-                        chip.borrow_mut().core.set_streams(streams.clone())
-                    }
-                    AxVmExecutor::Phantom(chip) => chip.borrow_mut().set_streams(streams.clone()),
-                    _ => {}
-                }
+            if let AxVmChip::Executor(AxVmExecutor::Phantom(chip)) = chip {
+                chip.borrow_mut().set_streams(streams.clone());
             }
         }
     }
@@ -367,19 +352,11 @@ impl VmConfig {
             }
             match executor {
                 ExecutorName::Phantom => {
-                    let mut phantom_chip = PhantomChip::new(
+                    let phantom_chip = PhantomChip::new(
                         execution_bus,
                         program_bus,
                         memory_controller.clone(),
                         offset,
-                    );
-                    phantom_chip.add_sub_executor(
-                        crate::extensions::rv32im::phantom::Rv32HintInputSubEx,
-                        PhantomDiscriminant(Rv32Phantom::HintInput as u16),
-                    );
-                    phantom_chip.add_sub_executor(
-                        crate::extensions::rv32im::phantom::Rv32PrintStrSubEx,
-                        PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
                     );
 
                     let phantom_chip = Rc::new(RefCell::new(phantom_chip));
@@ -389,237 +366,6 @@ impl VmConfig {
                     chips.push(AxVmChip::Executor(phantom_chip.into()));
                 }
                 ExecutorName::Poseidon2 => {}
-                ExecutorName::BaseAluRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32BaseAluChip::new(
-                        Rv32BaseAluAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        BaseAluCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::LessThanRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32LessThanChip::new(
-                        Rv32BaseAluAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        LessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::MultiplicationRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32MultiplicationChip::new(
-                        Rv32MultAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        MultiplicationCoreChip::new(range_tuple_checker.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::MultiplicationHighRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32MulHChip::new(
-                        Rv32MultAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        MulHCoreChip::new(
-                            bitwise_lookup_chip.clone(),
-                            range_tuple_checker.clone(),
-                            offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::DivRemRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32DivRemChip::new(
-                        Rv32MultAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        DivRemCoreChip::new(
-                            bitwise_lookup_chip.clone(),
-                            range_tuple_checker.clone(),
-                            offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::ShiftRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32ShiftChip::new(
-                        Rv32BaseAluAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        ShiftCoreChip::new(
-                            bitwise_lookup_chip.clone(),
-                            range_checker.clone(),
-                            offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::LoadStoreRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32LoadStoreChip::new(
-                        Rv32LoadStoreAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            range_checker.clone(),
-                            offset,
-                        ),
-                        LoadStoreCoreChip::new(offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::LoadSignExtendRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32LoadSignExtendChip::new(
-                        Rv32LoadStoreAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            range_checker.clone(),
-                            offset,
-                        ),
-                        LoadSignExtendCoreChip::new(range_checker.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::HintStoreRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32HintStoreChip::new(
-                        Rv32HintStoreAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                            range_checker.clone(),
-                        ),
-                        Rv32HintStoreCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::BranchEqualRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32BranchEqualChip::new(
-                        Rv32BranchAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        BranchEqualCoreChip::new(offset, DEFAULT_PC_STEP),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::BranchLessThanRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32BranchLessThanChip::new(
-                        Rv32BranchAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        BranchLessThanCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::JalLuiRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32JalLuiChip::new(
-                        Rv32CondRdWriteAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        Rv32JalLuiCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::JalrRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32JalrChip::new(
-                        Rv32JalrAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        Rv32JalrCoreChip::new(
-                            bitwise_lookup_chip.clone(),
-                            range_checker.clone(),
-                            offset,
-                        ),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
-                ExecutorName::AuipcRv32 => {
-                    let chip = Rc::new(RefCell::new(Rv32AuipcChip::new(
-                        Rv32RdWriteAdapterChip::new(
-                            execution_bus,
-                            program_bus,
-                            memory_controller.clone(),
-                        ),
-                        Rv32AuipcCoreChip::new(bitwise_lookup_chip.clone(), offset),
-                        memory_controller.clone(),
-                    )));
-                    for opcode in range {
-                        executors.insert(opcode, chip.clone().into());
-                    }
-                    chips.push(AxVmChip::Executor(chip.into()));
-                }
                 _ => {
                     unreachable!("Unsupported executor")
                 }
@@ -677,78 +423,6 @@ fn default_executor_range(executor: ExecutorName) -> (Range<usize>, usize) {
             Poseidon2Opcode::default_offset(),
             Poseidon2Opcode::COUNT,
             Poseidon2Opcode::default_offset(),
-        ),
-        ExecutorName::BaseAluRv32 => (
-            BaseAluOpcode::default_offset(),
-            BaseAluOpcode::COUNT,
-            BaseAluOpcode::default_offset(),
-        ),
-        ExecutorName::LoadStoreRv32 => (
-            // LOADW through STOREB
-            Rv32LoadStoreOpcode::default_offset(),
-            Rv32LoadStoreOpcode::STOREB as usize + 1,
-            Rv32LoadStoreOpcode::default_offset(),
-        ),
-        ExecutorName::LoadSignExtendRv32 => (
-            // [LOADB, LOADH]
-            Rv32LoadStoreOpcode::LOADB.with_default_offset(),
-            2,
-            Rv32LoadStoreOpcode::default_offset(),
-        ),
-        ExecutorName::HintStoreRv32 => (
-            Rv32HintStoreOpcode::default_offset(),
-            Rv32HintStoreOpcode::COUNT,
-            Rv32HintStoreOpcode::default_offset(),
-        ),
-        ExecutorName::JalLuiRv32 => (
-            Rv32JalLuiOpcode::default_offset(),
-            Rv32JalLuiOpcode::COUNT,
-            Rv32JalLuiOpcode::default_offset(),
-        ),
-        ExecutorName::JalrRv32 => (
-            Rv32JalrOpcode::default_offset(),
-            Rv32JalrOpcode::COUNT,
-            Rv32JalrOpcode::default_offset(),
-        ),
-        ExecutorName::AuipcRv32 => (
-            Rv32AuipcOpcode::default_offset(),
-            Rv32AuipcOpcode::COUNT,
-            Rv32AuipcOpcode::default_offset(),
-        ),
-        ExecutorName::LessThanRv32 => (
-            LessThanOpcode::default_offset(),
-            LessThanOpcode::COUNT,
-            LessThanOpcode::default_offset(),
-        ),
-        ExecutorName::MultiplicationRv32 => (
-            MulOpcode::default_offset(),
-            MulOpcode::COUNT,
-            MulOpcode::default_offset(),
-        ),
-        ExecutorName::MultiplicationHighRv32 => (
-            MulHOpcode::default_offset(),
-            MulHOpcode::COUNT,
-            MulHOpcode::default_offset(),
-        ),
-        ExecutorName::DivRemRv32 => (
-            DivRemOpcode::default_offset(),
-            DivRemOpcode::COUNT,
-            DivRemOpcode::default_offset(),
-        ),
-        ExecutorName::ShiftRv32 => (
-            ShiftOpcode::default_offset(),
-            ShiftOpcode::COUNT,
-            ShiftOpcode::default_offset(),
-        ),
-        ExecutorName::BranchEqualRv32 => (
-            BranchEqualOpcode::default_offset(),
-            BranchEqualOpcode::COUNT,
-            BranchEqualOpcode::default_offset(),
-        ),
-        ExecutorName::BranchLessThanRv32 => (
-            BranchLessThanOpcode::default_offset(),
-            BranchLessThanOpcode::COUNT,
-            BranchLessThanOpcode::default_offset(),
         ),
         _ => panic!("Not a default executor"),
     };

@@ -8,7 +8,6 @@ use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
@@ -17,6 +16,7 @@ use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{
     Fp12Opcode, PairingOpcode, PairingPhantom, PhantomDiscriminant, UsizeOpcode,
 };
+use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
@@ -338,7 +338,6 @@ pub(crate) mod phantom {
     use ax_stark_backend::p3_field::PrimeField32;
     use axvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        rv32im::adapters::{compose, unsafe_read_rv32_register},
         system::memory::MemoryController,
     };
     use axvm_ecc::{
@@ -352,6 +351,7 @@ pub(crate) mod phantom {
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
+    use axvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
     use eyre::bail;
 
     use super::PairingCurve;

@@ -1,9 +1,9 @@
 [package]
-name = "axvm-bigint-circuit"
+name = "axvm-rv32-adapters"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM circuit extension for uint256 and int256"
+description = "axVM adapters for rv32 intrinsics"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
@@ -11,12 +11,9 @@ ax-stark-sdk = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-instructions = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
-axvm-rv32-adapters = { workspace = true }
-
-p3-keccak-air = { workspace = true }
+axvm-circuit-derive = { workspace = true }
+axvm-instructions = { workspace = true } 
 
 parking_lot.workspace = true
 strum.workspace = true
@@ -28,6 +25,7 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
+num-traits.workspace = true
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }
@@ -35,15 +33,9 @@ test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
 axvm-circuit = { workspace = true, features = ["test-utils"] }
-axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
-default = ["parallel", "mimalloc"]
+default = ["parallel"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]
-# performance features:
-mimalloc = ["axvm-circuit/mimalloc"]
-jemalloc = ["axvm-circuit/jemalloc"]
-jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
-nightly-features = ["axvm-circuit/nightly-features"]

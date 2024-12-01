@@ -15,6 +15,7 @@ ax-mod-circuit-builder = { workspace = true }
 ax-stark-backend = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
 axvm-algebra-circuit = { workspace = true }
+axvm-rv32-adapters = { workspace = true }
 
 num-bigint-dig = { workspace = true }
 num-traits = { workspace = true }
@@ -27,3 +28,4 @@ once_cell = { workspace = true }
 [dev-dependencies]
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }

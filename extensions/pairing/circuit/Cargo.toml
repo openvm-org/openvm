@@ -17,6 +17,7 @@ ax-mod-circuit-builder = { workspace = true }
 ax-stark-backend = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
 axvm-algebra-circuit = { workspace = true }
+axvm-rv32-adapters = { workspace = true }
 axvm-ecc-circuit = { workspace = true }
 
 num-bigint-dig = { workspace = true }
@@ -33,6 +34,7 @@ eyre = { workspace = true }
 ax-stark-sdk = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
 axvm-ecc = { workspace = true }
 ax-ecc-execution = { workspace = true }

@@ -559,6 +559,7 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -600,6 +601,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -651,7 +653,6 @@ dependencies = [
  "async-trait",
  "ax-circuit-derive",
  "ax-circuit-primitives",
- "ax-ecc-execution",
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
@@ -761,6 +762,7 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -891,6 +893,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -972,6 +975,7 @@ dependencies = [
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -1051,6 +1055,35 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-rv32-adapters"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-traits",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
 ]
 
 [[package]]

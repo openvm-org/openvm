@@ -3,19 +3,12 @@ use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sy
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{Field, PrimeField32},
 };
-use p3_air::BaseAir;
-use p3_field::{Field, PrimeField32};
-
-use super::{
-    read_rv32_register, vec_heap_generate_trace_row_impl, Rv32VecHeapAdapterAir,
-    Rv32VecHeapAdapterCols, Rv32VecHeapReadRecord, Rv32VecHeapWriteRecord,
-};
-use crate::{
+use axvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -28,6 +21,16 @@ use crate::{
         },
         program::ProgramBus,
     },
+};
+use axvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use axvm_rv32im_circuit::adapters::read_rv32_register;
+
+use super::{
+    vec_heap_generate_trace_row_impl, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols,
+    Rv32VecHeapReadRecord, Rv32VecHeapWriteRecord,
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
@@ -120,7 +123,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
-        let address_bits = memory_controller.mem_config.pointer_max_bits;
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
         Self {
             air: Rv32HeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),

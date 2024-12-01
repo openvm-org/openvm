@@ -9,11 +9,11 @@ use axvm_circuit::{
     arch::{
         instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
+    utils::biguint_to_limbs,
 };
 use axvm_ecc_constants::SampleEcPoints;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
 use num_traits::{Num, Zero};
 use p3_baby_bear::BabyBear;

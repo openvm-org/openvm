@@ -44,7 +44,8 @@ members = [
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/pairing/circuit",
-    "extensions/pairing/transpiler"
+    "extensions/pairing/transpiler",
+    "extensions/rv32-adapters"
 ]
 resolver = "2"
 
@@ -123,6 +124,7 @@ axvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-featur
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
+axvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

@@ -1,11 +1,10 @@
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    rv32im::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS},
-};
+use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use axvm_instructions::instruction::Instruction;
 use rand::{rngs::StdRng, Rng};
+
+use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
 // Returns (instruction, rd)
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(

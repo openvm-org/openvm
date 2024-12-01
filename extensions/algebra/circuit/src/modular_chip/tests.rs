@@ -12,16 +12,16 @@ use axvm_circuit::{
     arch::{
         instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
     },
-    intrinsics::test_utils::write_ptr_reg,
-    rv32im::adapters::{
-        Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip, RV32_REGISTER_NUM_LIMBS,
-    },
-    utils::{biguint_to_limbs, generate_field_element, rv32_write_heap_default},
+    utils::{biguint_to_limbs, generate_field_element},
 };
 use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
 };
+use axvm_rv32_adapters::{
+    rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
+};
+use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_baby_bear::BabyBear;

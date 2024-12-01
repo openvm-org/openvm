@@ -11,13 +11,13 @@ use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
-    rv32im::adapters::Rv32VecHeapAdapterChip,
-    utils::{biguint_to_limbs, rv32_write_heap_default},
+    utils::biguint_to_limbs,
 };
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{
     riscv::RV32_CELL_BITS, Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode,
 };
+use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};

@@ -12,8 +12,7 @@ use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    rv32im::adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip},
-    utils::{biguint_to_limbs, rv32_write_heap_default, rv32_write_heap_default_with_increment},
+    utils::biguint_to_limbs,
 };
 use axvm_ecc::{
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
@@ -21,6 +20,10 @@ use axvm_ecc::{
 };
 use axvm_ecc_constants::BN254;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_rv32_adapters::{
+    rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
+    Rv32VecHeapTwoReadsAdapterChip,
+};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
