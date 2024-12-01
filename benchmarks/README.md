@@ -11,7 +11,7 @@ not on the machine doing the compilation (the "host machine"), although we will 
 ### Writing the Guest Program
 
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
-`no_std` crates and write Rust as you normally would. Import the `axvm` library crate to use `axvm` intrinsic functions (for example `axvm::io::*, axvm::intrinsics::*`).
+`no_std` crates and write Rust as you normally would. Import the `axvm` library crate to use `axvm` intrinsic functions (for example `axvm::io::*`).
 
 The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `axvm::entry!` macro. You should still create a `main` function, and then add `axvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
 

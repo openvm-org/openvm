@@ -16,11 +16,11 @@ use core::arch::asm;
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;
 
-pub mod intrinsics;
 pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
 pub mod pal_abi;
 pub mod process;
+pub mod utils;
 
 #[cfg(not(target_os = "zkvm"))]
 pub mod host;

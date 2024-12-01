@@ -18,7 +18,7 @@ pub fn main() {
 
     let caps = re.captures(data).expect("No match found.");
     let email = caps.name("email").expect("No email found.");
-    let email_hash = axvm::intrinsics::keccak256(email.as_str().as_bytes());
+    let email_hash = axvm_keccak256_guest::keccak256(email.as_str().as_bytes());
 
     let email_hash = unsafe { transmute::<[u8; 32], [u32; 8]>(email_hash) };
 
