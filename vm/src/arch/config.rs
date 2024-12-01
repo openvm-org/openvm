@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
-    VmInventoryError, PUBLIC_VALUES_AIR_ID,
+    VmInventoryError, VmInventoryTraceHeights, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
     arch::ExecutorName,
@@ -43,6 +43,7 @@ pub trait VmGenericConfig<F: PrimeField32> {
 
     fn create_chip_complex(
         &self,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
@@ -100,7 +101,7 @@ pub struct SystemConfig {
     pub overridden_heights: Option<SystemTraceHeights>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SystemTraceHeights {
     pub memory: MemoryTraceHeights,
     // All other chips have constant heights.
@@ -196,8 +197,9 @@ impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
 
     fn create_chip_complex(
         &self,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = SystemComplex::new(self.clone());
+        let complex = SystemComplex::new(self.clone(), overridden_inventory_heights);
         Ok(complex)
     }
 }

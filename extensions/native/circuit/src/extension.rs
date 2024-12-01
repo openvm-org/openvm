@@ -5,7 +5,7 @@ use axvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
         VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        VmInventoryError, VmInventoryTraceHeights,
     },
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };

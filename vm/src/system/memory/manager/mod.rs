@@ -119,7 +119,7 @@ pub struct MemoryController<F> {
     result: Option<MemoryControllerResult<F>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MemoryTraceHeights {
     Volatile(VolatileMemoryTraceHeights),
     Persistent(PersistentMemoryTraceHeights),
@@ -140,10 +140,10 @@ impl MemoryTraceHeights {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VolatileMemoryTraceHeights {
-    boundary: usize,
-    access_adapters: FxHashMap<usize, usize>,
+    pub boundary: usize,
+    pub access_adapters: FxHashMap<usize, usize>,
 }
 
 impl VolatileMemoryTraceHeights {
@@ -154,7 +154,7 @@ impl VolatileMemoryTraceHeights {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PersistentMemoryTraceHeights {
     boundary: usize,
     merkle: usize,
@@ -652,6 +652,33 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle: merkle_chip.current_height(),
                 access_adapters,
             }),
+        }
+    }
+    pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
+        let access_adapters = [2, 4, 8, 16, 32, 64]
+            .iter()
+            .flat_map(|&n| {
+                if self.mem_config.max_access_adapter_n >= n {
+                    Some((n, 1))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
+                    boundary: 1,
+                    access_adapters,
+                })
+            }
+            MemoryInterface::Persistent { .. } => {
+                MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
+                    boundary: 1,
+                    merkle: 1,
+                    access_adapters,
+                })
+            }
         }
     }
 

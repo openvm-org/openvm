@@ -13,7 +13,10 @@ use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
 use thiserror::Error;
 
-use super::{ExecutionError, VmGenericConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{
+    ExecutionError, SystemTraceHeights, VmGenericConfig, VmInventoryTraceHeights, CONNECTOR_AIR_ID,
+    MERKLE_AIR_ID,
+};
 use crate::{
     arch::new_segment::ExecutionSegment,
     system::{
@@ -43,6 +46,7 @@ impl<F> Streams<F> {
 
 pub struct VmExecutor<F, VmConfig> {
     pub config: VmConfig,
+    pub overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     _marker: PhantomData<F>,
 }
 
@@ -68,8 +72,16 @@ where
     ///
     /// The VM will start with a single segment, which is created from the initial state.
     pub fn new(config: VmConfig) -> Self {
+        Self::new_with_overridden_inventory_heights(config, None)
+    }
+
+    pub fn new_with_overridden_inventory_heights(
+        config: VmConfig,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+    ) -> Self {
         Self {
             config,
+            overridden_inventory_heights,
             _marker: Default::default(),
         }
     }
@@ -95,6 +107,7 @@ where
             streams,
             Some(memory_image_to_equipartition(exe.init_memory)),
             exe.fn_bounds.clone(),
+            self.overridden_inventory_heights.clone(),
         );
         let mut pc = exe.pc_start;
 
@@ -132,6 +145,7 @@ where
                 streams,
                 Some(final_memory),
                 exe.fn_bounds.clone(),
+                self.overridden_inventory_heights.clone(),
             );
             segment.cycle_tracker = cycle_tracker;
         }
@@ -228,6 +242,7 @@ where
 /// A single segment VM.
 pub struct SingleSegmentVmExecutor<F, VmConfig> {
     pub config: VmConfig,
+    pub overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     _marker: PhantomData<F>,
 }
 
@@ -236,7 +251,9 @@ pub struct SingleSegmentVmExecutionResult<F> {
     /// All user public values
     pub public_values: Vec<Option<F>>,
     /// Heights of each AIR
-    pub heights: Vec<usize>,
+    pub air_heights: Vec<usize>,
+    pub system_heights: SystemTraceHeights,
+    pub inventory_heights: VmInventoryTraceHeights,
 }
 
 impl<F, VmConfig> SingleSegmentVmExecutor<F, VmConfig>
@@ -245,12 +262,19 @@ where
     VmConfig: VmGenericConfig<F>,
 {
     pub fn new(config: VmConfig) -> Self {
+        Self::new_with_overridden_inventory_heights(config, None)
+    }
+    pub fn new_with_overridden_inventory_heights(
+        config: VmConfig,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+    ) -> Self {
         assert!(
             !config.system().continuation_enabled,
             "Single segment VM doesn't support continuation mode"
         );
         Self {
             config,
+            overridden_inventory_heights,
             _marker: Default::default(),
         }
     }
@@ -262,7 +286,10 @@ where
         input: Vec<Vec<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
-        let heights = segment.chip_complex.current_trace_heights();
+        let air_heights = segment.chip_complex.current_trace_heights();
+        let (system_heights, inventory_heights) = segment
+            .chip_complex
+            .get_system_and_inventory_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
             pv_chip.core.get_custom_public_values()
         } else {
@@ -270,7 +297,9 @@ where
         };
         Ok(SingleSegmentVmExecutionResult {
             public_values,
-            heights,
+            air_heights,
+            system_heights,
+            inventory_heights,
         })
     }
 
@@ -301,6 +330,7 @@ where
             Streams::new(input),
             None,
             exe.fn_bounds,
+            self.overridden_inventory_heights.clone(),
         );
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
@@ -364,7 +394,7 @@ where
 
     pub fn keygen(&self) -> MultiStarkProvingKey<SC> {
         let mut keygen_builder = self.engine.keygen_builder();
-        let chip_complex = self.config().create_chip_complex().unwrap();
+        let chip_complex = self.config().create_chip_complex(None).unwrap();
         for air in chip_complex.airs() {
             keygen_builder.add_air(air);
         }

@@ -10,7 +10,10 @@ use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program}
 use backtrace::Backtrace;
 use p3_field::PrimeField32;
 
-use super::{AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
+use super::{
+    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGenericConfig,
+    VmInventoryTraceHeights,
+};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -59,8 +62,11 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
         init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
         fn_bounds: FnBounds,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex().unwrap();
+        let mut chip_complex = config
+            .create_chip_complex(overridden_inventory_heights)
+            .unwrap();
         chip_complex.set_streams(init_streams);
         let program = if config.system().collect_metrics {
             program.strip_debug_infos()

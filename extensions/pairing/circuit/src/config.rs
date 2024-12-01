@@ -2,7 +2,8 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::*;
 use axvm_circuit::arch::{
-    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
+    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig,
+    VmInventoryError, VmInventoryTraceHeights,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
 use axvm_ecc_circuit::*;

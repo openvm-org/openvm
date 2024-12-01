@@ -177,7 +177,7 @@ pub struct VmInventory<E, P> {
     insertion_order: Vec<ChipId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VmInventoryTraceHeights {
     pub chips: FxHashMap<ChipId, usize>,
 }
@@ -327,6 +327,28 @@ impl<E, P> VmInventory<E, P> {
                 .collect(),
         }
     }
+    /// Return the dummy trace heights of the inventory. This is used for generating a dummy proof.
+    /// Regular users should not need this.
+    pub fn get_dummy_trace_heights(&self) -> VmInventoryTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmInventoryTraceHeights {
+            chips: self
+                .executors
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (ChipId::Executor(i), 1))
+                .chain(self.periphery.iter().enumerate().map(|(i, chip)| {
+                    (
+                        ChipId::Periphery(i),
+                        chip.constant_trace_height().unwrap_or(1),
+                    )
+                }))
+                .collect(),
+        }
+    }
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
@@ -390,6 +412,16 @@ impl<F: PrimeField32> SystemBase<F> {
             memory: self.memory_controller.borrow().get_memory_trace_heights(),
         }
     }
+    /// Return dummy trace heights of SystemBase. Usually this is for aggregation to generate a
+    /// dummy proof and not useful for regular users.
+    pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
+        SystemTraceHeights {
+            memory: self
+                .memory_controller
+                .borrow()
+                .get_dummy_memory_trace_heights(),
+        }
+    }
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
@@ -405,7 +437,10 @@ pub enum SystemPeriphery<F: PrimeField32> {
 }
 
 impl<F: PrimeField32> SystemComplex<F> {
-    pub fn new(config: SystemConfig) -> Self {
+    pub fn new(
+        config: SystemConfig,
+        overridden_inventory_heights: Option<VmInventoryTraceHeights>,
+    ) -> Self {
         let range_bus =
             VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, config.memory_config.decomp);
         let mut bus_idx_max = RANGE_CHECKER_BUS;
@@ -505,7 +540,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory,
             bus_idx_max,
             streams,
-            overridden_inventory_heights: None,
+            overridden_inventory_heights,
         }
     }
 }
@@ -725,6 +760,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         (
             self.base.get_system_trace_heights(),
             self.inventory.get_trace_heights(),
+        )
+    }
+    /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
+    /// generate a dummy proof and not useful for regular users.
+    pub fn get_dummy_system_and_inventory_trace_heights(
+        &self,
+    ) -> (SystemTraceHeights, VmInventoryTraceHeights)
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        (
+            self.base.get_dummy_system_trace_heights(),
+            self.inventory.get_dummy_trace_heights(),
         )
     }
 

@@ -16,7 +16,13 @@ impl<F: PrimeField32> MemoryController<F> {
         let width = BaseAir::<F>::width(&air);
 
         match self.adapter_records.get(&N) {
-            None => RowMajorMatrix::new(vec![], width),
+            None => {
+                if let Some(oh) = self.get_access_adapter_overridden_height(N) {
+                    RowMajorMatrix::new(F::zero_vec(oh * width), width)
+                } else {
+                    RowMajorMatrix::new(vec![], width)
+                }
+            }
             Some(records) => {
                 let height = if let Some(oh) = self.get_access_adapter_overridden_height(N) {
                     assert!(

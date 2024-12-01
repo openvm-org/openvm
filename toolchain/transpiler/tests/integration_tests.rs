@@ -14,7 +14,7 @@ use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_circuit::{
     arch::{
         new_vm::VmExecutor, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
-        VmGenericConfig, VmInventoryError,
+        VmGenericConfig, VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
     utils::new_air_test_with_min_segments,
