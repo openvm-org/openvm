@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::new_vm::{SingleSegmentVmExecutor, VmExecutor};
+use axvm_circuit::arch::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
     arch::VmConfig,
     prover::{

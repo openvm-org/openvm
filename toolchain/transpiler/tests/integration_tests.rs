@@ -39,7 +39,6 @@ use test_case::test_case;
 
 type F = BabyBear;
 
-/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
