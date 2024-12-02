@@ -291,6 +291,12 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info,
                     );
                 }
+                DslIr::UnsafeCastVF(dst, src) => {
+                    self.push(
+                        AsmInstruction::AddFI(dst.fp(), src.fp(), F::ZERO),
+                        debug_info,
+                    );
+                }
                 DslIr::IfEq(lhs, rhs, then_block, else_block) => {
                     let if_compiler = IfCompiler {
                         compiler: self,

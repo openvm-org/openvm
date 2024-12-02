@@ -196,6 +196,13 @@ impl<C: Config> Builder<C> {
         self.operations.push(DslIr::CastFV(var, felt));
         var
     }
+    /// Casts a Var to a Felt.
+    pub fn unsafe_cast_var_to_felt(&mut self, var: Var<C::N>) -> Felt<C::F> {
+        assert!(!self.flags.static_only, "dynamic mode only");
+        let felt: Felt<_> = self.uninit();
+        self.operations.push(DslIr::UnsafeCastVF(felt, var));
+        felt
+    }
 
     /// Asserts that two expressions are equal.
     pub fn assert_eq<V: Variable<C>>(

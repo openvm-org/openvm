@@ -2,6 +2,7 @@ use itertools::{izip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
 use p3_field::{AbstractExtensionField, AbstractField};
+use p3_util::log2_strict_usize;
 use tracing::instrument;
 
 use crate::{
@@ -15,6 +16,8 @@ pub mod constraints;
 mod error;
 
 pub use error::*;
+
+use crate::config::Val;
 
 /// Verifies a partitioned proof of multi-matrix AIRs.
 pub struct MultiTraceStarkVerifier<'c, SC: StarkGenericConfig> {
@@ -93,6 +96,13 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkVerifier<'c, SC> {
 
         // Observe main trace commitments
         challenger.observe_slice(&proof.commitments.main_trace);
+        challenger.observe_slice(
+            &proof
+                .per_air
+                .iter()
+                .map(|ap| Val::<SC>::from_canonical_usize(log2_strict_usize(ap.degree)))
+                .collect_vec(),
+        );
 
         let mut challenges = Vec::new();
         for (phase_idx, (&num_to_sample, commit)) in mvk

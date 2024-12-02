@@ -6,10 +6,12 @@ use std::{
 use itertools::{izip, multiunzip, Itertools};
 use p3_challenger::{CanObserve, FieldChallenger};
 use p3_commit::{Pcs, PolynomialSpace};
+use p3_field::AbstractField;
 use p3_matrix::{
     dense::{RowMajorMatrix, RowMajorMatrixView},
     Matrix,
 };
+use p3_util::log2_strict_usize;
 use tracing::instrument;
 
 use crate::{
@@ -149,6 +151,12 @@ impl<'c, SC: StarkGenericConfig> MultiTraceStarkProver<'c, SC> {
             degree_per_air.push(main_views[0].height());
             main_views_per_air.push(main_views);
         }
+        challenger.observe_slice(
+            &degree_per_air
+                .iter()
+                .map(|&d| Val::<SC>::from_canonical_usize(log2_strict_usize(d)))
+                .collect::<Vec<_>>(),
+        );
         let domain_per_air: Vec<_> = degree_per_air
             .iter()
             .map(|&degree| pcs.natural_domain_for_degree(degree))

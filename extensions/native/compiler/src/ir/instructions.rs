@@ -110,6 +110,8 @@ pub enum DslIr<C: Config> {
 
     /// Cast a Felt to a Var.
     CastFV(Var<C::N>, Felt<C::F>),
+    /// Cast a Var to a Felt. This is unsafe because of possible overflow. Dynamic mode only.
+    UnsafeCastVF(Felt<C::F>, Var<C::N>),
 
     // =======
 
