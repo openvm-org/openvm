@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
-      - "axvm-sdk/**"
+      - "crates/stark-backend/**"
+      - "crates/primitives/**"
+      - "crates/vm/**"
+      - "crates/axvm-sdk/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -62,12 +62,12 @@ jobs:
           fi
 
       - name: Setup halo2
-        working-directory: axvm-sdk
+        working-directory: crates/axvm-sdk
         run: |
-          bash ../extensions/native/lib/recursion/trusted_setup_s3.sh
+          bash ../../extensions/native/lib/recursion/trusted_setup_s3.sh
 
       - name: Run axvm-sdk crate tests
-        working-directory: axvm-sdk
+        working-directory: crates/axvm-sdk
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --features parallel,static-verifier

@@ -6,12 +6,12 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
-      - "extensions/native/compiler/**"
-      - "cargo-axiom/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
+      - "crates/cargo-axiom/**"
       - "extensions/ecc/**"
+      - "extensions/native/compiler/**"
       - "extensions/pairing/**"
 
 concurrency:
@@ -52,7 +52,7 @@ jobs:
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast 
 
       - name: Install cargo-axiom
-        working-directory: cargo-axiom
+        working-directory: crates/cargo-axiom
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .

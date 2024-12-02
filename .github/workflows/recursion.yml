@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
       - "extensions/native/compiler/**"
       - "extensions/native/lib/recursion/**"
 

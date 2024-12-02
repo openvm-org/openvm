@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
+      - "crates/stark-backend/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -30,6 +30,6 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        working-directory: stark-backend
+        working-directory: crates/stark-backend
         run: |
           cargo nextest run --features parallel

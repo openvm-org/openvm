@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "vm/**"
-      - "toolchain/riscv/**"
+      - "crates/vm/**"
+      - "crates/toolchain/platform/**"
+      - "crates/toolchain/instructions/**"
+      - "crates/toolchain/build/**"
+      - "crates/toolchain/macros/**"
+      - "crates/toolchain/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
