@@ -1,4 +1,4 @@
-use std::{fs::read, path::PathBuf, rc::Rc, str::FromStr, time::Instant};
+use std::{fs::read, path::PathBuf, str::FromStr, time::Instant};
 
 use anstyle::*;
 use ax_stark_sdk::{
@@ -100,10 +100,10 @@ impl BenchCmd {
         let exe = AxVmExe::from_elf(
             elf,
             Transpiler::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(Keccak256TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Keccak256TranspilerExtension),
         );
         // TODO: read from axiom.toml
         let app_log_blowup = 2;

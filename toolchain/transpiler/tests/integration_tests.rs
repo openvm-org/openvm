@@ -1,7 +1,6 @@
 use std::{
     fs::read,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
@@ -66,10 +65,10 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     let data = read(dir.join(elf_path))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     let program = Transpiler::<F>::default()
-        .with_processor(Rc::new(Rv32ITranspilerExtension))
-        .with_processor(Rc::new(Rv32MTranspilerExtension))
-        .with_processor(Rc::new(Rv32IoTranspilerExtension))
-        .with_processor(Rc::new(ModularTranspilerExtension))
+        .with_extension(Rv32ITranspilerExtension)
+        .with_extension(Rv32MTranspilerExtension)
+        .with_extension(Rv32IoTranspilerExtension)
+        .with_extension(ModularTranspilerExtension)
         .transpile(&elf.instructions);
     for instruction in program {
         println!("{:?}", instruction);
@@ -84,9 +83,9 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
     );
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
@@ -136,11 +135,11 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension))
-            .with_processor(Rc::new(ModularTranspilerExtension))
-            .with_processor(Rc::new(Fp2TranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(ModularTranspilerExtension)
+            .with_extension(Fp2TranspilerExtension),
     );
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(axvm_exe, vec![])?;
@@ -154,10 +153,10 @@ fn test_terminate_prove() -> Result<()> {
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension))
-            .with_processor(Rc::new(ModularTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(ModularTranspilerExtension),
     );
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1);
     Ok(())

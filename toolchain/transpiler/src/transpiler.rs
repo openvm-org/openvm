@@ -28,6 +28,10 @@ impl<F: PrimeField32> Transpiler<F> {
         Self { processors: procs }
     }
 
+    pub fn with_extension<T: TranspilerExtension<F> + 'static>(self, ext: T) -> Self {
+        self.with_processor(Rc::new(ext))
+    }
+
     /// Iterates over a sequence of 32-bit RISC-V instructions `instructions_u32`. The iterator
     /// applies every processor in the [`Transpiler`] to determine if one of them knows how to transpile
     /// the current instruction (and possibly a contiguous section of following instructions).

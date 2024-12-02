@@ -1,6 +1,5 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use std::rc::Rc;
 
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
@@ -32,9 +31,9 @@ fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
     );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata =

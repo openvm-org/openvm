@@ -1,4 +1,4 @@
-use std::{fs::read_dir, path::PathBuf, rc::Rc};
+use std::{fs::read_dir, path::PathBuf};
 
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, VmExecutor},
@@ -35,9 +35,9 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 let exe = AxVmExe::from_elf(
                     elf,
                     Transpiler::<F>::default()
-                        .with_processor(Rc::new(Rv32ITranspilerExtension))
-                        .with_processor(Rc::new(Rv32MTranspilerExtension))
-                        .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+                        .with_extension(Rv32ITranspilerExtension)
+                        .with_extension(Rv32MTranspilerExtension)
+                        .with_extension(Rv32IoTranspilerExtension),
                 );
                 let executor = VmExecutor::<F, _>::new(config.clone());
                 let res = executor.execute(exe, vec![])?;
@@ -74,9 +74,9 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             let exe = AxVmExe::from_elf(
                 elf,
                 Transpiler::<F>::default()
-                    .with_processor(Rc::new(Rv32ITranspilerExtension))
-                    .with_processor(Rc::new(Rv32MTranspilerExtension))
-                    .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+                    .with_extension(Rv32ITranspilerExtension)
+                    .with_extension(Rv32MTranspilerExtension)
+                    .with_extension(Rv32IoTranspilerExtension),
             );
 
             let result = std::panic::catch_unwind(|| {

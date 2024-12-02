@@ -45,7 +45,7 @@ pub fn get_testing_config() -> Rv32PairingConfig {
 }
 
 mod bn254 {
-    use std::{iter, rc::Rc};
+    use std::iter;
 
     use ax_ecc_execution::{
         axvm_ecc::{
@@ -73,12 +73,12 @@ mod bn254 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -104,12 +104,12 @@ mod bn254 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -157,12 +157,12 @@ mod bn254 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -201,12 +201,12 @@ mod bn254 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -260,12 +260,12 @@ mod bn254 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -320,8 +320,6 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use std::rc::Rc;
-
     use ax_ecc_execution::{
         axvm_ecc::{
             halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
@@ -346,12 +344,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -377,12 +375,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -431,12 +429,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -475,12 +473,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -541,12 +539,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
@@ -605,12 +603,12 @@ mod bls12_381 {
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_processor(Rc::new(Rv32ITranspilerExtension))
-                .with_processor(Rc::new(Rv32MTranspilerExtension))
-                .with_processor(Rc::new(Rv32IoTranspilerExtension))
-                .with_processor(Rc::new(PairingTranspilerExtension))
-                .with_processor(Rc::new(ModularTranspilerExtension))
-                .with_processor(Rc::new(Fp2TranspilerExtension)),
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 

@@ -1,8 +1,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use std::rc::Rc;
-
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use ax_stark_sdk::{
@@ -113,12 +111,12 @@ fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension))
-            .with_processor(Rc::new(Keccak256TranspilerExtension))
-            .with_processor(Rc::new(ModularTranspilerExtension))
-            .with_processor(Rc::new(EccTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Keccak256TranspilerExtension)
+            .with_extension(ModularTranspilerExtension)
+            .with_extension(EccTranspilerExtension),
     );
     // TODO: update sw_setup macros and read it from elf.
     let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
