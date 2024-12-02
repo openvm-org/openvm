@@ -113,7 +113,7 @@ impl AggProvingKey {
         let internal_program = InternalVmVerifierConfig {
             leaf_fri_params: config.leaf_fri_params,
             internal_fri_params: config.internal_fri_params,
-            compiler_options: config.compiler_options.clone(),
+            compiler_options: config.compiler_options,
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
         let internal_committed_exe = Arc::new(AxVmCommittedExe::<SC>::commit(

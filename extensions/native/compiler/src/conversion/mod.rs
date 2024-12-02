@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::asm::{AsmInstruction, AssemblyCode};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct CompilerOptions {
     // The compiler will ensure that the heap pointer is aligned to be a multiple of `word_size`.
     pub word_size: usize,

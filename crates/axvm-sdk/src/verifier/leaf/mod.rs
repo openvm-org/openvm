@@ -101,7 +101,7 @@ impl<VC: VmConfig<F>> LeafVmVerifierConfig<VC> {
             builder.halt();
         }
 
-        builder.compile_isa_with_options(self.compiler_options.clone())
+        builder.compile_isa_with_options(self.compiler_options)
     }
 
     /// Read the public values root proof from the input stream and verify it.

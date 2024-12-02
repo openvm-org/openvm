@@ -40,8 +40,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
         info_span!("Verify Fibonacci AIR", group = "verify_fibair",).in_scope(|| {
-            let (program, input_stream) =
-                build_verification_program(vdata, compiler_options.clone());
+            let (program, input_stream) = build_verification_program(vdata, compiler_options);
             let engine = BabyBearPoseidon2Engine::new(
                 FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
             );

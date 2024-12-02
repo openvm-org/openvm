@@ -106,7 +106,7 @@ impl RootVmVerifierConfig {
             builder.halt();
         }
 
-        builder.compile_isa_with_options(self.compiler_options.clone())
+        builder.compile_isa_with_options(self.compiler_options)
     }
 }
 
