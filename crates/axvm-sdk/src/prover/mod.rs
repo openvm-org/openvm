@@ -132,18 +132,26 @@ where
 
     pub fn generate_e2e_proof(&self, input: Vec<Vec<F>>) -> Proof<OuterSC> {
         assert!(self.agg_pk.is_some(), "Aggregation has not been configured");
-        let app_proofs = self.generate_app_proof_impl(input);
+        let app_proofs = self.generate_app_proof(input);
         let leaf_proofs = self.generate_leaf_proof_impl(&app_proofs);
         let internal_proof = self.generate_internal_proof_impl(leaf_proofs);
         self.generate_root_proof_impl(app_proofs, internal_proof)
     }
 
     pub fn generate_app_proof(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
-        self.generate_app_proof_impl(input)
+        #[cfg(feature = "bench-metrics")]
+        {
+            bench_app_proof(&self.app_pk, &self.app_committed_exe, input.clone());
+        }
+        ContinuationVmProver::prove(&self.app_prover, input)
     }
 
     pub fn generate_app_proof_without_continuations(&self, input: Vec<Vec<F>>) -> Vec<Proof<SC>> {
-        self.generate_app_proof_impl(input).per_segment
+        #[cfg(feature = "bench-metrics")]
+        {
+            bench_app_proof(&self.app_pk, &self.app_committed_exe, input.clone());
+        }
+        self.app_prover.prove_without_continuations(input)
     }
 
     pub fn generate_e2e_proof_with_metric_spans(
@@ -174,20 +182,8 @@ where
         let group_name = program_name.replace(" ", "_").to_lowercase();
         info_span!("App Continuation Program", group = group_name).in_scope(|| {
             counter!("fri.log_blowup").absolute(self.app_pk.app_vm_pk.fri_params.log_blowup as u64);
-            self.generate_app_proof_impl(input)
+            self.generate_app_proof(input)
         })
-    }
-
-    fn generate_app_proof_impl(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
-        #[cfg(feature = "bench-metrics")]
-        {
-            let mut vm_config = self.app_pk.app_vm_pk.vm_config.clone();
-            vm_config.system_mut().collect_metrics = true;
-            let vm = VmExecutor::new(vm_config);
-            vm.execute_segments(self.app_committed_exe.exe.clone(), input.clone())
-                .unwrap();
-        }
-        ContinuationVmProver::prove(&self.app_prover, input)
     }
 
     fn generate_leaf_proof_impl(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
@@ -284,4 +280,20 @@ fn single_segment_prove<E: StarkFriEngine<SC>>(
             .unwrap();
     }
     SingleSegmentVmProver::prove(prover, input)
+}
+
+#[cfg(feature = "bench-metrics")]
+fn bench_app_proof<VC: VmConfig<F>>(
+    app_pk: &AppProvingKey<VC>,
+    app_committed_exe: &Arc<AxVmCommittedExe<SC>>,
+    input: Vec<Vec<F>>,
+) where
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
+    let mut vm_config = app_pk.app_vm_pk.vm_config.clone();
+    vm_config.system_mut().collect_metrics = true;
+    let vm = VmExecutor::new(vm_config);
+    vm.execute_segments(app_committed_exe.exe.clone(), input)
+        .unwrap();
 }
