@@ -1,19 +1,24 @@
+use std::rc::Rc;
+
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use axvm_circuit::arch::instructions::{program::DEFAULT_MAX_NUM_PUBLIC_VALUES, AxVmExe};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
 use axvm_recursion::witness::Witnessable;
 use axvm_rv32im_circuit::Rv32ImConfig;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use axvm_sdk::{
     config::{AggConfig, AppConfig},
     e2e_prover::{commit_app_exe, generate_leaf_committed_exe, E2EStarkProver},
     keygen::{AggProvingKey, AppProvingKey},
 };
-use axvm_transpiler::axvm_platform::bincode;
+use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler};
 use clap::Parser;
 use eyre::Result;
 use p3_field::AbstractField;
