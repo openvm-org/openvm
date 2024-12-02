@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use axvm_algebra::{
+use axvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivUnsafe, Field,
 };

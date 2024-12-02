@@ -1,6 +1,6 @@
 use core::ops::Add;
 
-use axvm_algebra::{DivUnsafe, IntMod, Reduce};
+use axvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize};
 use elliptic_curve::{
     bigint::CheckedAdd,

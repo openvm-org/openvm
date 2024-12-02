@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
-use axvm_algebra::{IntMod, Reduce};
+use axvm_algebra_guest::{IntMod, Reduce};
 use elliptic_curve::{
     sec1::{Coordinates, EncodedPoint, ModulusSize},
     Curve,

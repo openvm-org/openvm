@@ -1,4 +1,4 @@
-use axvm_algebra::field::{Field, FieldExtension};
+use axvm_algebra_guest::field::{Field, FieldExtension};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;
 

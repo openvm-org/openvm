@@ -1,4 +1,4 @@
-use axvm_algebra::{field::FieldExtension, Field};
+use axvm_algebra_guest::{field::FieldExtension, Field};
 
 use crate::affine_point::AffinePoint;
 

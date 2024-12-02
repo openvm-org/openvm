@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-use axvm_algebra::IntMod;
+use axvm_algebra_guest::IntMod;
 
 axvm::entry!(main);
 axvm::moduli_setup! {

@@ -1,9 +1,9 @@
 [package]
-name = "axvm-algebra"
+name = "axvm-algebra-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM library for algebra over rings and fields, including modular arithmetic."
+description = "axVM guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
 
 [dependencies]
 axvm-platform = { workspace = true }

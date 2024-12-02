@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm_algebra::{DivUnsafe, IntMod};
+use axvm_algebra_guest::{DivUnsafe, IntMod};
 use axvm_ecc::sw::Secp256k1Coord;
 
 axvm::entry!(main);

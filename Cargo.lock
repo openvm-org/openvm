@@ -542,17 +542,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-algebra"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "halo2curves-axiom 0.7.0",
- "num-bigint-dig",
- "serde",
- "serde-big-array",
-]
-
-[[package]]
 name = "axvm-algebra-circuit"
 version = "0.1.0"
 dependencies = [
@@ -582,6 +571,17 @@ dependencies = [
  "rand 0.8.5",
  "strum",
  "tracing",
+]
+
+[[package]]
+name = "axvm-algebra-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
+ "halo2curves-axiom 0.7.0",
+ "num-bigint-dig",
+ "serde",
+ "serde-big-array",
 ]
 
 [[package]]
@@ -792,7 +792,7 @@ name = "axvm-ecc"
 version = "0.1.0"
 dependencies = [
  "axvm",
- "axvm-algebra",
+ "axvm-algebra-guest",
  "axvm-platform",
  "ecdsa",
  "elliptic-curve",

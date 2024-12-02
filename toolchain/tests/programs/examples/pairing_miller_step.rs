@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm::io::read_vec;
-use axvm_algebra::IntMod;
+use axvm_algebra_guest::IntMod;
 use axvm_ecc::{pairing::MillerStep, AffinePoint};
 
 axvm::entry!(main);

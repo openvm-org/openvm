@@ -1,5 +1,5 @@
 use axvm::moduli_setup;
-use axvm_algebra::{Field, IntMod};
+use axvm_algebra_guest::{Field, IntMod};
 
 mod fp12;
 mod fp2;

@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::Neg;
 
-use axvm_algebra::{
+use axvm_algebra_guest::{
     field::{Complex, FieldExtension},
     Field, IntMod,
 };

@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm_algebra::{
+use axvm_algebra_guest::{
     field::{Complex, ComplexConjugate},
     DivAssignUnsafe, DivUnsafe, IntMod,
 };

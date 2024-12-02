@@ -1,6 +1,6 @@
 use core::ops::{Add, Mul, Neg, Sub};
 
-use axvm_algebra::{DivUnsafe, Field};
+use axvm_algebra_guest::{DivUnsafe, Field};
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,

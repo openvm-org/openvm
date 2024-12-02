@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm::io::read_vec;
-use axvm_algebra::{field::FieldExtension, IntMod};
+use axvm_algebra_guest::{field::FieldExtension, IntMod};
 use axvm_ecc::pairing::{EvaluatedLine, LineMulDType, LineMulMType};
 
 axvm::entry!(main);

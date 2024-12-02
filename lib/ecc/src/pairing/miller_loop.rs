@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::{Mul, Neg};
 
-use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
+use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use itertools::{izip, Itertools};
 
 use super::{Evaluatable, EvaluatedLine, MillerStep, UnevaluatedLine};

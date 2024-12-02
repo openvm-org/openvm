@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use axvm_algebra::{field::FieldExtension, DivUnsafe, Field};
+use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {

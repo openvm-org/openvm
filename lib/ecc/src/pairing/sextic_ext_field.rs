@@ -3,7 +3,7 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use axvm_algebra::field::Field;
+use axvm_algebra_guest::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,

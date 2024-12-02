@@ -3,7 +3,7 @@
 
 use core::hint::black_box;
 
-use axvm_algebra::IntMod;
+use axvm_algebra_guest::IntMod;
 use axvm_ecc::{
     msm,
     sw::{setup_curves, Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},

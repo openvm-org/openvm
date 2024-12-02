@@ -11,7 +11,7 @@ axvm::entry!(main);
 mod bn254 {
     use alloc::format;
 
-    use axvm_algebra::IntMod;
+    use axvm_algebra_guest::IntMod;
     use axvm_ecc::{
         bls12_381::{setup_Bls12_381Fp, setup_Bls12_381Fp_fp2},
         bn254::{Bn254, Fp, Fp2},
@@ -45,7 +45,7 @@ mod bls12_381 {
 
     use alloc::format;
 
-    use axvm_algebra::IntMod;
+    use axvm_algebra_guest::IntMod;
     use axvm_ecc::bls12_381::{setup_Bls12_381Fp, setup_Bls12_381Fp_fp2, Bls12_381, Fp, Fp2};
 
     use super::*;

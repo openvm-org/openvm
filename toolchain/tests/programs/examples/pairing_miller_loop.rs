@@ -4,7 +4,7 @@
 extern crate alloc;
 
 use axvm::io::read_vec;
-use axvm_algebra::{field::FieldExtension, IntMod};
+use axvm_algebra_guest::{field::FieldExtension, IntMod};
 use axvm_ecc::{pairing::MultiMillerLoop, AffinePoint};
 
 axvm::entry!(main);

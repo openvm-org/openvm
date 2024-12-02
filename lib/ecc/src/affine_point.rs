@@ -1,6 +1,6 @@
 use core::ops::Neg;
 
-use axvm_algebra::Field;
+use axvm_algebra_guest::Field;
 use rand::Rng;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

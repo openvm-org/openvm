@@ -105,7 +105,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
-            pub struct #struct_name(#[serde(with = "axvm_algebra::BigArray")] [u8; #limbs]);
+            pub struct #struct_name(#[serde(with = "axvm_algebra_guest::BigArray")] [u8; #limbs]);
 
             impl #struct_name {
                 #[inline(always)]
@@ -337,11 +337,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
             // Put trait implementations in a private module to avoid conflicts
             mod #module_name {
-                use axvm_algebra::IntMod;
+                use axvm_algebra_guest::IntMod;
 
                 use super::#struct_name;
 
-                impl axvm_algebra::IntMod for #struct_name {
+                impl axvm_algebra_guest::IntMod for #struct_name {
                     type Repr = [u8; #limbs];
                     type SelfRef<'a> = &'a Self;
 
@@ -569,7 +569,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra::DivAssignUnsafe<&'a #struct_name> for #struct_name {
+                impl<'a> axvm_algebra_guest::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
                     fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
@@ -577,7 +577,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl axvm_algebra::DivAssignUnsafe for #struct_name {
+                impl axvm_algebra_guest::DivAssignUnsafe for #struct_name {
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
                     fn div_assign_unsafe(&mut self, other: Self) {
@@ -585,7 +585,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl axvm_algebra::DivUnsafe for #struct_name {
+                impl axvm_algebra_guest::DivUnsafe for #struct_name {
                     type Output = Self;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -595,7 +595,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for #struct_name {
+                impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for #struct_name {
                     type Output = Self;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -605,7 +605,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra::DivUnsafe<&'a #struct_name> for &#struct_name {
+                impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for &#struct_name {
                     type Output = #struct_name;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -666,7 +666,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl axvm_algebra::Reduce for #struct_name {
+            impl axvm_algebra_guest::Reduce for #struct_name {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
                     let mut res = <Self as IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent

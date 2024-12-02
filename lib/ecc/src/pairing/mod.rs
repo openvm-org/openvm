@@ -5,7 +5,7 @@ mod miller_step;
 mod operations;
 mod sextic_ext_field;
 
-use axvm_algebra::{
+use axvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
 };
