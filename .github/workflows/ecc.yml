@@ -6,15 +6,13 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
-      - "toolchain/native-compiler/**"
-      - "lib/ecc/**"
-      - "lib/ecc-execution/**"
-      - "cargo-axiom/**"
-      - "extensions/ecc/circuit/**"
-      - "extensions/pairing/circuit/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
+      - "crates/cargo-axiom/**"
+      - "extensions/ecc/**"
+      - "extensions/native/compiler/**"
+      - "extensions/pairing/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -39,7 +37,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run ecc-execution crate tests
-        working-directory: lib/ecc-execution
+        working-directory: extensions/ecc/execution
         run: |
           cargo nextest run --cargo-profile=fast
 
@@ -53,18 +51,13 @@ jobs:
         run: |
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast 
 
-      - name: Run axvm-ecc crate tests
-        working-directory: lib/ecc
-        run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --features halo2curves
-
       - name: Install cargo-axiom
-        working-directory: cargo-axiom
+        working-directory: crates/cargo-axiom
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .
 
-      - name: Build axvm-ecc crate for axvm
-        working-directory: lib/ecc
+      - name: Build axvm-ecc-guest crate for axvm
+        working-directory: extensions/ecc/guest
         run: |
           cargo axiom build

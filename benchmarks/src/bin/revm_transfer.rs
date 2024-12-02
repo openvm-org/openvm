@@ -11,7 +11,7 @@ use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::instructions::exe::AxVmExe;
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -31,9 +31,9 @@ fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
     );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata =

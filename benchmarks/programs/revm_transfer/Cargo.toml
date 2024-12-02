@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 revm = { version = "18.0.0", default-features = false }
-axvm = { path = "../../../toolchain/riscv/axvm" }
+axvm = { path = "../../../crates/toolchain/axvm" }
 tracing = { version = "0.1.40", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [
     "native-keccak",

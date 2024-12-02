@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "circuits/hashes/poseidon2-air/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/circuits/poseidon2-air/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -33,11 +33,11 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run tests for primitives
-        working-directory: circuits/primitives
+        working-directory: crates/circuits/primitives
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 
       - name: Run tests for poseidon2-air
-        working-directory: circuits/hashes/poseidon2-air
+        working-directory: crates/circuits/poseidon2-air
         run: |
           cargo nextest run --cargo-profile fast --features parallel

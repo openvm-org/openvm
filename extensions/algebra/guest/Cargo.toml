@@ -1,0 +1,22 @@
+[package]
+name = "axvm-algebra-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "axVM guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
+
+[dependencies]
+axvm-platform = { workspace = true }
+serde = { workspace = true }
+serde-big-array = "0.5.1"
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+halo2curves-axiom = { workspace = true, optional = true }
+
+[dev-dependencies]
+
+[features]
+default = []
+std = []
+halo2curves = ["dep:halo2curves-axiom"]

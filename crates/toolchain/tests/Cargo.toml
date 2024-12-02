@@ -1,0 +1,49 @@
+[package]
+name = "axvm-toolchain-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Tests for the axVM toolchain starting from Rust"
+
+[dependencies]
+ax-circuit-derive.workspace = true
+ax-ecc-execution.workspace = true
+ax-stark-backend.workspace = true
+ax-stark-sdk.workspace = true
+axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-transpiler.workspace = true
+axvm-build.workspace = true
+axvm-keccak256-transpiler.workspace = true
+axvm-algebra-transpiler.workspace = true
+axvm-bigint-transpiler.workspace = true
+axvm-ecc-transpiler.workspace = true
+axvm-pairing-transpiler.workspace = true
+axvm-bigint-circuit.workspace = true
+axvm-rv32im-circuit.workspace = true
+axvm-rv32im-transpiler.workspace = true
+axvm-algebra-circuit.workspace = true
+axvm-ecc-circuit.workspace = true
+axvm-pairing-circuit.workspace = true
+axvm-keccak256-circuit.workspace = true
+axvm-ecc-constants.workspace = true
+axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+
+p3-baby-bear.workspace = true
+p3-field.workspace = true
+
+eyre.workspace = true
+test-case.workspace = true
+tempfile.workspace = true
+serde = { workspace = true, features = ["alloc"] }
+rand = { workspace = true }
+derive_more = { workspace = true, features = ["from"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["axvm-circuit/parallel"]

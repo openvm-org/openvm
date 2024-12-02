@@ -203,7 +203,7 @@ impl Fp12 {
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
-    use ax_ecc_execution::axvm_ecc::algebra::field::FieldExtension;
+    use ax_ecc_execution::axvm_ecc_guest::algebra::field::FieldExtension;
     use ax_mod_circuit_builder::{test_utils::*, *};
     use ax_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,

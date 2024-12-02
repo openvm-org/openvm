@@ -1,0 +1,59 @@
+[package]
+name = "axvm-platform"
+description = "Axiom VM"
+version = { workspace = true }
+edition = { workspace = true }
+# license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+stability = "0.2"
+bincode = { version = "2.0.0-rc", default-features = false, features = [
+    "derive",
+    "alloc",
+    "serde",
+] }
+strum_macros.workspace = true
+axvm-algebra-moduli-setup = { workspace = true }
+
+# This crate should have as few dependencies as possible so it can be
+# used as many places as possible to share the platform definitions.
+[target.'cfg(target_os = "zkvm")'.dependencies]
+bytemuck = { version = "1.13", optional = true }
+critical-section = { version = "1.1.2", optional = true }
+embedded-alloc = { version = "0.6.0", features = [
+    "allocator_api",
+], optional = true }
+getrandom = { version = "0.2", features = ["custom"], optional = true }
+libm = { version = "0.2", optional = true }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+features = [
+    "rust-runtime",
+    "panic-handler",
+    "export-libm",
+    "export-getrandom",
+    "export-pal-abi",
+    "getrandom",
+    "unstable",
+]
+
+[features]
+default = []
+entrypoint = []
+# exports a `getrandom` implementation that panics
+export-getrandom = ["dep:getrandom"]
+export-libm = ["dep:libm"]
+# Currently unimplemented: exports a `getrandom` implementation that uses sys_random
+getrandom = ["export-getrandom", "dep:bytemuck"]
+heap-embedded-alloc = [
+    "dep:critical-section",
+    "dep:embedded-alloc",
+    "rust-runtime",
+]
+panic-handler = []
+# Build a rust runtime
+rust-runtime = ["export-libm"]
+unstable = []

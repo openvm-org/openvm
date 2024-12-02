@@ -1,6 +1,5 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use std::rc::Rc;
 
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
@@ -14,7 +13,7 @@ use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -33,10 +32,10 @@ fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf.clone(),
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension))
-            .with_processor(Rc::new(Keccak256TranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Keccak256TranspilerExtension),
     );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {
