@@ -7,7 +7,7 @@ on:
     branches: ["**"]
     paths:
       - "crates/stark-backend/**"
-      - "crates/primitives/**"
+      - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "crates/axvm-sdk/**"
 
@@ -48,7 +48,7 @@ jobs:
               exit 1
               ;;
           esac
-          
+
           echo "Checking s5cmd"
           if type s5cmd &>/dev/null; then
               echo "s5cmd was installed."
