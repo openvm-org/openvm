@@ -14,7 +14,7 @@ axvm::moduli_declare! {
 axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
 
 pub fn main() {
-    setup_all_fp2();
+    setup_all_complex_extensions();
     let mut a = Complex::new(
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 10)),
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 21)),

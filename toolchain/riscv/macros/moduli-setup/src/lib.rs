@@ -692,7 +692,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let mut setups = Vec::new();
     let mut axiom_section = Vec::new();
     let mut setup_all_moduli = Vec::new();
-    let mut setup_all_fp2 = Vec::new();
+    let mut setup_all_complex_extensions = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -796,7 +796,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         setup_all_moduli.push(quote::quote_spanned! { span.into() =>
             #setup_function();
         });
-        setup_all_fp2.push(quote::quote_spanned! { span.into() =>
+        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
             #setup_function_fp2();
         });
 
@@ -895,8 +895,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         pub fn setup_all_moduli() {
             #(#setup_all_moduli)*
         }
-        pub fn setup_all_fp2() {
-            #(#setup_all_fp2)*
+        pub fn setup_all_complex_extensions() {
+            #(#setup_all_complex_extensions)*
         }
     })
 }
