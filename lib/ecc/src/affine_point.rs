@@ -24,6 +24,10 @@ impl<F: Field> AffinePoint<F> {
             y: Neg::neg(&self.y),
         }
     }
+
+    pub fn is_infinity(&self) -> bool {
+        self.x == F::ZERO && self.y == F::ZERO
+    }
 }
 
 impl<F> Neg for AffinePoint<F>
@@ -58,4 +62,7 @@ pub trait AffineCoords<F>: Clone {
 
     /// Returns the generator point of the elliptic curve.
     fn generator() -> Self;
+
+    /// Returns whether the point is the point at infinity or not.
+    fn is_infinity(&self) -> bool;
 }
