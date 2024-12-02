@@ -53,6 +53,9 @@ where
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
+        if s.is_infinity() {
+            panic!("Should not do miller double step on point at infinity");
+        }
         #[cfg(not(target_os = "zkvm"))]
         {
             let one = &Self::Fp2::ONE;
@@ -133,6 +136,9 @@ where
         UnevaluatedLine<Self::Fp2>,
         UnevaluatedLine<Self::Fp2>,
     ) {
+        if s == q {
+            panic!("Should not do miller double and add step on same point");
+        }
         #[cfg(not(target_os = "zkvm"))]
         {
             let one = &Self::Fp2::ONE;

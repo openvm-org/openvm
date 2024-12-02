@@ -2,7 +2,7 @@ use core::ops::Neg;
 
 use axvm_algebra_guest::Field;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[repr(C)]
 pub struct AffinePoint<F> {
     pub x: F,
