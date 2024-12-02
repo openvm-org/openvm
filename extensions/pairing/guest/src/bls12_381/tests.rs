@@ -230,4 +230,16 @@ fn test_bls12381_miller_loop_identity() {
     };
 
     let _f = Bls12_381::multi_miller_loop(&[p], &[q]);
+
+    let h2c_p = G1Affine::random(&mut rng);
+    let p = AffinePoint {
+        x: convert_bls12381_halo2_fq_to_fp(h2c_p.x),
+        y: convert_bls12381_halo2_fq_to_fp(h2c_p.y),
+    };
+    let q = AffinePoint {
+        x: convert_bls12381_halo2_fq2_to_fp2(Fq2::ZERO),
+        y: convert_bls12381_halo2_fq2_to_fp2(Fq2::ZERO),
+    };
+
+    let _f = Bls12_381::multi_miller_loop(&[p], &[q]);
 }
