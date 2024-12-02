@@ -10,7 +10,7 @@ on:
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "extensions/native/compiler/**"
-      - "extensions/native/lib/recursion/**"
+      - "extensions/native/recursion/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -37,6 +37,6 @@ jobs:
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
       - name: Run recursion crate tests
-        working-directory: extensions/native/lib/recursion
+        working-directory: extensions/native/recursion
         run: |
           cargo nextest run --features parallel,static-verifier

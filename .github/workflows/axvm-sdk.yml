@@ -64,7 +64,7 @@ jobs:
       - name: Setup halo2
         working-directory: crates/axvm-sdk
         run: |
-          bash ../../extensions/native/lib/recursion/trusted_setup_s3.sh
+          bash ../../extensions/native/recursion/trusted_setup_s3.sh
 
       - name: Run axvm-sdk crate tests
         working-directory: crates/axvm-sdk

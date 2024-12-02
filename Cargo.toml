@@ -39,7 +39,7 @@ members = [
     "extensions/native/circuit",
     "extensions/native/compiler",
     "extensions/native/compiler/derive",
-    "extensions/native/lib/recursion",
+    "extensions/native/recursion",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
@@ -131,7 +131,7 @@ axvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features =
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 axvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
 axvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
-axvm-native-recursion = { path = "extensions/native/lib/recursion", default-features = false }
+axvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
 axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 axvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 axvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
