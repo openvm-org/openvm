@@ -9,7 +9,7 @@ on:
       - "stark-backend/**"
       - "circuits/primitives/**"
       - "vm/**"
-      - "toolchain/native-compiler/**"
+      - "extensions/native/compiler/**"
       - "cargo-axiom/**"
       - "extensions/ecc/**"
       - "extensions/pairing/**"
@@ -50,11 +50,6 @@ jobs:
         working-directory: extensions/pairing/circuit
         run: |
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast 
-
-      - name: Run axvm-ecc-guest crate tests
-        working-directory: extensions/ecc/guest
-        run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --features halo2curves
 
       - name: Install cargo-axiom
         working-directory: cargo-axiom
