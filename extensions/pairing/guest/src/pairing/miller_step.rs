@@ -1,6 +1,7 @@
 use core::ops::{Add, Mul, Neg, Sub};
 
 use axvm_algebra_guest::{DivUnsafe, Field};
+use axvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
@@ -10,7 +11,6 @@ use {
 };
 
 use super::{PairingIntrinsics, UnevaluatedLine};
-use crate::AffinePoint;
 
 /// Trait definition for Miller step opcodes
 pub trait MillerStep {

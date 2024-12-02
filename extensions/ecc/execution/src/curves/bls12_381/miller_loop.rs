@@ -1,10 +1,12 @@
 use axvm_ecc_guest::{
     algebra::{DivUnsafe, Field},
+    AffinePoint,
+};
+use axvm_pairing_guest::{
     bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
     pairing::{
         Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
     },
-    AffinePoint,
 };
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;

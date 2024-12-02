@@ -379,6 +379,7 @@ version = "0.1.0"
 dependencies = [
  "axvm-ecc-constants",
  "axvm-ecc-guest",
+ "axvm-pairing-guest",
  "ff 0.13.0",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -1045,6 +1046,7 @@ dependencies = [
  "axvm-ecc-constants",
  "axvm-ecc-guest",
  "axvm-instructions",
+ "axvm-pairing-guest",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
@@ -1057,6 +1059,29 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "strum",
+]
+
+[[package]]
+name = "axvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-algebra-guest",
+ "axvm-ecc-guest",
+ "axvm-platform",
+ "ecdsa",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "rand 0.8.5",
+ "serde",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1251,6 +1276,7 @@ dependencies = [
  "axvm-keccak256-circuit",
  "axvm-keccak256-transpiler",
  "axvm-pairing-circuit",
+ "axvm-pairing-guest",
  "axvm-pairing-transpiler",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",

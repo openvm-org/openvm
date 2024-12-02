@@ -1,8 +1,5 @@
-use axvm_ecc_guest::{
-    algebra::field::FieldExtension,
-    pairing::{FromLineMType, LineMulMType},
-    AffinePoint,
-};
+use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use axvm_pairing_guest::pairing::{FromLineMType, LineMulMType};
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,

@@ -1,8 +1,8 @@
 use axvm_ecc_guest::{
     algebra::{ExpBytes, Field},
-    pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
 };
+use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use num_bigint::BigUint;
 

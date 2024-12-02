@@ -9,6 +9,7 @@ use axvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
 };
+use axvm_ecc_guest::AffinePoint;
 use axvm_platform::constants::{PairingBaseFunct7, PAIRING_MAX_KINDS};
 pub use final_exp::*;
 pub use line::*;
@@ -16,8 +17,6 @@ pub use miller_loop::*;
 pub use miller_step::*;
 pub(crate) use operations::*;
 pub use sextic_ext_field::*;
-
-use crate::AffinePoint;
 
 pub trait PairingIntrinsics {
     type Fp: Field + IntMod;

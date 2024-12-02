@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 
 use axvm_algebra_guest::{field::FieldExtension, IntMod};
+use axvm_ecc_guest::AffinePoint;
 use group::ff::Field;
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
@@ -14,7 +15,6 @@ use crate::{
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
     },
-    AffinePoint,
 };
 
 fn convert_bn254_halo2_fq_to_fp(x: Fq) -> Fp {

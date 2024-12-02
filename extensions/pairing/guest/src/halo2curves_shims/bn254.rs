@@ -3,8 +3,8 @@ use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;
 
 use crate::{
+    affine_point::AffineCoords,
     pairing::{Evaluatable, EvaluatedLine, FromLineDType, UnevaluatedLine},
-    AffineCoords,
 };
 
 impl FromLineDType<Fq2> for Fq12 {

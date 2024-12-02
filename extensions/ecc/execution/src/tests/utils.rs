@@ -1,4 +1,5 @@
-use axvm_ecc_guest::{algebra::field::FieldExtension, AffineCoords, AffinePoint};
+use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use axvm_pairing_guest::affine_point::AffineCoords;
 use ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};

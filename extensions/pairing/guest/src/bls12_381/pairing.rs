@@ -4,6 +4,7 @@ use axvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivUnsafe, Field,
 };
+use axvm_ecc_guest::AffinePoint;
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
@@ -14,12 +15,9 @@ use {
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
-use crate::{
-    pairing::{
-        Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep, MultiMillerLoop,
-        PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
-    },
-    AffinePoint,
+use crate::pairing::{
+    Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep, MultiMillerLoop,
+    PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
 };
 
 // TODO[jpw]: make macro

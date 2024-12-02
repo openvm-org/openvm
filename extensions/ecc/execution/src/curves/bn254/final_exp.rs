@@ -1,8 +1,5 @@
-use axvm_ecc_guest::{
-    algebra::field::FieldExtension,
-    pairing::{FinalExp, MultiMillerLoop},
-    AffinePoint,
-};
+use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,

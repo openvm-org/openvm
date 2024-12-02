@@ -12,8 +12,9 @@ use axvm_circuit::{
     utils::biguint_to_limbs,
 };
 use axvm_ecc_constants::BLS12381;
-use axvm_ecc_guest::{pairing::LineMulMType, AffinePoint};
+use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_pairing_guest::pairing::LineMulMType;
 use axvm_rv32_adapters::{
     rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip,
 };

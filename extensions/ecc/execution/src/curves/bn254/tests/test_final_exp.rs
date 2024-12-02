@@ -1,7 +1,7 @@
-use axvm_ecc_guest::{
-    algebra::ExpBytes,
+use axvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
+use axvm_pairing_guest::{
+    affine_point::AffineCoords,
     pairing::{FinalExp, MultiMillerLoop},
-    AffineCoords, AffinePoint,
 };
 use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;

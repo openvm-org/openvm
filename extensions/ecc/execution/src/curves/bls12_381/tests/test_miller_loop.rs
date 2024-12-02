@@ -1,8 +1,5 @@
-use axvm_ecc_guest::{
-    algebra::Field,
-    pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop},
-    AffinePoint,
-};
+use axvm_ecc_guest::{algebra::Field, AffinePoint};
+use axvm_pairing_guest::pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop};
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
 };

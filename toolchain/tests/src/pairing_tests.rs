@@ -1,10 +1,7 @@
 #![allow(non_snake_case)]
 
 use ax_ecc_execution::axvm_ecc_guest::{
-    algebra::field::FieldExtension,
-    halo2curves::ff::Field,
-    pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop},
-    AffinePoint,
+    algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
@@ -12,6 +9,7 @@ use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
+use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
@@ -48,17 +46,14 @@ mod bn254 {
     use std::iter;
 
     use ax_ecc_execution::{
-        axvm_ecc_guest::{
-            halo2curves::{
-                bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-                ff::Field,
-            },
-            pairing::MillerStep,
-            AffineCoords,
+        axvm_ecc_guest::halo2curves::{
+            bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+            ff::Field,
         },
         curves::bn254::Bn254,
     };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use axvm_pairing_guest::{affine_point::AffineCoords, pairing::MillerStep};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -323,13 +318,13 @@ mod bls12_381 {
     use ax_ecc_execution::{
         axvm_ecc_guest::{
             halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            pairing::{LineMulMType, MillerStep},
             AffinePoint,
         },
         curves::bls12_381::Bls12_381,
     };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_ecc_guest::algebra::IntMod;
+    use axvm_pairing_guest::pairing::{LineMulMType, MillerStep};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -622,19 +617,19 @@ mod bls12_381 {
             .into_iter()
             .map(|pt| {
                 let [x, y] = [pt.x, pt.y]
-                    .map(|x| axvm_ecc_guest::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                    .map(|x| axvm_pairing_guest::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
         let qs = qs
             .into_iter()
             .map(|pt| {
-                let [x, y] =
-                    [pt.x, pt.y].map(|x| axvm_ecc_guest::bls12_381::Fp2::from_bytes(&x.to_bytes()));
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| axvm_pairing_guest::bls12_381::Fp2::from_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
-        let [c, s] = [c, s].map(|x| axvm_ecc_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let [c, s] = [c, s].map(|x| axvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
         let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
         executor.execute(

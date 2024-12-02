@@ -2,9 +2,9 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc_guest::{
     algebra::{field::FieldExtension, Field},
-    pairing::{EvaluatedLine, LineMulDType},
     AffinePoint,
 };
+use axvm_pairing_guest::pairing::{EvaluatedLine, LineMulDType};
 use halo2curves_axiom::bn256::{Fq12, Fq2};
 
 use super::{Bn254, BN254_XI};

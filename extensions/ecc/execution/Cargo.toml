@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true

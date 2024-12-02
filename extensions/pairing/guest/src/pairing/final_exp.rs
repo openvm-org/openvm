@@ -1,6 +1,5 @@
 use axvm_algebra_guest::{field::FieldExtension, Field};
-
-use crate::affine_point::AffinePoint;
+use axvm_ecc_guest::AffinePoint;
 
 // Currently this is only used by VM runtime execution and not implemented for guest programs.
 #[allow(non_snake_case)]

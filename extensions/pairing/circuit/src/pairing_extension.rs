@@ -341,16 +341,12 @@ pub(crate) mod phantom {
         system::memory::MemoryController,
     };
     use axvm_ecc_constants::{BLS12381, BN254};
-    use axvm_ecc_guest::{
-        algebra::field::FieldExtension,
-        halo2curves::ff,
-        pairing::{FinalExp, MultiMillerLoop},
-        AffinePoint,
-    };
+    use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
     use axvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
+    use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
     use axvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
     use eyre::bail;
 

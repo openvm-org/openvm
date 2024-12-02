@@ -2,10 +2,10 @@ use alloc::vec::Vec;
 use core::ops::{Mul, Neg};
 
 use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
+use axvm_ecc_guest::AffinePoint;
 use itertools::{izip, Itertools};
 
 use super::{Evaluatable, EvaluatedLine, MillerStep, UnevaluatedLine};
-use crate::AffinePoint;
 
 #[allow(non_snake_case)]
 pub trait MultiMillerLoop: MillerStep
