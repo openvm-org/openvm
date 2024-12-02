@@ -526,6 +526,7 @@ version = "0.1.0"
 dependencies = [
  "axvm-moduli-setup",
  "axvm-platform",
+ "axvm-rv32im-guest",
  "axvm-sw-setup",
  "chrono",
  "hex-literal",
@@ -1131,6 +1132,13 @@ dependencies = [
  "test-case",
  "test-log",
  "tracing",
+]
+
+[[package]]
+name = "axvm-rv32im-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
 ]
 
 [[package]]

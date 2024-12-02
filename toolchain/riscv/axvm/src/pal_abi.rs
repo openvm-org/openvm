@@ -5,8 +5,7 @@
 /// operations in the same way: there is no operating system and even the standard library should be
 /// directly handled with intrinsics.
 use axvm_platform::{memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
-
-use crate::intrinsics::raw_print_str_from_bytes;
+use axvm_rv32im_guest::raw_print_str_from_bytes;
 
 const DIGEST_WORDS: usize = 8;
 
