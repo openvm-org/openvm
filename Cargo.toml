@@ -32,7 +32,7 @@ members = [
     "lib/ecc-execution",
     "lib/recursion",
     "axvm-sdk",
-#    "benchmarks",
+    "benchmarks",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
@@ -90,7 +90,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
-# axvm-sdk = { path = "axvm-sdk", default-features = false }
+axvm-sdk = { path = "axvm-sdk", default-features = false }
 cargo-axiom = { path = "cargo-axiom", default-features = false }
 axvm = { path = "toolchain/riscv/axvm", default-features = false }
 axvm-instructions = { path = "toolchain/instructions", default-features = false }

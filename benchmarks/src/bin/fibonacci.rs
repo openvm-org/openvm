@@ -1,18 +1,25 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
+use std::rc::Rc;
+
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::VmConfig;
+use axvm_circuit::arch::instructions::exe::AxVmExe;
+use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_circuit::Rv32ImConfig;
-use axvm_transpiler::axvm_platform::bincode;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
+use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use tracing::info_span;
 
@@ -22,6 +29,13 @@ fn main() -> Result<()> {
     let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("fibonacci")?;
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<BabyBear>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata =
             info_span!("Fibonacci Program", group = "fibonacci_program").in_scope(|| {
@@ -33,7 +47,7 @@ fn main() -> Result<()> {
                 bench_from_exe(
                     engine,
                     Rv32ImConfig::default(),
-                    elf,
+                    exe,
                     vec![input
                         .into_iter()
                         .map(AbstractField::from_canonical_u8)
@@ -46,7 +60,7 @@ fn main() -> Result<()> {
             // Leaf aggregation: 1->1 proof "aggregation"
             // TODO[jpw]: put real user public values number, placeholder=0
             let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-            let config = VmConfig::aggregation(0, max_constraint_degree);
+            let config = NativeConfig::aggregation(0, max_constraint_degree);
             let compiler_options = CompilerOptions {
                 enable_cycle_tracker: true,
                 ..Default::default()
