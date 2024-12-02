@@ -228,14 +228,6 @@ impl<F: PrimeField32> MemoryController<F> {
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
-        let mut overridden_heights = None;
-        // A temporary hack to support the old code.
-        if let Some(boundary_air_height) = mem_config.boundary_air_height {
-            overridden_heights = Some(MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                boundary: boundary_air_height,
-                access_adapters: FxHashMap::default(),
-            }));
-        }
         let range_checker_bus = range_checker.bus();
         Self {
             memory_bus,
@@ -253,7 +245,7 @@ impl<F: PrimeField32> MemoryController<F> {
             range_checker,
             range_checker_bus,
             result: None,
-            overridden_heights,
+            overridden_heights: None,
         }
     }
 
