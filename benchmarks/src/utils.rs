@@ -56,7 +56,7 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     Elf::decode(&data, MEM_SIZE as u32)
 }
 
-/// 1. Executes runtime once with full metric collection for flamegraphs (slow).
+/// 1. If `collect_metrics` is true, executes runtime once with full metric collection for flamegraphs (slow).
 /// 2. Generate proving key from config.
 /// 3. Commit to the exe by generating cached trace for program.
 /// 4. Executes runtime again without metric collection and generate trace.
@@ -69,6 +69,7 @@ pub fn bench_from_exe<SC, E, VC>(
     mut config: VC,
     exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
+    collect_metrics: bool,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
 where
     SC: StarkGenericConfig,
@@ -79,11 +80,13 @@ where
     VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
-    // 1. Executes runtime once with full metric collection for flamegraphs (slow).
-    config.system_mut().collect_metrics = true;
-    let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
-    tracing::info_span!("execute_with_metrics", collect_metrics = true)
-        .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
+    if collect_metrics {
+        // 1. Executes runtime once with full metric collection for flamegraphs (slow).
+        config.system_mut().collect_metrics = true;
+        let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
+        tracing::info_span!("execute_with_metrics", collect_metrics = true)
+            .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
+    }
     // 2. Generate proving key from config.
     config.system_mut().collect_metrics = false;
     counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);

@@ -51,6 +51,7 @@ fn main() -> Result<()> {
                         .into_iter()
                         .map(AbstractField::from_canonical_u8)
                         .collect()],
+                    true,
                 )
             })?;
 

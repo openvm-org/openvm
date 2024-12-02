@@ -151,7 +151,7 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, vm_config, exe, input_stream)
+                bench_from_exe(engine, vm_config, exe, input_stream, true)
             })?;
 
         Ok(())

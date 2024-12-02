@@ -51,7 +51,13 @@ fn main() -> Result<()> {
                 .into_iter()
                 .map(AbstractField::from_canonical_u8)
                 .collect::<Vec<BabyBear>>();
-            bench_from_exe(engine, Keccak256Rv32Config::default(), exe, vec![fe_bytes])
+            bench_from_exe(
+                engine,
+                Keccak256Rv32Config::default(),
+                exe,
+                vec![fe_bytes],
+                true,
+            )
         })?;
 
         #[cfg(feature = "aggregation")]

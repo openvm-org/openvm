@@ -41,7 +41,7 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, Keccak256Rv32Config::default(), exe, vec![])
+                bench_from_exe(engine, Keccak256Rv32Config::default(), exe, vec![], true)
             })?;
         Ok(())
     })
