@@ -16,6 +16,13 @@ rand.workspace = true
 lazy_static.workspace = true
 group = "0.13.0"
 
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+axvm-ecc = { workspace = true, features = [
+    "halo2curves",
+    "bn254",
+    "bls12_381",
+] }
+
 [dev-dependencies]
 rng = "0.1.0"
 subtle = "2.6.1"

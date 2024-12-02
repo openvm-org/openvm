@@ -11,7 +11,6 @@ Cargo.lock
 **/root
 **/leaf
 **/internal
-
 !axvm-sdk/src/verifier/leaf
 !axvm-sdk/src/verifier/internal
 !axvm-sdk/src/verifier/root
@@ -32,6 +31,9 @@ rustc-*
 # Bench metrics
 .bench_metrics/
 __pycache__/
+
+# KZG trusted setup
+**/params
 
 # Javascript
 **/node_modules/
