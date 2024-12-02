@@ -28,12 +28,12 @@ use crate::{
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
-pub struct ExecutionSegment<F, VmConfig>
+pub struct ExecutionSegment<F, VC>
 where
     F: PrimeField32,
-    VmConfig: VmGenericConfig<F>,
+    VC: VmGenericConfig<F>,
 {
-    pub chip_complex: VmChipComplex<F, VmConfig::Executor, VmConfig::Periphery>,
+    pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
@@ -54,10 +54,10 @@ pub struct ExecutionSegmentState {
     pub is_terminated: bool,
 }
 
-impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig> {
+impl<F: PrimeField32, VC: VmGenericConfig<F>> ExecutionSegment<F, VC> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: &VmConfig,
+        config: &VC,
         program: Program<F>,
         init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
@@ -261,7 +261,9 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
                     .chip_complex
                     .inventory
                     .periphery
-                    .get_mut(VmChipComplex::<F, VmConfig::Executor, VmConfig::Periphery>::POSEIDON2_PERIPHERY_IDX)
+                    .get_mut(
+                        VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
+                    )
                     .expect("Poseidon2 chip required for persistent memory");
                 let hasher: &mut Poseidon2Chip<F> = chip
                     .as_any_kind_mut()
@@ -297,8 +299,8 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VmConfig::Executor: Chip<SC>,
-        VmConfig::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         self.chip_complex.generate_proof_input(cached_program)
     }

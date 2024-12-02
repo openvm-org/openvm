@@ -159,7 +159,7 @@ For each extension's inventory generation, the `VmInventoryBuilder` is provided 
 The top level structs of `VirtualMachine`, `VmExecutor`, `SegmentExecutor` remain almost entirely the same, but now has `VmGenericConfig` as a generic:
 
 ```rust
-pub struct VirtualMachine<SC: StarkGenericConfig, E, VmConfig> {
+pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
 ```
 
 We refer to the code on usage, which should be straightforward.

@@ -32,13 +32,13 @@ pub mod types;
 mod vars;
 
 /// Config to generate leaf VM verifier program.
-pub struct LeafVmVerifierConfig<VmConfig: VmGenericConfig<F>> {
+pub struct LeafVmVerifierConfig<VC: VmGenericConfig<F>> {
     pub app_fri_params: FriParameters,
-    pub app_vm_config: VmConfig,
+    pub app_vm_config: VC,
     pub compiler_options: CompilerOptions,
 }
 
-impl<VmConfig: VmGenericConfig<F>> LeafVmVerifierConfig<VmConfig> {
+impl<VC: VmGenericConfig<F>> LeafVmVerifierConfig<VC> {
     pub fn build_program(
         &self,
         app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,

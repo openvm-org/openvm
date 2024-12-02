@@ -43,8 +43,8 @@ impl<F> Streams<F> {
     }
 }
 
-pub struct VmExecutor<F, VmConfig> {
-    pub config: VmConfig,
+pub struct VmExecutor<F, VC> {
+    pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
@@ -62,15 +62,15 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub final_memory: Option<VmMemoryState<Val<SC>>>,
 }
 
-impl<F, VmConfig> VmExecutor<F, VmConfig>
+impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
-    VmConfig: VmGenericConfig<F>,
+    VC: VmGenericConfig<F>,
 {
     /// Create a new VM executor with a given config.
     ///
     /// The VM will start with a single segment, which is created from the initial state.
-    pub fn new(config: VmConfig) -> Self {
+    pub fn new(config: VC) -> Self {
         Self::new_with_overridden_trace_heights(config, None)
     }
 
@@ -79,7 +79,7 @@ where
     }
 
     pub fn new_with_overridden_trace_heights(
-        config: VmConfig,
+        config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
         Self {
@@ -97,7 +97,7 @@ where
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<Vec<ExecutionSegment<F, VmConfig>>, ExecutionError> {
+    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
 
@@ -191,8 +191,8 @@ where
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VmConfig::Executor: Chip<SC>,
-        VmConfig::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         self.execute_and_generate_impl(exe.into(), None, input.into())
     }
@@ -203,8 +203,8 @@ where
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VmConfig::Executor: Chip<SC>,
-        VmConfig::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         self.execute_and_generate_impl(
             commited_exe.exe.clone(),
@@ -220,8 +220,8 @@ where
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VmConfig::Executor: Chip<SC>,
-        VmConfig::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
@@ -247,8 +247,8 @@ where
 }
 
 /// A single segment VM.
-pub struct SingleSegmentVmExecutor<F, VmConfig> {
-    pub config: VmConfig,
+pub struct SingleSegmentVmExecutor<F, VC> {
+    pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
@@ -263,17 +263,17 @@ pub struct SingleSegmentVmExecutionResult<F> {
     pub internal_heights: VmComplexTraceHeights,
 }
 
-impl<F, VmConfig> SingleSegmentVmExecutor<F, VmConfig>
+impl<F, VC> SingleSegmentVmExecutor<F, VC>
 where
     F: PrimeField32,
-    VmConfig: VmGenericConfig<F>,
+    VC: VmGenericConfig<F>,
 {
-    pub fn new(config: VmConfig) -> Self {
+    pub fn new(config: VC) -> Self {
         Self::new_with_overridden_trace_heights(config, None)
     }
 
     pub fn new_with_overridden_trace_heights(
-        config: VmConfig,
+        config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
         assert!(
@@ -320,8 +320,8 @@ where
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VmConfig::Executor: Chip<SC>,
-        VmConfig::Periphery: Chip<SC>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
         Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
@@ -331,7 +331,7 @@ where
         &self,
         exe: AxVmExe<F>,
         input: VecDeque<Vec<F>>,
-    ) -> Result<ExecutionSegment<F, VmConfig>, ExecutionError> {
+    ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -372,25 +372,25 @@ pub enum VmVerificationError {
     StarkError(#[from] VerificationError),
 }
 
-pub struct VirtualMachine<SC: StarkGenericConfig, E, VmConfig> {
+pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
     /// Proving engine
     pub engine: E,
     /// Runtime executor
-    pub executor: VmExecutor<Val<SC>, VmConfig>,
+    pub executor: VmExecutor<Val<SC>, VC>,
     _marker: PhantomData<SC>,
 }
 
-impl<F, SC, E, VmConfig> VirtualMachine<SC, E, VmConfig>
+impl<F, SC, E, VC> VirtualMachine<SC, E, VC>
 where
     F: PrimeField32,
     SC: StarkGenericConfig,
     E: StarkEngine<SC>,
     Domain<SC>: PolynomialSpace<Val = F>,
-    VmConfig: VmGenericConfig<F>,
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC: VmGenericConfig<F>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
-    pub fn new(engine: E, config: VmConfig) -> Self {
+    pub fn new(engine: E, config: VC) -> Self {
         let executor = VmExecutor::new(config);
         Self {
             engine,
@@ -401,7 +401,7 @@ where
 
     pub fn new_with_overridden_trace_heights(
         engine: E,
-        config: VmConfig,
+        config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {
         let executor = VmExecutor::new_with_overridden_trace_heights(config, overridden_heights);
@@ -412,7 +412,7 @@ where
         }
     }
 
-    pub fn config(&self) -> &VmConfig {
+    pub fn config(&self) -> &VC {
         &self.executor.config
     }
 

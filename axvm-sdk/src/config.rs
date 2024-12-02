@@ -5,9 +5,9 @@ use axvm_native_compiler::conversion::CompilerOptions;
 use crate::F;
 
 #[derive(Clone, Debug)]
-pub struct AppConfig<VmConfig: VmGenericConfig<F>> {
+pub struct AppConfig<VC: VmGenericConfig<F>> {
     pub app_fri_params: FriParameters,
-    pub app_vm_config: VmConfig,
+    pub app_vm_config: VC,
 }
 
 #[derive(Clone, Debug)]

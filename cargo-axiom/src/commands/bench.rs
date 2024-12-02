@@ -129,9 +129,9 @@ impl BenchCmd {
 /// Performs proving keygen and then execute and proof generation.
 ///
 /// Returns total proving time in ms.
-pub fn bench_from_exe<SC, E, VmConfig>(
+pub fn bench_from_exe<SC, E, VC>(
     engine: E,
-    config: VmConfig,
+    config: VC,
     exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<u128>
@@ -139,14 +139,14 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    VmConfig: VmGenericConfig<Val<SC>>,
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC: VmGenericConfig<Val<SC>>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
     // 1. Generate proving key from config.
     tracing::info!("fri.log_blowup: {}", engine.fri_params().log_blowup);
-    let vm = VirtualMachine::<SC, E, VmConfig>::new(engine, config);
+    let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
     let pk = vm.keygen();
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = vm.commit_exe(exe);
