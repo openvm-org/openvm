@@ -216,7 +216,6 @@ fn test_bls12381_miller_loop() {
 }
 
 #[test]
-#[should_panic]
 fn test_bls12381_miller_loop_identity() {
     let mut rng = StdRng::seed_from_u64(33);
     let h2c_q = G2Affine::random(&mut rng);
