@@ -12,6 +12,7 @@ use ax_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_less_than::IsLtSubAir,
     is_zero::IsZeroSubAir,
+    utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
@@ -138,6 +139,22 @@ impl MemoryTraceHeights {
             MemoryTraceHeights::Persistent(oh) => oh.flatten(),
         }
     }
+
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two(),
+            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two(),
+        }
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two_or_zero(),
+            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two_or_zero(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -151,6 +168,20 @@ impl VolatileMemoryTraceHeights {
         iter::once(self.boundary)
             .chain(self.access_adapters.iter().sorted().map(|(_, &v)| v))
             .collect()
+    }
+
+    fn round_to_next_power_of_two(&mut self) {
+        self.boundary = self.boundary.next_power_of_two();
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.boundary = next_power_of_two_or_zero(self.boundary);
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
 
@@ -166,6 +197,22 @@ impl PersistentMemoryTraceHeights {
             .into_iter()
             .chain(self.access_adapters.iter().sorted().map(|(_, v)| *v))
             .collect()
+    }
+
+    fn round_to_next_power_of_two(&mut self) {
+        self.boundary = self.boundary.next_power_of_two();
+        self.merkle = self.merkle.next_power_of_two();
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.boundary = next_power_of_two_or_zero(self.boundary);
+        self.merkle = next_power_of_two_or_zero(self.merkle);
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
 
@@ -789,9 +836,9 @@ pub fn memory_image_to_equipartition<F: PrimeField32, const N: usize>(
 ) -> Equipartition<F, { N }> {
     let mut result = Equipartition::new();
     for ((addr_space, addr), word) in memory_image {
-        let addr_u32 = addr.as_canonical_u32();
-        let shift = addr_u32 as usize % N;
-        let key = (addr_space, (addr_u32 / N as u32) as usize);
+        let addr_usize = addr.as_canonical_u32() as usize;
+        let shift = addr_usize % N;
+        let key = (addr_space, addr_usize / N);
         result.entry(key).or_insert([F::ZERO; N])[shift] = word;
     }
     result

@@ -68,6 +68,31 @@ impl Default for Rv32ImConfig {
     }
 }
 
+impl Rv32IConfig {
+    pub fn with_public_values(public_values: usize) -> Self {
+        let system = SystemConfig::default()
+            .with_continuations()
+            .with_public_values(public_values);
+        Self {
+            system,
+            base: Default::default(),
+            io: Default::default(),
+        }
+    }
+}
+
+impl Rv32ImConfig {
+    pub fn with_public_values(public_values: usize) -> Self {
+        let inner = Rv32IConfig::with_public_values(public_values);
+        Self {
+            system: inner.system,
+            base: inner.base,
+            mul: Default::default(),
+            io: Default::default(),
+        }
+    }
+}
+
 // ============ Extension Implementations ============
 
 /// RISC-V 32-bit Base (RV32I) Extension

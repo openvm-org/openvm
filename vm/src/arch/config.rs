@@ -33,7 +33,7 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmGenericConfig<F: PrimeField32> {
+pub trait VmGenericConfig<F: PrimeField32>: Clone {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
@@ -177,6 +177,18 @@ impl Default for SystemConfig {
             Default::default(),
             0,
         )
+    }
+}
+
+impl SystemTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.memory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.memory.round_to_next_power_of_two_or_zero();
     }
 }
 

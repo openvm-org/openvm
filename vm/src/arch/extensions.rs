@@ -1,7 +1,10 @@
 use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::{
+    utils::next_power_of_two_or_zero,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -313,6 +316,10 @@ impl<E, P> VmInventory<E, P> {
         self.executors.len() + self.periphery.len()
     }
 
+    /// Return trace heights of all chips in the inventory.
+    /// The order is deterministic:
+    /// - All executors come first, in the order they were added.
+    /// - All periphery chips come after, in the order they were added.
     pub fn get_trace_heights(&self) -> VmInventoryTraceHeights
     where
         E: ChipUsageGetter,
@@ -333,6 +340,7 @@ impl<E, P> VmInventory<E, P> {
                 .collect(),
         }
     }
+
     /// Return the dummy trace heights of the inventory. This is used for generating a dummy proof.
     /// Regular users should not need this.
     pub fn get_dummy_trace_heights(&self) -> VmInventoryTraceHeights
@@ -354,6 +362,36 @@ impl<E, P> VmInventory<E, P> {
                 }))
                 .collect(),
         }
+    }
+}
+
+impl VmInventoryTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.chips
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.chips
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
+    }
+}
+
+impl VmComplexTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.system.round_to_next_power_of_two();
+        self.inventory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.system.round_to_next_power_of_two_or_zero();
+        self.inventory.round_to_next_power_of_two_or_zero();
     }
 }
 
@@ -728,7 +766,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().air_name()])
             .collect()
     }
-    /// Return trace heights of all chips in order.
+    /// Return trace heights of all chips in order corresponding to `air_names`.
     pub(crate) fn current_trace_heights(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,
@@ -748,28 +786,31 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     /// Return trace heights of (SystemBase, Inventory). Usually this is for aggregation and not
     /// useful for regular users.
-    pub fn get_system_and_inventory_trace_heights(
-        &self,
-    ) -> (SystemTraceHeights, VmInventoryTraceHeights)
+    ///
+    /// **Warning**: the order of `get_trace_heights` is deterministic, but it is not the same as
+    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,
     {
-        (
+        VmComplexTraceHeights::new(
             self.base.get_system_trace_heights(),
             self.inventory.get_trace_heights(),
         )
     }
+
     /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
     /// generate a dummy proof and not useful for regular users.
-    pub fn get_dummy_system_and_inventory_trace_heights(
-        &self,
-    ) -> (SystemTraceHeights, VmInventoryTraceHeights)
+    ///
+    /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the same as
+    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,
     {
-        (
+        VmComplexTraceHeights::new(
             self.base.get_dummy_system_trace_heights(),
             self.inventory.get_dummy_trace_heights(),
         )
@@ -777,14 +818,14 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
     /// generate a dummy proof and not useful for regular users.
-    pub fn set_override_inventory_trace_heights(
+    pub(crate) fn set_override_inventory_trace_heights(
         &mut self,
         overridden_inventory_heights: VmInventoryTraceHeights,
     ) {
         self.overridden_inventory_heights = Some(overridden_inventory_heights);
     }
 
-    pub fn set_override_system_trace_heights(
+    pub(crate) fn set_override_system_trace_heights(
         &mut self,
         overridden_system_heights: SystemTraceHeights,
     ) {

@@ -7,7 +7,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
 axvm-recursion = { workspace = true }
 ax-poseidon2-air = { workspace = true }
 ax-stark-sdk = { workspace = true }

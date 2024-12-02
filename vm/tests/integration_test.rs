@@ -160,7 +160,7 @@ fn test_vm_override_executor_height() {
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
     let res = executor.execute(committed_exe.exe.clone(), vec![]).unwrap();
     assert_eq!(
-        res.system_heights,
+        res.internal_heights.system,
         SystemTraceHeights {
             memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
                 boundary: 1,
@@ -169,7 +169,7 @@ fn test_vm_override_executor_height() {
         }
     );
     assert_eq!(
-        res.inventory_heights,
+        res.internal_heights.inventory,
         VmInventoryTraceHeights {
             chips: vec![
                 (ChipId::Executor(0), 0),
@@ -213,7 +213,7 @@ fn test_vm_override_executor_height() {
         system_overridden_heights.clone(),
         inventory_overridden_heights.clone(),
     );
-    let executor = SingleSegmentVmExecutor::new_with_overridden_inventory_heights(
+    let executor = SingleSegmentVmExecutor::new_with_overridden_trace_heights(
         vm_config,
         Some(overridden_heights),
     );

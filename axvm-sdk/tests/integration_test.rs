@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use ax_stark_sdk::{
-    ax_stark_backend::{p3_field::AbstractField, prover::types::Proof},
+    ax_stark_backend::{p3_field::AbstractField, prover::types::Proof, Chip},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -10,11 +10,13 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, ExecutorName,
-        SingleSegmentVmExecutor, VmConfig, VmExecutor,
+        hasher::poseidon2::vm_poseidon2_hasher,
+        new_vm::{SingleSegmentVmExecutor, VmExecutor},
+        ExecutionError, SystemConfig, VmGenericConfig,
     },
     system::memory::tree::public_values::UserPublicValuesProof,
 };
+use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_recursion::types::InnerConfig;
 use axvm_sdk::{
@@ -37,7 +39,13 @@ type F = BabyBear;
 const NUM_PUB_VALUES: usize = 16;
 
 // TODO: keygen agg_pk once for all IT tests and store in a file
-fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<SC>) {
+fn load_agg_pk_into_e2e_prover<VC: VmGenericConfig<F>>(
+    app_config: AppConfig<VC>,
+) -> (E2EStarkProver<VC>, Proof<SC>)
+where
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
     let agg_config = AggConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
@@ -66,7 +74,7 @@ fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<
     };
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
-    let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config.clone(), None);
+    let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config.clone());
     let app_committed_exe = commit_app_exe(app_config, program);
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
     (
@@ -75,10 +83,14 @@ fn load_agg_pk_into_e2e_prover(app_config: AppConfig) -> (E2EStarkProver, Proof<
     )
 }
 
-fn run_leaf_verifier(
+fn run_leaf_verifier<VC: VmGenericConfig<F>>(
     verifier_input: LeafVmVerifierInput<SC>,
-    e2e_prover: &E2EStarkProver,
-) -> Result<Vec<F>, ExecutionError> {
+    e2e_prover: &E2EStarkProver<VC>,
+) -> Result<Vec<F>, ExecutionError>
+where
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
+{
     let leaf_vm = SingleSegmentVmExecutor::new(e2e_prover.agg_pk.leaf_vm_pk.vm_config.clone());
     let exe_result = leaf_vm.execute(
         e2e_prover.leaf_committed_exe.exe.clone(),
@@ -92,22 +104,22 @@ fn run_leaf_verifier(
     Ok(runtime_pvs)
 }
 
+fn small_test_app_config(log_blowup_factor: usize) -> AppConfig<NativeConfig> {
+    AppConfig {
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(log_blowup_factor),
+        app_vm_config: NativeConfig::new(
+            SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(16),
+            Native,
+        ),
+    }
+}
+
 #[test]
 fn test_public_values_and_leaf_verification() {
-    let app_config = AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
-        app_vm_config: VmConfig {
-            max_segment_len: 200,
-            continuation_enabled: true,
-            num_public_values: 16,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic),
-    };
-
+    let app_config = small_test_app_config(3);
     let (e2e_prover, _) = load_agg_pk_into_e2e_prover(app_config);
 
     let app_engine = BabyBearPoseidon2Engine::new(e2e_prover.app_pk.app_vm_pk.fri_params);
@@ -150,7 +162,7 @@ fn test_public_values_and_leaf_verification() {
     };
 
     let pv_proof = UserPublicValuesProof::compute(
-        app_vm.config.memory_config.memory_dimensions(),
+        app_vm.config.system.memory_config.memory_dimensions(),
         e2e_prover.agg_pk.num_public_values(),
         &vm_poseidon2_hasher(),
         app_vm_result.final_memory.as_ref().unwrap(),
@@ -219,20 +231,7 @@ fn test_public_values_and_leaf_verification() {
 
 #[test]
 fn test_e2e_proof_generation() {
-    let app_config = AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
-        app_vm_config: VmConfig {
-            max_segment_len: 200,
-            continuation_enabled: true,
-            num_public_values: 16,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic),
-    };
-
+    let app_config = small_test_app_config(3);
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
@@ -268,19 +267,7 @@ fn test_e2e_proof_generation() {
 
 #[test]
 fn test_e2e_app_log_blowup_1() {
-    let app_config = AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(1),
-        app_vm_config: VmConfig {
-            max_segment_len: 200,
-            continuation_enabled: true,
-            num_public_values: 16,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::FieldArithmetic),
-    };
+    let app_config = small_test_app_config(1);
 
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
