@@ -37,11 +37,6 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
-default = ["parallel", "mimalloc"]
+default = ["parallel"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]
-# performance features:
-mimalloc = ["axvm-circuit/mimalloc"]
-jemalloc = ["axvm-circuit/jemalloc"]
-jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
-nightly-features = ["axvm-circuit/nightly-features"]
