@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 # This cannot be local path because we need axvm version to be consistent with revm's axvm.
 axvm = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-axvm-ecc = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
+axvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
 revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-features = false, features = ["axvm"] }
 revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-features = false }
 
