@@ -18,7 +18,7 @@ use axvm_sdk::{
     e2e_prover::{commit_app_exe, generate_leaf_committed_exe, E2EStarkProver},
     keygen::{AggProvingKey, AppProvingKey},
 };
-use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler};
+use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 use p3_field::AbstractField;
