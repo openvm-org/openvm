@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::{program::DEFAULT_MAX_NUM_PUBLIC_VALUES, AxVmExe};
+use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
 use axvm_recursion::witness::Witnessable;
 use axvm_rv32im_circuit::Rv32ImConfig;
