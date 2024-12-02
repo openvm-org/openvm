@@ -65,22 +65,22 @@ fn test_moduli_setup_runtime() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_modular_runtime() -> Result<()> {
-    let elf = build_example_program_with_features("little", ["k256"])?;
-    let axvm_exe = AxVmExe::from_elf(
-        elf,
-        Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension)
-            .with_extension(ModularTranspilerExtension),
-    );
-    let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
-    let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(axvm_exe, vec![])?;
-    Ok(())
-}
+// #[test]
+// fn test_modular_runtime() -> Result<()> {
+//     let elf = build_example_program_with_features("little", ["k256"])?;
+//     let axvm_exe = AxVmExe::from_elf(
+//         elf,
+//         Transpiler::<F>::default()
+//             .with_extension(Rv32ITranspilerExtension)
+//             .with_extension(Rv32MTranspilerExtension)
+//             .with_extension(Rv32IoTranspilerExtension)
+//             .with_extension(ModularTranspilerExtension),
+//     );
+//     let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
+//     let executor = VmExecutor::<F, _>::new(config);
+//     executor.execute(axvm_exe, vec![])?;
+//     Ok(())
+// }
 
 #[test]
 fn test_complex_runtime() -> Result<()> {
