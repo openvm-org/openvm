@@ -1,4 +1,4 @@
-use axvm_ecc::{
+use axvm_ecc_guest::{
     algebra::Field,
     pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop},
     AffinePoint,

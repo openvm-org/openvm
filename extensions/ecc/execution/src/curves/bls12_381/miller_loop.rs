@@ -1,4 +1,4 @@
-use axvm_ecc::{
+use axvm_ecc_guest::{
     algebra::{DivUnsafe, Field},
     bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
     pairing::{

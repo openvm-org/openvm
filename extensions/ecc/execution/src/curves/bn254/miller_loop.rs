@@ -1,4 +1,4 @@
-use axvm_ecc::{
+use axvm_ecc_guest::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
     bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
     pairing::{

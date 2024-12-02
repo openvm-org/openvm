@@ -1,4 +1,4 @@
-pub use axvm_ecc;
+pub use axvm_ecc_guest;
 
 pub mod curves;
 

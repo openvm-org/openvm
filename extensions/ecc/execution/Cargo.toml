@@ -5,7 +5,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-axvm-ecc = { workspace = true, features = ["halo2curves"] }
+axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true

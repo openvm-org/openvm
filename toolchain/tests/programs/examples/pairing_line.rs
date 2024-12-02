@@ -3,12 +3,12 @@
 
 use axvm::io::read_vec;
 use axvm_algebra_guest::{field::FieldExtension, IntMod};
-use axvm_ecc::pairing::{EvaluatedLine, LineMulDType, LineMulMType};
+use axvm_ecc_guest::pairing::{EvaluatedLine, LineMulDType, LineMulMType};
 
 axvm::entry!(main);
 
 mod bn254 {
-    use axvm_ecc::bn254::{Bn254, Fp12, Fp2};
+    use axvm_ecc_guest::bn254::{Bn254, Fp12, Fp2};
 
     use super::*;
 
@@ -54,7 +54,7 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use axvm_ecc::bls12_381::{Bls12_381, Fp12, Fp2};
+    use axvm_ecc_guest::bls12_381::{Bls12_381, Fp12, Fp2};
 
     use super::*;
 

@@ -67,7 +67,7 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-ecc = { workspace = true, features = ["halo2curves"] }
+axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 axvm-ecc-constants = { workspace = true }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 
@@ -85,7 +85,7 @@ hex.workspace = true
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["axvm-ecc/halo2curves"]
+test-utils = ["axvm-ecc-guest/halo2curves"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 function-span = []
 # performance features:

@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use axvm::io::read;
-use axvm_ecc::{bls12_381::*, pairing::PairingCheck, sw::setup_fp2, AffinePoint};
+use axvm_ecc_guest::{bls12_381::*, pairing::PairingCheck, sw::setup_fp2, AffinePoint};
 
 axvm::entry!(main);
 

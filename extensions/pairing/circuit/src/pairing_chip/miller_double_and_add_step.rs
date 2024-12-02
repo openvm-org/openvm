@@ -111,8 +111,8 @@ mod tests {
         arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         utils::biguint_to_limbs,
     };
-    use axvm_ecc::{pairing::MillerStep, AffinePoint};
     use axvm_ecc_constants::BN254;
+    use axvm_ecc_guest::{pairing::MillerStep, AffinePoint};
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::bn256::G2Affine;

@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use ax_ecc_execution::axvm_ecc::{
+use ax_ecc_execution::axvm_ecc_guest::{
     algebra::field::FieldExtension,
     halo2curves::ff::Field,
     pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop},
@@ -48,7 +48,7 @@ mod bn254 {
     use std::iter;
 
     use ax_ecc_execution::{
-        axvm_ecc::{
+        axvm_ecc_guest::{
             halo2curves::{
                 bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
                 ff::Field,
@@ -321,7 +321,7 @@ mod bn254 {
 
 mod bls12_381 {
     use ax_ecc_execution::{
-        axvm_ecc::{
+        axvm_ecc_guest::{
             halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
             pairing::{LineMulMType, MillerStep},
             AffinePoint,
@@ -329,7 +329,7 @@ mod bls12_381 {
         curves::bls12_381::Bls12_381,
     };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use axvm_ecc::algebra::IntMod;
+    use axvm_ecc_guest::algebra::IntMod;
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -621,8 +621,8 @@ mod bls12_381 {
         let ps = ps
             .into_iter()
             .map(|pt| {
-                let [x, y] =
-                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| axvm_ecc_guest::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
@@ -630,11 +630,11 @@ mod bls12_381 {
             .into_iter()
             .map(|pt| {
                 let [x, y] =
-                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp2::from_bytes(&x.to_bytes()));
+                    [pt.x, pt.y].map(|x| axvm_ecc_guest::bls12_381::Fp2::from_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
-        let [c, s] = [c, s].map(|x| axvm_ecc::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let [c, s] = [c, s].map(|x| axvm_ecc_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
         let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
         executor.execute(

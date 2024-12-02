@@ -9,7 +9,7 @@ axvm = { path = "../../riscv/axvm" }
 axvm-bigint-guest = { path = "../../../extensions/bigint/guest" }
 axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 axvm-platform = { path = "../../riscv/platform" }
-axvm-ecc = { path = "../../../lib/ecc", default-features = false }
+axvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
 axvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -21,7 +21,7 @@ k256 = { version = "0.13.3", default-features = false, features = ["ecdsa-core",
 
 [features]
 default = []
-std = ["axvm/std", "axvm-ecc/std", "axvm-keccak256-guest/std"]
+std = ["axvm/std", "axvm-ecc-guest/std", "axvm-keccak256-guest/std"]
 
 [profile.release]
 panic = "abort"

@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
-use axvm_ecc::{
+use axvm_ecc_guest::{
     algebra::{field::FieldExtension, Field},
     pairing::{EvaluatedLine, LineMulMType},
     AffinePoint,

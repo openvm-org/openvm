@@ -3,7 +3,7 @@
 
 use core::hint::black_box;
 
-use axvm_ecc::VerifyingKey;
+use axvm_ecc_guest::VerifyingKey;
 use axvm_keccak256_guest::keccak256;
 use hex_literal::hex;
 use k256::ecdsa::{self, RecoveryId, Signature};

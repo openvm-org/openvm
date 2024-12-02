@@ -1,4 +1,4 @@
-use axvm_ecc::{
+use axvm_ecc_guest::{
     algebra::{ExpBytes, Field},
     pairing::{FinalExp, MultiMillerLoop},
     AffinePoint,
