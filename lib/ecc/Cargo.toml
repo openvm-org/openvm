@@ -32,7 +32,7 @@ num-traits.workspace = true
 group = "0.13.0"
 
 [features]
-default = []
+default = ["k256"]
 std = ["axvm/std", "serde/std"]
 # TODO[yj]: Switch to `halo2curves`
 halo2curves = ["dep:halo2curves-axiom", "axvm-algebra/halo2curves"]

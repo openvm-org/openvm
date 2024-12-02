@@ -2,9 +2,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use axvm_algebra::{DivUnsafe, IntMod};
-use axvm_ecc::sw::Secp256k1Coord;
 
 axvm::entry!(main);
+
+axvm::moduli_declare! {
+    Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
+}
 
 axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
 

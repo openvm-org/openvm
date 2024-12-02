@@ -7,7 +7,7 @@ use axvm_algebra::IntMod;
 
 axvm::entry!(main);
 axvm::moduli_declare! {
-    bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
+    Bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
     Mod1e18 { modulus = "1000000000000000003" },
 }
 
@@ -15,7 +15,7 @@ axvm::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-axvm::moduli_define! {
+axvm::moduli_init! {
     "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
     "1000000000000000003",
     "0x1fffffffffffffff",
@@ -23,7 +23,7 @@ axvm::moduli_define! {
 
 pub fn main() {
     setup_all_moduli();
-    let x = bls12381::from_repr(core::array::from_fn(|i| i as u8));
+    let x = Bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
     let y = Mod1e18::from_u32(100);

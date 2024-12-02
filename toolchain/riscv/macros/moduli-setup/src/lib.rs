@@ -892,10 +892,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             #(#externs)*
         }
         #(#setups)*
-        fn setup_all_moduli() {
+        pub fn setup_all_moduli() {
             #(#setup_all_moduli)*
         }
-        fn setup_all_fp2() {
+        pub fn setup_all_fp2() {
             #(#setup_all_fp2)*
         }
     })

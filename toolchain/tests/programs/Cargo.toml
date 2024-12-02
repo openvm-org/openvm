@@ -17,13 +17,31 @@ serde = { version = "1.0", default-features = false, features = [
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
-k256 = { version = "0.13.3", default-features = false, features = ["ecdsa-core", "ecdsa"] }
+k256 = { version = "0.13.3", default-features = false, features = [
+    "ecdsa-core",
+    "ecdsa",
+], optional = true }
 
 [features]
 default = []
 std = ["axvm/std", "axvm-ecc/std", "axvm-keccak256-guest/std"]
+bn254 = ["axvm-ecc/bn254"]
+bls12_381 = ["axvm-ecc/bls12_381"]
+k256 = ["axvm-ecc/k256", "dep:k256"]
 
 [profile.release]
-panic = "abort"
-lto = "fat"     # decrease binary size
+panic = "unwind"
+lto = "fat"      # decrease binary size
 # strip = "symbols"
+
+[[example]]
+name = "ec"
+required-features = ["k256"]
+
+[[example]]
+name = "ecdsa"
+required-features = ["k256"]
+
+[[example]]
+name = "final_exp_hint"
+required-features = ["bls12_381"]

@@ -10,10 +10,10 @@ pub fn main() {
     if vec.len() != 4 {
         axvm::process::panic();
     }
+    #[allow(clippy::needless_range_loop)]
     for i in 0..4 {
         if vec[i] != i as u8 {
             axvm::process::panic();
         }
-        // assert_eq!(vec[i], i as u8);
     }
 }

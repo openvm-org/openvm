@@ -25,7 +25,8 @@ use strum::{EnumCount, FromRepr};
 use super::*;
 
 // All the supported pairing curves.
-#[derive(Clone, Debug, FromRepr)]
+#[derive(Clone, Copy, Debug, FromRepr)]
+#[repr(usize)]
 pub enum PairingCurve {
     Bn254,
     Bls12_381,
@@ -105,9 +106,11 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        for (i, curve) in self.supported_curves.iter().enumerate() {
-            let pairing_class_offset = PairingOpcode::default_offset() + i * PairingOpcode::COUNT;
-            let fp12_class_offset = Fp12Opcode::default_offset() + i * Fp12Opcode::COUNT;
+        for curve in self.supported_curves.iter() {
+            let pairing_idx = *curve as usize;
+            let pairing_class_offset =
+                PairingOpcode::default_offset() + pairing_idx * PairingOpcode::COUNT;
+            let fp12_class_offset = Fp12Opcode::default_offset() + pairing_idx * Fp12Opcode::COUNT;
             match curve {
                 PairingCurve::Bn254 => {
                     let bn_config = ExprBuilderConfig {
