@@ -53,7 +53,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             oh = oh.next_power_of_two();
             assert!(
                 oh >= height,
-                "Overridden height is less than the required height"
+                "Overridden height {oh} is less than the required height {height}"
             );
             height = oh;
         }

@@ -34,7 +34,7 @@ pub(crate) mod dummy;
 pub mod perm;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct AppProvingKey<VmConfig: VmGenericConfig<F>> {
+pub struct AppProvingKey<VmConfig> {
     pub app_vm_pk: VmProvingKey<SC, VmConfig>,
 }
 

@@ -139,10 +139,20 @@ impl MemoryTraceHeights {
             MemoryTraceHeights::Persistent(oh) => oh.flatten(),
         }
     }
+
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
         match self {
             MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two(),
             MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two(),
+        }
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        match self {
+            MemoryTraceHeights::Volatile(oh) => oh.round_to_next_power_of_two_or_zero(),
+            MemoryTraceHeights::Persistent(oh) => oh.round_to_next_power_of_two_or_zero(),
         }
     }
 }
@@ -161,6 +171,13 @@ impl VolatileMemoryTraceHeights {
     }
 
     fn round_to_next_power_of_two(&mut self) {
+        self.boundary = self.boundary.next_power_of_two();
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    fn round_to_next_power_of_two_or_zero(&mut self) {
         self.boundary = next_power_of_two_or_zero(self.boundary);
         self.access_adapters
             .values_mut()
@@ -183,6 +200,14 @@ impl PersistentMemoryTraceHeights {
     }
 
     fn round_to_next_power_of_two(&mut self) {
+        self.boundary = self.boundary.next_power_of_two();
+        self.merkle = self.merkle.next_power_of_two();
+        self.access_adapters
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    fn round_to_next_power_of_two_or_zero(&mut self) {
         self.boundary = next_power_of_two_or_zero(self.boundary);
         self.merkle = next_power_of_two_or_zero(self.merkle);
         self.access_adapters

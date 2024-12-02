@@ -181,9 +181,14 @@ impl Default for SystemConfig {
 }
 
 impl SystemTraceHeights {
-    /// Round all trace heights to the next power of two or zero.
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
         self.memory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.memory.round_to_next_power_of_two_or_zero();
     }
 }
 

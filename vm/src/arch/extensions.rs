@@ -366,8 +366,15 @@ impl<E, P> VmInventory<E, P> {
 }
 
 impl VmInventoryTraceHeights {
-    /// Round all trace heights to the next power of two or zero.
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
+        self.chips
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
         self.chips
             .values_mut()
             .for_each(|v| *v = next_power_of_two_or_zero(*v));
@@ -375,10 +382,16 @@ impl VmInventoryTraceHeights {
 }
 
 impl VmComplexTraceHeights {
-    /// Round all trace heights to the next power of two or zero.
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
     pub fn round_to_next_power_of_two(&mut self) {
         self.system.round_to_next_power_of_two();
         self.inventory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.system.round_to_next_power_of_two_or_zero();
+        self.inventory.round_to_next_power_of_two_or_zero();
     }
 }
 

@@ -32,7 +32,7 @@ use crate::{
 mod exe;
 pub use exe::*;
 
-pub struct E2EStarkProver<VmConfig: VmGenericConfig<F>> {
+pub struct E2EStarkProver<VmConfig> {
     pub app_pk: AppProvingKey<VmConfig>,
     pub agg_pk: AggProvingKey,
     pub app_committed_exe: Arc<AxVmCommittedExe<SC>>,

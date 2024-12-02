@@ -23,13 +23,7 @@ use crate::{
     },
 };
 
-pub struct VmLocalProver<
-    SC: StarkGenericConfig,
-    VmConfig: VmGenericConfig<Val<SC>>,
-    E: StarkFriEngine<SC>,
-> where
-    Val<SC>: PrimeField32,
-{
+pub struct VmLocalProver<SC: StarkGenericConfig, VmConfig, E: StarkFriEngine<SC>> {
     pub pk: VmProvingKey<SC, VmConfig>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
     overridden_heights: Option<VmComplexTraceHeights>,

@@ -16,7 +16,7 @@ use axvm_circuit::{
             exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
             UsizeOpcode,
         },
-        new_vm::{SingleSegmentVmExecutor, VirtualMachine},
+        new_vm::{SingleSegmentVmExecutor, VirtualMachine, VmExecutor},
         VmComplexTraceHeights, VmGenericConfig,
     },
     prover::{
@@ -24,6 +24,7 @@ use axvm_circuit::{
         SingleSegmentVmProver,
     },
     system::program::trace::AxVmCommittedExe,
+    utils::next_power_of_two_or_zero,
 };
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
@@ -59,10 +60,10 @@ pub(super) fn compute_root_proof_heights(
     let air_heights: Vec<_> = res
         .air_heights
         .into_iter()
-        .map(|h| h.next_power_of_two())
+        .map(next_power_of_two_or_zero)
         .collect();
     let mut internal_heights = res.internal_heights;
-    internal_heights.round_to_next_power_of_two();
+    internal_heights.round_to_next_power_of_two_or_zero();
     (air_heights, internal_heights)
 }
 
@@ -169,17 +170,28 @@ where
     VmConfig::Executor: Chip<SC>,
     VmConfig::Periphery: Chip<SC>,
 {
-    // Enforce each AIR to have at least 1 row.
-    let overridden_heights = overridden_heights.unwrap_or_else(|| {
-        let chip_complex = app_vm_pk.vm_config.create_chip_complex().unwrap();
-        chip_complex.get_dummy_internal_trace_heights()
-    });
     let fri_params = app_vm_pk.fri_params;
+    let dummy_exe = dummy_app_committed_exe(fri_params);
+    // Enforce each AIR to have at least 1 row.
+    let overridden_heights = if let Some(overridden_heights) = overridden_heights {
+        overridden_heights
+    } else {
+        // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2 (forcing trace height 0 to 1)
+        let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
+        let results = executor
+            .execute_segments(dummy_exe.exe.clone(), vec![])
+            .unwrap();
+        // ASSUMPTION: the dummy exe has only 1 segment
+        assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
+        let mut internal_heights = results[0].chip_complex.get_internal_trace_heights();
+        internal_heights.round_to_next_power_of_two();
+        internal_heights
+    };
     // For the dummy proof, we must override the trace heights.
     let app_prover =
         VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
             app_vm_pk,
-            dummy_app_committed_exe(fri_params),
+            dummy_exe,
             Some(overridden_heights),
         );
     ContinuationVmProver::prove(&app_prover, vec![])
