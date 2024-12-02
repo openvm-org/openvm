@@ -33,4 +33,4 @@ jobs:
       - name: Run native extension crate tests
         working-directory: extensions/native/circuit
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel, mimalloc
+          cargo nextest run --cargo-profile=fast --features parallel, mimalloc --no-tests
