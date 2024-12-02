@@ -209,7 +209,7 @@ jobs:
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
           if [[ "${E2E_BENCH}" == "true" ]]; then
-            bash ./lib/recursion/trusted_setup_s3.sh
+            bash ./extensions/native/lib/recursion/trusted_setup_s3.sh
           fi
 
       ##########################################################################

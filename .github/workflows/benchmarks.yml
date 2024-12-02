@@ -12,7 +12,7 @@ on:
       - "circuits/**"
       - "vm/**"
       - "toolchain/**"
-      - "lib/recursion/**"
+      - "extensions/**"
       - "benchmarks/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
