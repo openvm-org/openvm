@@ -130,7 +130,7 @@ where
         self.leaf_committed_exe.as_ref().unwrap()
     }
 
-    pub fn generate_e2e_proof(&self, input: Vec<F>) -> Proof<OuterSC> {
+    pub fn generate_e2e_proof(&self, input: Vec<Vec<F>>) -> Proof<OuterSC> {
         assert!(self.agg_pk.is_some(), "Aggregation has not been configured");
         let app_proofs = self.generate_app_proof_impl(input);
         let leaf_proofs = self.generate_leaf_proof_impl(&app_proofs);
@@ -138,17 +138,17 @@ where
         self.generate_root_proof_impl(app_proofs, internal_proof)
     }
 
-    pub fn generate_app_proof(&self, input: Vec<F>) -> ContinuationVmProof<SC> {
+    pub fn generate_app_proof(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
         self.generate_app_proof_impl(input)
     }
 
-    pub fn generate_app_proof_without_continuations(&self, input: Vec<F>) -> Vec<Proof<SC>> {
+    pub fn generate_app_proof_without_continuations(&self, input: Vec<Vec<F>>) -> Vec<Proof<SC>> {
         self.generate_app_proof_impl(input).per_segment
     }
 
     pub fn generate_e2e_proof_with_metric_spans(
         &self,
-        input: Vec<F>,
+        input: Vec<Vec<F>>,
         program_name: &str,
     ) -> Proof<OuterSC> {
         assert!(self.agg_pk.is_some(), "Aggregation has not been configured");
@@ -168,7 +168,7 @@ where
 
     pub fn generate_app_proof_with_metric_spans(
         &self,
-        input: Vec<F>,
+        input: Vec<Vec<F>>,
         program_name: &str,
     ) -> ContinuationVmProof<SC> {
         let group_name = program_name.replace(" ", "_").to_lowercase();
@@ -178,16 +178,16 @@ where
         })
     }
 
-    fn generate_app_proof_impl(&self, input: Vec<F>) -> ContinuationVmProof<SC> {
+    fn generate_app_proof_impl(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
         #[cfg(feature = "bench-metrics")]
         {
             let mut vm_config = self.app_pk.app_vm_pk.vm_config.clone();
             vm_config.system_mut().collect_metrics = true;
             let vm = VmExecutor::new(vm_config);
-            vm.execute_segments(self.app_committed_exe.exe.clone(), vec![input.clone()])
+            vm.execute_segments(self.app_committed_exe.exe.clone(), input.clone())
                 .unwrap();
         }
-        ContinuationVmProver::prove(&self.app_prover, vec![input])
+        ContinuationVmProver::prove(&self.app_prover, input)
     }
 
     fn generate_leaf_proof_impl(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {

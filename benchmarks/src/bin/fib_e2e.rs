@@ -83,8 +83,10 @@ async fn main() -> Result<()> {
         .collect();
     run_with_metric_collection("OUTPUT_PATH", || {
         #[allow(unused_variables)]
-        let root_proof = prover
-            .generate_e2e_proof_with_metric_spans(app_input, "Fibonacci Continuation Program");
+        let root_proof = prover.generate_e2e_proof_with_metric_spans(
+            vec![app_input],
+            "Fibonacci Continuation Program",
+        );
         #[cfg(feature = "static-verifier")]
         let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
             .in_scope(|| {

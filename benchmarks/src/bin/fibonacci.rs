@@ -72,7 +72,7 @@ fn main() -> Result<()> {
                 )
                 .in_scope(|| {
                     let (program, input_stream) =
-                        build_verification_program(vdata, compiler_options.clone());
+                        build_verification_program(vdata, compiler_options);
                     let engine = BabyBearPoseidon2Engine::new(
                         FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
                     );
