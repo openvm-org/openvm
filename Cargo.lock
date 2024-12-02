@@ -608,6 +608,7 @@ dependencies = [
  "axvm-ecc-circuit",
  "axvm-ecc-transpiler",
  "axvm-keccak256-circuit",
+ "axvm-keccak256-guest",
  "axvm-keccak256-transpiler",
  "axvm-native-circuit",
  "axvm-native-compiler",
