@@ -23,6 +23,10 @@ impl<F: Field> AffinePoint<F> {
             y: Neg::neg(&self.y),
         }
     }
+
+    pub fn is_infinity(&self) -> bool {
+        self.x == F::ZERO && self.y == F::ZERO
+    }
 }
 
 impl<F> Neg for AffinePoint<F>

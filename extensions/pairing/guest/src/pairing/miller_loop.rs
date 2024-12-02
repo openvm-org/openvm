@@ -64,6 +64,24 @@ where
     ) -> Self::Fp12 {
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
+        let mut P = P.to_vec();
+        let mut Q = Q.to_vec();
+
+        // Remove any (P, Q) pairs in which P or Q is the point at infinity
+        let mut indices_to_remove: Vec<usize> = P
+            .iter()
+            .zip(Q.iter())
+            .enumerate()
+            .filter(|(_, (p, q))| p.is_infinity() || q.is_infinity())
+            .map(|(i, _)| i)
+            .collect();
+
+        // Remove from back to front to maintain correct indices
+        indices_to_remove.reverse();
+        for i in indices_to_remove {
+            P.remove(i);
+            Q.remove(i);
+        }
 
         let xy_fracs = P
             .iter()
@@ -77,7 +95,7 @@ where
 
         let mut Q_acc = Q.to_vec();
 
-        let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, Q, c.clone(), &xy_fracs);
+        let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, &Q, c.clone(), &xy_fracs);
         let mut f = f_out;
         Q_acc = Q_acc_out;
 
@@ -117,7 +135,7 @@ where
                 let (Q_out, lines_S_plus_Q, lines_S_plus_Q_plus_S): (Vec<_>, Vec<_>, Vec<_>) =
                     Q_acc
                         .iter()
-                        .zip(Q)
+                        .zip(&Q)
                         .map(|(Q_acc, q)| {
                             // OPT[jpw]: cache the neg q outside of the loop
                             let q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
@@ -146,7 +164,7 @@ where
             f = Self::evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), Q, c, &xy_fracs);
+        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), &Q, c, &xy_fracs);
         f = f_out;
 
         f
