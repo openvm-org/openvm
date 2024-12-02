@@ -5,7 +5,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../../toolchain/riscv/axvm" }
+axvm = { path = "../../../crates/toolchain/axvm" }
 
 [features]
 default = []

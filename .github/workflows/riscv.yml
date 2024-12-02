@@ -47,7 +47,7 @@ jobs:
           make
 
       - name: Run RISC-V test vector tests
-        working-directory: toolchain/tests
+        working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
           cargo nextest run --cargo-profile=fast --run-ignored only -- test_rv32im_riscv_vector_runtime
