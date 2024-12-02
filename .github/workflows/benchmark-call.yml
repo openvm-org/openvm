@@ -172,7 +172,7 @@ jobs:
             select(.run_params[] | (.root_log_blowup // 0) == $root_log_blowup) |
             select(.run_params[] | (.internal_log_blowup // 0) == $internal_log_blowup) |
             .e2e_bench
-          ' ../../ci/benchmark-config.json)
+          ' ../../../../ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
 
           if [[ "${E2E_BENCH}" == "true" ]]; then
