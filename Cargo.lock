@@ -1138,7 +1138,6 @@ name = "axvm-rv32im-guest"
 version = "0.1.0"
 dependencies = [
  "axvm-platform",
- "serde",
 ]
 
 [[package]]

@@ -8,8 +8,5 @@ description = "Guest extension for RISC-V 32IM"
 [dependencies]
 axvm-platform = { workspace = true }
 
-serde = { workspace = true, features = ["alloc"] }
-
 [features]
 default = []
-std = ["serde/std"]
