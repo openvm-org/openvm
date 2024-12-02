@@ -32,7 +32,7 @@ members = [
     "lib/ecc-execution",
     "lib/recursion",
     "axvm-sdk",
-#    "benchmarks",
+    "benchmarks",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
