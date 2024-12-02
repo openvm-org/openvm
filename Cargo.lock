@@ -603,6 +603,7 @@ dependencies = [
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-circuit",

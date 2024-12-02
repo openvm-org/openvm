@@ -15,6 +15,7 @@ use axvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
 };
+use axvm_algebra_transpiler::ModularTranspilerExtension;
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
@@ -116,6 +117,7 @@ fn main() -> Result<()> {
             .with_processor(Rc::new(Rv32MTranspilerExtension))
             .with_processor(Rc::new(Rv32IoTranspilerExtension))
             .with_processor(Rc::new(Keccak256TranspilerExtension))
+            .with_processor(Rc::new(ModularTranspilerExtension))
             .with_processor(Rc::new(EccTranspilerExtension)),
     );
     // TODO: update sw_setup macros and read it from elf.
