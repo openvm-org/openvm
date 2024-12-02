@@ -15,7 +15,7 @@ use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
 use crate::arch::{
-    new_vm::{VirtualMachine as NewVirtualMachine, VmExecutor as NewVmExecutor},
+    vm::{VirtualMachine, VmExecutor},
     VmGenericConfig, VmMemoryState,
 };
 
@@ -42,7 +42,7 @@ where
 {
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = NewVirtualMachine::new(engine, config);
+    let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();
@@ -68,7 +68,7 @@ where
 {
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = NewVirtualMachine::new(engine, config);
+    let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();
@@ -101,7 +101,7 @@ where
             // Run once with metrics collection enabled, which can improve runtime performance
             config.system_mut().collect_metrics = true;
             {
-                let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config.clone());
+                let executor = VmExecutor::<Val<SC>, VmConfig>::new(config.clone());
                 executor.execute(program.clone(), input_stream.clone()).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
@@ -110,7 +110,7 @@ where
         }
     }
 
-    let executor = NewVmExecutor::<Val<SC>, VmConfig>::new(config);
+    let executor = VmExecutor::<Val<SC>, VmConfig>::new(config);
 
     let mut result = executor
         .execute_and_generate(program, input_stream)

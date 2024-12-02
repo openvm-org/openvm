@@ -1,5 +1,5 @@
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::arch::{new_vm::VmExecutor, SystemConfig};
+use axvm_circuit::arch::{SystemConfig, VmExecutor};
 use axvm_instructions::program::Program;
 
 use crate::{Native, NativeConfig};

@@ -14,10 +14,9 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        ChipId, ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        SystemTraceHeights, VmChipComplex, VmComplexTraceHeights, VmGenericConfig,
-        VmInventoryError, VmInventoryTraceHeights,
+        ChipId, ExitCode, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemExecutor,
+        SystemPeriphery, SystemTraceHeights, VirtualMachine, VmChipComplex, VmComplexTraceHeights,
+        VmGenericConfig, VmInventoryError, VmInventoryTraceHeights,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
     system::{

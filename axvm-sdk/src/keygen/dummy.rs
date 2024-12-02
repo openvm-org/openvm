@@ -16,8 +16,8 @@ use axvm_circuit::{
             exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
             UsizeOpcode,
         },
-        new_vm::{SingleSegmentVmExecutor, VirtualMachine, VmExecutor},
-        VmComplexTraceHeights, VmGenericConfig,
+        SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmExecutor,
+        VmGenericConfig,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,

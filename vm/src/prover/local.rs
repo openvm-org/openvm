@@ -11,7 +11,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, new_vm::VirtualMachine, VmComplexTraceHeights,
+        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, VmComplexTraceHeights,
         VmGenericConfig,
     },
     prover::{

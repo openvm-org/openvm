@@ -8,8 +8,8 @@ use axvm_algebra_circuit::{
 use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use axvm_circuit::{
     arch::{
-        instructions::exe::AxVmExe, new_vm::VmExecutor, SystemConfig, SystemExecutor,
-        SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
+        instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        VmExecutor, VmGenericConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
 };

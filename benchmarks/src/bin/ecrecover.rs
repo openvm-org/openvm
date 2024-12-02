@@ -19,8 +19,8 @@ use axvm_algebra_transpiler::ModularTranspilerExtension;
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
-        instructions::exe::AxVmExe, ExecutorName, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmConfig, VmGenericConfig, VmInventoryError,
+        instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        VmGenericConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
 };

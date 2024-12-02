@@ -1,7 +1,7 @@
 use std::{fs::read_dir, path::PathBuf, rc::Rc};
 
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, new_vm::VmExecutor},
+    arch::{instructions::exe::AxVmExe, VmExecutor},
     utils::new_air_test_with_min_segments,
 };
 use axvm_rv32im_circuit::Rv32ImConfig;

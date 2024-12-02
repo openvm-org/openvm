@@ -10,9 +10,8 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher,
-        new_vm::{SingleSegmentVmExecutor, VmExecutor},
-        ExecutionError, SystemConfig, VmGenericConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
+        SystemConfig, VmExecutor, VmGenericConfig,
     },
     system::memory::tree::public_values::UserPublicValuesProof,
 };

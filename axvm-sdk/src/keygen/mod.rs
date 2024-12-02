@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_circuit::{
-    arch::{new_vm::VirtualMachine, VmGenericConfig},
+    arch::{VirtualMachine, VmGenericConfig},
     prover::types::VmProvingKey,
     system::program::trace::AxVmCommittedExe,
 };

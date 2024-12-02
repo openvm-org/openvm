@@ -1,4 +1,4 @@
-use axvm_circuit::arch::{new_vm::SingleSegmentVmExecutor, SystemConfig};
+use axvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
 use axvm_native_circuit::{execute_program, Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use p3_baby_bear::BabyBear;

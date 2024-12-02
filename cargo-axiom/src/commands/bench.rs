@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
 };
-use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm::VirtualMachine, VmGenericConfig};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmGenericConfig};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_rv32im_transpiler::{

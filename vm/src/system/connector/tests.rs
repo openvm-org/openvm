@@ -22,7 +22,7 @@ use p3_field::AbstractField;
 
 use super::VmConnectorPvs;
 use crate::{
-    arch::{SingleSegmentVmExecutor, VmConfig, CONNECTOR_AIR_ID},
+    arch::{SingleSegmentVmExecutor, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID},
     system::program::trace::AxVmCommittedExe,
 };
 
@@ -68,10 +68,11 @@ fn test_impl(
     exit_code: u32,
     f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
 ) {
-    let vm_config = VmConfig::default();
+    let vm_config = SystemConfig::default();
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let pk = vm_config.generate_pk(engine.keygen_builder());
+    let vm = VirtualMachine::new(engine, vm_config.clone());
+    let pk = vm.keygen();
 
     {
         let instructions = vec![Instruction::from_isize(
@@ -86,22 +87,24 @@ fn test_impl(
         let program = Program::from_instructions(&instructions);
         let committed_exe = Arc::new(AxVmCommittedExe::commit(
             program.into(),
-            engine.config.pcs(),
+            vm.engine.config.pcs(),
         ));
-        let vm = SingleSegmentVmExecutor::new(vm_config);
-        let mut proof_input = vm.execute_and_generate(committed_exe, vec![]).unwrap();
+        let single_vm = SingleSegmentVmExecutor::new(vm_config);
+        let mut proof_input = single_vm
+            .execute_and_generate(committed_exe, vec![])
+            .unwrap();
         let connector_air_input = proof_input
             .per_air
             .iter_mut()
             .find(|(air_id, _)| *air_id == CONNECTOR_AIR_ID);
         f(&mut connector_air_input.unwrap().1);
         if should_pass {
-            engine
+            vm.engine
                 .prove_then_verify(&pk, proof_input)
                 .expect("Verification failed");
         } else {
             disable_debug_builder();
-            assert!(engine.prove_then_verify(&pk, proof_input).is_err());
+            assert!(vm.engine.prove_then_verify(&pk, proof_input).is_err());
         }
     }
 }

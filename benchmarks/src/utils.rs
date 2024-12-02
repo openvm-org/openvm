@@ -9,11 +9,7 @@ use ax_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{
-    instructions::exe::AxVmExe,
-    new_vm::{VirtualMachine, VmExecutor},
-    VmGenericConfig,
-};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmExecutor, VmGenericConfig};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;

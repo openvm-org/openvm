@@ -7,7 +7,7 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::new_vm::SingleSegmentVmExecutor,
+    arch::SingleSegmentVmExecutor,
     prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
 };
 
