@@ -9,7 +9,7 @@ use ax_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmExecutor, VmGenericConfig};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig, VmExecutor};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
@@ -74,7 +74,7 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    VC: VmGenericConfig<Val<SC>>,
+    VC: VmConfig<Val<SC>>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {

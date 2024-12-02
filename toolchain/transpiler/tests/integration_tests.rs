@@ -13,10 +13,10 @@ use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension
 use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExecutor, VmGenericConfig,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExecutor,
         VmInventoryError,
     },
-    derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
 use axvm_ecc_constants::SECP256K1;
@@ -95,7 +95,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct Rv32ModularFp2Int256Config {
     #[system]
     pub system: SystemConfig,

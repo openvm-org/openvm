@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_circuit::{
-    arch::{VirtualMachine, VmGenericConfig},
+    arch::{VirtualMachine, VmConfig},
     prover::types::VmProvingKey,
     system::program::trace::AxVmCommittedExe,
 };
@@ -38,7 +38,7 @@ pub struct AppProvingKey<VC> {
     pub app_vm_pk: VmProvingKey<SC, VC>,
 }
 
-impl<VC: VmGenericConfig<F>> AppProvingKey<VC>
+impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,

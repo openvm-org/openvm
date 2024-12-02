@@ -187,9 +187,9 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-// VmGenericConfig derive macro
+// VmConfig derive macro
 
-#[proc_macro_derive(VmGenericConfig, attributes(system, extension))]
+#[proc_macro_derive(VmConfig, attributes(system, extension))]
 pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
     let name = &ast.ident;
@@ -320,7 +320,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
                     #(#periphery_enum_fields)*
                 }
 
-                impl<F: PrimeField32> VmGenericConfig<F> for #name {
+                impl<F: PrimeField32> VmConfig<F> for #name {
                     type Executor = #executor_type<F>;
                     type Periphery = #periphery_type<F>;
 

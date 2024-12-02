@@ -5,7 +5,7 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, VmGenericConfig},
+    arch::{instructions::exe::AxVmExe, VmConfig},
     system::program::trace::AxVmCommittedExe,
 };
 
@@ -16,7 +16,7 @@ use crate::{
     F, SC,
 };
 
-pub fn commit_app_exe<VC: VmGenericConfig<F>>(
+pub fn commit_app_exe<VC: VmConfig<F>>(
     app_config: AppConfig<VC>,
     app_exe: impl Into<AxVmExe<F>>,
 ) -> Arc<AxVmCommittedExe<SC>> {
@@ -26,7 +26,7 @@ pub fn commit_app_exe<VC: VmGenericConfig<F>>(
     Arc::new(AxVmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
 
-pub fn generate_leaf_committed_exe<VC: VmGenericConfig<F>>(
+pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
     agg_config: AggConfig,
     app_pk: &AppProvingKey<VC>,
 ) -> Arc<AxVmCommittedExe<SC>> {

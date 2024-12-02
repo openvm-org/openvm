@@ -4,12 +4,11 @@ use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmExtension, VmGenericConfig, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_instructions::*;
 use axvm_rv32im_circuit::BranchEqualCoreChip;
 use branch_native_adapter::BranchNativeAdapterChip;
@@ -23,7 +22,7 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, phantom::*, *};
 
-#[derive(Clone, Debug, Serialize, Deserialize, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
     #[system]
     pub system: SystemConfig,

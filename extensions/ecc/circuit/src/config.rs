@@ -1,16 +1,16 @@
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use axvm_algebra_circuit::*;
 use axvm_circuit::arch::{
-    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
+    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 use p3_field::PrimeField32;
 
 use super::*;
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct Rv32WeierstrassConfig {
     #[system]
     pub system: SystemConfig,

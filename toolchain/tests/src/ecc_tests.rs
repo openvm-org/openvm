@@ -9,9 +9,9 @@ use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension
 use axvm_circuit::{
     arch::{
         instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
-        VmExecutor, VmGenericConfig, VmInventoryError,
+        VmConfig, VmExecutor, VmInventoryError,
     },
-    derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
 use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
@@ -118,7 +118,7 @@ fn test_ec_runtime() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct Rv32ModularKeccak256Config {
     #[system]
     pub system: SystemConfig,

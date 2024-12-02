@@ -16,8 +16,7 @@ use axvm_circuit::{
             exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
             UsizeOpcode,
         },
-        SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmExecutor,
-        VmGenericConfig,
+        SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
@@ -97,7 +96,7 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
 }
 
 #[allow(dead_code)]
-pub fn dummy_leaf_proof<VC: VmGenericConfig<F>>(
+pub fn dummy_leaf_proof<VC: VmConfig<F>>(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
     app_vm_pk: &VmProvingKey<SC, VC>,
     overridden_heights: Option<VmComplexTraceHeights>,
@@ -120,7 +119,7 @@ pub(super) fn dummy_leaf_proof_riscv_app_vm(
     dummy_leaf_proof_impl(leaf_vm_pk, &app_vm_pk, &app_proof)
 }
 
-fn dummy_leaf_proof_impl<VC: VmGenericConfig<F>>(
+fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
     app_vm_pk: &VmProvingKey<SC, VC>,
     app_proof: &ContinuationVmProof<SC>,
@@ -162,7 +161,7 @@ fn dummy_riscv_app_vm_pk(
     }
 }
 
-fn dummy_app_proof_impl<VC: VmGenericConfig<F>>(
+fn dummy_app_proof_impl<VC: VmConfig<F>>(
     app_vm_pk: VmProvingKey<SC, VC>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>

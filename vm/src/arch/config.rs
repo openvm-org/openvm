@@ -32,7 +32,7 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmGenericConfig<F: PrimeField32>: Clone {
+pub trait VmConfig<F: PrimeField32>: Clone {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
@@ -191,7 +191,7 @@ impl SystemTraceHeights {
     }
 }
 
-impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
+impl<F: PrimeField32> VmConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
     type Periphery = SystemPeriphery<F>;
 

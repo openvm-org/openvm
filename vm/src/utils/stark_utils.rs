@@ -16,12 +16,12 @@ use p3_field::PrimeField32;
 
 use crate::arch::{
     vm::{VirtualMachine, VmExecutor},
-    VmGenericConfig, VmMemoryState,
+    VmConfig, VmMemoryState,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<AxVmExe<BabyBear>>)
 where
-    VC: VmGenericConfig<BabyBear>,
+    VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
@@ -36,7 +36,7 @@ pub fn air_test_with_min_segments<VC>(
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
 where
-    VC: VmGenericConfig<BabyBear>,
+    VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
@@ -62,7 +62,7 @@ pub fn new_air_test_with_min_segments<VC>(
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
 where
-    VC: VmGenericConfig<BabyBear>,
+    VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
@@ -92,7 +92,7 @@ pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig, VC>(
 ) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
-    VC: VmGenericConfig<Val<SC>> + Clone,
+    VC: VmConfig<Val<SC>> + Clone,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
@@ -143,7 +143,7 @@ pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, 
 ) -> ExecuteAndProveResult<SC>
 where
     Val<SC>: PrimeField32,
-    VC: VmGenericConfig<Val<SC>> + Clone,
+    VC: VmConfig<Val<SC>> + Clone,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {

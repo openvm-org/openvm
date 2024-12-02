@@ -13,9 +13,7 @@ use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
 use thiserror::Error;
 
-use super::{
-    ExecutionError, VmComplexTraceHeights, VmGenericConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-};
+use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
     arch::segment::ExecutionSegment,
     system::{
@@ -65,7 +63,7 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
-    VC: VmGenericConfig<F>,
+    VC: VmConfig<F>,
 {
     /// Create a new VM executor with a given config.
     ///
@@ -266,7 +264,7 @@ pub struct SingleSegmentVmExecutionResult<F> {
 impl<F, VC> SingleSegmentVmExecutor<F, VC>
 where
     F: PrimeField32,
-    VC: VmGenericConfig<F>,
+    VC: VmConfig<F>,
 {
     pub fn new(config: VC) -> Self {
         Self::new_with_overridden_trace_heights(config, None)
@@ -386,7 +384,7 @@ where
     SC: StarkGenericConfig,
     E: StarkEngine<SC>,
     Domain<SC>: PolynomialSpace<Val = F>,
-    VC: VmGenericConfig<F>,
+    VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {

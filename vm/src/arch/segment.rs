@@ -11,8 +11,7 @@ use backtrace::Backtrace;
 use p3_field::PrimeField32;
 
 use super::{
-    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmGenericConfig,
+    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -31,7 +30,7 @@ const SEGMENT_CHECK_INTERVAL: usize = 100;
 pub struct ExecutionSegment<F, VC>
 where
     F: PrimeField32,
-    VC: VmGenericConfig<F>,
+    VC: VmConfig<F>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
 
@@ -54,7 +53,7 @@ pub struct ExecutionSegmentState {
     pub is_terminated: bool,
 }
 
-impl<F: PrimeField32, VC: VmGenericConfig<F>> ExecutionSegment<F, VC> {
+impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
         config: &VC,

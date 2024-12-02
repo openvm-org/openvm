@@ -3,12 +3,12 @@ use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
         VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_instructions::*;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
@@ -19,7 +19,7 @@ use strum::IntoEnumIterator;
 
 use crate::*;
 
-#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new)]
 pub struct Keccak256Rv32Config {
     #[system]
     pub system: SystemConfig,

@@ -11,8 +11,7 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, VmComplexTraceHeights,
-        VmGenericConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     prover::{
         types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
@@ -30,8 +29,7 @@ pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig, VC: VmGenericConfig<Val<SC>>, E: StarkFriEngine<SC>>
-    VmLocalProver<SC, VC, E>
+impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
 {
@@ -62,8 +60,8 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, VC: VmGenericConfig<Val<SC>>, E: StarkFriEngine<SC>>
-    ContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
+impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
+    for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
     VC::Executor: Chip<SC>,
@@ -95,7 +93,7 @@ where
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, VC: VmGenericConfig<Val<SC>>, E: StarkFriEngine<SC>>
+impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
     AsyncContinuationVmProver<SC> for VmLocalProver<SC, VC, E>
 where
     VmLocalProver<SC, VC, E>: Send + Sync,
@@ -111,8 +109,8 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, VC: VmGenericConfig<Val<SC>>, E: StarkFriEngine<SC>>
-    SingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
+impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> SingleSegmentVmProver<SC>
+    for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
     VC::Executor: Chip<SC>,
@@ -131,7 +129,7 @@ where
 }
 
 #[async_trait]
-impl<SC: StarkGenericConfig, VC: VmGenericConfig<Val<SC>>, E: StarkFriEngine<SC>>
+impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
     AsyncSingleSegmentVmProver<SC> for VmLocalProver<SC, VC, E>
 where
     VmLocalProver<SC, VC, E>: Send + Sync,

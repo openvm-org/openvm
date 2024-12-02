@@ -8,7 +8,7 @@ use ax_stark_sdk::{
 #[cfg(feature = "bench-metrics")]
 use axvm_circuit::arch::new_vm::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
-    arch::VmGenericConfig,
+    arch::VmConfig,
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
@@ -47,7 +47,7 @@ pub struct E2EStarkProver<VC> {
     root_prover: RootVerifierLocalProver,
 }
 
-impl<VC: VmGenericConfig<F>> E2EStarkProver<VC>
+impl<VC: VmConfig<F>> E2EStarkProver<VC>
 where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,

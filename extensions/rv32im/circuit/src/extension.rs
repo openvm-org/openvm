@@ -8,12 +8,12 @@ use ax_circuit_primitives::{
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmExtension, VmGenericConfig,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
         VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_instructions::*;
 use derive_more::derive::From;
 use program::DEFAULT_PC_STEP;
@@ -22,7 +22,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 /// Config for a VM with base extension and IO extension
-#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new)]
 pub struct Rv32IConfig {
     #[system]
     pub system: SystemConfig,
@@ -33,7 +33,7 @@ pub struct Rv32IConfig {
 }
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new)]
 pub struct Rv32ImConfig {
     #[system]
     pub system: SystemConfig,
