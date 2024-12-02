@@ -12,3 +12,4 @@ p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+axvm-algebra-guest = { workspace = true }

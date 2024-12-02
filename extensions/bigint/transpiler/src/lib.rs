@@ -1,3 +1,4 @@
+use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
     BranchEqualOpcode, LessThanOpcode, MulOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
@@ -6,33 +7,9 @@ use axvm_instructions::{
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, RType};
-use strum_macros::FromRepr;
 
 #[derive(Default)]
 pub struct Int256TranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x0b;
-pub(crate) const INT256_FUNCT3: u8 = 0b101;
-pub(crate) const BEQ256_FUNCT3: u8 = 0b110;
-
-// TODO: this should be moved to `guest` crate
-/// funct7 options for 256-bit integer instructions.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum Int256Funct7 {
-    Add = 0,
-    Sub,
-    Xor,
-    Or,
-    And,
-    Sll,
-    Srl,
-    Sra,
-    Slt,
-    Sltu,
-    Mul,
-}
 
 impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {

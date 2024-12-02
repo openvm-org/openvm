@@ -585,9 +585,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-platform",
+ "num-bigint-dig",
+ "num-traits",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-algebra-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-algebra-guest",
  "axvm-instructions",
  "axvm-transpiler",
  "p3-field",
@@ -677,18 +690,18 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "serde",
- "tiny-keccak",
+ "strum_macros",
 ]
 
 [[package]]
 name = "axvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-bigint-guest",
  "axvm-instructions",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
- "strum_macros",
 ]
 
 [[package]]
@@ -845,15 +858,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-ecc-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-platform",
+ "num-bigint-dig",
+ "num-traits",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-ecc-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
  "strum",
- "strum_macros",
 ]
 
 [[package]]
@@ -929,6 +954,7 @@ name = "axvm-keccak256-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-keccak256-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
@@ -1060,15 +1086,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-platform",
+ "num-bigint-dig",
+ "num-traits",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
 name = "axvm-pairing-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-pairing-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
  "strum",
- "strum_macros",
 ]
 
 [[package]]
@@ -1187,6 +1225,7 @@ name = "axvm-rv32im-guest"
 version = "0.1.0"
 dependencies = [
  "axvm-platform",
+ "strum",
 ]
 
 [[package]]
@@ -1194,6 +1233,7 @@ name = "axvm-rv32im-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-rv32im-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",

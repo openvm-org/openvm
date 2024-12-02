@@ -4,8 +4,11 @@ use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
     Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom, SystemOpcode, UsizeOpcode,
 };
+use axvm_rv32im_guest::{
+    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
+    RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+};
 use axvm_transpiler::{
-    axvm_platform::constants::PhantomImm,
     util::{nop, unimp},
     TranspilerExtension,
 };
@@ -26,18 +29,6 @@ pub struct Rv32MTranspilerExtension;
 
 #[derive(Default)]
 pub struct Rv32IoTranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const SYSTEM_OPCODE: u8 = 0x0b;
-pub(crate) const CSR_OPCODE: u8 = 0b1110011;
-pub(crate) const RV32_ALU_OPCODE: u8 = 0b0110011;
-pub(crate) const RV32M_FUNCT7: u8 = 0x01;
-
-pub(crate) const TERMINATE_FUNCT3: u8 = 0b000;
-pub(crate) const HINT_STORE_W_FUNCT3: u8 = 0b001;
-pub(crate) const REVEAL_FUNCT3: u8 = 0b010;
-pub(crate) const PHANTOM_FUNCT3: u8 = 0b011;
-pub(crate) const CSRRW_FUNCT3: u8 = 0b001;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {

@@ -11,3 +11,4 @@ axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 tracing = { workspace = true }
+axvm-rv32im-guest = { workspace = true }

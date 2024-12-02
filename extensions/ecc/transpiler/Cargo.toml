@@ -11,4 +11,4 @@ axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
-strum_macros = { workspace = true }
+axvm-ecc-guest = { workspace = true }

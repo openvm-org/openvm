@@ -10,4 +10,4 @@ axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 rrs-lib = { workspace = true }
-strum_macros = { workspace = true }
+axvm-bigint-guest = { workspace = true }

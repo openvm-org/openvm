@@ -1,9 +1,9 @@
 [package]
-name = "axvm-bigint-guest"
+name = "axvm-algebra-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Guest extension for Int256"
+description = "Guest extension for modular arithmetic"
 
 [dependencies]
 axvm = { workspace = true }

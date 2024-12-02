@@ -1,3 +1,8 @@
+use axvm_algebra_guest::{
+    ComplexExtFieldBaseFunct7,
+    ModArithBaseFunct7::{self},
+    COMPLEX_EXT_FIELD_FUNCT3, MODULAR_ARITHMETIC_FUNCT3, OPCODE,
+};
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Fp2Opcode,
     Rv32ModularArithmeticOpcode, UsizeOpcode,
@@ -6,48 +11,12 @@ use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
 use strum::EnumCount;
-use strum_macros::FromRepr;
 
 #[derive(Default)]
 pub struct ModularTranspilerExtension;
 
 #[derive(Default)]
 pub struct Fp2TranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x2b;
-pub(crate) const MODULAR_ARITHMETIC_FUNCT3: u8 = 0b000;
-pub(crate) const COMPLEX_EXT_FIELD_FUNCT3: u8 = 0b010;
-
-// TODO: this should be moved to `guest` crate
-pub const MODULAR_ARITHMETIC_MAX_KINDS: u8 = 8;
-
-/// Modular arithmetic is configurable.
-/// The funct7 field equals `mod_idx * MODULAR_ARITHMETIC_MAX_KINDS + base_funct7`.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum ModArithBaseFunct7 {
-    AddMod = 0,
-    SubMod,
-    MulMod,
-    DivMod,
-    IsEqMod,
-    SetupMod,
-}
-
-pub const COMPLEX_EXT_FIELD_MAX_KINDS: u8 = 8;
-
-/// Complex extension field is configurable.
-/// The funct7 field equals `fp2_idx * COMPLEX_EXT_FIELD_MAX_KINDS + base_funct7`.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum ComplexExtFieldBaseFunct7 {
-    Add = 0,
-    Sub,
-    Mul,
-    Div,
-    Setup,
-}
 
 impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
@@ -67,9 +36,15 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
 
         let instruction = {
             let dec_insn = RType::new(instruction_u32);
-            let base_funct7 = (dec_insn.funct7 as u8) % MODULAR_ARITHMETIC_MAX_KINDS;
-            assert!(Rv32ModularArithmeticOpcode::COUNT <= MODULAR_ARITHMETIC_MAX_KINDS as usize);
-            let mod_idx_shift = ((dec_insn.funct7 as u8) / MODULAR_ARITHMETIC_MAX_KINDS) as usize
+            let base_funct7 =
+                (dec_insn.funct7 as u8) % ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS;
+            assert!(
+                Rv32ModularArithmeticOpcode::COUNT
+                    <= ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize
+            );
+            let mod_idx_shift = ((dec_insn.funct7 as u8)
+                / ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS)
+                as usize
                 * Rv32ModularArithmeticOpcode::COUNT;
             if base_funct7 == ModArithBaseFunct7::SetupMod as u8 {
                 let local_opcode = match dec_insn.rs2 {
@@ -137,11 +112,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
         }
 
         let instruction = {
-            assert!(Fp2Opcode::COUNT <= COMPLEX_EXT_FIELD_MAX_KINDS as usize);
+            assert!(
+                Fp2Opcode::COUNT <= ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize
+            );
             let dec_insn = RType::new(instruction_u32);
-            let base_funct7 = (dec_insn.funct7 as u8) % COMPLEX_EXT_FIELD_MAX_KINDS;
-            let complex_idx_shift =
-                ((dec_insn.funct7 as u8) / COMPLEX_EXT_FIELD_MAX_KINDS) as usize * Fp2Opcode::COUNT;
+            let base_funct7 =
+                (dec_insn.funct7 as u8) % ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS;
+            let complex_idx_shift = ((dec_insn.funct7 as u8)
+                / ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS)
+                as usize
+                * Fp2Opcode::COUNT;
 
             if base_funct7 == ComplexExtFieldBaseFunct7::Setup as u8 {
                 let local_opcode = match dec_insn.rs2 {

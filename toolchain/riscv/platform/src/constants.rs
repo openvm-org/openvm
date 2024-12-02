@@ -8,52 +8,52 @@ pub const CUSTOM_1: u8 = 0x2b;
 #[repr(u8)]
 pub enum Custom0Funct3 {
     Terminate = 0,
-    HintStoreW,
-    Reveal,
-    Phantom,
-    Keccak256 = 0b100,
-    Int256 = 0b101,
-    Beq256,
+    HintStoreW = 1,
+    Reveal = 2,
+    Phantom = 3,
+    // Keccak256 = 4,
+    // Int256 = 5,
+    // Beq256 = 6,
 }
 
 /// Different funct3 for custom RISC-V instructions using the [CUSTOM_1] 7-bit opcode prefix.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u8)]
 pub enum Custom1Funct3 {
-    /// Modular arithmetic
+    // /// Modular arithmetic
     ModularArithmetic = 0,
     /// Short Weierstrass elliptic curve arithmetic
-    ShortWeierstrass,
+    ShortWeierstrass = 1,
     /// Arithmetic for quadratic extension field of a prime field, with irreducible polynomial `X^2 + 1`.
-    ComplexExtField,
+    ComplexExtField = 2,
     /// Instructions for optimal Ate pairing
-    Pairing,
+    Pairing = 3,
 }
 
-/// imm options for system phantom instructions
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u16)]
-pub enum PhantomImm {
-    HintInput = 0,
-    PrintStr,
-}
+// /// imm options for system phantom instructions
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+// #[repr(u16)]
+// pub enum PhantomImm {
+//     HintInput = 0,
+//     PrintStr,
+// }
 
-/// funct7 options for 256-bit integer instructions.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum Int256Funct7 {
-    Add = 0,
-    Sub,
-    Xor,
-    Or,
-    And,
-    Sll,
-    Srl,
-    Sra,
-    Slt,
-    Sltu,
-    Mul,
-}
+// /// funct7 options for 256-bit integer instructions.
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+// #[repr(u8)]
+// pub enum Int256Funct7 {
+//     Add = 0,
+//     Sub,
+//     Xor,
+//     Or,
+//     And,
+//     Sll,
+//     Srl,
+//     Sra,
+//     Slt,
+//     Sltu,
+//     Mul,
+// }
 
 pub const MODULAR_ARITHMETIC_MAX_KINDS: u8 = 8;
 
