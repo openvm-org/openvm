@@ -20,7 +20,7 @@ pub fn main() {
     let mut res = Secp256k1Coord::from_u32(1);
     let inv = res.clone().div_unsafe(&a);
 
-    // assert_ne!(res, Secp256k1Coord::from_u32(0));
+    assert_ne!(res, Secp256k1Coord::from_u32(0));
 
     for i in 0..32 {
         for j in 0..8 {
