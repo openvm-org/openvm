@@ -17,6 +17,7 @@ elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true }
 hex-literal = { workspace = true }
 axvm-algebra-guest = { workspace = true }
+axvm-algebra-moduli-setup = { workspace = true }
 axvm-ecc-guest = { workspace = true }
 
 # Used for `halo2curves` feature

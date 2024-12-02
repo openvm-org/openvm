@@ -13,8 +13,8 @@ axvm-platform = { workspace = true, features = [
     "export-getrandom",
 ] }
 axvm-rv32im-guest = { workspace = true }    
-axvm-moduli-setup = { workspace = true }
-axvm-sw-setup = { workspace = true }
+axvm-algebra-moduli-setup = { workspace = true }
+axvm-ecc-sw-setup = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
 

@@ -531,10 +531,10 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
  "axvm-rv32im-guest",
- "axvm-sw-setup",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
@@ -583,6 +583,15 @@ dependencies = [
  "num-bigint-dig",
  "serde",
  "serde-big-array",
+]
+
+[[package]]
+name = "axvm-algebra-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -829,6 +838,8 @@ version = "0.1.0"
 dependencies = [
  "axvm",
  "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
  "ecdsa",
  "elliptic-curve",
@@ -843,6 +854,15 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "strum_macros",
+]
+
+[[package]]
+name = "axvm-ecc-sw-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -939,15 +959,6 @@ dependencies = [
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-moduli-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
  "syn 2.0.90",
 ]
 
@@ -1108,6 +1119,7 @@ version = "0.1.0"
 dependencies = [
  "axvm",
  "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
  "axvm-ecc-guest",
  "axvm-platform",
  "ecdsa",
@@ -1141,7 +1153,7 @@ dependencies = [
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
+ "axvm-algebra-moduli-setup",
  "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
@@ -1244,15 +1256,6 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "tracing",
-]
-
-[[package]]
-name = "axvm-sw-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
 ]
 
 [[package]]

@@ -29,10 +29,6 @@ pub mod utils;
 #[cfg(not(target_os = "zkvm"))]
 pub mod host;
 
-// TODO remove these from this crate
-pub use axvm_moduli_setup::*;
-pub use axvm_sw_setup::*;
-
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
 #[cfg(target_os = "zkvm")]
