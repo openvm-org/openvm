@@ -7,7 +7,7 @@ use axvm_algebra_guest::{field::FieldExtension, IntMod};
 axvm::entry!(main);
 
 mod bn254 {
-    use axvm_ecc_guest::bn254::Fp12;
+    use axvm_pairing_guest::bn254::Fp12;
 
     use super::*;
 
@@ -34,7 +34,7 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use axvm_ecc_guest::bls12_381::Fp12;
+    use axvm_pairing_guest::bls12_381::Fp12;
 
     use super::*;
 

@@ -4,7 +4,8 @@
 extern crate alloc;
 
 use axvm::io::read_vec;
-use axvm_ecc_guest::{pairing::PairingCheck, AffinePoint};
+use axvm_ecc_guest::AffinePoint;
+use axvm_pairing_guest::pairing::PairingCheck;
 
 axvm::entry!(main);
 

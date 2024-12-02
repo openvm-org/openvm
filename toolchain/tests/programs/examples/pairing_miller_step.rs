@@ -3,7 +3,8 @@
 
 use axvm::io::read_vec;
 use axvm_algebra_guest::IntMod;
-use axvm_ecc_guest::{pairing::MillerStep, AffinePoint};
+use axvm_ecc_guest::AffinePoint;
+use axvm_pairing_guest::pairing::MillerStep;
 
 axvm::entry!(main);
 

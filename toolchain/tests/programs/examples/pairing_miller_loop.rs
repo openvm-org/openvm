@@ -5,12 +5,13 @@ extern crate alloc;
 
 use axvm::io::read_vec;
 use axvm_algebra_guest::{field::FieldExtension, IntMod};
-use axvm_ecc_guest::{pairing::MultiMillerLoop, AffinePoint};
+use axvm_ecc_guest::AffinePoint;
+use axvm_pairing_guest::pairing::MultiMillerLoop;
 
 axvm::entry!(main);
 
 mod bn254 {
-    use axvm_ecc_guest::bn254::{Bn254, Fp, Fp2};
+    use axvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
 
@@ -42,7 +43,7 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use axvm_ecc_guest::bls12_381::{Bls12_381, Fp, Fp2};
+    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
 
