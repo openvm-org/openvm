@@ -244,13 +244,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
                 fn identity() -> Self {
                     Self {
-                        x: <#intmod_type as IntMod>::ZERO,
-                        y: <#intmod_type as IntMod>::ZERO,
+                        x: <#intmod_type as axvm_algebra::IntMod>::ZERO,
+                        y: <#intmod_type as axvm_algebra::IntMod>::ZERO,
                     }
                 }
 
                 fn is_identity(&self) -> bool {
-                    self.x == <#intmod_type as IntMod>::ZERO && self.y == <#intmod_type as IntMod>::ZERO
+                    self.x == <#intmod_type as axvm_algebra::IntMod>::ZERO && self.y == <#intmod_type as axvm_algebra::IntMod>::ZERO
                 }
 
                 fn double(&self) -> Self {
@@ -294,7 +294,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     } else if p2.is_identity() {
                         self.clone()
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as axvm_algebra::IntMod>::ZERO {
                             #struct_name::identity()
                         } else {
                             #struct_name::double_impl(self)
@@ -312,7 +312,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     } else if p2.is_identity() {
                         // do nothing
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as axvm_algebra::IntMod>::ZERO {
                             *self = Self::identity();
                         } else {
                             Self::double_assign_impl(self);
@@ -462,8 +462,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
-                    let modulus_bytes = <#item as IntMod>::MODULUS;
-                    let one = <#item as IntMod>::ONE.as_le_bytes();
+                    let modulus_bytes = <#item as axvm_algebra::IntMod>::MODULUS;
+                    let mut one = [0u8; <#item as axvm_algebra::IntMod>::NUM_BYTES];
+                    one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
