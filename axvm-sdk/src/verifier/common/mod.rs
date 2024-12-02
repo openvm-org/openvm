@@ -6,7 +6,7 @@ use axvm_circuit::{
     system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
 };
 use axvm_native_compiler::{ir::Config, prelude::*};
-use axvm_recursion::{digest::DigestVariable, vars::StarkProofVariable};
+use axvm_native_recursion::{digest::DigestVariable, vars::StarkProofVariable};
 
 use crate::verifier::internal::types::InternalVmVerifierPvs;
 

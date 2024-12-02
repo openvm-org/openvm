@@ -1,6 +1,6 @@
 use ax_stark_sdk::ax_stark_backend::{config::Val, prover::types::Proof};
 use axvm_native_compiler::prelude::*;
-use axvm_recursion::{hints::Hintable, vars::StarkProofVariable};
+use axvm_native_recursion::{hints::Hintable, vars::StarkProofVariable};
 
 use crate::{verifier::root::types::RootVmVerifierInput, C, SC};
 

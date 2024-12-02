@@ -2,7 +2,7 @@ use std::array;
 
 use ax_stark_sdk::ax_stark_backend::prover::types::Proof;
 use axvm_native_compiler::{ir::DIGEST_SIZE, prelude::*};
-use axvm_recursion::{hints::Hintable, vars::StarkProofVariable};
+use axvm_native_recursion::{hints::Hintable, vars::StarkProofVariable};
 
 use crate::{
     verifier::{internal::types::InternalVmVerifierInput, utils::write_field_slice},

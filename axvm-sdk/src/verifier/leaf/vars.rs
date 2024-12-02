@@ -6,7 +6,7 @@ use ax_stark_sdk::ax_stark_backend::{
     prover::types::Proof,
 };
 use axvm_native_compiler::prelude::*;
-use axvm_recursion::hints::Hintable;
+use axvm_native_recursion::hints::Hintable;
 
 use crate::{
     verifier::{

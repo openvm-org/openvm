@@ -10,7 +10,7 @@ repository.workspace = true
 axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
-axvm-recursion = { workspace = true }
+axvm-native-recursion = { workspace = true }
 ax-poseidon2-air = { workspace = true }
 ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
@@ -26,7 +26,7 @@ tracing.workspace = true
 
 [features]
 default = ["parallel"]
-bench-metrics = ["axvm-recursion/bench-metrics"]
-static-verifier = ["axvm-recursion/static-verifier"]
+bench-metrics = ["axvm-native-recursion/bench-metrics"]
+static-verifier = ["axvm-native-recursion/static-verifier"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]

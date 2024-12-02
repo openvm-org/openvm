@@ -13,7 +13,7 @@ use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };

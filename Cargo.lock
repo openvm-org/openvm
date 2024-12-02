@@ -615,7 +615,7 @@ dependencies = [
  "axvm-keccak256-transpiler",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",
  "axvm-sdk",
@@ -1022,11 +1022,52 @@ name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "p3-field",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-native-recursion"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-circuit",
+ "axvm-native-compiler",
+ "axvm-native-compiler-derive",
+ "axvm-native-recursion",
+ "cfg-if",
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint-dig",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-util",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "tracing",
+ "zkhash",
 ]
 
 [[package]]
@@ -1112,47 +1153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-recursion"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-native-compiler-derive",
- "axvm-recursion",
- "cfg-if",
- "ff 0.13.0",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint-dig",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "axvm-rv32-adapters"
 version = "0.1.0"
 dependencies = [
@@ -1235,7 +1235,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "derivative",
  "metrics",

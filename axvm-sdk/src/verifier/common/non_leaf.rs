@@ -3,7 +3,7 @@ use std::{array, borrow::Borrow};
 use ax_stark_sdk::ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::arch::PUBLIC_VALUES_AIR_ID;
 use axvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, Usize, DIGEST_SIZE};
-use axvm_recursion::{
+use axvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, stark::StarkVerifier,
     types::MultiStarkVerificationAdvice, vars::StarkProofVariable,
 };

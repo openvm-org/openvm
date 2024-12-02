@@ -4,7 +4,7 @@ use ax_stark_sdk::config::{
     baby_bear_poseidon2::BabyBearPoseidon2Config,
     baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
 };
-use axvm_recursion::types::InnerConfig;
+use axvm_native_recursion::types::InnerConfig;
 use p3_baby_bear::BabyBear;
 
 pub mod commit;

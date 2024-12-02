@@ -27,7 +27,7 @@ use axvm_circuit::{
 };
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
-use axvm_recursion::hints::Hintable;
+use axvm_native_recursion::hints::Hintable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 
 use crate::{

@@ -6,7 +6,7 @@ use ax_stark_sdk::{
 use axvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecutor};
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
-use axvm_recursion::testing_utils::inner::run_recursive_test;
+use axvm_native_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
 use p3_field::{extension::BinomialExtensionField, AbstractField};
@@ -71,7 +71,7 @@ fn test_fibonacci_program_verify() {
 #[test]
 #[ignore = "slow"]
 fn test_fibonacci_program_halo2_verify() {
-    use axvm_recursion::halo2::testing_utils::run_static_verifier_test;
+    use axvm_native_recursion::halo2::testing_utils::run_static_verifier_test;
 
     let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
     run_static_verifier_test(

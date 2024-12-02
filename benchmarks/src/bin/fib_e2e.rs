@@ -9,7 +9,7 @@ use axvm_native_compiler::conversion::CompilerOptions;
 #[cfg(feature = "static-verifier")]
 use axvm_native_compiler::prelude::Witness;
 #[cfg(feature = "static-verifier")]
-use axvm_recursion::witness::Witnessable;
+use axvm_native_recursion::witness::Witnessable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,

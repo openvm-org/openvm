@@ -4,7 +4,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::arch::instructions::program::Program;
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_recursion::{
+use axvm_native_recursion::{
     fri::TwoAdicFriPcsVariable, hints::Hintable, types::new_from_inner_multi_vk,
     utils::const_fri_config,
 };

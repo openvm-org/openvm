@@ -17,7 +17,7 @@ use axvm_circuit::{
 };
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_recursion::types::InnerConfig;
+use axvm_native_recursion::types::InnerConfig;
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AppConfig},
@@ -288,7 +288,7 @@ mod static_verifier {
         config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     };
     use axvm_native_compiler::prelude::Witness;
-    use axvm_recursion::witness::Witnessable;
+    use axvm_native_recursion::witness::Witnessable;
     use axvm_sdk::keygen::RootVerifierProvingKey;
 
     use crate::SC;

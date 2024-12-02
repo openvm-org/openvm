@@ -9,7 +9,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{arch::PROGRAM_CACHED_TRACE_INDEX, prover::SingleSegmentVmProver};
 use axvm_native_compiler::prelude::*;
-use axvm_recursion::{
+use axvm_native_recursion::{
     challenger::multi_field32::MultiField32ChallengerVariable,
     config::outer::{new_from_outer_multi_vk, OuterConfig},
     digest::DigestVariable,

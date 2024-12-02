@@ -10,7 +10,7 @@ use axvm_circuit::{
     system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_recursion::{
+use axvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, hints::Hintable,
     stark::StarkVerifier, types::new_from_inner_multi_vk, utils::const_fri_config,
     vars::StarkProofVariable,

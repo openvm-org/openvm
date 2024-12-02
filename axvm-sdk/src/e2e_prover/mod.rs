@@ -15,7 +15,7 @@ use axvm_circuit::{
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_circuit::NativeConfig;
-use axvm_recursion::hints::Hintable;
+use axvm_native_recursion::hints::Hintable;
 use metrics::counter;
 use tracing::info_span;
 

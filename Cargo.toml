@@ -18,15 +18,12 @@ members = [
     "toolchain/instructions",
     "toolchain/instructions/derive",
     "toolchain/transpiler",
-    "toolchain/native-compiler",
-    "toolchain/native-compiler/derive",
     "toolchain/riscv/platform",
     "toolchain/riscv/axvm",
     "toolchain/riscv/macros",
     "toolchain/build",
     "toolchain/tests",
     "cargo-axiom",
-    "lib/recursion",
     "axvm-sdk",
     "benchmarks",
     "extensions/bigint/circuit",
@@ -36,6 +33,9 @@ members = [
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
     "extensions/native/circuit",
+    "extensions/native/compiler",
+    "extensions/native/compiler/derive",
+    "extensions/native/lib/recursion",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
@@ -99,9 +99,6 @@ axvm-instructions-derive = { path = "toolchain/instructions/derive", default-fea
 axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
 axvm-transpiler = { path = "toolchain/transpiler", default-features = false }
 axvm-build = { path = "toolchain/build", default-features = false }
-axvm-recursion = { path = "lib/recursion", default-features = false }
-axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
-axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
 axvm-moduli-setup = { path = "toolchain/riscv/macros/moduli-setup", default-features = false }
 axvm-sw-setup = { path = "toolchain/riscv/macros/sw-setup", default-features = false }
 axvm-circuit = { path = "vm", default-features = false }
@@ -134,6 +131,9 @@ axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-featur
 axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 axvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
+axvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
+axvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
+axvm-native-recursion = { path = "extensions/native/lib/recursion", default-features = false }
 axvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

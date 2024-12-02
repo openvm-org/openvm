@@ -38,7 +38,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                pub #name: <#field_type as axvm_recursion::hints::Hintable<C> >::HintVariable,
+                pub #name: <#field_type as axvm_native_recursion::hints::Hintable<C> >::HintVariable,
             }
         })
         .collect();
@@ -48,7 +48,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                let #name = <#field_type as axvm_recursion::hints::Hintable<C>>::read(builder);
+                let #name = <#field_type as axvm_native_recursion::hints::Hintable<C>>::read(builder);
             }
         })
         .collect();
@@ -57,7 +57,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .iter()
         .map(|name| {
             quote! {
-                stream.extend(axvm_recursion::hints::Hintable::<C>::write(&self.#name));
+                stream.extend(axvm_native_recursion::hints::Hintable::<C>::write(&self.#name));
             }
         })
         .collect();
@@ -68,7 +68,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
             #(#input_struct_tokens)*
         }
 
-        impl #impl_generics axvm_recursion::hints::Hintable<C> for #name #ty_generics #where_clause {
+        impl #impl_generics axvm_native_recursion::hints::Hintable<C> for #name #ty_generics #where_clause {
             type HintVariable = #name_var_ident<C>;
 
             fn read(builder: &mut axvm_native_compiler::prelude::Builder<C>) -> Self::HintVariable {

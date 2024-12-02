@@ -1,5 +1,5 @@
 [package]
-name = "axvm-recursion"
+name = "axvm-native-recursion"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -46,7 +46,7 @@ cfg-if = { workspace = true }
 
 [dev-dependencies]
 ax-circuit-primitives.workspace = true
-axvm-recursion = { workspace = true, features = ["test-utils"] }
+axvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel", "mimalloc"]
