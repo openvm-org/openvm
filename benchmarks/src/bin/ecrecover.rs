@@ -11,6 +11,10 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_keccak::Keccak256Hash,
 };
+use axvm_algebra_circuit::{
+    ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
+    Rv32ModularWithFp2Config,
+};
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
@@ -23,17 +27,17 @@ use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
 };
+use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
-use axvm_mod_circuit::{
-    ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
-    Rv32ModularWithFp2Config,
-};
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
+};
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
@@ -107,8 +111,12 @@ fn main() -> Result<()> {
     let elf = build_bench_program("ecrecover")?;
     let exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<BabyBear>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+        Transpiler::<BabyBear>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
+            .with_processor(Rc::new(Keccak256TranspilerExtension))
+            .with_processor(Rc::new(EccTranspilerExtension)),
     );
     // TODO: update sw_setup macros and read it from elf.
     let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);

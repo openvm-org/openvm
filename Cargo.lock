@@ -580,6 +580,19 @@ dependencies = [
  "p3-matrix",
  "rand 0.8.5",
  "strum",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-algebra-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -589,15 +602,18 @@ dependencies = [
  "ax-circuit-derive",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-circuit",
+ "axvm-ecc-transpiler",
  "axvm-keccak256-circuit",
- "axvm-mod-circuit",
+ "axvm-keccak256-transpiler",
  "axvm-native-circuit",
  "axvm-native-compiler",
  "axvm-recursion",
  "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "axvm-sdk",
  "axvm-transpiler",
  "clap",
@@ -617,18 +633,6 @@ dependencies = [
  "tiny-keccak",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "axvm-algebra-transpiler"
-version = "0.1.0"
-dependencies = [
- "axvm-instructions",
- "axvm-transpiler",
- "p3-field",
- "rrs-lib",
- "strum",
- "strum_macros",
 ]
 
 [[package]]
@@ -5319,7 +5323,7 @@ checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.87",
+ "syn 2.0.90",
 ]
 
 [[package]]

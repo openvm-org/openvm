@@ -11,10 +11,13 @@ use ax_stark_sdk::{
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, ExecutorName};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_keccak_transpiler::KeccakTranspilerExtension;
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
@@ -29,8 +32,11 @@ fn main() -> Result<()> {
     let elf = build_bench_program("regex")?;
     let exe = AxVmExe::from_elf(
         elf.clone(),
-        Transpiler::<BabyBear>::default_with_intrinsics()
-            .with_processor(Rc::new(KeccakTranspilerExtension)),
+        Transpiler::<BabyBear>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension))
+            .with_processor(Rc::new(Keccak256TranspilerExtension)),
     );
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {

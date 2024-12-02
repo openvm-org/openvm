@@ -1,19 +1,33 @@
+use std::rc::Rc;
+
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_benchmarks::utils::build_bench_program;
-use axvm_circuit::arch::new_vm::VmExecutor;
+use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm::VmExecutor};
 use axvm_rv32im_circuit::Rv32ImConfig;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 
 fn benchmark_function(c: &mut Criterion) {
     let elf = build_bench_program("fibonacci").unwrap();
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<BabyBear>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
+
     let mut group = c.benchmark_group("fibonacci");
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::<BabyBear, Rv32ImConfig>::new(config);
 
     group.bench_function("execute", |b| {
         b.iter(|| {
-            executor.execute(elf.clone(), vec![]).unwrap();
+            executor.execute(exe.clone(), vec![]).unwrap();
         })
     });
 
