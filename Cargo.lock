@@ -377,8 +377,9 @@ dependencies = [
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
- "axvm-ecc",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-pairing-guest",
  "ff 0.13.0",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -530,26 +531,15 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
  "axvm-rv32im-guest",
- "axvm-sw-setup",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
  "num-traits",
  "serde",
-]
-
-[[package]]
-name = "axvm-algebra"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "halo2curves-axiom 0.7.0",
- "num-bigint-dig",
- "serde",
- "serde-big-array",
 ]
 
 [[package]]
@@ -588,12 +578,20 @@ dependencies = [
 name = "axvm-algebra-guest"
 version = "0.1.0"
 dependencies = [
- "axvm",
  "axvm-platform",
+ "halo2curves-axiom 0.7.0",
  "num-bigint-dig",
- "num-traits",
  "serde",
- "strum_macros",
+ "serde-big-array",
+]
+
+[[package]]
+name = "axvm-algebra-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -627,7 +625,7 @@ dependencies = [
  "axvm-keccak256-transpiler",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",
  "axvm-sdk",
@@ -733,9 +731,9 @@ dependencies = [
  "axvm-bigint-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc",
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-keccak256-circuit",
  "axvm-native-circuit",
@@ -801,28 +799,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-ecc"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-algebra",
- "axvm-platform",
- "ecdsa",
- "elliptic-curve",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "k256",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-traits",
- "rand 0.8.5",
- "serde",
- "strum_macros",
-]
-
-[[package]]
 name = "axvm-ecc-circuit"
 version = "0.1.0"
 dependencies = [
@@ -862,11 +838,32 @@ name = "axvm-ecc-guest"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
+ "ecdsa",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-traits",
+ "rand 0.8.5",
  "serde",
  "strum_macros",
+]
+
+[[package]]
+name = "axvm-ecc-sw-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -968,15 +965,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-moduli-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
 name = "axvm-native-circuit"
 version = "0.1.0"
 dependencies = [
@@ -1047,7 +1035,7 @@ name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "p3-field",
  "proc-macro2",
  "quote",
@@ -1055,77 +1043,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-pairing-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-ecc-execution",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-circuit",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc",
- "axvm-ecc-circuit",
- "axvm-ecc-constants",
- "axvm-instructions",
- "axvm-rv32-adapters",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "halo2curves-axiom 0.7.0",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "once_cell",
- "rand 0.8.5",
- "strum",
-]
-
-[[package]]
-name = "axvm-pairing-guest"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-platform",
- "num-bigint-dig",
- "num-traits",
- "serde",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-pairing-transpiler"
-version = "0.1.0"
-dependencies = [
- "axvm-instructions",
- "axvm-pairing-guest",
- "axvm-transpiler",
- "p3-field",
- "rrs-lib",
- "strum",
-]
-
-[[package]]
-name = "axvm-platform"
-version = "0.1.0"
-dependencies = [
- "axvm-moduli-setup",
- "bincode 2.0.0-rc.3",
- "bytemuck",
- "critical-section",
- "embedded-alloc",
- "getrandom",
- "libm",
- "stability",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-recursion"
+name = "axvm-native-recursion"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
@@ -1135,7 +1053,7 @@ dependencies = [
  "axvm-native-circuit",
  "axvm-native-compiler",
  "axvm-native-compiler-derive",
- "axvm-recursion",
+ "axvm-native-recursion",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -1163,6 +1081,89 @@ dependencies = [
  "snark-verifier-sdk",
  "tracing",
  "zkhash",
+]
+
+[[package]]
+name = "axvm-pairing-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-execution",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-circuit",
+ "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-instructions",
+ "axvm-pairing-guest",
+ "axvm-rv32-adapters",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "rand 0.8.5",
+ "strum",
+]
+
+[[package]]
+name = "axvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-guest",
+ "axvm-platform",
+ "ecdsa",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "rand 0.8.5",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-pairing-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-pairing-guest",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
+name = "axvm-platform"
+version = "0.1.0"
+dependencies = [
+ "axvm-algebra-moduli-setup",
+ "bincode 2.0.0-rc.3",
+ "bytemuck",
+ "critical-section",
+ "embedded-alloc",
+ "getrandom",
+ "libm",
+ "stability",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1250,7 +1251,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "derivative",
  "metrics",
@@ -1259,15 +1260,6 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "tracing",
-]
-
-[[package]]
-name = "axvm-sw-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
 ]
 
 [[package]]
@@ -1284,13 +1276,14 @@ dependencies = [
  "axvm-bigint-transpiler",
  "axvm-build",
  "axvm-circuit",
- "axvm-ecc",
  "axvm-ecc-circuit",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-ecc-transpiler",
  "axvm-keccak256-circuit",
  "axvm-keccak256-transpiler",
  "axvm-pairing-circuit",
+ "axvm-pairing-guest",
  "axvm-pairing-transpiler",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",

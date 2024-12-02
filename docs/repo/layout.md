@@ -69,7 +69,7 @@ The toolchain, ISA, and VM are simultaenously extendable. This repository mainta
 
 - [`axvm-circuit`](../../vm/): VM extension for native kernel instructions is currently in the main crate but will be refactored into a standalone crate.
 - [`axvm-native-compiler`](../../toolchain/native-compiler/): Implementation of compiler from a Rust embedded DSL to axVM assembly. The eDSL only targets the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
-- [`axvm-recursion`](../../lib/recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. Library supports compilation to Halo2 circuit.
+- [`axvm-recursion`](../../recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. Library supports compilation to Halo2 circuit.
 
 #### Keccak256
 

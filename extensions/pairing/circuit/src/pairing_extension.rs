@@ -340,17 +340,13 @@ pub(crate) mod phantom {
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use axvm_ecc::{
-        algebra::field::FieldExtension,
-        halo2curves::ff,
-        pairing::{FinalExp, MultiMillerLoop},
-        AffinePoint,
-    };
     use axvm_ecc_constants::{BLS12381, BN254};
+    use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
     use axvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
+    use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
     use axvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
     use eyre::bail;
 
@@ -402,7 +398,7 @@ pub(crate) mod phantom {
 
         match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
-                use axvm_ecc::halo2curves::bn256::{Fq, Fq12, Fq2};
+                use axvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
                 const N: usize = 32;
                 debug_assert_eq!(BN254.NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {
@@ -444,7 +440,7 @@ pub(crate) mod phantom {
                 );
             }
             Some(PairingCurve::Bls12_381) => {
-                use axvm_ecc::halo2curves::bls12_381::{Fq, Fq12, Fq2};
+                use axvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
                 const N: usize = 48;
                 debug_assert_eq!(BLS12381.NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {

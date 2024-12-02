@@ -14,12 +14,10 @@ use axvm_circuit::{
     arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     utils::biguint_to_limbs,
 };
-use axvm_ecc::{
-    pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
-    AffinePoint,
-};
 use axvm_ecc_constants::BN254;
+use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_pairing_guest::pairing::{Evaluatable, LineMulDType, UnevaluatedLine};
 use axvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,

@@ -1,8 +1,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use std::rc::Rc;
-
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use ax_stark_sdk::{
@@ -32,7 +30,7 @@ use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -113,12 +111,12 @@ fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension))
-            .with_processor(Rc::new(Keccak256TranspilerExtension))
-            .with_processor(Rc::new(ModularTranspilerExtension))
-            .with_processor(Rc::new(EccTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Keccak256TranspilerExtension)
+            .with_extension(ModularTranspilerExtension)
+            .with_extension(EccTranspilerExtension),
     );
     // TODO: update sw_setup macros and read it from elf.
     let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);

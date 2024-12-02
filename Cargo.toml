@@ -8,31 +8,28 @@ repository = "https://github.com/axiom-crypto/"
 
 [workspace]
 members = [
-    "stark-backend",
-    "stark-sdk",
-    "circuits/hashes/poseidon2-air",
-    "circuits/primitives",
-    "circuits/derive",
-    "circuits/mod-builder",
-    "vm",
-    "toolchain/instructions",
-    "toolchain/instructions/derive",
-    "toolchain/transpiler",
-    "toolchain/native-compiler",
-    "toolchain/native-compiler/derive",
-    "toolchain/riscv/platform",
-    "toolchain/riscv/axvm",
-    "toolchain/riscv/macros",
-    "toolchain/build",
-    "toolchain/tests",
-    "cargo-axiom",
-    "lib/algebra",
-    "lib/ecc",
-    "lib/ecc-constants",
-    "lib/ecc-execution",
-    "lib/recursion",
-    "axvm-sdk",
     "benchmarks",
+    "crates/axvm-sdk",    
+    "crates/cargo-axiom",
+    "crates/circuits/mod-builder",
+    "crates/circuits/poseidon2-air",
+    "crates/circuits/primitives",
+    "crates/circuits/derive",
+    "crates/stark-backend",
+    "crates/stark-sdk",    
+    "crates/toolchain/transpiler",
+    "crates/toolchain/axvm",
+    "crates/toolchain/build",    
+    "crates/toolchain/instructions",
+    "crates/toolchain/instructions/derive",
+    "crates/toolchain/macros",
+    "crates/toolchain/platform",
+    "crates/toolchain/tests",
+    "crates/vm",    
+    "extensions/algebra/circuit",
+    "extensions/algebra/transpiler",
+    "extensions/algebra/guest",
+    "extensions/algebra/moduli-setup",    
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
@@ -40,6 +37,9 @@ members = [
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
     "extensions/native/circuit",
+    "extensions/native/compiler",
+    "extensions/native/compiler/derive",
+    "extensions/native/recursion",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
@@ -49,6 +49,9 @@ members = [
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
+    "extensions/ecc/constants",
+    "extensions/ecc/execution",
+    "extensions/ecc/sw-setup",
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
@@ -93,52 +96,59 @@ lto = "thin"
 
 [workspace.dependencies]
 # Axiom
-axvm-sdk = { path = "axvm-sdk", default-features = false }
-cargo-axiom = { path = "cargo-axiom", default-features = false }
-axvm = { path = "toolchain/riscv/axvm", default-features = false }
-axvm-instructions = { path = "toolchain/instructions", default-features = false }
-axvm-instructions-derive = { path = "toolchain/instructions/derive", default-features = false }
-axvm-platform = { path = "toolchain/riscv/platform", default-features = false }
-axvm-transpiler = { path = "toolchain/transpiler", default-features = false }
-axvm-build = { path = "toolchain/build", default-features = false }
-axvm-algebra = { path = "lib/algebra", default-features = false }
-axvm-ecc = { path = "lib/ecc", default-features = false }
-axvm-ecc-constants = { path = "lib/ecc-constants", default-features = false }
-axvm-recursion = { path = "lib/recursion", default-features = false }
-axvm-native-compiler = { path = "toolchain/native-compiler", default-features = false }
-axvm-native-compiler-derive = { path = "toolchain/native-compiler/derive", default-features = false }
-axvm-moduli-setup = { path = "toolchain/riscv/macros/moduli-setup", default-features = false }
-axvm-sw-setup = { path = "toolchain/riscv/macros/sw-setup", default-features = false }
-axvm-circuit = { path = "vm", default-features = false }
-axvm-circuit-derive = { path = "vm/derive", default-features = false }
-ax-poseidon2-air = { path = "circuits/hashes/poseidon2-air", default-features = false }
-ax-ecc-execution = { path = "lib/ecc-execution", default-features = false }
-ax-circuit-primitives = { path = "circuits/primitives", default-features = false }
-ax-circuit-derive = { path = "circuits/derive", default-features = false }
-ax-stark-backend = { path = "stark-backend", default-features = false }
-ax-stark-sdk = { path = "stark-sdk", default-features = false }
-ax-mod-circuit-builder = { path = "circuits/mod-builder", default-features = false }
+axvm-sdk = { path = "crates/axvm-sdk", default-features = false }
+cargo-axiom = { path = "crates/cargo-axiom", default-features = false }
+ax-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
+ax-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
+ax-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
+ax-circuit-derive = { path = "crates/circuits/derive", default-features = false }
+axvm = { path = "crates/toolchain/axvm", default-features = false }
+axvm-build = { path = "crates/toolchain/build", default-features = false }
+axvm-instructions = { path = "crates/toolchain/instructions", default-features = false }
+axvm-instructions-derive = { path = "crates/toolchain/instructions/derive", default-features = false }
+axvm-macros-common = { path = "crates/toolchain/macros", default-features = false }
+axvm-platform = { path = "crates/toolchain/platform", default-features = false }
+axvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
+axvm-circuit = { path = "crates/vm", default-features = false }
+axvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
+ax-stark-backend = { path = "crates/stark-backend", default-features = false }
+ax-stark-sdk = { path = "crates/stark-sdk", default-features = false }
+
 # Extensions
-axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-axvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
-axvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
 axvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
 axvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
-axvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 axvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 axvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
 axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 axvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 axvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
+axvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
+axvm-algebra-moduli-setup = { path = "extensions/algebra/moduli-setup", default-features = false }
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
 axvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
+axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
+axvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
+axvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
+axvm-ecc-constants = { path = "extensions/ecc/constants", default-features = false }
+axvm-ecc-sw-setup = { path = "extensions/ecc/sw-setup", default-features = false }
+ax-ecc-execution = { path = "extensions/ecc/execution", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 axvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
 axvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
+axvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
+axvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
+axvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+axvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
+axvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
+axvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 axvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
+axvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
+axvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
+axvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
+
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

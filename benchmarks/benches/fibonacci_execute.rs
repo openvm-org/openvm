@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_benchmarks::utils::build_bench_program;
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VmExecutor};
@@ -16,9 +14,9 @@ fn benchmark_function(c: &mut Criterion) {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
     );
 
     let mut group = c.benchmark_group("fibonacci");

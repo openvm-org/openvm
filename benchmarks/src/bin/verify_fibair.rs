@@ -12,7 +12,7 @@ use ax_stark_sdk::{
 use axvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use clap::Parser;
 use eyre::Result;
 use tracing::info_span;

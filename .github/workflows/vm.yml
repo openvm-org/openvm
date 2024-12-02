@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/**"
+      - "crates/vm/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -33,6 +33,6 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run vm crate tests
-        working-directory: vm
+        working-directory: crates/vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

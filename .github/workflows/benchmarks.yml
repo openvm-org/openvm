@@ -7,12 +7,12 @@ on:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "stark-sdk/**"
-      - "circuits/**"
-      - "vm/**"
-      - "toolchain/**"
-      - "lib/recursion/**"
+      - "crates/stark-backend/**"
+      - "crates/stark-sdk/**"
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/extensions/**"
       - "benchmarks/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"

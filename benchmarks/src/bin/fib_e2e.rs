@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -11,7 +9,7 @@ use axvm_native_compiler::conversion::CompilerOptions;
 #[cfg(feature = "static-verifier")]
 use axvm_native_compiler::prelude::Witness;
 #[cfg(feature = "static-verifier")]
-use axvm_recursion::witness::Witnessable;
+use axvm_native_recursion::witness::Witnessable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -68,9 +66,9 @@ async fn main() -> Result<()> {
     let exe = AxVmExe::from_elf(
         elf,
         Transpiler::default()
-            .with_processor(Rc::new(Rv32ITranspilerExtension))
-            .with_processor(Rc::new(Rv32MTranspilerExtension))
-            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
     );
     let app_committed_exe = commit_app_exe(app_config, exe);
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
