@@ -13,7 +13,7 @@ use k256::ecdsa::{self, RecoveryId, Signature};
 axvm::entry!(main);
 
 /// Inputs to the m-of-n ECDSA verification
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Eq, PartialEq)]
 struct Inputs {
     /// calculated keystore address
     keystore_address: [u8; 32],
@@ -89,16 +89,20 @@ pub fn main() {
 
         // Get ethereum address from verifying key (public key)
         let enc_pt = vk.0.to_encoded_point(false);
-        let eth_addr: [u8; 20] = keccak256(&enc_pt.as_bytes()[1..])[12..]
+        let pt_bytes = &enc_pt.as_bytes();
+        assert_eq!(pt_bytes.len(), 65);
+        assert_eq!(pt_bytes[0], 4);
+        let eth_addr: [u8; 20] = keccak256(&pt_bytes[1..])[12..]
             .try_into()
             .expect("Invalid ethereum address");
 
         // Check that the ethereum address calculated from the public key is in the list of EOA addresses
-        assert!(io.eoa_addrs.contains(&eth_addr));
+        // assert!(io.eoa_addrs.contains(&eth_addr));
+        assert_eq!(io.eoa_addrs[0], eth_addr);
     }
 }
 
-pub fn deserialize_u8_65_vec<'de, D>(deserializer: D) -> Result<Vec<[u8; 65]>, D::Error>
+fn deserialize_u8_65_vec<'de, D>(deserializer: D) -> Result<Vec<[u8; 65]>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -135,7 +139,7 @@ where
     deserializer.deserialize_seq(VecVisitor)
 }
 
-pub fn deserialize_u8_20_vec<'de, D>(deserializer: D) -> Result<Vec<[u8; 20]>, D::Error>
+fn deserialize_u8_20_vec<'de, D>(deserializer: D) -> Result<Vec<[u8; 20]>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

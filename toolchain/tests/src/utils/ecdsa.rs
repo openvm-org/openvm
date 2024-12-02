@@ -52,6 +52,7 @@ pub fn ecdsa_sign(
         .expect("Signature with recovery id must be 65 bytes")
 }
 
+/// Calculates data_hash, where data_hash = keccak256(m || n || [eoa_addrs].concat())
 pub fn calculate_data_hash(m: u32, n: u32, eoa_addrs: Vec<[u8; 20]>) -> [u8; 32] {
     keccak256(
         [
