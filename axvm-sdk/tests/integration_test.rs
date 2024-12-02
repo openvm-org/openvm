@@ -104,10 +104,9 @@ where
     Ok(runtime_pvs)
 }
 
-#[test]
-fn test_public_values_and_leaf_verification() {
-    let app_config = AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
+fn small_test_app_config(log_blowup_factor: usize) -> AppConfig<NativeConfig> {
+    AppConfig {
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(log_blowup_factor),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
                 .with_max_segment_len(200)
@@ -115,8 +114,12 @@ fn test_public_values_and_leaf_verification() {
                 .with_public_values(16),
             Native,
         ),
-    };
+    }
+}
 
+#[test]
+fn test_public_values_and_leaf_verification() {
+    let app_config = small_test_app_config(3);
     let (e2e_prover, _) = load_agg_pk_into_e2e_prover(app_config);
 
     let app_engine = BabyBearPoseidon2Engine::new(e2e_prover.app_pk.app_vm_pk.fri_params);
@@ -226,109 +229,84 @@ fn test_public_values_and_leaf_verification() {
     }
 }
 
-// #[test]
-// fn test_e2e_proof_generation() {
-//     let app_config = AppConfig {
-//         app_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
-//         app_vm_config: VmConfig {
-//             max_segment_len: 200,
-//             continuation_enabled: true,
-//             num_public_values: 16,
-//             ..Default::default()
-//         }
-//         .add_executor(ExecutorName::BranchEqual)
-//         .add_executor(ExecutorName::Jal)
-//         .add_executor(ExecutorName::LoadStore)
-//         .add_executor(ExecutorName::FieldArithmetic),
-//     };
+#[test]
+fn test_e2e_proof_generation() {
+    let app_config = small_test_app_config(3);
+    #[allow(unused_variables)]
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
-//     #[allow(unused_variables)]
-//     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
+    let air_id_perm = e2e_prover.agg_pk.root_verifier_pk.air_id_permutation();
+    let special_air_ids = air_id_perm.get_special_air_ids();
 
-//     let air_id_perm = e2e_prover.agg_pk.root_verifier_pk.air_id_permutation();
-//     let special_air_ids = air_id_perm.get_special_air_ids();
+    let root_proof = e2e_prover.generate_proof(vec![]);
+    let root_pvs = RootVmVerifierPvs::from_flatten(
+        root_proof.per_air[special_air_ids.public_values_air_id]
+            .public_values
+            .clone(),
+    );
 
-//     let root_proof = e2e_prover.generate_proof(vec![]);
-//     let root_pvs = RootVmVerifierPvs::from_flatten(
-//         root_proof.per_air[special_air_ids.public_values_air_id]
-//             .public_values
-//             .clone(),
-//     );
+    let app_exe_commit = AppExecutionCommit::compute(
+        &e2e_prover.app_pk.app_vm_pk.vm_config,
+        &e2e_prover.app_committed_exe,
+        &e2e_prover.leaf_committed_exe,
+    );
 
-//     let app_exe_commit = AppExecutionCommit::compute(
-//         &e2e_prover.app_pk.app_vm_pk.vm_config,
-//         &e2e_prover.app_committed_exe,
-//         &e2e_prover.leaf_committed_exe,
-//     );
+    assert_eq!(root_pvs.exe_commit, app_exe_commit.exe_commit);
+    assert_eq!(
+        root_pvs.leaf_verifier_commit,
+        app_exe_commit.leaf_vm_verifier_commit
+    );
 
-//     assert_eq!(root_pvs.exe_commit, app_exe_commit.exe_commit);
-//     assert_eq!(
-//         root_pvs.leaf_verifier_commit,
-//         app_exe_commit.leaf_vm_verifier_commit
-//     );
+    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &e2e_prover.agg_pk.root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
+}
 
-//     #[cfg(feature = "static-verifier")]
-//     static_verifier::test_static_verifier(
-//         &e2e_prover.agg_pk.root_verifier_pk,
-//         dummy_internal_proof,
-//         &root_proof,
-//     );
-// }
+#[test]
+fn test_e2e_app_log_blowup_1() {
+    let app_config = small_test_app_config(1);
 
-// #[test]
-// fn test_e2e_app_log_blowup_1() {
-//     let app_config = AppConfig {
-//         app_fri_params: standard_fri_params_with_100_bits_conjectured_security(1),
-//         app_vm_config: VmConfig {
-//             max_segment_len: 200,
-//             continuation_enabled: true,
-//             num_public_values: 16,
-//             ..Default::default()
-//         }
-//         .add_executor(ExecutorName::BranchEqual)
-//         .add_executor(ExecutorName::Jal)
-//         .add_executor(ExecutorName::LoadStore)
-//         .add_executor(ExecutorName::FieldArithmetic),
-//     };
+    #[allow(unused_variables)]
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
+    #[allow(unused_variables)]
+    let root_proof = e2e_prover.generate_proof(vec![]);
 
-//     #[allow(unused_variables)]
-//     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
-//     #[allow(unused_variables)]
-//     let root_proof = e2e_prover.generate_proof(vec![]);
+    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &e2e_prover.agg_pk.root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
+}
 
-//     #[cfg(feature = "static-verifier")]
-//     static_verifier::test_static_verifier(
-//         &e2e_prover.agg_pk.root_verifier_pk,
-//         dummy_internal_proof,
-//         &root_proof,
-//     );
-// }
+#[cfg(feature = "static-verifier")]
+mod static_verifier {
+    use ax_stark_sdk::{
+        ax_stark_backend::prover::types::Proof,
+        config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+    };
+    use axvm_native_compiler::prelude::Witness;
+    use axvm_recursion::witness::Witnessable;
+    use axvm_sdk::keygen::RootVerifierProvingKey;
 
-// #[cfg(feature = "static-verifier")]
-// mod static_verifier {
-//     use ax_stark_sdk::{
-//         ax_stark_backend::prover::types::Proof,
-//         config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
-//     };
-//     use axvm_native_compiler::prelude::Witness;
-//     use axvm_recursion::witness::Witnessable;
-//     use axvm_sdk::keygen::RootVerifierProvingKey;
+    use crate::SC;
 
-//     use crate::SC;
-
-//     pub(crate) fn test_static_verifier(
-//         root_verifier_pk: &RootVerifierProvingKey,
-//         dummy_internal_proof: Proof<SC>,
-//         root_proot: &Proof<BabyBearPoseidon2OuterConfig>,
-//     ) {
-//         // Here we intend to use a dummy root proof to generate a static verifier circuit in order
-//         // to test if the static verifier circuit can handle a different root proof.
-//         let dummy_root_proof = root_verifier_pk.generate_dummy_root_proof(dummy_internal_proof);
-//         let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_root_proof);
-//         let mut witness = Witness::default();
-//         root_proot.write(&mut witness);
-//         // Here the proof is verified inside.
-//         // FIXME: explicitly verify the proof.
-//         static_verifier.prove(witness);
-//     }
-// }
+    pub(crate) fn test_static_verifier(
+        root_verifier_pk: &RootVerifierProvingKey,
+        dummy_internal_proof: Proof<SC>,
+        root_proot: &Proof<BabyBearPoseidon2OuterConfig>,
+    ) {
+        // Here we intend to use a dummy root proof to generate a static verifier circuit in order
+        // to test if the static verifier circuit can handle a different root proof.
+        let dummy_root_proof = root_verifier_pk.generate_dummy_root_proof(dummy_internal_proof);
+        let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_root_proof);
+        let mut witness = Witness::default();
+        root_proot.write(&mut witness);
+        // Here the proof is verified inside.
+        // FIXME: explicitly verify the proof.
+        static_verifier.prove(witness);
+    }
+}
