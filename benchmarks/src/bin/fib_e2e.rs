@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
         let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
             .in_scope(|| {
                 let static_verifier = prover
-                    .agg_pk
+                    .agg_pk()
                     .root_verifier_pk
                     .keygen_static_verifier(23, root_proof.clone());
                 let mut witness = Witness::default();
