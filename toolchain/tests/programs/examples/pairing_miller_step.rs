@@ -9,7 +9,7 @@ use axvm_pairing_guest::pairing::MillerStep;
 axvm::entry!(main);
 
 mod bn254 {
-    use axvm_ecc_guest::bn254::{Bn254, Fp2};
+    use axvm_pairing_guest::bn254::{Bn254, Fp2};
 
     use super::*;
 
@@ -77,7 +77,7 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use axvm_ecc_guest::bls12_381::{Bls12_381, Fp2};
+    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp2};
 
     use super::*;
 
