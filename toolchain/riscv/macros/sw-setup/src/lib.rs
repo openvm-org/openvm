@@ -6,7 +6,10 @@ use std::sync::atomic::AtomicUsize;
 
 use axvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, ExprPath};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Expr, ExprPath, Path, Token,
+};
 
 static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 
@@ -49,9 +52,32 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
         let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+
+        macro_rules! create_extern_func {
+            ($name:ident) => {
+                let $name = syn::Ident::new(
+                    &format!(
+                        "{}_{}",
+                        stringify!($name),
+                        intmod_type
+                            .segments
+                            .iter()
+                            .map(|x| x.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("_")
+                    ),
+                    span.into(),
+                );
+            };
+        }
+        create_extern_func!(sw_add_ne_extern_func);
+        create_extern_func!(sw_double_extern_func);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
+            extern "C" {
+                fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #sw_double_extern_func(rd: usize, rs1: usize, rs2: usize);
+            }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
@@ -61,6 +87,9 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
             }
 
             impl #struct_name {
+                // I would like to just store `pub type MOD_TYPE = #intmod_type` here, but alas https://github.com/rust-lang/rust/issues/8995.
+                pub const MODULUS: <#intmod_type as IntMod>::Repr = <#intmod_type as IntMod>::MODULUS;
+                pub const MOD_SIZE: usize = <#intmod_type as IntMod>::NUM_BYTES;
                 pub const EC_IDX: usize = #ec_idx;
 
                 // Below are wrapper functions for the intrinsic instructions.
@@ -78,15 +107,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                        custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
-                            SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            uninit.as_mut_ptr(),
-                            p1 as *const #struct_name,
-                            p2 as *const #struct_name
-                        );
+                        unsafe {
+                            #sw_add_ne_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p1 as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize
+                            )
+                        };
                         unsafe { uninit.assume_init() }
                     }
                 }
@@ -104,15 +131,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
-                            SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            self as *mut #struct_name,
-                            self as *const #struct_name,
-                            p2 as *const #struct_name
-                        );
+                        unsafe {
+                            #sw_add_ne_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize
+                            )
+                        };
                     }
                 }
 
@@ -131,15 +156,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                        custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
-                            SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            uninit.as_mut_ptr(),
-                            p as *const #struct_name,
-                            "x0"
-                        );
+                        unsafe {
+                            #sw_double_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p as *const #struct_name as usize,
+                                0
+                            )
+                        };
                         unsafe { uninit.assume_init() }
                     }
                 }
@@ -158,15 +181,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
-                            SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            self as *mut #struct_name,
-                            self as *const #struct_name,
-                            "x0"
-                        );
+                        unsafe {
+                            #sw_double_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize,
+                                0
+                            )
+                        };
                     }
                 }
             }
@@ -359,7 +380,86 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     self.add_assign(rhs.neg());
                 }
             }
+        });
+        output.push(result);
+    }
 
+    TokenStream::from_iter(output)
+}
+
+struct SwDefine {
+    items: Vec<Path>,
+}
+
+impl Parse for SwDefine {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
+        Ok(Self {
+            items: items
+                .into_iter()
+                .map(|e| {
+                    if let Expr::Path(p) = e {
+                        p.path
+                    } else {
+                        panic!("expected path");
+                    }
+                })
+                .collect(),
+        })
+    }
+}
+
+#[proc_macro]
+pub fn sw_init(input: TokenStream) -> TokenStream {
+    let SwDefine { items } = parse_macro_input!(input as SwDefine);
+
+    let mut externs = Vec::new();
+    let mut setups = Vec::new();
+    let mut setup_all_curves = Vec::new();
+
+    let span = proc_macro::Span::call_site();
+
+    for (ec_idx, item) in items.into_iter().enumerate() {
+        let str_path = item
+            .segments
+            .iter()
+            .map(|x| x.ident.to_string())
+            .collect::<Vec<_>>()
+            .join("_");
+        let add_ne_extern_func =
+            syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
+        let double_extern_func =
+            syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
+                axvm_platform::custom_insn_r!(
+                    CUSTOM_1,
+                    Custom1Funct3::ShortWeierstrass as usize,
+                    SwBaseFunct7::SwAddNe as usize + #ec_idx
+                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd,
+                    rs1,
+                    rs2
+                );
+            }
+
+            #[no_mangle]
+            extern "C" fn #double_extern_func(rd: usize, rs1: usize, rs2: usize) {
+                axvm_platform::custom_insn_r!(
+                    CUSTOM_1,
+                    Custom1Funct3::ShortWeierstrass as usize,
+                    SwBaseFunct7::SwDouble as usize + #ec_idx
+                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd,
+                    rs1,
+                    rs2
+                );
+            }
+        });
+
+        let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
+        setups.push(quote::quote_spanned! { span.into() =>
             // make a setup function that sends setup op to ec add, ec double. fp2 ?
             #[allow(non_snake_case)]
             pub fn #setup_function() {
@@ -367,12 +467,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
-                    let modulus_bytes = <#intmod_type as IntMod>::MODULUS;
-                    let one = <#intmod_type as IntMod>::ONE.as_le_bytes();
+                    let modulus_bytes = #item::MODULUS;
+                    let mut one = [0u32; #item::MOD_SIZE];
+                    one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
-                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<#item> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         axvm_platform::constants::CUSTOM_1,
                         axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
@@ -396,8 +497,21 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
         });
-        output.push(result);
+
+        setup_all_curves.push(quote::quote_spanned! { span.into() =>
+            #setup_function();
+        });
     }
 
-    TokenStream::from_iter(output)
+    TokenStream::from(quote::quote_spanned! { span.into() =>
+        // #(#axiom_section)*
+        #[cfg(target_os = "zkvm")]
+        mod axvm_intrinsics_ffi {
+            #(#externs)*
+        }
+        #(#setups)*
+        pub fn setup_all_curves() {
+            #(#setup_all_curves)*
+        }
+    })
 }
