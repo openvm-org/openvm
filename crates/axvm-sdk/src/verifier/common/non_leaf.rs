@@ -11,7 +11,8 @@ use axvm_native_recursion::{
 use crate::verifier::{
     common::{
         assert_or_assign_connector_pvs, assert_or_assign_memory_pvs,
-        assert_single_segment_vm_exit_successfully, get_program_commit, types::VmVerifierPvs,
+        assert_required_air_for_agg_vm_present, assert_single_segment_vm_exit_successfully,
+        get_program_commit, types::VmVerifierPvs,
     },
     internal::types::InternalVmVerifierPvs,
     utils::{assign_array_to_slice, eq_felt_slice},
@@ -44,6 +45,7 @@ impl<C: Config> NonLeafVerifierVariables<C> {
 
         builder.range(0, proofs.len()).for_each(|i, builder| {
             let proof = builder.get(proofs, i);
+            assert_required_air_for_agg_vm_present(builder, &proof);
             let proof_vm_pvs = self.verify_internal_or_leaf_verifier_proof(builder, &proof);
 
             assert_single_segment_vm_exit_successfully(builder, &proof);

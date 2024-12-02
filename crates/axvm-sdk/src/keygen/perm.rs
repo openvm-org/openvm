@@ -2,17 +2,11 @@ use std::cmp::Reverse;
 
 use axvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 
+use crate::verifier::common::types::SpecialAirIds;
+
 // FIXME: is there a good crate to replace this?
 pub struct AirIdPermutation {
     pub perm: Vec<usize>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub struct SpecialAirIds {
-    pub program_air_id: usize,
-    pub connector_air_id: usize,
-    pub public_values_air_id: usize,
 }
 
 impl AirIdPermutation {
@@ -26,7 +20,6 @@ impl AirIdPermutation {
                 .collect(),
         }
     }
-    #[allow(dead_code)]
     pub fn get_special_air_ids(&self) -> SpecialAirIds {
         let perm_len = self.perm.len();
         let mut ret = SpecialAirIds {
@@ -43,6 +36,12 @@ impl AirIdPermutation {
                 ret.public_values_air_id = i;
             }
         }
+        debug_assert_ne!(ret.program_air_id, perm_len, "Program AIR not found");
+        debug_assert_ne!(ret.connector_air_id, perm_len, "Connector AIR not found");
+        debug_assert_ne!(
+            ret.public_values_air_id, perm_len,
+            "Public Values AIR not found"
+        );
         ret
     }
     /// arr[i] <- arr[perm[i]]
