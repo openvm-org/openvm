@@ -79,6 +79,7 @@ pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;
 pub enum SwBaseFunct7 {
     SwAddNe = 0,
     SwDouble,
+    SwSetup,
 }
 
 pub const COMPLEX_EXT_FIELD_MAX_KINDS: u8 = 8;
@@ -92,6 +93,7 @@ pub enum ComplexExtFieldBaseFunct7 {
     Sub,
     Mul,
     Div,
+    Setup,
 }
 
 pub const PAIRING_MAX_KINDS: u8 = 16;
@@ -105,10 +107,8 @@ pub enum PairingBaseFunct7 {
     Fp12Mul,
     EvaluateLine,
     Mul013By013,
-    MulBy013,
     MulBy01234,
     Mul023By023,
-    MulBy023,
     MulBy02345,
     HintFinalExp,
 }

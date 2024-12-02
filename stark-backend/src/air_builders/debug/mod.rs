@@ -16,6 +16,7 @@ pub mod check_constraints;
 /// An `AirBuilder` which asserts that each constraint is zero, allowing any failed constraints to
 /// be detected early.
 pub struct DebugConstraintBuilder<'a, SC: StarkGenericConfig> {
+    pub air_name: &'a str,
     pub row_index: usize,
     pub preprocessed: ViewPair<'a, Val<SC>>,
     pub partitioned_main: Vec<ViewPair<'a, Val<SC>>>,
@@ -67,7 +68,8 @@ where
         assert_eq!(
             x.into(),
             Val::<SC>::ZERO,
-            "constraints had nonzero value on row {}",
+            "constraints had nonzero value on air {},row {}",
+            self.air_name,
             self.row_index
         );
     }
@@ -77,8 +79,8 @@ where
         let y = y.into();
         assert_eq!(
             x, y,
-            "values didn't match on row {}: {} != {}",
-            self.row_index, x, y
+            "values didn't match on air {}, row {}: {} != {}",
+            self.air_name, self.row_index, x, y
         );
     }
 }
@@ -121,8 +123,8 @@ where
         let y = y.into();
         assert_eq!(
             x, y,
-            "values didn't match on row {}: {} != {}",
-            self.row_index, x, y
+            "values didn't match on air {}, row {}: {} != {}",
+            self.air_name, self.row_index, x, y
         );
     }
 }

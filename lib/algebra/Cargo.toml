@@ -7,6 +7,8 @@ description = "axVM library for algebra over rings and fields, including modular
 
 [dependencies]
 axvm-platform = { workspace = true }
+serde = { workspace = true }
+serde-big-array = "0.5.1"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true

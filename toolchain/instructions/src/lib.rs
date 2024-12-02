@@ -3,6 +3,7 @@
 #![allow(non_camel_case_types)]
 
 use axvm_instructions_derive::UsizeOpcode;
+use strum::IntoEnumIterator;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod config;
@@ -65,6 +66,12 @@ pub enum NativeLoadStoreOpcode {
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x110]
 pub struct NativeBranchEqualOpcode(pub BranchEqualOpcode);
+
+impl NativeBranchEqualOpcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchEqualOpcode::iter().map(Self)
+    }
+}
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
@@ -323,25 +330,61 @@ pub enum Rv32KeccakOpcode {
 #[opcode_offset = 0x400]
 pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
 
+impl Rv32BaseAlu256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BaseAluOpcode::iter().map(Self)
+    }
+}
+
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x405]
 pub struct Rv32Shift256Opcode(pub ShiftOpcode);
+
+impl Rv32Shift256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        ShiftOpcode::iter().map(Self)
+    }
+}
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x408]
 pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
 
+impl Rv32LessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        LessThanOpcode::iter().map(Self)
+    }
+}
+
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x420]
 pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
+
+impl Rv32BranchEqual256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchEqualOpcode::iter().map(Self)
+    }
+}
 
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x425]
 pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
 
+impl Rv32BranchLessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchLessThanOpcode::iter().map(Self)
+    }
+}
+
 #[derive(Copy, Clone, Debug, UsizeOpcode)]
 #[opcode_offset = 0x450]
 pub struct Rv32Mul256Opcode(pub MulOpcode);
+
+impl Rv32Mul256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        MulOpcode::iter().map(Self)
+    }
+}
 
 // =================================================================================================
 // Intrinsics: Prime Field Arithmetic
@@ -371,7 +414,9 @@ pub enum Rv32ModularArithmeticOpcode {
 #[repr(usize)]
 pub enum Rv32WeierstrassOpcode {
     EC_ADD_NE,
+    SETUP_EC_ADD_NE,
     EC_DOUBLE,
+    SETUP_EC_DOUBLE,
 }
 
 #[derive(
@@ -395,14 +440,16 @@ pub enum Fp12Opcode {
 pub enum Fp2Opcode {
     ADD,
     SUB,
+    SETUP_ADDSUB,
     MUL,
     DIV,
+    SETUP_MULDIV,
 }
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x720]
+#[opcode_offset = 0x750]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum PairingOpcode {
@@ -410,10 +457,8 @@ pub enum PairingOpcode {
     MILLER_DOUBLE_AND_ADD_STEP,
     EVALUATE_LINE,
     MUL_013_BY_013,
-    MUL_BY_013,
     MUL_BY_01234,
     MUL_023_BY_023,
-    MUL_BY_023,
     MUL_BY_02345,
 }
 

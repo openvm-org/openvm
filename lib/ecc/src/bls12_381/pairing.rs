@@ -2,25 +2,22 @@ use alloc::vec::Vec;
 
 use axvm_algebra::{
     field::{ComplexConjugate, FieldExtension},
-    Field,
+    DivUnsafe, Field,
 };
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
-    crate::pairing::{final_exp_hint, shifted_funct7, PairingCheck, PairingCheckError},
-    axvm_algebra::DivUnsafe,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
+    crate::pairing::shifted_funct7,
+    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1, PAIRING_MAX_KINDS},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};
-#[cfg(not(target_os = "zkvm"))]
-use crate::pairing::PairingIntrinsics;
 use crate::{
     pairing::{
         Evaluatable, EvaluatedLine, FromLineMType, LineMulMType, MillerStep, MultiMillerLoop,
-        UnevaluatedLine,
+        PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
     },
     AffinePoint,
 };
@@ -266,21 +263,52 @@ impl MultiMillerLoop for Bls12_381 {
     }
 }
 
-#[cfg(target_os = "zkvm")]
 #[allow(non_snake_case)]
 impl PairingCheck for Bls12_381 {
     type Fp = Fp;
     type Fp2 = Fp2;
     type Fp12 = Fp12;
 
+    #[allow(unused_variables)]
+    fn pairing_check_hint(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> (Self::Fp12, Self::Fp12) {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            todo!()
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            let hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
+            // We do not rely on the slice P's memory layout since rust does not guarantee it across compiler versions.
+            let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
+            let q_fat_ptr = (Q.as_ptr() as u32, Q.len() as u32);
+            unsafe {
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                    opcode = const CUSTOM_1,
+                    funct3 = const (Custom1Funct3::Pairing as u8),
+                    funct7 = const ((Bls12_381::PAIRING_IDX as u8) * PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    rs1 = in(reg) &p_fat_ptr,
+                    rs2 = in(reg) &q_fat_ptr
+                );
+                let mut ptr = hint.as_ptr() as *const u8;
+                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                for _ in (0..48 * 12 * 2).step_by(4) {
+                    axvm::hint_store_u32!(ptr, 0);
+                    ptr = ptr.add(4);
+                }
+                hint.assume_init()
+            }
+        }
+    }
+
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> Result<(), PairingCheckError> {
-        let f = Self::multi_miller_loop(P, Q);
-        let hint = final_exp_hint::bls12_381_final_exp_hint(&f.to_bytes());
-        let c = Fp12::from_bytes(&hint[..48 * 12]);
-        let s = Fp12::from_bytes(&hint[48 * 12..]);
+        let (c, s) = Self::pairing_check_hint(P, Q);
 
         // f * s = c^{q - x}
         // f * s = c^q * c^-x

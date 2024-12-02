@@ -1,10 +1,10 @@
 extern crate alloc;
 extern crate proc_macro;
 
-use itertools::multiunzip;
-use proc_macro::TokenStream;
-use quote::quote;
-use syn::{Data, Fields, GenericParam};
+use itertools::{multiunzip, Itertools};
+use proc_macro::{Span, TokenStream};
+use quote::{quote, ToTokens};
+use syn::{punctuated::Punctuated, Data, Fields, GenericParam, Ident, Meta, Token};
 
 #[proc_macro_derive(InstructionExecutor)]
 pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
@@ -34,7 +34,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 syn::parse_quote! { #inner_ty: ::axvm_circuit::arch::InstructionExecutor<F> },
             );
             quote! {
-                impl #impl_generics crate::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::axvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         instruction: ::axvm_circuit::arch::instructions::instruction::Instruction<F>,
@@ -182,6 +182,166 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
             .into()
         }
         _ => syn::Error::new(name.span(), "Only enums are supported")
+            .to_compile_error()
+            .into(),
+    }
+}
+
+// VmConfig derive macro
+
+#[proc_macro_derive(VmConfig, attributes(system, extension))]
+pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let ast = syn::parse_macro_input!(input as syn::DeriveInput);
+    let name = &ast.ident;
+
+    let gen_name_with_uppercase_idents = |ident: &Ident| {
+        let mut name = ident.to_string().chars().collect::<Vec<_>>();
+        assert!(name[0].is_lowercase(), "Field name must not be capitalized");
+        let res_lower = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
+        name[0] = name[0].to_ascii_uppercase();
+        let res_upper = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
+        (res_lower, res_upper)
+    };
+
+    match &ast.data {
+        syn::Data::Struct(inner) => {
+            let fields = match &inner.fields {
+                Fields::Named(named) => named.named.iter().collect(),
+                Fields::Unnamed(_) => {
+                    return syn::Error::new(name.span(), "Only named fields are supported")
+                        .to_compile_error()
+                        .into();
+                }
+                Fields::Unit => vec![],
+            };
+
+            let system = fields
+                .iter()
+                .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("system")))
+                .exactly_one()
+                .expect("Exactly one field must have #[system] attribute");
+            let (system_name, system_name_upper) =
+                gen_name_with_uppercase_idents(&system.ident.clone().unwrap());
+
+            let extensions = fields
+                .iter()
+                .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("extension")))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let mut executor_enum_fields = Vec::new();
+            let mut periphery_enum_fields = Vec::new();
+            let mut create_chip_complex = Vec::new();
+            for &e in extensions.iter() {
+                let (field_name, field_name_upper) =
+                    gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
+                // TRACKING ISSUE:
+                // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
+                let mut executor_name = Ident::new(
+                    &format!("{}Executor", e.ty.to_token_stream()),
+                    Span::call_site().into(),
+                );
+                let mut periphery_name = Ident::new(
+                    &format!("{}Periphery", e.ty.to_token_stream()),
+                    Span::call_site().into(),
+                );
+                if let Some(attr) = e
+                    .attrs
+                    .iter()
+                    .find(|attr| attr.path().is_ident("extension"))
+                {
+                    match attr.meta {
+                        Meta::Path(_) => {}
+                        Meta::NameValue(_) => {
+                            return syn::Error::new(
+                                name.span(),
+                                "Only `#[extension]` or `#[extension(...)] formats are supported",
+                            )
+                            .to_compile_error()
+                            .into()
+                        }
+                        _ => {
+                            let nested = attr
+                                .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                                .unwrap();
+                            for meta in nested {
+                                match meta {
+                                    Meta::NameValue(nv) => {
+                                        if nv.path.is_ident("executor") {
+                                            executor_name = Ident::new(
+                                                &nv.value.to_token_stream().to_string(),
+                                                Span::call_site().into(),
+                                            );
+                                            Ok(())
+                                        } else if nv.path.is_ident("periphery") {
+                                            periphery_name = Ident::new(
+                                                &nv.value.to_token_stream().to_string(),
+                                                Span::call_site().into(),
+                                            );
+                                            Ok(())
+                                        } else {
+                                            Err("only executor and periphery keys are supported")
+                                        }
+                                    }
+                                    _ => Err("only name = value format is supported"),
+                                }
+                                .expect("wrong attributes format");
+                            }
+                        }
+                    }
+                };
+                executor_enum_fields.push(quote! {
+                    #[any_enum]
+                    #field_name_upper(#executor_name<F>),
+                });
+                periphery_enum_fields.push(quote! {
+                    #[any_enum]
+                    #field_name_upper(#periphery_name<F>),
+                });
+                create_chip_complex.push(quote! {
+                    let complex: VmChipComplex<F, Self::Executor, Self::Periphery> = complex.extend(&self.#field_name)?;
+                });
+            }
+
+            let executor_type = Ident::new(&format!("{}Executor", name), name.span());
+            let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
+            TokenStream::from(quote! {
+                #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+                pub enum #executor_type<F: PrimeField32> {
+                    #[any_enum]
+                    #system_name_upper(SystemExecutor<F>),
+                    #(#executor_enum_fields)*
+                }
+
+                #[derive(ChipUsageGetter, Chip, From, AnyEnum)]
+                pub enum #periphery_type<F: PrimeField32> {
+                    #[any_enum]
+                    #system_name_upper(SystemPeriphery<F>),
+                    #(#periphery_enum_fields)*
+                }
+
+                impl<F: PrimeField32> VmConfig<F> for #name {
+                    type Executor = #executor_type<F>;
+                    type Periphery = #periphery_type<F>;
+
+                    fn system(&self) -> &SystemConfig {
+                        &self.#system_name
+                    }
+                    fn system_mut(&mut self) -> &mut SystemConfig {
+                        &mut self.#system_name
+                    }
+
+                    fn create_chip_complex(
+                        &self,
+                    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+                        let complex = self.#system_name.create_chip_complex()?;
+                        #(#create_chip_complex)*
+                        Ok(complex)
+                    }
+                }
+            })
+        }
+        _ => syn::Error::new(name.span(), "Only structs are supported")
             .to_compile_error()
             .into(),
     }

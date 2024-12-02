@@ -33,6 +33,13 @@ impl GuestOptions {
             .extend(options.into_iter().map(|s| s.as_ref().to_string()));
         self
     }
+
+    /// Add package features to pass to `cargo build`.
+    pub fn with_features<S: AsRef<str>>(mut self, features: impl IntoIterator<Item = S>) -> Self {
+        self.features
+            .extend(features.into_iter().map(|s| s.as_ref().to_string()));
+        self
+    }
 }
 
 /// Metadata defining options to build a guest

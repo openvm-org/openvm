@@ -39,6 +39,15 @@ pub trait PairingCheck {
     type Fp2: Field + FieldExtension<Self::Fp> + ComplexConjugate;
     type Fp12: FieldExtension<Self::Fp2> + ComplexConjugate;
 
+    /// Given points P[], Q[], computes the multi-Miller loop and then returns
+    /// the final exponentiation hint from Novakovic-Eagon <https://eprint.iacr.org/2024/640.pdf>.
+    ///
+    /// Output is c (residue witness inverse) and u (cubic nonresidue power).
+    fn pairing_check_hint(
+        P: &[AffinePoint<Self::Fp>],
+        Q: &[AffinePoint<Self::Fp2>],
+    ) -> (Self::Fp12, Self::Fp12);
+
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],

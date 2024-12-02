@@ -1,0 +1,13 @@
+[package]
+name = "axvm-rv32im-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for RISC-V32IM"
+
+[dependencies]
+axvm-instructions = { workspace = true }
+axvm-transpiler = { workspace = true }
+p3-field = { workspace = true }
+rrs-lib = { workspace = true }
+tracing = { workspace = true }

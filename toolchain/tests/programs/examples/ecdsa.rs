@@ -1,10 +1,10 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::hint::black_box;
 
-use axvm::intrinsics::keccak256;
 use axvm_ecc::VerifyingKey;
+use axvm_keccak256_guest::keccak256;
 use hex_literal::hex;
 use k256::ecdsa::{self, RecoveryId, Signature};
 axvm::entry!(main);

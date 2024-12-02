@@ -13,7 +13,6 @@ pub mod tests;
 mod air;
 mod bus;
 pub mod trace;
-pub mod util;
 
 pub use air::*;
 pub use bus::*;

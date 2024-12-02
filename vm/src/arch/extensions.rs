@@ -1,7 +1,10 @@
 use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::{
+    utils::next_power_of_two_or_zero,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -21,28 +24,25 @@ use p3_field::{AbstractField, PrimeField32};
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
 use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
-    SystemConfig,
+    SystemConfig, SystemTraceHeights,
 };
-use crate::{
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
-    kernels::{
-        adapters::native_adapter::NativeAdapterChip,
-        public_values::{core::PublicValuesCoreChip, PublicValuesChip},
+use crate::system::{
+    connector::VmConnectorChip,
+    memory::{
+        merkle::{DirectCompressionBus, MemoryMerkleBus},
+        offline_checker::MemoryBus,
+        Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
+        MERKLE_AIR_OFFSET,
     },
-    system::{
-        connector::VmConnectorChip,
-        memory::{
-            merkle::{DirectCompressionBus, MemoryMerkleBus},
-            offline_checker::MemoryBus,
-            Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
-            MERKLE_AIR_OFFSET,
-        },
-        phantom::PhantomChip,
-        program::{ProgramBus, ProgramChip},
-    },
+    native_adapter::NativeAdapterChip,
+    phantom::PhantomChip,
+    poseidon2::Poseidon2Chip,
+    program::{ProgramBus, ProgramChip},
+    public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -87,6 +87,7 @@ pub trait VmExtension<F: PrimeField32> {
 
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
+    system_config: &'a SystemConfig,
     system: &'a SystemBase<F>,
     streams: &'a Arc<Mutex<Streams<F>>>,
     /// Bus indices are in range [0, bus_idx_max)
@@ -99,11 +100,13 @@ pub struct VmInventoryBuilder<'a, F: PrimeField32> {
 
 impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn new(
+        system_config: &'a SystemConfig,
         system: &'a SystemBase<F>,
         streams: &'a Arc<Mutex<Streams<F>>>,
         bus_idx_max: usize,
     ) -> Self {
         Self {
+            system_config,
             system,
             streams,
             bus_idx_max,
@@ -113,6 +116,10 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 
     pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
         &self.system.memory_controller
+    }
+
+    pub fn system_config(&self) -> &SystemConfig {
+        self.system_config
     }
 
     pub fn system_base(&self) -> &SystemBase<F> {
@@ -173,12 +180,23 @@ pub struct VmInventory<E, P> {
     insertion_order: Vec<ChipId>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VmInventoryTraceHeights {
+    pub chips: FxHashMap<ChipId, usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
+pub struct VmComplexTraceHeights {
+    pub system: SystemTraceHeights,
+    pub inventory: VmInventoryTraceHeights,
+}
+
 type ExecutorId = usize;
 /// TODO: create newtype
 type AxVmOpcode = usize;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ChipId {
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChipId {
     Executor(usize),
     Periphery(usize),
 }
@@ -297,6 +315,84 @@ impl<E, P> VmInventory<E, P> {
     pub fn num_airs(&self) -> usize {
         self.executors.len() + self.periphery.len()
     }
+
+    /// Return trace heights of all chips in the inventory.
+    /// The order is deterministic:
+    /// - All executors come first, in the order they were added.
+    /// - All periphery chips come after, in the order they were added.
+    pub fn get_trace_heights(&self) -> VmInventoryTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmInventoryTraceHeights {
+            chips: self
+                .executors
+                .iter()
+                .enumerate()
+                .map(|(i, chip)| (ChipId::Executor(i), chip.current_trace_height()))
+                .chain(
+                    self.periphery
+                        .iter()
+                        .enumerate()
+                        .map(|(i, chip)| (ChipId::Periphery(i), chip.current_trace_height())),
+                )
+                .collect(),
+        }
+    }
+
+    /// Return the dummy trace heights of the inventory. This is used for generating a dummy proof.
+    /// Regular users should not need this.
+    pub fn get_dummy_trace_heights(&self) -> VmInventoryTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmInventoryTraceHeights {
+            chips: self
+                .executors
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (ChipId::Executor(i), 1))
+                .chain(self.periphery.iter().enumerate().map(|(i, chip)| {
+                    (
+                        ChipId::Periphery(i),
+                        chip.constant_trace_height().unwrap_or(1),
+                    )
+                }))
+                .collect(),
+        }
+    }
+}
+
+impl VmInventoryTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.chips
+            .values_mut()
+            .for_each(|v| *v = v.next_power_of_two());
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.chips
+            .values_mut()
+            .for_each(|v| *v = next_power_of_two_or_zero(*v));
+    }
+}
+
+impl VmComplexTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.system.round_to_next_power_of_two();
+        self.inventory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.system.round_to_next_power_of_two_or_zero();
+        self.inventory.round_to_next_power_of_two_or_zero();
+    }
 }
 
 // PublicValuesChip needs F: PrimeField32 due to Adapter
@@ -313,6 +409,7 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     /// - PublicValuesChip if continuations disabled
     /// - Poseidon2Chip if continuations enabled
     pub inventory: VmInventory<E, P>,
+    overridden_inventory_heights: Option<VmInventoryTraceHeights>,
 
     streams: Arc<Mutex<Streams<F>>>,
     /// System buses use indices [0, bus_idx_max)
@@ -335,7 +432,7 @@ pub struct SystemBase<F> {
     range_checker_bus: VariableRangeCheckerBus,
 }
 
-impl<F> SystemBase<F> {
+impl<F: PrimeField32> SystemBase<F> {
     pub fn range_checker_bus(&self) -> VariableRangeCheckerBus {
         self.range_checker_bus
     }
@@ -350,6 +447,25 @@ impl<F> SystemBase<F> {
 
     pub fn execution_bus(&self) -> ExecutionBus {
         EXECUTION_BUS
+    }
+
+    /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for
+    /// regular users.
+    pub fn get_system_trace_heights(&self) -> SystemTraceHeights {
+        SystemTraceHeights {
+            memory: self.memory_controller.borrow().get_memory_trace_heights(),
+        }
+    }
+
+    /// Return dummy trace heights of SystemBase. Usually this is for aggregation to generate a
+    /// dummy proof and not useful for regular users.
+    pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
+        SystemTraceHeights {
+            memory: self
+                .memory_controller
+                .borrow()
+                .get_dummy_memory_trace_heights(),
+        }
     }
 }
 
@@ -402,7 +518,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 PublicValuesCoreChip::new(
                     config.num_public_values,
                     PublishOpcode::default_offset(),
-                    config.max_constraint_degree as u32,
+                    config.max_constraint_degree as u32 - 1,
                 ),
                 memory_controller.clone(),
             );
@@ -439,7 +555,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             EXECUTION_BUS,
             PROGRAM_BUS,
             memory_controller.clone(),
-            phantom_opcode,
+            SystemOpcode::default_offset(),
         );
         phantom_chip.set_streams(streams.clone());
         inventory
@@ -460,6 +576,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory,
             bus_idx_max,
             streams,
+            overridden_inventory_heights: None,
         }
     }
 }
@@ -476,7 +593,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder = VmInventoryBuilder::new(&self.base, &self.streams, self.bus_idx_max);
+        let mut builder =
+            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_max);
         // Add range checker for convenience, the other system base chips aren't included - they can be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
         for chip in self.inventory.executors() {
@@ -521,6 +639,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             inventory: self.inventory.transmute(),
             bus_idx_max: self.bus_idx_max,
             streams: self.streams,
+            overridden_inventory_heights: self.overridden_inventory_heights,
         }
     }
 
@@ -647,7 +766,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().air_name()])
             .collect()
     }
-    /// Return trace heights of all chips in order.
+    /// Return trace heights of all chips in order corresponding to `air_names`.
     pub(crate) fn current_trace_heights(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,
@@ -664,6 +783,56 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().current_trace_height()])
             .collect()
     }
+
+    /// Return trace heights of (SystemBase, Inventory). Usually this is for aggregation and not
+    /// useful for regular users.
+    ///
+    /// **Warning**: the order of `get_trace_heights` is deterministic, but it is not the same as
+    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmComplexTraceHeights::new(
+            self.base.get_system_trace_heights(),
+            self.inventory.get_trace_heights(),
+        )
+    }
+
+    /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
+    /// generate a dummy proof and not useful for regular users.
+    ///
+    /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the same as
+    /// the order of `air_names`. In other words, the order here does not match the order of AIR IDs.
+    pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        VmComplexTraceHeights::new(
+            self.base.get_dummy_system_trace_heights(),
+            self.inventory.get_dummy_trace_heights(),
+        )
+    }
+
+    /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
+    /// generate a dummy proof and not useful for regular users.
+    pub(crate) fn set_override_inventory_trace_heights(
+        &mut self,
+        overridden_inventory_heights: VmInventoryTraceHeights,
+    ) {
+        self.overridden_inventory_heights = Some(overridden_inventory_heights);
+    }
+
+    pub(crate) fn set_override_system_trace_heights(
+        &mut self,
+        overridden_system_heights: SystemTraceHeights,
+    ) {
+        let mut memory_controller = self.base.memory_controller.borrow_mut();
+        memory_controller.set_override_trace_heights(overridden_system_heights.memory);
+    }
+
     /// Return dynamic trace heights of all chips in order, or 0 if
     /// chip has constant height.
     // Used for continuation segmentation logic, so this is performance-sensitive.
@@ -765,13 +934,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         insertion_order.reverse();
         let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
         for chip_id in insertion_order {
-            let height = None;
-            // let height = self.overridden_executor_heights.as_ref().and_then(
-            //     |overridden_heights| {
-            //         let executor_name: ExecutorName = (&executor).into();
-            //         overridden_heights.get(&executor_name).copied()
-            //     },
-            // );
+            let mut height = None;
+            if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
+                height = overridden_heights.chips.get(&chip_id).copied();
+            }
             let air_proof_input = match chip_id {
                 ChipId::Executor(id) => {
                     let chip = self.inventory.executors.pop().unwrap();

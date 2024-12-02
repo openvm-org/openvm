@@ -15,7 +15,7 @@ use {
 /// Elements are represented as `c0 + c1 * w + ... + c5 * w^5` where `w^6 = \xi`, where `\xi in F`.
 ///
 /// Memory alignment follows alignment of `F`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct SexticExtField<F> {
     pub c: [F; 6],

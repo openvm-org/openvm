@@ -1,28 +1,25 @@
-use std::collections::BTreeMap;
-
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use ax_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    ChipUsageGetter,
-};
-use axvm_ecc_constants::{BLS12381, BN254};
+use ax_stark_backend::ChipUsageGetter;
+use axvm_circuit::system::memory::MemoryTraceHeights;
 use derive_new::new;
-use itertools::Itertools;
-use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
-use crate::{
-    arch::ExecutorName,
-    intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
-    system::memory::BOUNDARY_AIR_OFFSET,
-};
+use crate::system::memory::BOUNDARY_AIR_OFFSET;
+
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
+pub const BYTE_XOR_BUS: usize = 10;
+//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
@@ -35,12 +32,13 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmGenericConfig<F: PrimeField32> {
+pub trait VmConfig<F: PrimeField32>: Clone {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
     /// Must contain system config
     fn system(&self) -> &SystemConfig;
+    fn system_mut(&mut self) -> &mut SystemConfig;
 
     fn create_chip_complex(
         &self,
@@ -60,18 +58,19 @@ pub struct MemoryConfig {
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
     /// If set, the height of the trace of boundary AIR(for volatile memory) will be overridden.
+    // TODO: remove this because we have MemoryTraceHeights
     pub boundary_air_height: Option<usize>,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 16, 64, None)
+        Self::new(29, 1, 29, 29, 17, 64, None)
     }
 }
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
     pub max_constraint_degree: usize,
@@ -96,6 +95,12 @@ pub struct SystemConfig {
     /// Whether to collect metrics.
     /// **Warning**: this slows down the runtime.
     pub collect_metrics: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SystemTraceHeights {
+    pub memory: MemoryTraceHeights,
+    // All other chips have constant heights.
 }
 
 impl SystemConfig {
@@ -134,6 +139,11 @@ impl SystemConfig {
         self
     }
 
+    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
+        self.max_segment_len = max_segment_len;
+        self
+    }
+
     pub fn with_metric_collection(mut self) -> Self {
         self.collect_metrics = true;
         self
@@ -169,312 +179,33 @@ impl Default for SystemConfig {
     }
 }
 
-impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
+impl SystemTraceHeights {
+    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
+    pub fn round_to_next_power_of_two(&mut self) {
+        self.memory.round_to_next_power_of_two();
+    }
+
+    /// Round all trace heights to the next power of two, except 0 stays 0.
+    pub fn round_to_next_power_of_two_or_zero(&mut self) {
+        self.memory.round_to_next_power_of_two_or_zero();
+    }
+}
+
+impl<F: PrimeField32> VmConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
     type Periphery = SystemPeriphery<F>;
 
     fn system(&self) -> &SystemConfig {
         self
     }
+    fn system_mut(&mut self) -> &mut SystemConfig {
+        self
+    }
 
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = SystemComplex::new(*self);
+        let complex = SystemComplex::new(self.clone());
         Ok(complex)
-    }
-}
-
-// to be deleted
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VmConfig {
-    /// List of all executors except modular executors.
-    pub executors: Vec<ExecutorName>,
-    /// Optional. Can be used to override the height of the trace of an executor.
-    pub overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
-    /// List of all supported modulus
-    pub supported_modulus: Vec<BigUint>,
-    /// List of all supported Complex extensions, stored as indices of supported_modulus.
-    /// The supported modulus must exist in order for the complex extension to be supported.
-    pub supported_complex_ext: Vec<usize>,
-    /// List of all supported EC curves
-    pub supported_ec_curves: Vec<EcCurve>,
-    /// List of all supported pairing curves
-    pub supported_pairing_curves: Vec<PairingCurve>,
-
-    pub poseidon2_max_constraint_degree: usize,
-    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
-    /// each segment is proved by a proof. Each proof commits the before and after state of the
-    /// corresponding segment.
-    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
-    /// proof.
-    pub continuation_enabled: bool,
-    pub memory_config: MemoryConfig,
-    /// `num_public_values` has different meanings in single segment mode and continuation mode.
-    /// In single segment mode, `num_public_values` is the number of public values of
-    /// PublicValuesChips. In this case, verifier can read public values directly.
-    /// In continuation mode, public values are stored in a special address space.
-    /// `number_public_values` indicates the number of allowed addresses in that address space. The verifier
-    /// cannot read public values directly, but they can decommit the public values from the memory
-    /// state commit.
-    pub num_public_values: usize,
-    pub max_segment_len: usize,
-    /*pub max_program_length: usize,
-    pub max_operations: usize,*/
-    pub collect_metrics: bool,
-}
-
-impl VmConfig {
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_parameters(
-        poseidon2_max_constraint_degree: usize,
-        continuation_enabled: bool,
-        memory_config: MemoryConfig,
-        num_public_values: usize,
-        max_segment_len: usize,
-        collect_metrics: bool,
-        // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
-        supported_modulus: Vec<BigUint>,
-        supported_complex_ext: Vec<usize>,
-        supported_ec_curves: Vec<EcCurve>,
-        supported_pairing_curves: Vec<PairingCurve>,
-    ) -> Self {
-        VmConfig {
-            executors: Vec::new(),
-            overridden_executor_heights: None,
-            continuation_enabled,
-            poseidon2_max_constraint_degree,
-            memory_config,
-            num_public_values,
-            max_segment_len,
-            collect_metrics,
-            supported_modulus,
-            supported_complex_ext,
-            supported_ec_curves,
-            supported_pairing_curves,
-        }
-    }
-
-    pub fn add_executor(mut self, executor: ExecutorName) -> Self {
-        // Some executors need to be handled in a special way, and cannot be added like other executors.
-        // Adding these will cause a panic in the `create_chip_set` function.
-        self.executors.push(executor);
-        self
-    }
-
-    pub fn add_int256_alu(self) -> Self {
-        self.add_executor(ExecutorName::BaseAlu256Rv32)
-            .add_executor(ExecutorName::LessThan256Rv32)
-            .add_executor(ExecutorName::Shift256Rv32)
-    }
-
-    pub fn add_int256_branch(self) -> Self {
-        self.add_executor(ExecutorName::BranchEqual256Rv32)
-            .add_executor(ExecutorName::BranchLessThan256Rv32)
-    }
-
-    pub fn add_int256_m(self) -> Self {
-        self.add_executor(ExecutorName::Multiplication256Rv32)
-    }
-
-    pub fn add_modular_support(self, enabled_modulus: Vec<BigUint>) -> Self {
-        let mut res = self;
-        res.supported_modulus.extend(enabled_modulus);
-        res
-    }
-
-    pub fn add_canonical_modulus(self) -> Self {
-        let primes = Modulus::all().iter().map(|m| m.prime()).collect();
-        self.add_modular_support(primes)
-    }
-
-    pub fn add_complex_ext_support(mut self, enabled_moduli: Vec<BigUint>) -> Self {
-        for modulus in enabled_moduli {
-            let (mod_idx, _) = self
-                .supported_modulus
-                .iter()
-                .find_position(|&m| m == &modulus)
-                .expect("Modulus must be supported to enable complex extension");
-            self.supported_complex_ext.push(mod_idx);
-        }
-        self
-    }
-
-    pub fn add_ecc_support(self, ec_curves: Vec<EcCurve>) -> Self {
-        let mut res = self;
-        res.supported_ec_curves.extend(ec_curves);
-        res
-    }
-
-    // TODO: remove canonical ec curves altogether
-    pub fn add_canonical_ec_curves(self) -> Self {
-        self.add_ecc_support(vec![EcCurve::Secp256k1])
-    }
-
-    pub fn add_pairing_support(self, pairing_curves: Vec<PairingCurve>) -> Self {
-        let mut res = self;
-        res.supported_pairing_curves.extend(pairing_curves);
-        res
-    }
-
-    pub fn add_canonical_pairing_curves(self) -> Self {
-        self.add_pairing_support(vec![PairingCurve::Bn254])
-    }
-
-    pub fn with_num_public_values(mut self, n: usize) -> Self {
-        self.num_public_values = n;
-        self
-    }
-
-    pub fn with_max_segment_len(mut self, n: usize) -> Self {
-        self.max_segment_len = n;
-        self
-    }
-
-    /// Generate a proving key for the VM.
-    pub fn generate_pk<SC: StarkGenericConfig>(
-        &self,
-        mut keygen_builder: MultiStarkKeygenBuilder<SC>,
-    ) -> MultiStarkProvingKey<SC>
-    where
-        Val<SC>: PrimeField32,
-    {
-        let chip_set = self.create_chip_set::<Val<SC>>();
-        for air in chip_set.airs() {
-            keygen_builder.add_air(air);
-        }
-        keygen_builder.generate_pk()
-    }
-}
-
-impl Default for VmConfig {
-    fn default() -> Self {
-        Self::from_parameters(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            false,
-            Default::default(),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        )
-    }
-}
-
-impl VmConfig {
-    pub fn rv32i() -> Self {
-        VmConfig {
-            poseidon2_max_constraint_degree: 3,
-            continuation_enabled: true,
-            ..Default::default()
-        }
-        .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::BaseAluRv32)
-        .add_executor(ExecutorName::LessThanRv32)
-        .add_executor(ExecutorName::ShiftRv32)
-        .add_executor(ExecutorName::LoadStoreRv32)
-        .add_executor(ExecutorName::LoadSignExtendRv32)
-        .add_executor(ExecutorName::HintStoreRv32)
-        .add_executor(ExecutorName::BranchEqualRv32)
-        .add_executor(ExecutorName::BranchLessThanRv32)
-        .add_executor(ExecutorName::JalLuiRv32)
-        .add_executor(ExecutorName::JalrRv32)
-        .add_executor(ExecutorName::AuipcRv32)
-    }
-
-    pub fn rv32im() -> Self {
-        Self::rv32i()
-            .add_executor(ExecutorName::MultiplicationRv32)
-            .add_executor(ExecutorName::MultiplicationHighRv32)
-            .add_executor(ExecutorName::DivRemRv32)
-    }
-
-    pub fn aggregation(num_public_values: usize, poseidon2_max_constraint_degree: usize) -> Self {
-        VmConfig {
-            poseidon2_max_constraint_degree,
-            continuation_enabled: false,
-            memory_config: MemoryConfig {
-                // By default, eDSL never uses AccessAdapterAir with N > 8.
-                max_access_adapter_n: 8,
-                ..Default::default()
-            },
-            num_public_values,
-            max_segment_len: (1 << 24) - 100,
-            ..VmConfig::default()
-        }
-        .add_executor(ExecutorName::Phantom)
-        .add_executor(ExecutorName::LoadStore)
-        .add_executor(ExecutorName::BranchEqual)
-        .add_executor(ExecutorName::Jal)
-        .add_executor(ExecutorName::FieldArithmetic)
-        .add_executor(ExecutorName::FieldExtension)
-        .add_executor(ExecutorName::Poseidon2)
-        .add_executor(ExecutorName::FriReducedOpening)
-    }
-
-    pub fn read_config_file(file: &str) -> Result<Self, String> {
-        let file_str = std::fs::read_to_string(file)
-            .map_err(|_| format!("Could not load config file from: {file}"))?;
-        let config: Self = toml::from_str(file_str.as_str())
-            .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
-        Ok(config)
-    }
-}
-
-// TO BE DELETED:
-#[derive(EnumCount, EnumIter, FromRepr, Clone, Debug)]
-#[repr(usize)]
-pub enum Modulus {
-    Secp256k1Coord = 0,
-    Secp256k1Scalar = 1,
-}
-
-impl Modulus {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            Modulus::Secp256k1Coord => SECP256K1_COORD_PRIME.clone(),
-            Modulus::Secp256k1Scalar => SECP256K1_SCALAR_PRIME.clone(),
-        }
-    }
-
-    pub fn all() -> Vec<Self> {
-        Modulus::iter().collect()
-    }
-}
-
-// TO BE DELETED:
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EcCurve {
-    Secp256k1,
-    Bn254,
-    Bls12_381,
-}
-
-impl EcCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            EcCurve::Secp256k1 => SECP256K1_COORD_PRIME.clone(),
-            EcCurve::Bn254 => BN254.MODULUS.clone(),
-            EcCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
-    }
-}
-
-// TODO: move this to axvm-ecc
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, FromRepr, EnumCount)]
-pub enum PairingCurve {
-    Bn254,
-    Bls12_381,
-}
-
-impl PairingCurve {
-    pub fn prime(&self) -> BigUint {
-        match self {
-            PairingCurve::Bn254 => BN254.MODULUS.clone(),
-            PairingCurve::Bls12_381 => BLS12381.MODULUS.clone(),
-        }
     }
 }

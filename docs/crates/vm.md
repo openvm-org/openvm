@@ -63,7 +63,7 @@ Each specific instantiation of a modular VM is defined in the following structs 
 
 ```rust
 pub struct VirtualMachine<F: PrimeField32> {
-    pub config: VmConfig,
+    pub config: VC,
     /// Streams are shared between `ExecutionSegment`s and within each
     /// segment shared with any chip(s) that handle hint opcodes
     streams: Arc<Mutex<Streams<F>>>,
@@ -71,7 +71,7 @@ pub struct VirtualMachine<F: PrimeField32> {
 }
 
 pub struct SingleSegmentVM<F: PrimeField32> {
-    pub config: VmConfig,
+    pub config: VC,
     _marker: PhantomData<F>,
 }
 ```
@@ -88,7 +88,7 @@ pub struct Streams<F> {
 Configuration of opcodes and memory is handled by:
 
 ```rust
-pub struct VmConfig {
+pub struct VC {
     /// List of all executors except modular executors.
     pub executors: Vec<ExecutorName>,
     /// List of all supported modulus
@@ -149,7 +149,7 @@ with subsets of functionality offered by `.execute()` and `execute_and_generate(
 
 ```rust
 pub struct ExecutionSegment<F: PrimeField32> {
-    pub config: VmConfig,
+    pub config: VC,
     pub chip_set: VmChipSet<F>,
 
     // The streams should be mutated in serial without thread-safety,

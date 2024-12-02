@@ -5,12 +5,18 @@ use ax_stark_sdk::{
     ax_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_field::PrimeField32,
+        Chip,
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
 };
-use axvm_circuit::arch::{instructions::exe::AxVmExe, ExecutorName, VirtualMachine, VmConfig};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
+use axvm_keccak256_circuit::Keccak256Rv32Config;
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 
@@ -91,15 +97,22 @@ impl BenchCmd {
 
         let data = read(elf_path)?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-
+        let exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Keccak256TranspilerExtension),
+        );
         // TODO: read from axiom.toml
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(
             FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
         );
-        let config = VmConfig::rv32im().add_executor(ExecutorName::Keccak256Rv32);
+        let config = Keccak256Rv32Config::default();
 
-        let total_proving_time_ms = bench_from_exe(engine, config, elf, vec![])?;
+        let total_proving_time_ms = bench_from_exe(engine, config, exe, vec![])?;
 
         let green = AnsiColor::Green.on_default().effects(Effects::BOLD);
         write_status(
@@ -116,9 +129,9 @@ impl BenchCmd {
 /// Performs proving keygen and then execute and proof generation.
 ///
 /// Returns total proving time in ms.
-pub fn bench_from_exe<SC, E>(
+pub fn bench_from_exe<SC, E, VC>(
     engine: E,
-    config: VmConfig,
+    config: VC,
     exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<u128>
@@ -126,11 +139,14 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
+    VC: VmConfig<Val<SC>>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
     // 1. Generate proving key from config.
     tracing::info!("fri.log_blowup: {}", engine.fri_params().log_blowup);
-    let vm = VirtualMachine::new(engine, config);
+    let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
     let pk = vm.keygen();
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = vm.commit_exe(exe);

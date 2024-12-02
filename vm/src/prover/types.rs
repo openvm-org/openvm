@@ -6,17 +6,15 @@ use ax_stark_sdk::config::FriParameters;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
-use crate::arch::VmConfig;
-
 ///Proving key for a specific VM.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
-    serialize = "MultiStarkProvingKey<SC>: Serialize",
-    deserialize = "MultiStarkProvingKey<SC>: Deserialize<'de>"
+    serialize = "MultiStarkProvingKey<SC>: Serialize, VC: Serialize",
+    deserialize = "MultiStarkProvingKey<SC>: Deserialize<'de>, VC: Deserialize<'de>"
 ))]
-#[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct VmProvingKey<SC: StarkGenericConfig> {
+#[derivative(Clone(bound = "Com<SC>: Clone, VC: Clone"))]
+pub struct VmProvingKey<SC: StarkGenericConfig, VC> {
     pub fri_params: FriParameters,
-    pub vm_config: VmConfig,
+    pub vm_config: VC,
     pub vm_pk: MultiStarkProvingKey<SC>,
 }

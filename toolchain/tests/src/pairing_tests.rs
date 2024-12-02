@@ -7,7 +7,12 @@ use ax_ecc_execution::axvm_ecc::{
     AffinePoint,
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::arch::{EcCurve, PairingCurve, VmConfig, VmExecutor};
+use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
+use axvm_ecc_circuit::WeierstrassExtension;
+use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
+use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
 use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
@@ -15,6 +20,29 @@ use rand::SeedableRng;
 use crate::utils::build_example_program;
 
 type F = BabyBear;
+
+// TODO(INT-2746): this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
+pub fn get_testing_config() -> Rv32PairingConfig {
+    let primes = [
+        SECP256K1.MODULUS.clone(),
+        SECP256K1.ORDER.clone(),
+        BLS12381.MODULUS.clone(),
+        BN254.MODULUS.clone(),
+    ];
+    Rv32PairingConfig {
+        system: SystemConfig::default().with_continuations(),
+        base: Default::default(),
+        mul: Default::default(),
+        io: Default::default(),
+        modular: ModularExtension::new(primes.to_vec()),
+        fp2: Fp2Extension::new(primes.to_vec()),
+        weierstrass: WeierstrassExtension::new(vec![
+            PairingCurve::Bn254.curve_config(),
+            PairingCurve::Bls12_381.curve_config(),
+        ]),
+        pairing: PairingExtension::new(vec![PairingCurve::Bn254, PairingCurve::Bls12_381]),
+    }
+}
 
 mod bn254 {
     use std::iter;
@@ -30,20 +58,29 @@ mod bn254 {
         },
         curves::bn254::Bn254,
     };
-    use axvm_ecc_constants::BN254;
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use axvm_pairing_transpiler::PairingTranspilerExtension;
+    use axvm_rv32im_transpiler::{
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    };
+    use axvm_transpiler::transpiler::Transpiler;
 
     use super::*;
 
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(vec![BN254.MODULUS.clone()])
-                .add_complex_ext_support(vec![BN254.MODULUS.clone()]),
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -57,14 +94,24 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(axvm_exe, vec![io])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -100,14 +147,24 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im().add_canonical_pairing_curves());
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -134,13 +191,23 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -152,20 +219,7 @@ mod bn254 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
-
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -196,13 +250,23 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -214,20 +278,8 @@ mod bn254 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(1u64),
-            BN254.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bn254])
-                .add_ecc_support(vec![EcCurve::Bn254])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -262,7 +314,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 }
@@ -276,20 +328,30 @@ mod bls12_381 {
         },
         curves::bls12_381::Bls12_381,
     };
-    use axvm_ecc_constants::BLS12381;
+    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use axvm_ecc::algebra::IntMod;
+    use axvm_pairing_transpiler::PairingTranspilerExtension;
+    use axvm_rv32im_transpiler::{
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    };
+    use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
 
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(vec![BLS12381.MODULUS.clone()])
-                .add_complex_ext_support(vec![BLS12381.MODULUS.clone()]),
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -303,16 +365,24 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io])?;
+        executor.execute(axvm_exe, vec![io])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -349,16 +419,24 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im().add_pairing_support(vec![PairingCurve::Bls12_381]),
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
         );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -385,13 +463,23 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -403,19 +491,8 @@ mod bls12_381 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -452,13 +529,23 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
 
         // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
         // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
@@ -470,19 +557,8 @@ mod bls12_381 {
         //     .iter()
         //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
         //     .collect::<Vec<_>>();
-        let enabled_moduli = vec![
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(3u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(2u64),
-            BLS12381.MODULUS.clone() + num_bigint_dig::BigUint::from(0u64),
-        ];
 
-        let executor = VmExecutor::<F>::new(
-            VmConfig::rv32im()
-                .add_pairing_support(vec![PairingCurve::Bls12_381])
-                .add_ecc_support(vec![EcCurve::Bls12_381])
-                .add_modular_support(enabled_moduli.clone())
-                .add_complex_ext_support(enabled_moduli),
-        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -517,14 +593,24 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(elf, vec![io_all])?;
+        executor.execute(axvm_exe, vec![io_all])?;
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program("final_exp_hint")?;
-        let executor = VmExecutor::<F>::new(VmConfig::rv32im());
+        let axvm_exe = AxVmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(PairingTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension),
+        );
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -532,14 +618,29 @@ mod bls12_381 {
         let qs = vec![AffinePoint::new(Q.x, Q.y), AffinePoint::new(Q.x, Q.y)];
         let f = Bls12_381::multi_miller_loop(&ps, &qs);
         let (c, s) = Bls12_381::final_exp_hint(&f);
-        let io = [f, c, s]
+        let ps = ps
             .into_iter()
-            .flat_map(|fp12| fp12.to_coeffs())
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
-            .map(AbstractField::from_canonical_u8)
+            .map(|pt| {
+                let [x, y] =
+                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
             .collect::<Vec<_>>();
-        executor.execute(elf, vec![io])?;
+        let qs = qs
+            .into_iter()
+            .map(|pt| {
+                let [x, y] =
+                    [pt.x, pt.y].map(|x| axvm_ecc::bls12_381::Fp2::from_bytes(&x.to_bytes()));
+                AffinePoint::new(x, y)
+            })
+            .collect::<Vec<_>>();
+        let [c, s] = [c, s].map(|x| axvm_ecc::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let io = (ps, qs, (c, s));
+        let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
+        executor.execute(
+            axvm_exe,
+            vec![io.into_iter().map(F::from_canonical_u8).collect()],
+        )?;
         Ok(())
     }
 }
