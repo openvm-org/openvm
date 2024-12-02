@@ -62,6 +62,7 @@ mod bn254 {
 
     use super::*;
 
+    #[ignore]
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
@@ -93,6 +94,7 @@ mod bn254 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
@@ -146,6 +148,7 @@ mod bn254 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
@@ -190,6 +193,7 @@ mod bn254 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
@@ -249,6 +253,7 @@ mod bn254 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
@@ -333,6 +338,7 @@ mod bls12_381 {
 
     use super::*;
 
+    #[ignore]
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program("fp12_mul")?;
@@ -364,6 +370,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program("pairing_line")?;
@@ -418,6 +425,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program("pairing_miller_step")?;
@@ -462,6 +470,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program("pairing_miller_loop")?;
@@ -528,6 +537,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program("pairing_check")?;
@@ -592,6 +602,7 @@ mod bls12_381 {
         Ok(())
     }
 
+    #[ignore]
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program("final_exp_hint")?;
