@@ -17,8 +17,13 @@ axvm::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 
+axvm::sw_init! {
+    Secp256k1Coord,
+}
+
 pub fn main() {
     setup_all_moduli();
+    setup_all_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
