@@ -10,14 +10,19 @@ use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program}
 use backtrace::Backtrace;
 use p3_field::PrimeField32;
 
-use super::{AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmGenericConfig};
+use super::{
+    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
+    VmGenericConfig,
+};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
     metrics::cycle_tracker::CycleTracker,
-    system::memory::{Equipartition, CHUNK},
+    system::{
+        memory::{Equipartition, CHUNK},
+        poseidon2::Poseidon2Chip,
+    },
 };
 
 /// Check segment every 100 instructions.
@@ -89,6 +94,13 @@ impl<F: PrimeField32, VmConfig: VmGenericConfig<F>> ExecutionSegment<F, VmConfig
 
     pub fn system_config(&self) -> &SystemConfig {
         self.chip_complex.config()
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.chip_complex
+            .set_override_system_trace_heights(overridden_heights.system);
+        self.chip_complex
+            .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
     /// Stopping is triggered by should_segment()

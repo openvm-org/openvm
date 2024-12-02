@@ -1,0 +1,12 @@
+[package]
+name = "axvm-rv32im-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Guest extension for RISC-V 32IM"
+
+[dependencies]
+axvm-platform = { workspace = true }
+
+[features]
+default = []

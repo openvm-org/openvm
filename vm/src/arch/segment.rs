@@ -16,9 +16,11 @@ use parking_lot::Mutex;
 use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
 use crate::{
     arch::{instructions::*, AxVmChip, ExecutionError, ExecutionState, InstructionExecutor},
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
     metrics::{cycle_tracker::CycleTracker, VmMetrics},
-    system::memory::{Equipartition, CHUNK},
+    system::{
+        memory::{Equipartition, CHUNK},
+        poseidon2::Poseidon2Chip,
+    },
 };
 
 /// Check segment every 100 instructions.

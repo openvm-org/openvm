@@ -7,14 +7,11 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::SingleSegmentVmExecutor,
+    arch::new_vm::SingleSegmentVmExecutor,
     prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
 };
 
-use crate::{
-    keygen::{perm::AirIdPermutation, RootVerifierProvingKey},
-    OuterSC, F,
-};
+use crate::{keygen::RootVerifierProvingKey, OuterSC, F};
 
 /// Local prover for a root verifier.
 pub struct RootVerifierLocalProver {
@@ -32,22 +29,25 @@ impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
         let input = input.into();
         let vm = SingleSegmentVmExecutor::new(self.root_verifier_pk.vm_pk.vm_config.clone());
         let mut proof_input = vm
-            .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
+            .execute_and_generate(
+                self.root_verifier_pk.root_committed_exe.clone(),
+                input.into(),
+            )
             .unwrap();
         assert_eq!(
             proof_input.per_air.len(),
-            self.root_verifier_pk.heights.len(),
+            self.root_verifier_pk.air_heights.len(),
             "All AIRs of root verifier should present"
         );
         proof_input.per_air.iter().for_each(|(air_id, input)| {
             assert_eq!(
                 input.main_trace_height(),
-                self.root_verifier_pk.heights[*air_id],
+                self.root_verifier_pk.air_heights[*air_id],
                 "Trace height doesn't match"
             );
         });
         // Reorder the AIRs by heights.
-        let air_id_perm = AirIdPermutation::compute(&self.root_verifier_pk.heights);
+        let air_id_perm = self.root_verifier_pk.air_id_permutation();
         air_id_perm.permute(&mut proof_input.per_air);
         for i in 0..proof_input.per_air.len() {
             // Overwrite the AIR ID.

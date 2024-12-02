@@ -22,7 +22,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 /// Config for a VM with base extension and IO extension
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Rv32IConfig {
     #[system]
     pub system: SystemConfig,
@@ -33,7 +33,7 @@ pub struct Rv32IConfig {
 }
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Copy, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
 pub struct Rv32ImConfig {
     #[system]
     pub system: SystemConfig,
@@ -59,6 +59,53 @@ impl Default for Rv32IConfig {
 impl Default for Rv32ImConfig {
     fn default() -> Self {
         let inner = Rv32IConfig::default();
+        Self {
+            system: inner.system,
+            base: inner.base,
+            mul: Default::default(),
+            io: Default::default(),
+        }
+    }
+}
+
+impl Rv32IConfig {
+    pub fn with_public_values(public_values: usize) -> Self {
+        let system = SystemConfig::default()
+            .with_continuations()
+            .with_public_values(public_values);
+        Self {
+            system,
+            base: Default::default(),
+            io: Default::default(),
+        }
+    }
+
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
+        let system = SystemConfig::default()
+            .with_continuations()
+            .with_public_values(public_values)
+            .with_max_segment_len(segment_len);
+        Self {
+            system,
+            base: Default::default(),
+            io: Default::default(),
+        }
+    }
+}
+
+impl Rv32ImConfig {
+    pub fn with_public_values(public_values: usize) -> Self {
+        let inner = Rv32IConfig::with_public_values(public_values);
+        Self {
+            system: inner.system,
+            base: inner.base,
+            mul: Default::default(),
+            io: Default::default(),
+        }
+    }
+
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
+        let inner = Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len);
         Self {
             system: inner.system,
             base: inner.base,

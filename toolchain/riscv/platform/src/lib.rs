@@ -1,17 +1,3 @@
-// Copyright 2024 RISC Zero, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #![doc = include_str!("../README.md")]
 #![no_std]
 #![allow(unused_variables)]
@@ -21,16 +7,16 @@
 // Re-export bincode for consistent version for serialization and deserialization across crates.
 pub use bincode;
 
-pub mod memory;
-// #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
-// mod getrandom;
 pub mod constants;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod custom_insn;
+#[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]
+mod getrandom;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
+pub mod memory;
 #[cfg(feature = "rust-runtime")]
 pub mod rust_rt;
 

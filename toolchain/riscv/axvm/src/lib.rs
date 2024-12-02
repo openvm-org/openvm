@@ -1,37 +1,42 @@
-//! # axVM
+//! # axVM standard library
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![feature(thread_local)]
 
 extern crate alloc;
 
-pub mod intrinsics;
+// always include rust_rt so the memory allocator is enabled
+#[cfg(target_os = "zkvm")]
+use core::arch::asm;
+
+#[cfg(target_os = "zkvm")]
+#[allow(unused_imports)]
+use axvm_platform::rust_rt;
+#[cfg(target_os = "zkvm")]
+pub use axvm_rv32im_guest::*;
+
 pub mod io;
+#[cfg(all(feature = "std", target_os = "zkvm"))]
+pub mod pal_abi;
 pub mod process;
+
+#[cfg(not(target_os = "zkvm"))]
+pub mod utils;
 
 #[cfg(not(target_os = "zkvm"))]
 pub mod host;
 
-#[cfg(target_os = "zkvm")]
-use core::arch::asm;
-
+// TODO remove these from this crate
 pub use axvm_moduli_setup::*;
-// always include rust_rt so the memory allocator is enabled
-#[cfg(target_os = "zkvm")]
-#[allow(unused_imports)]
-use axvm_platform::rust_rt;
 pub use axvm_sw_setup::*;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memcpy.s"));
-
-#[cfg(all(feature = "std", target_os = "zkvm"))]
-compile_error!("std not yet supported by axvm");
 
 fn _fault() -> ! {
     #[cfg(target_os = "zkvm")]
@@ -69,7 +74,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
-#[cfg(target_os = "zkvm")]
+#[cfg(all(not(feature = "std"), target_os = "zkvm"))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -88,7 +93,7 @@ macro_rules! entry {
 }
 /// This macro does nothing. You should name the function `main` so that the normal rust main function
 /// setup is used.
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(any(feature = "std", not(target_os = "zkvm")))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {};

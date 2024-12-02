@@ -1,7 +1,7 @@
 //! Program to match the workload of <https://github.com/bluealloy/revm/blob/900409f134c1cbd4489d370a6b037f354afa4a5c/crates/revm/benches/bench.rs#L68>
 //! We run 100 transfers to take the average
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 
 extern crate alloc;
 

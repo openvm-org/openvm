@@ -7,7 +7,9 @@ use crate::SubAir;
 pub struct Encoder {
     var_cnt: usize,
     flag_cnt: usize,
-    max_degree: u32,
+    /// Maximal degree of the flag expressions.
+    /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is, `max_flag_degree + 1`.
+    max_flag_degree: u32,
     pts: Vec<Vec<u32>>,
 }
 
@@ -46,7 +48,7 @@ impl Encoder {
         Self {
             var_cnt: k,
             flag_cnt: cnt,
-            max_degree,
+            max_flag_degree: max_degree,
             pts,
         }
     }
@@ -69,8 +71,8 @@ impl Encoder {
         {
             let sum: u32 = pt.iter().sum();
             let var_sum = vars.iter().fold(AB::Expr::ZERO, |acc, &v| acc + v);
-            for j in 0..(self.max_degree - sum) {
-                expr *= AB::Expr::from_canonical_u32(self.max_degree - j) - var_sum.clone();
+            for j in 0..(self.max_flag_degree - sum) {
+                expr *= AB::Expr::from_canonical_u32(self.max_flag_degree - j) - var_sum.clone();
                 denom *= AB::F::from_canonical_u32(j + 1);
             }
         }
@@ -130,7 +132,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for Encoder {
         assert_eq!(local.len(), self.var_cnt, "wrong number of variables");
         let falling_factorial = |lin: AB::Expr| {
             let mut res = AB::Expr::ONE;
-            for i in 0..=self.max_degree {
+            for i in 0..=self.max_flag_degree {
                 res *= lin.clone() - AB::Expr::from_canonical_u32(i);
             }
             res

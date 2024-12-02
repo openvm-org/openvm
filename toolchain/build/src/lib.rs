@@ -157,7 +157,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     // if !rust_src.is_empty() {
     // TODO[jpw]: only do this for custom src once we make axiom toolchain
     args.push("-Z");
-    args.push("build-std=alloc,core,proc_macro,panic_abort"); // ,std");
+    args.push("build-std=alloc,core,proc_macro,panic_abort,std");
     args.push("-Z");
     args.push("build-std-features=compiler-builtins-mem");
     // cmd.env("__CARGO_TESTS_ONLY_SRC_ROOT", rust_src);

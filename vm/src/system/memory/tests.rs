@@ -38,13 +38,13 @@ use crate::{
         testing::memory::gen_pointer, ExecutionBus, MemoryConfig, EXECUTION_BUS, MEMORY_BUS,
         MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
     },
-    intrinsics::hashes::poseidon2::Poseidon2Chip,
     system::{
         memory::{
             merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryWriteRecord,
         },
+        poseidon2::Poseidon2Chip,
         program::ProgramBus,
     },
 };

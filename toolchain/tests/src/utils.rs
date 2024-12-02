@@ -21,12 +21,20 @@ pub fn decode_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
 }
 
 pub fn build_example_program(example_name: &str) -> Result<Elf> {
+    build_example_program_with_features::<&str>(example_name, [])
+}
+
+pub fn build_example_program_with_features<S: AsRef<str>>(
+    example_name: &str,
+    features: impl IntoIterator<Item = S>,
+) -> Result<Elf> {
     let manifest_dir = get_programs_dir();
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
         .with_options(["--example", example_name])
+        .with_features(features)
         .into();
     build_guest_package(&pkg, &target_dir, &guest_opts, None);
     // Assumes the package has a single target binary

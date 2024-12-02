@@ -81,7 +81,7 @@ fn test<const CHUNK: usize>(
 
     println!("trace height = {}", chip.current_height());
     let (trace, final_tree) =
-        chip.generate_trace_and_final_tree(&initial_tree, final_memory, &mut hash_test_chip);
+        chip.generate_trace_and_final_tree(&initial_tree, final_memory, &mut hash_test_chip, None);
 
     assert_eq!(final_tree, final_tree_check);
 
@@ -250,7 +250,7 @@ fn expand_test_no_accesses() {
         COMPRESSION_BUS,
     );
 
-    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
+    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip, None);
 
     let mut public_values = vec![vec![]; 2];
     public_values[0].extend(tree.hash());
@@ -289,7 +289,8 @@ fn expand_test_negative() {
         COMPRESSION_BUS,
     );
 
-    let (mut trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip);
+    let (mut trace, _) =
+        chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip, None);
     for row in trace.rows_mut() {
         let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
         if row.expand_direction == BabyBear::NEG_ONE {

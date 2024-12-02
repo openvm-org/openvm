@@ -5,7 +5,7 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        VmConfig,
+        VmGenericConfig,
     },
     system::{
         memory::{memory_image_to_equipartition, tree::MemoryNode},
@@ -36,14 +36,16 @@ pub struct AppExecutionCommit<T> {
 impl AppExecutionCommit<Val<SC>> {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the final
     /// proof.
-    pub fn compute(
-        app_vm_config: &VmConfig,
+    pub fn compute<VC: VmGenericConfig<Val<SC>>>(
+        app_vm_config: &VC,
         app_exe: &AxVmCommittedExe<SC>,
         leaf_vm_verifier_exe: &AxVmCommittedExe<SC>,
     ) -> Self {
-        assert!(app_exe.exe.program.max_num_public_values <= app_vm_config.num_public_values);
+        assert!(
+            app_exe.exe.program.max_num_public_values <= app_vm_config.system().num_public_values
+        );
         let hasher = vm_poseidon2_hasher();
-        let memory_dimensions = app_vm_config.memory_config.memory_dimensions();
+        let memory_dimensions = app_vm_config.system().memory_config.memory_dimensions();
         let app_program_commit: [Val<SC>; DIGEST_SIZE] =
             app_exe.committed_program.prover_data.commit.into();
         let leaf_verifier_program_commit: [Val<SC>; DIGEST_SIZE] = leaf_vm_verifier_exe

@@ -196,7 +196,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = axvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
                         *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                     }
                     #[cfg(target_os = "zkvm")]
@@ -288,7 +288,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = axvm::intrinsics::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = axvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
                         Self::from_biguint((self.as_biguint() * inv) % modulus)
                     }
                     #[cfg(target_os = "zkvm")]
@@ -377,7 +377,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     #[cfg(not(target_os = "zkvm"))]
                     fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
-                        Self(axvm::intrinsics::biguint_to_limbs(&biguint))
+                        Self(axvm::utils::biguint_to_limbs(&biguint))
                     }
 
                     #[cfg(not(target_os = "zkvm"))]

@@ -3,10 +3,7 @@ use std::rc::Rc;
 use axvm_instructions::instruction::Instruction;
 use p3_field::PrimeField32;
 
-use crate::{
-    intrinsic_extensions::IntrinsicTranspilerExtension, rrs::Rv32TranspilerExtension,
-    TranspilerExtension,
-};
+use crate::TranspilerExtension;
 
 /// Collection of [`TranspilerExtension`]s.
 /// The transpiler can be configured to transpile any ELF in 32-bit chunks.
@@ -22,13 +19,7 @@ impl<F: PrimeField32> Default for Transpiler<F> {
 
 impl<F: PrimeField32> Transpiler<F> {
     pub fn new() -> Self {
-        Self {
-            processors: vec![Rc::new(Rv32TranspilerExtension)],
-        }
-    }
-
-    pub fn default_with_intrinsics() -> Self {
-        Self::default().with_processor(Rc::new(IntrinsicTranspilerExtension))
+        Self { processors: vec![] }
     }
 
     pub fn with_processor(self, proc: Rc<dyn TranspilerExtension<F>>) -> Self {

@@ -2,9 +2,11 @@ use num_bigint_dig::BigUint;
 
 mod bls12381;
 mod bn254;
+mod secp256k1;
 mod utils;
 pub use bls12381::*;
 pub use bn254::*;
+pub use secp256k1::*;
 pub use utils::*;
 
 #[allow(non_snake_case)]

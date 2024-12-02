@@ -428,6 +428,6 @@ pub mod tests {
     #[test]
     fn test_two_adic_fri_pcs_single_batch() {
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
-        axvm_circuit::system::program::util::execute_program(program, witness);
+        axvm_native_circuit::execute_program(program, witness);
     }
 }
