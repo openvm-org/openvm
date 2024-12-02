@@ -10,8 +10,10 @@ axvm-bigint-guest = { path = "../../../extensions/bigint/guest" }
 axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 axvm-platform = { path = "../../riscv/platform" }
 axvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+axvm-ecc-sw-setup = { path = "../../../extensions/ecc/sw-setup", default-features = false }
 axvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false }
-axvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
+axvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
+axvm-algebra-moduli-setup = { path = "../../../extensions/algebra/moduli-setup", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
