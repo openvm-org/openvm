@@ -41,7 +41,7 @@ jobs:
           submodules: recursive
 
       - name: Run Makefile
-        working-directory: toolchain/tests/rv32im-test-vectors
+        working-directory: crates/toolchain/tests/rv32im-test-vectors
         run: |
           export PATH=/opt/riscv/bin:$PATH
           make
