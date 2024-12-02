@@ -1,14 +1,7 @@
-use std::collections::BTreeMap;
-
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use ax_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
-    ChipUsageGetter,
-};
+use ax_stark_backend::ChipUsageGetter;
 use axvm_circuit::system::memory::MemoryTraceHeights;
 use derive_new::new;
-use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
@@ -16,11 +9,17 @@ use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
-use crate::{
-    arch::ExecutorName,
-    // intrinsics::modular::{SECP256K1_COORD_PRIME, SECP256K1_SCALAR_PRIME},
-    system::memory::BOUNDARY_AIR_OFFSET,
-};
+use crate::system::memory::BOUNDARY_AIR_OFFSET;
+
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
+pub const BYTE_XOR_BUS: usize = 10;
+//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
@@ -33,7 +32,7 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmGenericConfig<F: PrimeField32>: Clone {
+pub trait VmConfig<F: PrimeField32>: Clone {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
@@ -192,7 +191,7 @@ impl SystemTraceHeights {
     }
 }
 
-impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
+impl<F: PrimeField32> VmConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
     type Periphery = SystemPeriphery<F>;
 
@@ -208,125 +207,5 @@ impl<F: PrimeField32> VmGenericConfig<F> for SystemConfig {
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
         let complex = SystemComplex::new(self.clone());
         Ok(complex)
-    }
-}
-
-// to be deleted
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VmConfig {
-    /// List of all executors except modular executors.
-    pub executors: Vec<ExecutorName>,
-    /// Optional. Can be used to override the height of the trace of an executor.
-    pub overridden_executor_heights: Option<BTreeMap<ExecutorName, usize>>,
-    /// List of all supported modulus
-    pub supported_modulus: Vec<BigUint>,
-    /// List of all supported Complex extensions, stored as indices of supported_modulus.
-    /// The supported modulus must exist in order for the complex extension to be supported.
-    pub supported_complex_ext: Vec<usize>,
-
-    pub poseidon2_max_constraint_degree: usize,
-    /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
-    /// each segment is proved by a proof. Each proof commits the before and after state of the
-    /// corresponding segment.
-    /// False if the VM is in single segment mode. In this mode, an execution is proved by a single
-    /// proof.
-    pub continuation_enabled: bool,
-    pub memory_config: MemoryConfig,
-    /// `num_public_values` has different meanings in single segment mode and continuation mode.
-    /// In single segment mode, `num_public_values` is the number of public values of
-    /// PublicValuesChips. In this case, verifier can read public values directly.
-    /// In continuation mode, public values are stored in a special address space.
-    /// `number_public_values` indicates the number of allowed addresses in that address space. The verifier
-    /// cannot read public values directly, but they can decommit the public values from the memory
-    /// state commit.
-    pub num_public_values: usize,
-    pub max_segment_len: usize,
-    /*pub max_program_length: usize,
-    pub max_operations: usize,*/
-    pub collect_metrics: bool,
-}
-
-impl VmConfig {
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_parameters(
-        poseidon2_max_constraint_degree: usize,
-        continuation_enabled: bool,
-        memory_config: MemoryConfig,
-        num_public_values: usize,
-        max_segment_len: usize,
-        collect_metrics: bool,
-        // Come from CompilerOptions. We can also pass in the whole compiler option if we need more fields from it.
-        supported_modulus: Vec<BigUint>,
-        supported_complex_ext: Vec<usize>,
-    ) -> Self {
-        VmConfig {
-            executors: Vec::new(),
-            overridden_executor_heights: None,
-            continuation_enabled,
-            poseidon2_max_constraint_degree,
-            memory_config,
-            num_public_values,
-            max_segment_len,
-            collect_metrics,
-            supported_modulus,
-            supported_complex_ext,
-        }
-    }
-
-    pub fn add_executor(mut self, executor: ExecutorName) -> Self {
-        // Some executors need to be handled in a special way, and cannot be added like other executors.
-        // Adding these will cause a panic in the `create_chip_set` function.
-        self.executors.push(executor);
-        self
-    }
-
-    pub fn with_num_public_values(mut self, n: usize) -> Self {
-        self.num_public_values = n;
-        self
-    }
-
-    pub fn with_max_segment_len(mut self, n: usize) -> Self {
-        self.max_segment_len = n;
-        self
-    }
-
-    /// Generate a proving key for the VM.
-    pub fn generate_pk<SC: StarkGenericConfig>(
-        &self,
-        mut keygen_builder: MultiStarkKeygenBuilder<SC>,
-    ) -> MultiStarkProvingKey<SC>
-    where
-        Val<SC>: PrimeField32,
-    {
-        let chip_set = self.create_chip_set::<Val<SC>>();
-        for air in chip_set.airs() {
-            keygen_builder.add_air(air);
-        }
-        keygen_builder.generate_pk()
-    }
-}
-
-impl Default for VmConfig {
-    fn default() -> Self {
-        Self::from_parameters(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            false,
-            Default::default(),
-            0,
-            DEFAULT_MAX_SEGMENT_LEN,
-            false,
-            vec![],
-            vec![],
-        )
-    }
-}
-
-impl VmConfig {
-    pub fn read_config_file(file: &str) -> Result<Self, String> {
-        let file_str = std::fs::read_to_string(file)
-            .map_err(|_| format!("Could not load config file from: {file}"))?;
-        let config: Self = toml::from_str(file_str.as_str())
-            .map_err(|e| format!("Failed to parse config file {}:\n{}", file, e))?;
-        Ok(config)
     }
 }

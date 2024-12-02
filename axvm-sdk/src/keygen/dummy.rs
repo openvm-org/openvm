@@ -16,8 +16,7 @@ use axvm_circuit::{
             exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
             UsizeOpcode,
         },
-        new_vm::{SingleSegmentVmExecutor, VirtualMachine, VmExecutor},
-        VmComplexTraceHeights, VmGenericConfig,
+        SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
     prover::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
@@ -97,14 +96,14 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
 }
 
 #[allow(dead_code)]
-pub fn dummy_leaf_proof<VmConfig: VmGenericConfig<F>>(
+pub fn dummy_leaf_proof<VC: VmConfig<F>>(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    app_vm_pk: &VmProvingKey<SC, VmConfig>,
+    app_vm_pk: &VmProvingKey<SC, VC>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_heights);
     dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
@@ -120,9 +119,9 @@ pub(super) fn dummy_leaf_proof_riscv_app_vm(
     dummy_leaf_proof_impl(leaf_vm_pk, &app_vm_pk, &app_proof)
 }
 
-fn dummy_leaf_proof_impl<VmConfig: VmGenericConfig<F>>(
+fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    app_vm_pk: &VmProvingKey<SC, VmConfig>,
+    app_vm_pk: &VmProvingKey<SC, VC>,
     app_proof: &ContinuationVmProof<SC>,
 ) -> Proof<SC> {
     let leaf_program = LeafVmVerifierConfig {
@@ -162,13 +161,13 @@ fn dummy_riscv_app_vm_pk(
     }
 }
 
-fn dummy_app_proof_impl<VmConfig: VmGenericConfig<F>>(
-    app_vm_pk: VmProvingKey<SC, VmConfig>,
+fn dummy_app_proof_impl<VC: VmConfig<F>>(
+    app_vm_pk: VmProvingKey<SC, VC>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     let fri_params = app_vm_pk.fri_params;
     let dummy_exe = dummy_app_committed_exe(fri_params);
@@ -189,7 +188,7 @@ where
     };
     // For the dummy proof, we must override the trace heights.
     let app_prover =
-        VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
+        VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
             app_vm_pk,
             dummy_exe,
             Some(overridden_heights),

@@ -6,9 +6,9 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::new_vm::{SingleSegmentVmExecutor, VmExecutor};
+use axvm_circuit::arch::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
-    arch::VmGenericConfig,
+    arch::VmConfig,
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
@@ -32,8 +32,8 @@ use crate::{
 mod exe;
 pub use exe::*;
 
-pub struct E2EStarkProver<VmConfig> {
-    pub app_pk: AppProvingKey<VmConfig>,
+pub struct E2EStarkProver<VC> {
+    pub app_pk: AppProvingKey<VC>,
     pub agg_pk: AggProvingKey,
     pub app_committed_exe: Arc<AxVmCommittedExe<SC>>,
     pub leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
@@ -41,19 +41,19 @@ pub struct E2EStarkProver<VmConfig> {
     pub num_children_leaf: usize,
     pub num_children_internal: usize,
 
-    app_prover: VmLocalProver<SC, VmConfig, BabyBearPoseidon2Engine>,
+    app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
     leaf_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
     internal_prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
     root_prover: RootVerifierLocalProver,
 }
 
-impl<VmConfig: VmGenericConfig<F>> E2EStarkProver<VmConfig>
+impl<VC: VmConfig<F>> E2EStarkProver<VC>
 where
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     pub fn new(
-        app_pk: AppProvingKey<VmConfig>,
+        app_pk: AppProvingKey<VC>,
         agg_pk: AggProvingKey,
         app_committed_exe: Arc<AxVmCommittedExe<SC>>,
         leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
@@ -61,7 +61,7 @@ where
         num_children_internal: usize,
     ) -> Self {
         assert_eq!(app_pk.num_public_values(), agg_pk.num_public_values());
-        let app_prover = VmLocalProver::<SC, VmConfig, BabyBearPoseidon2Engine>::new(
+        let app_prover = VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(
             app_pk.app_vm_pk.clone(),
             app_committed_exe.clone(),
         );

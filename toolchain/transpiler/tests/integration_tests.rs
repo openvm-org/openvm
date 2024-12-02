@@ -13,10 +13,10 @@ use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension
 use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_circuit::{
     arch::{
-        new_vm::VmExecutor, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
-        VmGenericConfig, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExecutor,
+        VmInventoryError,
     },
-    derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
 use axvm_ecc_constants::SECP256K1;
@@ -39,7 +39,6 @@ use test_case::test_case;
 
 type F = BabyBear;
 
-/// TODO: remove vm::VmExecutor and use new_vm::VmExecutor everywhere when all VmExtensions are implemented
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
@@ -95,7 +94,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct Rv32ModularFp2Int256Config {
     #[system]
     pub system: SystemConfig,

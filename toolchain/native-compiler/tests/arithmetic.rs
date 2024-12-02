@@ -1,4 +1,4 @@
-use axvm_circuit::arch::{new_vm::VmExecutor, ExecutionError};
+use axvm_circuit::arch::{ExecutionError, VmExecutor};
 use axvm_native_circuit::{execute_program, NativeConfig};
 use axvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},

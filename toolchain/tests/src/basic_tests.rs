@@ -4,9 +4,7 @@ use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_bigint_circuit::Int256Rv32Config;
 use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
-    arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::AxVmExe, new_vm::VmExecutor,
-    },
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::AxVmExe, VmExecutor},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };

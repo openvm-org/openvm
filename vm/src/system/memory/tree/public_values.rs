@@ -150,7 +150,7 @@ mod tests {
     use crate::{
         arch::{
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-            VmConfig,
+            SystemConfig,
         },
         system::memory::{memory_image_to_equipartition, tree::MemoryNode, CHUNK},
     };
@@ -158,7 +158,7 @@ mod tests {
     type F = BabyBear;
     #[test]
     fn test_public_value_happy_path() {
-        let mut vm_config = VmConfig::default();
+        let mut vm_config = SystemConfig::default();
         vm_config.memory_config.as_height = 4;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();

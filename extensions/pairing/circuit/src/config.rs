@@ -2,16 +2,16 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::*;
 use axvm_circuit::arch::{
-    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmGenericConfig, VmInventoryError,
+    SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmGenericConfig};
+use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_ecc_circuit::*;
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 
 use super::*;
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct Rv32PairingConfig {
     #[system]
     pub system: SystemConfig,

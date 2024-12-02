@@ -1,6 +1,4 @@
-use std::{
-    borrow::Borrow, cell::RefCell, collections::VecDeque, marker::PhantomData, mem, sync::Arc,
-};
+use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
@@ -9,16 +7,15 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, Proof, ProofInput},
     verifier::VerificationError,
+    Chip,
 };
 use axvm_instructions::exe::AxVmExe;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 use thiserror::Error;
 
-pub use super::new_vm::Streams;
-use super::{ExecutionError, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
+use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
-    arch::{ExecutionSegment, VmConfig},
+    arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
@@ -29,8 +26,24 @@ use crate::{
 /// VM memory state for continuations.
 pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
 
-pub struct VmExecutor<F: PrimeField32> {
-    pub config: VmConfig,
+#[derive(Clone, Default, Debug)]
+pub struct Streams<F> {
+    pub input_stream: VecDeque<Vec<F>>,
+    pub hint_stream: VecDeque<F>,
+}
+
+impl<F> Streams<F> {
+    pub fn new(input_stream: impl Into<VecDeque<Vec<F>>>) -> Self {
+        Self {
+            input_stream: input_stream.into(),
+            hint_stream: VecDeque::default(),
+        }
+    }
+}
+
+pub struct VmExecutor<F, VC> {
+    pub config: VC,
+    pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
 
@@ -47,39 +60,58 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub final_memory: Option<VmMemoryState<Val<SC>>>,
 }
 
-impl<F: PrimeField32> VmExecutor<F> {
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
     /// Create a new VM executor with a given config.
     ///
     /// The VM will start with a single segment, which is created from the initial state.
-    pub fn new(config: VmConfig) -> Self {
+    pub fn new(config: VC) -> Self {
+        Self::new_with_overridden_trace_heights(config, None)
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn new_with_overridden_trace_heights(
+        config: VC,
+        overridden_heights: Option<VmComplexTraceHeights>,
+    ) -> Self {
         Self {
             config,
+            overridden_heights,
             _marker: Default::default(),
         }
     }
 
     pub fn continuation_enabled(&self) -> bool {
-        self.config.continuation_enabled
+        self.config.system().continuation_enabled
     }
 
     pub fn execute_segments(
         &self,
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
-    ) -> Result<Vec<ExecutionSegment<F>>, ExecutionError> {
+    ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
 
         let exe = exe.into();
-        let streams = Arc::new(Mutex::new(Streams::new(input)));
+        let streams = Streams::new(input);
         let mut segments = vec![];
         let mut segment = ExecutionSegment::new(
-            self.config.clone(),
+            &self.config,
             exe.program.clone(),
-            streams.clone(),
+            streams,
             Some(memory_image_to_equipartition(exe.init_memory)),
             exe.fn_bounds.clone(),
         );
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
         let mut pc = exe.pc_start;
 
         loop {
@@ -98,25 +130,28 @@ impl<F: PrimeField32> VmExecutor<F> {
 
             assert_eq!(
                 pc,
-                segment.chip_set.connector_chip.boundary_states[1]
+                segment.chip_complex.connector_chip().boundary_states[1]
                     .unwrap()
                     .pc
             );
 
-            let config = mem::take(&mut segment.config);
             let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let final_memory = mem::take(&mut segment.final_memory)
                 .expect("final memory should be set in continuations segment");
+            let streams = segment.chip_complex.take_streams();
 
             segments.push(segment);
 
             segment = ExecutionSegment::new(
-                config,
+                &self.config,
                 exe.program.clone(),
-                streams.clone(),
+                streams,
                 Some(final_memory),
                 exe.fn_bounds.clone(),
             );
+            if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+                segment.set_override_trace_heights(overridden_heights.clone());
+            }
             segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
@@ -136,7 +171,7 @@ impl<F: PrimeField32> VmExecutor<F> {
         let last = results.last_mut().unwrap();
         let final_memory = mem::take(&mut last.final_memory);
         let end_state =
-            last.chip_set.connector_chip.boundary_states[1].expect("end state must be set");
+            last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
         // TODO[jpw]: add these as execution errors
         assert_eq!(end_state.is_terminate, 1, "program must terminate");
         assert_eq!(
@@ -154,6 +189,8 @@ impl<F: PrimeField32> VmExecutor<F> {
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         self.execute_and_generate_impl(exe.into(), None, input.into())
     }
@@ -164,6 +201,8 @@ impl<F: PrimeField32> VmExecutor<F> {
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         self.execute_and_generate_impl(
             commited_exe.exe.clone(),
@@ -179,6 +218,8 @@ impl<F: PrimeField32> VmExecutor<F> {
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         let mut segments = self.execute_segments(exe, input)?;
         let final_memory = mem::take(&mut segments.last_mut().unwrap().final_memory);
@@ -204,48 +245,68 @@ impl<F: PrimeField32> VmExecutor<F> {
 }
 
 /// A single segment VM.
-pub struct SingleSegmentVmExecutor<F: PrimeField32> {
-    pub config: VmConfig,
+pub struct SingleSegmentVmExecutor<F, VC> {
+    pub config: VC,
+    pub overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<F>,
 }
 
 /// Execution result of a single segment VM execution.
-pub struct SingleSegmentVmExecutionResult<F: PrimeField32> {
+pub struct SingleSegmentVmExecutionResult<F> {
     /// All user public values
     pub public_values: Vec<Option<F>>,
-    /// Heights of each AIR
-    pub heights: Vec<usize>,
+    /// Heights of each AIR, ordered by AIR ID.
+    pub air_heights: Vec<usize>,
+    /// Heights of (SystemBase, Inventory), in an internal ordering.
+    pub internal_heights: VmComplexTraceHeights,
 }
 
-impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
-    pub fn new(config: VmConfig) -> Self {
+impl<F, VC> SingleSegmentVmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
+    pub fn new(config: VC) -> Self {
+        Self::new_with_overridden_trace_heights(config, None)
+    }
+
+    pub fn new_with_overridden_trace_heights(
+        config: VC,
+        overridden_heights: Option<VmComplexTraceHeights>,
+    ) -> Self {
         assert!(
-            !config.continuation_enabled,
+            !config.system().continuation_enabled,
             "Single segment VM doesn't support continuation mode"
         );
         Self {
             config,
+            overridden_heights,
             _marker: Default::default(),
         }
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
     }
 
     /// Executes a program and returns the public values. None means the public value is not set.
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: Vec<Vec<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input.into())?;
-        let heights = segment.chip_set.current_trace_heights();
-        let public_values = if let Some(pv_chip) = segment.chip_set.public_values_chip {
-            let borrowed_pv_chip = RefCell::borrow(&pv_chip);
-            borrowed_pv_chip.core.get_custom_public_values()
+        let air_heights = segment.chip_complex.current_trace_heights();
+        let internal_heights = segment.chip_complex.get_internal_trace_heights();
+        let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
+            pv_chip.core.get_custom_public_values()
         } else {
             vec![]
         };
         Ok(SingleSegmentVmExecutionResult {
             public_values,
-            heights,
+            air_heights,
+            internal_heights,
         })
     }
 
@@ -253,10 +314,12 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: Vec<Vec<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
         let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
         Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
@@ -266,18 +329,18 @@ impl<F: PrimeField32> SingleSegmentVmExecutor<F> {
         &self,
         exe: AxVmExe<F>,
         input: VecDeque<Vec<F>>,
-    ) -> Result<ExecutionSegment<F>, ExecutionError> {
+    ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
-            self.config.clone(),
+            &self.config,
             exe.program.clone(),
-            Arc::new(Mutex::new(Streams {
-                input_stream: input,
-                hint_stream: VecDeque::new(),
-            })),
+            Streams::new(input),
             None,
             exe.fn_bounds,
         );
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
         segment.execute_from_pc(pc_start)?;
         Ok(segment)
     }
@@ -307,32 +370,57 @@ pub enum VmVerificationError {
     StarkError(#[from] VerificationError),
 }
 
-pub struct VirtualMachine<SC, E> {
+pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
+    /// Proving engine
     pub engine: E,
-    pub config: VmConfig,
+    /// Runtime executor
+    pub executor: VmExecutor<Val<SC>, VC>,
     _marker: PhantomData<SC>,
 }
 
-impl<F, SC, E> VirtualMachine<SC, E>
+impl<F, SC, E, VC> VirtualMachine<SC, E, VC>
 where
     F: PrimeField32,
     SC: StarkGenericConfig,
     E: StarkEngine<SC>,
     Domain<SC>: PolynomialSpace<Val = F>,
+    VC: VmConfig<F>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
-    pub fn new(engine: E, config: VmConfig) -> Self {
+    pub fn new(engine: E, config: VC) -> Self {
+        let executor = VmExecutor::new(config);
         Self {
             engine,
-            config,
+            executor,
             _marker: PhantomData,
         }
     }
 
-    pub fn keygen(&self) -> MultiStarkProvingKey<SC>
-    where
-        Val<SC>: PrimeField32,
-    {
-        self.config.generate_pk(self.engine.keygen_builder())
+    pub fn new_with_overridden_trace_heights(
+        engine: E,
+        config: VC,
+        overridden_heights: Option<VmComplexTraceHeights>,
+    ) -> Self {
+        let executor = VmExecutor::new_with_overridden_trace_heights(config, overridden_heights);
+        Self {
+            engine,
+            executor,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn config(&self) -> &VC {
+        &self.executor.config
+    }
+
+    pub fn keygen(&self) -> MultiStarkProvingKey<SC> {
+        let mut keygen_builder = self.engine.keygen_builder();
+        let chip_complex = self.config().create_chip_complex().unwrap();
+        for air in chip_complex.airs() {
+            keygen_builder.add_air(air);
+        }
+        keygen_builder.generate_pk()
     }
 
     pub fn commit_exe(&self, exe: impl Into<AxVmExe<F>>) -> Arc<AxVmCommittedExe<SC>> {
@@ -345,8 +433,7 @@ where
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
-        let executor = VmExecutor::new(self.config.clone());
-        executor.execute(exe, input)
+        self.executor.execute(exe, input)
     }
 
     pub fn execute_and_generate(
@@ -354,8 +441,7 @@ where
         exe: impl Into<AxVmExe<F>>,
         input: impl Into<VecDeque<Vec<F>>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError> {
-        let executor = VmExecutor::new(self.config.clone());
-        executor.execute_and_generate(exe, input)
+        self.executor.execute_and_generate(exe, input)
     }
 
     pub fn execute_and_generate_with_cached_program(
@@ -366,8 +452,8 @@ where
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let executor = VmExecutor::new(self.config.clone());
-        executor.execute_and_generate_with_cached_program(committed_exe, input)
+        self.executor
+            .execute_and_generate_with_cached_program(committed_exe, input)
     }
 
     pub fn prove_single(
@@ -414,7 +500,7 @@ where
     where
         Val<SC>: PrimeField32,
     {
-        if self.config.continuation_enabled {
+        if self.config().system().continuation_enabled {
             self.verify_segments(vk, proofs)
         } else {
             assert_eq!(proofs.len(), 1);

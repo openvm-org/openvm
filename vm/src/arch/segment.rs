@@ -1,22 +1,23 @@
-use std::{ops::DerefMut, sync::Arc};
-
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     prover::types::{CommittedTraceData, ProofInput},
+    Chip,
 };
 #[cfg(feature = "function-span")]
 use axvm_instructions::exe::FnBound;
 use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use itertools::izip;
 use p3_field::PrimeField32;
-use parking_lot::Mutex;
 
-use super::{AxVmExecutor, Streams, VmChipSet, VmConfig};
+use super::{
+    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
-    arch::{instructions::*, AxVmChip, ExecutionError, ExecutionState, InstructionExecutor},
-    metrics::{cycle_tracker::CycleTracker, VmMetrics},
+    arch::{instructions::*, ExecutionState, InstructionExecutor},
+    metrics::cycle_tracker::CycleTracker,
     system::{
         memory::{Equipartition, CHUNK},
         poseidon2::Poseidon2Chip,
@@ -26,21 +27,24 @@ use crate::{
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
-pub struct ExecutionSegment<F: PrimeField32> {
-    pub config: VmConfig,
-    pub chip_set: VmChipSet<F>,
+pub struct ExecutionSegment<F, VC>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+{
+    pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
 
     pub final_memory: Option<Equipartition<F, CHUNK>>,
 
     /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
+    #[cfg(feature = "bench-metrics")]
     pub(crate) collected_metrics: VmMetrics,
 
     #[allow(dead_code)]
     pub(crate) fn_bounds: FnBounds,
 
     pub air_names: Vec<String>,
-    pub const_height_air_ids: Vec<usize>,
     pub since_last_segment_check: usize,
 }
 
@@ -49,73 +53,53 @@ pub struct ExecutionSegmentState {
     pub is_terminated: bool,
 }
 
-macro_rules! find_chip {
-    ($chip_set:expr, $chip_type:path) => {{
-        let mut found_chip = None;
-        for chip in &$chip_set.chips {
-            if let $chip_type(c) = chip {
-                assert!(
-                    found_chip.is_none(),
-                    concat!("Multiple ", stringify!($chip_type), " chips found")
-                );
-                found_chip = Some(c.clone());
-            }
-        }
-        found_chip.unwrap()
-    }};
-    ($chip_set:expr, $chip_type:path, $chip_type2:path) => {{
-        let mut found_chip = None;
-        for chip in &$chip_set.chips {
-            if let $chip_type($chip_type2(c)) = chip {
-                assert!(
-                    found_chip.is_none(),
-                    concat!("Multiple ", stringify!($chip_type), " chips found")
-                );
-                found_chip = Some(c.clone());
-            }
-        }
-        found_chip.unwrap()
-    }};
-}
-
-impl<F: PrimeField32> ExecutionSegment<F> {
+impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: VmConfig,
+        config: &VC,
         program: Program<F>,
-        streams: Arc<Mutex<Streams<F>>>,
+        init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
         fn_bounds: FnBounds,
     ) -> Self {
-        let mut chip_set = config.create_chip_set();
-        chip_set.set_streams(streams);
-        let program = if config.collect_metrics {
-            program
-        } else {
+        let mut chip_complex = config.create_chip_complex().unwrap();
+        chip_complex.set_streams(init_streams);
+        let program = if config.system().collect_metrics {
             program.strip_debug_infos()
+        } else {
+            program
         };
-        chip_set.set_program(program);
+        chip_complex.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
-            chip_set
-                .memory_controller
+            chip_complex
+                .memory_controller()
                 .borrow_mut()
                 .set_initial_memory(initial_memory);
         }
-        let air_names = chip_set.air_names();
-        let const_height_air_ids = chip_set.const_height_air_ids();
+        let air_names = chip_complex.air_names();
 
         Self {
-            config,
-            chip_set,
+            chip_complex,
             final_memory: None,
             cycle_tracker: CycleTracker::new(),
+            #[cfg(feature = "bench-metrics")]
             collected_metrics: Default::default(),
             fn_bounds,
             air_names,
-            const_height_air_ids,
             since_last_segment_check: 0,
         }
+    }
+
+    pub fn system_config(&self) -> &SystemConfig {
+        self.chip_complex.config()
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.chip_complex
+            .set_override_system_trace_heights(overridden_heights.system);
+        self.chip_complex
+            .set_override_inventory_trace_heights(overridden_heights.inventory);
     }
 
     /// Stopping is triggered by should_segment()
@@ -123,9 +107,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         &mut self,
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
-        let mut timestamp = self.chip_set.memory_controller.borrow().timestamp();
+        let mut timestamp = self.chip_complex.memory_controller().borrow().timestamp();
 
-        let collect_metrics = self.config.collect_metrics;
+        #[cfg(feature = "bench-metrics")]
+        let collect_metrics = self.system_config().collect_metrics;
         // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
 
@@ -133,14 +118,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
         #[cfg(feature = "function-span")]
         let mut current_fn = FnBound::default();
 
-        self.chip_set
-            .connector_chip
+        self.chip_complex
+            .connector_chip_mut()
             .begin(ExecutionState::new(pc, timestamp));
 
         let mut did_terminate = false;
 
         loop {
-            let (instruction, debug_info) = self.chip_set.program_chip.get_instruction(pc)?;
+            let (instruction, debug_info) =
+                self.chip_complex.program_chip_mut().get_instruction(pc)?;
             tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
@@ -152,6 +138,7 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             );
 
             let opcode = instruction.opcode;
+            #[cfg(feature = "bench-metrics")]
             let prev_trace_cells = if collect_metrics {
                 self.current_trace_cells()
             } else {
@@ -160,14 +147,14 @@ impl<F: PrimeField32> ExecutionSegment<F> {
 
             if opcode == SystemOpcode::TERMINATE.with_default_offset() {
                 did_terminate = true;
-                self.chip_set.connector_chip.end(
+                self.chip_complex.connector_chip_mut().end(
                     ExecutionState::new(pc, timestamp),
                     Some(instruction.c.as_canonical_u32()),
                 );
                 break;
             }
 
-            // Some phantom instruction handling is more convenient to do here than in PhantomChip. FIXME[jpw]
+            // Some phantom instruction handling is more convenient to do here than in PhantomChip.
             if opcode == SystemOpcode::PHANTOM as usize {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
@@ -217,14 +204,16 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             };
 
+            #[cfg(feature = "bench-metrics")]
             let mut opcode_name = None;
-            if let Some(executor) = self.chip_set.executors.get_mut(&opcode) {
+            if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;
                 assert!(next_state.timestamp > timestamp);
+                #[cfg(feature = "bench-metrics")]
                 if collect_metrics {
                     opcode_name = Some(executor.get_opcode_name(opcode));
                 }
@@ -234,21 +223,20 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 return Err(ExecutionError::DisabledOperation { pc, opcode });
             };
 
+            #[cfg(feature = "bench-metrics")]
             if collect_metrics {
                 let now_trace_cells = self.current_trace_cells();
 
                 let opcode_name = opcode_name.unwrap_or(opcode.to_string());
                 let key = (dsl_instr.clone(), opcode_name.clone());
-                #[cfg(feature = "bench-metrics")]
                 self.cycle_tracker.increment_opcode(&key);
                 *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
 
                 for (air_name, now_value, &prev_value) in
-                    izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
+                    itertools::izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
                 {
                     if prev_value != now_value {
                         let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
-                        #[cfg(feature = "bench-metrics")]
                         self.cycle_tracker
                             .increment_cells_used(&key, now_value - prev_value);
                         *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
@@ -257,34 +245,43 @@ impl<F: PrimeField32> ExecutionSegment<F> {
                 }
             }
             if self.should_segment() {
-                self.chip_set
-                    .connector_chip
+                self.chip_complex
+                    .connector_chip_mut()
                     .end(ExecutionState::new(pc, timestamp), None);
                 break;
             }
         }
         // Finalize memory.
         {
-            let mut memory_controller = self.chip_set.memory_controller.borrow_mut();
-            self.final_memory = if self.config.continuation_enabled {
-                let poseidon_chip =
-                    find_chip!(self.chip_set, AxVmChip::Executor, AxVmExecutor::Poseidon2);
-                let mut hasher = poseidon_chip.borrow_mut();
-                memory_controller.finalize(Some(hasher.deref_mut()))
+            // Need some partial borrows, so code is ugly:
+            let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
+            self.final_memory = if self.system_config().continuation_enabled {
+                let chip = self
+                    .chip_complex
+                    .inventory
+                    .periphery
+                    .get_mut(
+                        VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
+                    )
+                    .expect("Poseidon2 chip required for persistent memory");
+                let hasher: &mut Poseidon2Chip<F> = chip
+                    .as_any_kind_mut()
+                    .downcast_mut()
+                    .expect("Poseidon2 chip required for persistent memory");
+                memory_controller.finalize(Some(hasher))
             } else {
                 memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
             };
         }
+        #[cfg(feature = "bench-metrics")]
         if collect_metrics {
             self.collected_metrics.chip_heights =
-                izip!(self.air_names.clone(), self.current_trace_heights()).collect();
-            #[cfg(feature = "bench-metrics")]
-            {
-                self.collected_metrics.emit();
-                if did_terminate {
-                    metrics::counter!("total_cells_used")
-                        .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-                }
+                itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
+
+            self.collected_metrics.emit();
+            if did_terminate {
+                metrics::counter!("total_cells_used")
+                    .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
             }
         }
 
@@ -301,8 +298,10 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
     {
-        self.chip_set.generate_proof_input(cached_program)
+        self.chip_complex.generate_proof_input(cached_program)
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
@@ -315,22 +314,15 @@ impl<F: PrimeField32> ExecutionSegment<F> {
             return false;
         }
         self.since_last_segment_check = 0;
-        let mut heights = self.current_trace_heights();
-        *heights.last_mut().unwrap() = 0; // range checker
-        let mut const_height_idx = 0;
-        for (i, (air_name, height)) in izip!(&self.air_names, heights).enumerate() {
-            if const_height_idx >= self.const_height_air_ids.len()
-                || self.const_height_air_ids[const_height_idx] != i
-            {
-                if height > self.config.max_segment_len {
-                    tracing::info!(
-                        "Should segment because chip {} has height {}",
-                        air_name,
-                        height
-                    );
-                    return true;
-                }
-                const_height_idx += 1;
+        let heights = self.chip_complex.dynamic_trace_heights();
+        for (i, height) in heights.enumerate() {
+            if height > self.system_config().max_segment_len {
+                tracing::info!(
+                    "Should segment because chip {} has height {}",
+                    self.air_names[i],
+                    height
+                );
+                return true;
             }
         }
 
@@ -338,9 +330,11 @@ impl<F: PrimeField32> ExecutionSegment<F> {
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {
-        self.chip_set.current_trace_cells()
+        self.chip_complex.current_trace_cells()
     }
+    /// Gets current trace heights for each chip.
+    /// Includes constant trace heights.
     pub fn current_trace_heights(&self) -> Vec<usize> {
-        self.chip_set.current_trace_heights()
+        self.chip_complex.current_trace_heights()
     }
 }

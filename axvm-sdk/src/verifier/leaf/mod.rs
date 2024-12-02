@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, VmGenericConfig},
+    arch::{instructions::program::Program, VmConfig},
     system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -32,13 +32,13 @@ pub mod types;
 mod vars;
 
 /// Config to generate leaf VM verifier program.
-pub struct LeafVmVerifierConfig<VmConfig: VmGenericConfig<F>> {
+pub struct LeafVmVerifierConfig<VC: VmConfig<F>> {
     pub app_fri_params: FriParameters,
-    pub app_vm_config: VmConfig,
+    pub app_vm_config: VC,
     pub compiler_options: CompilerOptions,
 }
 
-impl<VmConfig: VmGenericConfig<F>> LeafVmVerifierConfig<VmConfig> {
+impl<VC: VmConfig<F>> LeafVmVerifierConfig<VC> {
     pub fn build_program(
         &self,
         app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,

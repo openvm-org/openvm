@@ -10,9 +10,8 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher,
-        new_vm::{SingleSegmentVmExecutor, VmExecutor},
-        ExecutionError, SystemConfig, VmGenericConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
+        SystemConfig, VmConfig, VmExecutor,
     },
     system::memory::tree::public_values::UserPublicValuesProof,
 };
@@ -39,7 +38,7 @@ type F = BabyBear;
 const NUM_PUB_VALUES: usize = 16;
 
 // TODO: keygen agg_pk once for all IT tests and store in a file
-fn load_agg_pk_into_e2e_prover<VC: VmGenericConfig<F>>(
+fn load_agg_pk_into_e2e_prover<VC: VmConfig<F>>(
     app_config: AppConfig<VC>,
 ) -> (E2EStarkProver<VC>, Proof<SC>)
 where
@@ -83,7 +82,7 @@ where
     )
 }
 
-fn run_leaf_verifier<VC: VmGenericConfig<F>>(
+fn run_leaf_verifier<VC: VmConfig<F>>(
     verifier_input: LeafVmVerifierInput<SC>,
     e2e_prover: &E2EStarkProver<VC>,
 ) -> Result<Vec<F>, ExecutionError>

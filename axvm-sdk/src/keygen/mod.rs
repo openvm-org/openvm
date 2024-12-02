@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_circuit::{
-    arch::{new_vm::VirtualMachine, VmGenericConfig},
+    arch::{VirtualMachine, VmConfig},
     prover::types::VmProvingKey,
     system::program::trace::AxVmCommittedExe,
 };
@@ -34,16 +34,16 @@ pub(crate) mod dummy;
 pub mod perm;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct AppProvingKey<VmConfig> {
-    pub app_vm_pk: VmProvingKey<SC, VmConfig>,
+pub struct AppProvingKey<VC> {
+    pub app_vm_pk: VmProvingKey<SC, VC>,
 }
 
-impl<VmConfig: VmGenericConfig<F>> AppProvingKey<VmConfig>
+impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
-    pub fn keygen(config: AppConfig<VmConfig>) -> Self {
+    pub fn keygen(config: AppConfig<VC>) -> Self {
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params);
         let app_vm_pk = {
             let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
@@ -194,7 +194,7 @@ impl AggProvingKey {
 /// Proving key for the root verifier.
 /// Properties:
 /// - Traces heights of each AIR is constant. This is required by the static verifier.
-/// - Instead of the AIR order specified by VmConfig. AIRs are ordered by trace heights.
+/// - Instead of the AIR order specified by VC. AIRs are ordered by trace heights.
 #[derive(Serialize, Deserialize, Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct RootVerifierProvingKey {

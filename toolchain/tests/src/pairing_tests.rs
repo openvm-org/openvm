@@ -8,7 +8,7 @@ use ax_ecc_execution::axvm_ecc::{
 };
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm, SystemConfig};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
@@ -18,24 +18,6 @@ use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
 
 type F = BabyBear;
-
-// TODO(INT-2746): this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
-pub fn get_testing_config() -> Rv32PairingConfig {
-    let primes = [BN254.MODULUS.clone()];
-    Rv32PairingConfig {
-        system: SystemConfig::default().with_continuations(),
-        base: Default::default(),
-        mul: Default::default(),
-        io: Default::default(),
-        modular: ModularExtension::new(primes.to_vec()),
-        fp2: Fp2Extension::new(primes.to_vec()),
-        weierstrass: WeierstrassExtension::new(vec![
-            PairingCurve::Bn254.curve_config(),
-            PairingCurve::Bls12_381.curve_config(),
-        ]),
-        pairing: PairingExtension::new(vec![PairingCurve::Bn254, PairingCurve::Bls12_381]),
-    }
-}
 
 mod bn254 {
     use std::{iter, rc::Rc};
@@ -88,7 +70,7 @@ mod bn254 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -119,7 +101,7 @@ mod bn254 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -172,7 +154,7 @@ mod bn254 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -217,7 +199,7 @@ mod bn254 {
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -266,7 +248,7 @@ mod bn254 {
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -355,7 +337,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -386,7 +368,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -440,7 +422,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -485,7 +467,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -540,7 +522,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
 
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -592,7 +574,7 @@ mod bls12_381 {
                 .with_processor(Rc::new(ModularTranspilerExtension))
                 .with_processor(Rc::new(Fp2TranspilerExtension)),
         );
-        let executor = new_vm::VmExecutor::<F, _>::new(get_testing_config());
+        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();

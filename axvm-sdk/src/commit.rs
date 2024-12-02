@@ -5,7 +5,7 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        VmGenericConfig,
+        VmConfig,
     },
     system::{
         memory::{memory_image_to_equipartition, tree::MemoryNode},
@@ -36,7 +36,7 @@ pub struct AppExecutionCommit<T> {
 impl AppExecutionCommit<Val<SC>> {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the final
     /// proof.
-    pub fn compute<VC: VmGenericConfig<Val<SC>>>(
+    pub fn compute<VC: VmConfig<Val<SC>>>(
         app_vm_config: &VC,
         app_exe: &AxVmCommittedExe<SC>,
         leaf_vm_verifier_exe: &AxVmCommittedExe<SC>,

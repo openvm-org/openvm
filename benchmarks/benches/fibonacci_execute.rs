@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_benchmarks::utils::build_bench_program;
-use axvm_circuit::arch::{instructions::exe::AxVmExe, new_vm::VmExecutor};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VmExecutor};
 use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,

@@ -14,12 +14,11 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        new_vm::{SingleSegmentVmExecutor, VirtualMachine},
-        ChipId, ExitCode, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        SystemTraceHeights, VmChipComplex, VmComplexTraceHeights, VmGenericConfig,
-        VmInventoryError, VmInventoryTraceHeights,
+        ChipId, ExitCode, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemExecutor,
+        SystemPeriphery, SystemTraceHeights, VirtualMachine, VmChipComplex, VmComplexTraceHeights,
+        VmConfig, VmInventoryError, VmInventoryTraceHeights,
     },
-    derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
     system::{
         memory::{
             tree::public_values::UserPublicValuesProof, MemoryTraceHeights,
@@ -957,7 +956,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     instructions
 }
 
-#[derive(Clone, Debug, VmGenericConfig)]
+#[derive(Clone, Debug, VmConfig)]
 pub struct NativeKeccakConfig {
     #[system]
     pub system: SystemConfig,

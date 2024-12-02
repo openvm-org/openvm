@@ -19,10 +19,10 @@ use axvm_algebra_transpiler::ModularTranspilerExtension;
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
-        instructions::exe::AxVmExe, ExecutorName, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmConfig, VmGenericConfig, VmInventoryError,
+        instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        VmConfig, VmInventoryError,
     },
-    derive::{AnyEnum, InstructionExecutor, VmGenericConfig},
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
 use axvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
@@ -68,7 +68,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
     input.into_iter().map(BabyBear::from_canonical_u8).collect()
 }
 
-#[derive(Clone, Debug, VmGenericConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new)]
 pub struct Rv32ImEcRecoverConfig {
     #[system]
     pub system: SystemConfig,

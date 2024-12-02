@@ -9,11 +9,7 @@ use ax_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{
-    instructions::exe::AxVmExe,
-    new_vm::{VirtualMachine, VmExecutor},
-    VmGenericConfig,
-};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig, VmExecutor};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
@@ -68,9 +64,9 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<SC, E, VmConfig>(
+pub fn bench_from_exe<SC, E, VC>(
     engine: E,
-    mut config: VmConfig,
+    mut config: VC,
     exe: impl Into<AxVmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
@@ -78,20 +74,20 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
     Val<SC>: PrimeField32,
-    VmConfig: VmGenericConfig<Val<SC>>,
-    VmConfig::Executor: Chip<SC>,
-    VmConfig::Periphery: Chip<SC>,
+    VC: VmConfig<Val<SC>>,
+    VC::Executor: Chip<SC>,
+    VC::Periphery: Chip<SC>,
 {
     let exe = exe.into();
     // 1. Executes runtime once with full metric collection for flamegraphs (slow).
     config.system_mut().collect_metrics = true;
-    let executor = VmExecutor::<Val<SC>, VmConfig>::new(config.clone());
+    let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
     tracing::info_span!("execute_with_metrics", collect_metrics = true)
         .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
     // 2. Generate proving key from config.
     config.system_mut().collect_metrics = false;
     counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
-    let vm = VirtualMachine::<SC, E, VmConfig>::new(engine, config);
+    let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
     let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
     // 3. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || vm.commit_exe(exe));
