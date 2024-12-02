@@ -7,6 +7,7 @@ use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
 use axvm_recursion::witness::Witnessable;
+use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_sdk::{
     config::{AggConfig, AppConfig},
     e2e_prover::{commit_app_exe, generate_leaf_committed_exe, E2EStarkProver},
@@ -53,8 +54,16 @@ async fn main() -> Result<()> {
     };
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
-    let agg_pk = AggProvinigKey::keygen(agg_config.clone());
-    let app_committed_exe = commit_app_exe(app_config, build_bench_program("fibonacci").unwrap());
+    let agg_pk = AggProvingKey::keygen(agg_config.clone());
+    let elf = build_bench_program("fibonacci").unwrap();
+    let exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<BabyBear>::default()
+            .with_processor(Rc::new(Rv32ITranspilerExtension))
+            .with_processor(Rc::new(Rv32MTranspilerExtension))
+            .with_processor(Rc::new(Rv32IoTranspilerExtension)),
+    );
+    let app_committed_exe = commit_app_exe(app_config, exe);
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
 
     let prover = E2EStarkProver::new(app_pk, agg_pk, app_committed_exe, leaf_committed_exe, 2, 2);
