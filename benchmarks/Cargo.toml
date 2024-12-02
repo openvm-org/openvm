@@ -14,17 +14,17 @@ axvm-build.workspace = true
 axvm-rv32im-circuit.workspace = true
 axvm-rv32im-transpiler.workspace = true
 axvm-native-circuit.workspace = true
-axvm-ecc-circuit.workspace = true 
+axvm-ecc-circuit.workspace = true
 axvm-ecc-transpiler.workspace = true
 axvm-algebra-circuit.workspace = true
-axvm-algebra-transpiler.workspace = true 
+axvm-algebra-transpiler.workspace = true
 axvm-keccak256-circuit.workspace = true
 axvm-keccak256-transpiler.workspace = true
 axvm-keccak256-guest.workspace = true
 axvm-native-compiler.workspace = true
 axvm-recursion = { workspace = true, features = ["test-utils"] }
 ax-circuit-derive.workspace = true
-ax-stark-backend.workspace = true 
+ax-stark-backend.workspace = true
 ax-stark-sdk.workspace = true
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
@@ -68,4 +68,3 @@ harness = false
 
 [[bin]]
 name = "fib_e2e"
-required-features = ["static-verifier"]

@@ -7,7 +7,10 @@ use ax_stark_sdk::{
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
-use axvm_native_compiler::{conversion::CompilerOptions, prelude::Witness};
+use axvm_native_compiler::conversion::CompilerOptions;
+#[cfg(feature = "static-verifier")]
+use axvm_native_compiler::prelude::Witness;
+#[cfg(feature = "static-verifier")]
 use axvm_recursion::witness::Witnessable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 use axvm_rv32im_transpiler::{
@@ -22,6 +25,7 @@ use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 use p3_field::AbstractField;
+#[cfg(feature = "static-verifier")]
 use tracing::info_span;
 
 type F = BabyBear;
@@ -60,10 +64,10 @@ async fn main() -> Result<()> {
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
     let agg_pk = AggProvingKey::keygen(agg_config.clone());
-    let elf = build_bench_program("fibonacci").unwrap();
+    let elf = build_bench_program("fibonacci")?;
     let exe = AxVmExe::from_elf(
         elf,
-        Transpiler::<BabyBear>::default()
+        Transpiler::default()
             .with_processor(Rc::new(Rv32ITranspilerExtension))
             .with_processor(Rc::new(Rv32MTranspilerExtension))
             .with_processor(Rc::new(Rv32IoTranspilerExtension)),
@@ -79,9 +83,10 @@ async fn main() -> Result<()> {
         .map(F::from_canonical_u8)
         .collect();
     run_with_metric_collection("OUTPUT_PATH", || {
+        #[allow(unused_variables)]
         let root_proof =
             prover.generate_proof_with_metric_spans(app_input, "Fibonacci Continuation Program");
-        #[allow(unused_variables)]
+        #[cfg(feature = "static-verifier")]
         let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
             .in_scope(|| {
                 let static_verifier = prover
