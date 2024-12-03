@@ -32,12 +32,10 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm@9.1.0
 
-      - name: Install pnpm deps
-        run: pnpm i --frozen-lockfile
-
       - name: Build the book
         run: |
           cd book
+          pnpm i --frozen-lockfile
           just lint-book-toc
           mdbook build
 
