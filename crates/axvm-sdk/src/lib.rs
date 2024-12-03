@@ -46,9 +46,6 @@ pub(crate) type OuterSC = BabyBearPoseidon2OuterConfig;
 
 pub struct Sdk;
 
-pub struct Snark;
-pub struct Halo2VerifierCircuit;
-
 impl Sdk {
     pub fn build<P: AsRef<Path>>(&self, _guest_opts: GuestOptions, _pkg_dir: P) -> Result<Elf> {
         todo!()
