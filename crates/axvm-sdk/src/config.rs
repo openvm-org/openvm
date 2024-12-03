@@ -10,7 +10,7 @@ pub struct AppConfig<VC: VmConfig<F>> {
     pub app_vm_config: VC,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct AggConfig {
     pub max_num_user_public_values: usize,
     pub leaf_fri_params: FriParameters,

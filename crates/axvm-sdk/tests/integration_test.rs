@@ -21,8 +21,8 @@ use axvm_native_recursion::types::InnerConfig;
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AppConfig},
-    e2e_prover::{commit_app_exe, generate_leaf_committed_exe, E2EStarkProver},
     keygen::{AggProvingKey, AppProvingKey},
+    prover::{commit_app_exe, generate_leaf_committed_exe, StarkProver},
     verifier::{
         common::types::VmVerifierPvs,
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
@@ -40,7 +40,7 @@ const NUM_PUB_VALUES: usize = 16;
 // TODO: keygen agg_pk once for all IT tests and store in a file
 fn load_agg_pk_into_e2e_prover<VC: VmConfig<F>>(
     app_config: AppConfig<VC>,
-) -> (E2EStarkProver<VC>, Proof<SC>)
+) -> (StarkProver<VC>, Proof<SC>)
 where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
@@ -73,26 +73,27 @@ where
     };
 
     let app_pk = AppProvingKey::keygen(app_config.clone());
-    let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config.clone());
+    let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config);
     let app_committed_exe = commit_app_exe(app_config, program);
     let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
     (
-        E2EStarkProver::new(app_pk, agg_pk, app_committed_exe, leaf_committed_exe, 2, 2),
+        StarkProver::new(app_pk, app_committed_exe)
+            .with_agg_pk_and_leaf_committed_exe(agg_pk, leaf_committed_exe),
         dummy,
     )
 }
 
 fn run_leaf_verifier<VC: VmConfig<F>>(
     verifier_input: LeafVmVerifierInput<SC>,
-    e2e_prover: &E2EStarkProver<VC>,
+    e2e_prover: &StarkProver<VC>,
 ) -> Result<Vec<F>, ExecutionError>
 where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    let leaf_vm = SingleSegmentVmExecutor::new(e2e_prover.agg_pk.leaf_vm_pk.vm_config.clone());
+    let leaf_vm = SingleSegmentVmExecutor::new(e2e_prover.agg_pk().leaf_vm_pk.vm_config.clone());
     let exe_result = leaf_vm.execute(
-        e2e_prover.leaf_committed_exe.exe.clone(),
+        e2e_prover.leaf_committed_exe().exe.clone(),
         verifier_input.write_to_stream(),
     )?;
     let runtime_pvs: Vec<_> = exe_result
@@ -162,7 +163,7 @@ fn test_public_values_and_leaf_verification() {
 
     let pv_proof = UserPublicValuesProof::compute(
         app_vm.config.system.memory_config.memory_dimensions(),
-        e2e_prover.agg_pk.num_public_values(),
+        e2e_prover.agg_pk().num_public_values(),
         &vm_poseidon2_hasher(),
         app_vm_result.final_memory.as_ref().unwrap(),
     );
@@ -234,10 +235,10 @@ fn test_e2e_proof_generation() {
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
-    let air_id_perm = e2e_prover.agg_pk.root_verifier_pk.air_id_permutation();
+    let air_id_perm = e2e_prover.agg_pk().root_verifier_pk.air_id_permutation();
     let special_air_ids = air_id_perm.get_special_air_ids();
 
-    let root_proof = e2e_prover.generate_proof(vec![]);
+    let root_proof = e2e_prover.generate_e2e_proof(vec![]);
     let root_pvs = RootVmVerifierPvs::from_flatten(
         root_proof.per_air[special_air_ids.public_values_air_id]
             .public_values
@@ -247,7 +248,7 @@ fn test_e2e_proof_generation() {
     let app_exe_commit = AppExecutionCommit::compute(
         &e2e_prover.app_pk.app_vm_pk.vm_config,
         &e2e_prover.app_committed_exe,
-        &e2e_prover.leaf_committed_exe,
+        e2e_prover.leaf_committed_exe(),
     );
 
     assert_eq!(root_pvs.exe_commit, app_exe_commit.exe_commit);
@@ -258,7 +259,7 @@ fn test_e2e_proof_generation() {
 
     #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(
-        &e2e_prover.agg_pk.root_verifier_pk,
+        &e2e_prover.agg_pk().root_verifier_pk,
         dummy_internal_proof,
         &root_proof,
     );
@@ -271,11 +272,11 @@ fn test_e2e_app_log_blowup_1() {
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
     #[allow(unused_variables)]
-    let root_proof = e2e_prover.generate_proof(vec![]);
+    let root_proof = e2e_prover.generate_e2e_proof(vec![]);
 
     #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(
-        &e2e_prover.agg_pk.root_verifier_pk,
+        &e2e_prover.agg_pk().root_verifier_pk,
         dummy_internal_proof,
         &root_proof,
     );

@@ -1,21 +1,26 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
 use ax_stark_sdk::{
-    ax_stark_backend::{
-        config::{StarkGenericConfig, Val},
-        engine::VerificationData,
-        Chip,
-    },
+    ax_stark_backend::{engine::VerificationData, Chip},
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig, VmExecutor};
+use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
+use axvm_sdk::{
+    config::AppConfig,
+    keygen::AppProvingKey,
+    prover::{commit_app_exe, StarkProver},
+};
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};
-use p3_field::PrimeField32;
+use p3_baby_bear::BabyBear;
 use tempfile::tempdir;
+
+type F = BabyBear;
+type SC = BabyBearPoseidon2Config;
 
 #[derive(Parser, Debug)]
 #[command(allow_external_subcommands = true)]
@@ -56,50 +61,51 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     Elf::decode(&data, MEM_SIZE as u32)
 }
 
-/// 1. Executes runtime once with full metric collection for flamegraphs (slow).
-/// 2. Generate proving key from config.
-/// 3. Commit to the exe by generating cached trace for program.
-/// 4. Executes runtime again without metric collection and generate trace.
+/// 1. Generate proving key from config.
+/// 2. Commit to the exe by generating cached trace for program.
+/// 3. Executes runtime without metric collection and generate trace.
+/// 4. Executes runtime once with full metric collection for flamegraphs (slow).
 /// 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<SC, E, VC>(
+pub fn bench_from_exe<E, VC>(
     engine: E,
-    mut config: VC,
-    exe: impl Into<AxVmExe<Val<SC>>>,
-    input_stream: Vec<Vec<Val<SC>>>,
+    config: VC,
+    exe: impl Into<AxVmExe<F>>,
+    input_stream: Vec<Vec<F>>,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
 where
-    SC: StarkGenericConfig,
     E: StarkFriEngine<SC>,
-    Val<SC>: PrimeField32,
-    VC: VmConfig<Val<SC>>,
+    VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    let exe = exe.into();
-    // 1. Executes runtime once with full metric collection for flamegraphs (slow).
-    config.system_mut().collect_metrics = true;
-    let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
-    tracing::info_span!("execute_with_metrics", collect_metrics = true)
-        .in_scope(|| executor.execute(exe.clone(), input_stream.clone()))?;
-    // 2. Generate proving key from config.
-    config.system_mut().collect_metrics = false;
     counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
-    let vm = VirtualMachine::<SC, E, VC>::new(engine, config);
-    let pk = time(gauge!("keygen_time_ms"), || vm.keygen());
-    // 3. Commit to the exe by generating cached trace for program.
-    let committed_exe = time(gauge!("commit_exe_time_ms"), || vm.commit_exe(exe));
-    // 4. Executes runtime again without metric collection and generate trace.
-    let results = time(gauge!("execute_and_trace_gen_time_ms"), || {
-        vm.execute_and_generate_with_cached_program(committed_exe, input_stream)
+    let app_config = AppConfig {
+        app_vm_config: config.clone(),
+        app_fri_params: engine.fri_params(),
+    };
+    let vm = VirtualMachine::new(engine, config);
+    // 1. Generate proving key from config.
+    let app_pk = time(gauge!("keygen_time_ms"), || {
+        AppProvingKey::keygen(app_config.clone())
+    });
+    // 2. Commit to the exe by generating cached trace for program.
+    let committed_exe = time(gauge!("commit_exe_time_ms"), || {
+        commit_app_exe(app_config, exe)
+    });
+    // 3. Executes runtime again without metric collection and generate trace.
+    time(gauge!("execute_and_trace_gen_time_ms"), || {
+        vm.execute_and_generate_with_cached_program(committed_exe.clone(), input_stream.clone())
     })?;
+    // 4. Executes runtime once with full metric collection for flamegraphs (slow).
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
-    // vm.prove will emit metrics for proof time of each segment
-    let proofs = vm.prove(&pk, results);
+    // generate_app_proof will emit metrics for proof time of each
+    let prover = StarkProver::new(app_pk, committed_exe);
+    let proofs = prover.generate_app_proof(input_stream).per_segment;
     // 6. Verify STARK proofs.
-    let vk = pk.get_vk();
+    let vk = prover.app_pk.app_vm_pk.vm_pk.get_vk();
     vm.verify(&vk, proofs.clone()).expect("Verification failed");
     let vdata = proofs
         .into_iter()
