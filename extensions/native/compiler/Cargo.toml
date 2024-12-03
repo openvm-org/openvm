@@ -45,7 +45,7 @@ rand = "0.8.5"
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
-default = ["parallel"]
+default = ["parallel", "halo2-compiler"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
 parallel = ["axvm-circuit/parallel"]
 bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
