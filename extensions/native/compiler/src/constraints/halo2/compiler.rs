@@ -249,7 +249,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::CastFV(a, b) => {
                         let felt = felts[&b.0];
-                        let reduced_felt = if felt.max_bits > BABYBEAR_MAX_BITS {
+                        let reduced_felt = if felt.max_bits >= BABYBEAR_MAX_BITS {
                             f_chip.reduce(ctx, felt)
                         } else {
                             felt
