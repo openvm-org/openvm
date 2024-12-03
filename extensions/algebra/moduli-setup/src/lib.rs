@@ -653,10 +653,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
             impl axvm_algebra_guest::Reduce for #struct_name {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
-                    let mut res = <Self as IntMod>::ZERO;
+                    let mut res = <Self as axvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
                     let mut base = Self::from_le_bytes(&[255u8; #limbs]);
-                    base += <Self as IntMod>::ONE;
+                    base += <Self as axvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
                         res = res * &base + Self::from_le_bytes(chunk);
                     }
@@ -698,6 +698,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     for (mod_idx, item) in items.into_iter().enumerate() {
         let modulus = item.value();
+        println!("[init] modulus #{} = {}", mod_idx, modulus);
 
         // TODO: chore: move all duplicated code to a function
         let modulus_bytes = string_to_bytes(&modulus);

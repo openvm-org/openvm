@@ -22,11 +22,22 @@ serde = { version = "1.0", default-features = false, features = [
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
-k256 = { version = "0.13.3", default-features = false, features = ["ecdsa-core", "ecdsa"] }
+k256 = { version = "0.13.3", default-features = false, features = [
+    "ecdsa-core",
+    "ecdsa",
+], optional = true }
 
 [features]
+k256 = ["dep:k256"]
 default = []
-std = ["axvm/std", "axvm-algebra-guest/std", "axvm-bigint-guest/std", "axvm-ecc-guest/std", "axvm-keccak256-guest/std", "axvm-pairing-guest/std"]
+std = [
+    "axvm/std",
+    "axvm-algebra-guest/std",
+    "axvm-bigint-guest/std",
+    "axvm-ecc-guest/std",
+    "axvm-keccak256-guest/std",
+    "axvm-pairing-guest/std",
+]
 
 [profile.release]
 panic = "abort"

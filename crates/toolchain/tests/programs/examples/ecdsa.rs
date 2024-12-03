@@ -9,12 +9,12 @@ use hex_literal::hex;
 use k256::ecdsa::{self, RecoveryId, Signature};
 axvm::entry!(main);
 
-use axvm_ecc::k256::Secp256k1Coord;
-axvm::moduli_init! {
+use axvm_ecc_guest::sw::Secp256k1Coord;
+axvm_algebra_moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
-axvm::sw_init! {
+axvm_ecc_sw_setup::sw_init! {
     Secp256k1Coord,
 }
 

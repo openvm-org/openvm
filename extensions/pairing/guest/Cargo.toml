@@ -12,9 +12,6 @@ serde = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
 strum_macros.workspace = true
-ecdsa = { workspace = true, features = ["verifying"] }
-elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
-k256 = { workspace = true, optional = true }
 hex-literal = { workspace = true }
 axvm-algebra-guest = { workspace = true }
 axvm-algebra-moduli-setup = { workspace = true }
@@ -40,6 +37,7 @@ halo2curves = [
     "axvm-algebra-guest/halo2curves",
     "axvm-ecc-guest/halo2curves",
 ]
-k256 = ["dep:k256"]
+# features to enable specific curves in guest programs
+# only enable for the curves you use as it affects the init! macro
 bn254 = []
 bls12_381 = []

@@ -103,7 +103,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_add_ne_extern_func(
                                 uninit.as_mut_ptr() as usize,
@@ -152,7 +152,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_double_extern_func(
                                 uninit.as_mut_ptr() as usize,
@@ -187,17 +187,17 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
+            impl SwPoint for #struct_name {
                 type Coordinate = #intmod_type;
 
                 // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
-                fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
+                fn from_encoded_point<C: elliptic_curve::Curve>(p: &elliptic_curve::sec1::EncodedPoint<C>) -> Self
                 where
-                    C::FieldBytesSize: ModulusSize
+                    C::FieldBytesSize: elliptic_curve::sec1::ModulusSize
                 {
                     match p.coordinates() {
-                        halo2curves_axiom::Coordinates::Identity => Self::identity(),
-                        halo2curves_axiom::Coordinates::Uncompressed { x, y } => {
+                        elliptic_curve::sec1::Coordinates::Identity => Self::identity(),
+                        elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
                             // Sec1 bytes are in big endian.
                             let x = Self::Coordinate::from_be_bytes(x.as_ref());
                             let y = Self::Coordinate::from_be_bytes(y.as_ref());
@@ -206,8 +206,8 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                             Self { x, y }
 
                         }
-                        halo2curves_axiom::Coordinates::Compact { x } => unimplemented!(),
-                        halo2curves_axiom::Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
+                        elliptic_curve::sec1::Coordinates::Compact { x } => unimplemented!(),
+                        elliptic_curve::sec1::Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
                     }
                 }
 
