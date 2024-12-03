@@ -64,9 +64,3 @@ impl CyclicGroup for Secp256k1Point {
         )),
     };
 }
-
-#[cfg(feature = "k256")]
-impl IntrinsicCurve for k256::Secp256k1 {
-    type Scalar = Secp256k1Scalar;
-    type Point = Secp256k1Point;
-}

@@ -188,7 +188,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl SwPoint for #struct_name {
+            impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
                 type Coordinate = #intmod_type;
 
                 // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
