@@ -1,8 +1,8 @@
-name: Publish mdBook to GitHub Pages
+name: Publish mdBook to md-book branch
 
 on:
   push:
-    branches: ["main"]
+    branches: ["chore/mdbook-deploy"]
     paths:
       - "book/**"
 
@@ -41,11 +41,15 @@ jobs:
           just lint-book-toc
           mdbook build
 
-      - name: Add CNAME file
-        run: echo "vm.axiom.xyz" > ./book/CNAME
-
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: book
+      # Deploy the book to a specific branch
+      - name: Deploy to target branch
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git fetch origin
+          git switch --create book-output origin/mdbook-vercel || git switch book-output
+          rm -rf *  # Clear old files
+          cp -r book/* .  # Copy the book output
+          git add .
+          git commit -m "Triggered by commit ${{ github.sha }}" || echo "Nothing to commit"
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} book-output
