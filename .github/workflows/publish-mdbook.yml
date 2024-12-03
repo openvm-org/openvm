@@ -4,7 +4,7 @@ on:
   push:
     branches: ["chore/mdbook-deploy"]
     paths:
-      - "book/**"
+      - "**"
 
 jobs:
   publish:
