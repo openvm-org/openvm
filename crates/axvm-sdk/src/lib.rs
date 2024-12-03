@@ -125,12 +125,12 @@ where
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn generate_snark_verifier_contract(snark: Snark) {
+    pub fn generate_snark_verifier_contract(_snark: Snark) -> Vec<u8> {
         todo!()
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn evm_verify_snark(snark: Snark) {
+    pub fn evm_verify_snark(_snark: Snark) -> Result<(), VerificationError> {
         todo!()
     }
 }
