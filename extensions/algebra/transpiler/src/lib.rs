@@ -1,7 +1,6 @@
 use axvm_algebra_guest::{
-    ComplexExtFieldBaseFunct7,
-    ModArithBaseFunct7::{self},
-    COMPLEX_EXT_FIELD_FUNCT3, MODULAR_ARITHMETIC_FUNCT3, OPCODE,
+    ComplexExtFieldBaseFunct7, ModArithBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3,
+    MODULAR_ARITHMETIC_FUNCT3, OPCODE,
 };
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Fp2Opcode,
