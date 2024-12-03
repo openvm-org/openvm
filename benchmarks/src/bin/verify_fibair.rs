@@ -34,7 +34,7 @@ fn main() -> Result<()> {
             .run_test(vec![fib_chip.generate_air_proof_input()])
             .unwrap();
         let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-        let config = NativeConfig::aggregation(0, max_constraint_degree);
+        let config = NativeConfig::aggregation(0, max_constraint_degree).with_continuations();
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()

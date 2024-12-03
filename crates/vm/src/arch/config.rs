@@ -109,7 +109,7 @@ impl SystemConfig {
     ) -> Self {
         Self {
             max_constraint_degree,
-            continuation_enabled: true,
+            continuation_enabled: false,
             memory_config,
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
