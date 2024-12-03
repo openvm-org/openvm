@@ -32,12 +32,10 @@ num-bigint.workspace = true
 num-traits.workspace = true
 
 [features]
-default = []
+default = ["k256"]
 std = ["axvm/std"]
-# TODO[yj]: Switch to `halo2curves`
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro
 k256 = ["dep:k256"]
-bn254 = []
-bls12_381 = []
+# TODO[yj]: Switch to `halo2curves`
 halo2curves = ["dep:halo2curves-axiom", "axvm-algebra-guest/halo2curves"]

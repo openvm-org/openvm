@@ -37,5 +37,7 @@ halo2curves = [
     "axvm-algebra-guest/halo2curves",
     "axvm-ecc-guest/halo2curves",
 ]
+# features to enable specific curves in guest programs
+# only enable for the curves you use as it affects the init! macro
 bn254 = []
 bls12_381 = []

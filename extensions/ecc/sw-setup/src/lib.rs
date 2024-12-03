@@ -20,7 +20,8 @@ static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 ///     [TODO]
 /// }
 /// ```
-/// This [TODO add description].
+///
+/// For this macro to work, you must import the `elliptic_curve` crate and the `axvm_ecc_guest` crate..
 #[proc_macro]
 pub fn sw_setup(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);

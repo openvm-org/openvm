@@ -1,6 +1,7 @@
 #![no_std]
 
 extern crate alloc;
+extern crate self as axvm_ecc_guest;
 
 pub use axvm_algebra_guest as algebra;
 #[cfg(feature = "halo2curves")]
@@ -17,3 +18,7 @@ pub use ecdsa::*;
 
 /// Weierstrass curve traits
 pub mod sw;
+
+/// Types for Secp256k1 curve with intrinsic functions. Implements traits necessary for ECDSA.
+#[cfg(feature = "k256")]
+pub mod k256;

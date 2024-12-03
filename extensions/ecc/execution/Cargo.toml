@@ -10,6 +10,7 @@ axvm-pairing-guest = { workspace = true, features = [
     "bn254",
     "bls12_381",
 ] }
+axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true
@@ -19,13 +20,6 @@ num-traits.workspace = true
 rand.workspace = true
 lazy_static.workspace = true
 group = "0.13.0"
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-axvm-ecc-guest = { workspace = true, features = [
-    "halo2curves",
-    "bn254",
-    "bls12_381",
-] }
 
 [dev-dependencies]
 rng = "0.1.0"
