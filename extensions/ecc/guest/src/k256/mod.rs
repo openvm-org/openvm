@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Neg};
 
 use axvm_algebra_guest::IntMod;
-use axvm_ecc_guest;
 use hex_literal::hex;
 
 use super::group::{CyclicGroup, Group};
