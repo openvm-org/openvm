@@ -1,4 +1,4 @@
-name: Publish mdBook to md-book branch
+name: Publish mdBook to Vercel
 
 on:
   push:
@@ -45,6 +45,8 @@ jobs:
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}  # Token stored in GitHub Secrets
+          VERCEL_PROJECT_ID: axvm-book
+          VERCEL_ORG_ID: axiom-crypto
         run: |
           cd book
-          vercel --prod --token $VERCEL_TOKEN --project axvm-book
+          vercel --prod --token $VERCEL_TOKEN
