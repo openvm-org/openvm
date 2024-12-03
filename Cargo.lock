@@ -1257,7 +1257,6 @@ dependencies = [
  "p3-baby-bear",
  "serde",
  "serde_json",
- "snark-verifier-sdk",
  "static_assertions",
  "tracing",
 ]

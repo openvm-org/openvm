@@ -17,10 +17,6 @@ ax-poseidon2-air = { workspace = true }
 ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
 axvm-circuit = { workspace = true }
-snark-verifier-sdk = { workspace = true, features = [
-    "loader_evm",
-    "revm",
-], optional = true }
 
 derivative = { workspace = true }
 serde = { workspace = true }
@@ -34,6 +30,6 @@ tracing.workspace = true
 [features]
 default = ["parallel"]
 bench-metrics = ["axvm-native-recursion/bench-metrics"]
-static-verifier = ["axvm-native-recursion/static-verifier", "dep:snark-verifier-sdk"]
+static-verifier = ["axvm-native-recursion/static-verifier"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]

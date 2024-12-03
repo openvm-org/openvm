@@ -23,7 +23,7 @@ use p3_baby_bear::BabyBear;
 #[cfg(feature = "static-verifier")]
 use {
     axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit, config::AggConfig,
-    keygen::AggProvingKey, snark_verifier_sdk::Snark,
+    keygen::AggProvingKey,
 };
 
 pub mod commit;
@@ -120,7 +120,7 @@ impl Sdk {
     #[cfg(feature = "static-verifier")]
     pub fn load_agg_pk_from_cached_dir<P: AsRef<Path>>(
         &self,
-        _agg_cache_dir: P,
+        _agg_cache_path: P,
     ) -> Result<(
         AggProvingKey,
         Arc<AxVmCommittedExe<SC>>,
@@ -130,7 +130,7 @@ impl Sdk {
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn generate_e2e_proof<VC: VmConfig<F>>(
+    pub fn generate_e2e_proof<VC: VmConfig<F>, P: AsRef<Path>>(
         &self,
         _app_pk: AppProvingKey<VC>,
         _app_exe: Arc<AxVmCommittedExe<SC>>,
@@ -138,7 +138,8 @@ impl Sdk {
         _leaf_exe: Arc<AxVmCommittedExe<SC>>,
         _static_verifier: Halo2VerifierCircuit,
         _inputs: StdIn,
-    ) -> Result<Snark>
+        _output_path: Option<P>,
+    ) -> Result<EvmProof>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
@@ -147,9 +148,17 @@ impl Sdk {
     }
 
     #[cfg(feature = "static-verifier")]
+    pub fn load_e2e_proof_from_cached_dir<P: AsRef<Path>>(
+        &self,
+        _e2e_proof_path: P,
+    ) -> Result<EvmProof> {
+        todo!()
+    }
+
+    #[cfg(feature = "static-verifier")]
     pub fn generate_snark_verifier_contract<VC: VmConfig<F>, P: AsRef<Path>>(
         &self,
-        _snark: Snark,
+        _evm_proof: EvmProof,
         _app_pk: AppProvingKey<VC>,
         _agg_pk: AggProvingKey,
         _output_path: P,
@@ -162,7 +171,11 @@ impl Sdk {
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn evm_verify_snark(&self, _snark: Snark) -> Result<(), VerificationError> {
+    pub fn evm_verify_snark<P: AsRef<Path>>(
+        &self,
+        _evm_proof: EvmProof,
+        _contract_path: P,
+    ) -> Result<(), VerificationError> {
         todo!()
     }
 }
