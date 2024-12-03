@@ -10,6 +10,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
+use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_native_recursion::testing_utils::inner::build_verification_program;
@@ -34,7 +35,9 @@ fn main() -> Result<()> {
             .run_test(vec![fib_chip.generate_air_proof_input()])
             .unwrap();
         let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-        let config = NativeConfig::aggregation(0, max_constraint_degree).with_continuations();
+        let config =
+            NativeConfig::aggregation(DEFAULT_MAX_NUM_PUBLIC_VALUES, max_constraint_degree)
+                .with_continuations();
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
