@@ -1,5 +1,8 @@
 use alloc::vec::Vec;
-use core::ops::{Mul, Neg};
+use core::{
+    iter::zip,
+    ops::{Mul, Neg},
+};
 
 use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use axvm_ecc_guest::AffinePoint;
@@ -66,15 +69,10 @@ where
         assert_eq!(P.len(), Q.len());
 
         // Filter out the pair with infinity points
-        let valid_pairs: Vec<_> = P
-            .iter()
-            .zip(Q.iter())
-            .enumerate()
-            .filter(|(_, (p, q))| !p.is_infinity() && !q.is_infinity())
-            .collect();
-
-        let P: Vec<_> = valid_pairs.iter().map(|(_, (p, _))| (*p).clone()).collect();
-        let Q: Vec<_> = valid_pairs.iter().map(|(_, (_, q))| (*q).clone()).collect();
+        let (P, Q): (Vec<_>, Vec<_>) = zip(P, Q)
+            .filter(|(p, q)| !p.is_infinity() && !q.is_infinity())
+            .map(|(p, q)| (p.clone(), q.clone()))
+            .unzip();
 
         let xy_fracs = P
             .iter()
