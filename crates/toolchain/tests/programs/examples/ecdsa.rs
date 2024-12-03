@@ -20,6 +20,9 @@ axvm_ecc_sw_setup::sw_init! {
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {
+    setup_all_moduli();
+    setup_all_curves();
+
     let msg = b"example message";
 
     let signature = Signature::try_from(

@@ -4,6 +4,7 @@ extern crate alloc;
 extern crate self as axvm_ecc_guest;
 
 pub use axvm_algebra_guest as algebra;
+pub use axvm_ecc_sw_setup as sw_setup;
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
 
