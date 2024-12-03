@@ -7,7 +7,7 @@ use axvm_algebra_guest::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
+    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     axvm_platform::custom_insn_r,
 };
 
@@ -77,8 +77,8 @@ pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
     rhs: *const u8,
 ) {
     custom_insn_r!(
-        CUSTOM_1,
-        Custom1Funct3::Pairing as usize,
+        OPCODE,
+        PAIRING_FUNCT3,
         shifted_funct7::<P>(PairingBaseFunct7::Fp12Mul),
         dst,
         lhs,

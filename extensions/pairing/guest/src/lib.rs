@@ -1,4 +1,4 @@
-#![no_std]
+
 use strum_macros::FromRepr;
 
 
@@ -22,6 +22,7 @@ pub enum PairingBaseFunct7 {
 
 impl PairingBaseFunct7 {
     pub const PAIRING_MAX_KINDS: u8 = 16;
+
 }
 
 extern crate alloc;

@@ -5,12 +5,12 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-#[cfg(target_os = "zkvm")]
-use axvm_platform::{
-    constants::{ComplexExtFieldBaseFunct7, Custom1Funct3, COMPLEX_EXT_FIELD_MAX_KINDS, CUSTOM_1},
-    custom_insn_r,
-};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "zkvm")]
+use {
+    crate::{ComplexExtFieldBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3, OPCODE},
+    axvm_platform::custom_insn_r,
+};
 
 use super::{ComplexConjugate, Field};
 use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
@@ -58,10 +58,11 @@ impl<F: IntMod> Complex<F> {
         #[cfg(target_os = "zkvm")]
         {
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Add as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -80,10 +81,11 @@ impl<F: IntMod> Complex<F> {
         #[cfg(target_os = "zkvm")]
         {
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Sub as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -106,10 +108,11 @@ impl<F: IntMod> Complex<F> {
         #[cfg(target_os = "zkvm")]
         {
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Mul as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -133,10 +136,11 @@ impl<F: IntMod> Complex<F> {
         #[cfg(target_os = "zkvm")]
         {
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Div as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 self as *mut Self,
                 self as *const Self,
                 other as *const Self
@@ -156,10 +160,11 @@ impl<F: IntMod> Complex<F> {
         {
             let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Add as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
@@ -181,10 +186,11 @@ impl<F: IntMod> Complex<F> {
         {
             let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Sub as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self
@@ -209,10 +215,11 @@ impl<F: IntMod> Complex<F> {
         #[cfg(target_os = "zkvm")]
         {
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Mul as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 dst_ptr,
                 self as *const Self,
                 other as *const Self
@@ -233,10 +240,11 @@ impl<F: IntMod> Complex<F> {
         {
             let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::ComplexExtField as usize,
+                OPCODE,
+                COMPLEX_EXT_FIELD_FUNCT3,
                 ComplexExtFieldBaseFunct7::Div as usize
-                    + F::MOD_IDX * (COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    + F::MOD_IDX
+                        * (ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                 uninit.as_mut_ptr(),
                 self as *const Self,
                 other as *const Self

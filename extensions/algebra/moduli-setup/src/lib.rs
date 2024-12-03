@@ -130,11 +130,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::AddMod as usize
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::AddMod as usize
                                 + Self::MOD_IDX
-                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             self as *mut Self,
                             self as *const Self,
                             other as *const Self
@@ -154,11 +154,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::SubMod as usize
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::SubMod as usize
                                 + Self::MOD_IDX
-                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             self as *mut Self,
                             self as *const Self,
                             other as *const Self
@@ -177,11 +177,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::MulMod as usize
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::MulMod as usize
                                 + Self::MOD_IDX
-                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             self as *mut Self,
                             self as *const Self,
                             other as *const Self
@@ -200,11 +200,11 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::DivMod as usize
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::DivMod as usize
                                 + Self::MOD_IDX
-                                    * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             self as *mut Self,
                             self as *const Self,
                             other as *const Self
@@ -227,9 +227,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             dst_ptr,
                             self as *const #struct_name,
                             other as *const #struct_name
@@ -252,9 +252,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             dst_ptr,
                             self as *const #struct_name,
                             other as *const #struct_name
@@ -277,9 +277,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             dst_ptr,
                             self as *const #struct_name,
                             other as *const #struct_name
@@ -299,9 +299,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     {
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         axvm_platform::custom_insn_r!(
-                            axvm_platform::constants::CUSTOM_1,
-                            axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                            axvm_platform::constants::ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            axvm_algebra_guest::OPCODE,
+                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                            axvm_algebra_guest::ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             uninit.as_mut_ptr(),
                             self as *const #struct_name,
                             other as *const #struct_name
@@ -322,9 +322,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                         unsafe {
                             core::arch::asm!(
                                 ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                                opcode = const axvm_platform::constants::CUSTOM_1,
-                                funct3 = const axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                                funct7 = const axvm_platform::constants::ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                opcode = const axvm_algebra_guest::OPCODE,
+                                funct3 = const axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                                funct7 = const axvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                                 rd = out(reg) x,
                                 rs1 = in(reg) self as *const #struct_name,
                                 rs2 = in(reg) other as *const #struct_name
@@ -696,31 +696,31 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
                     let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
@@ -739,21 +739,21 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
                     let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
-                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
-                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                                * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         modulus_bytes.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
-                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
-                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                                * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         modulus_bytes.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV

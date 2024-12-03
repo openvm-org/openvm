@@ -7,7 +7,6 @@ description = "Guest extension for RISC-V 32IM"
 
 [dependencies]
 axvm-platform = { workspace = true }
-strum = { workspace = true }
 
 [features]
 default = []

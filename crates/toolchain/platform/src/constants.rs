@@ -1,4 +1,4 @@
-use strum_macros::FromRepr;
+/*use strum_macros::FromRepr;
 
 pub const CUSTOM_0: u8 = 0x0b;
 pub const CUSTOM_1: u8 = 0x2b;
@@ -11,9 +11,9 @@ pub enum Custom0Funct3 {
     HintStoreW = 1,
     Reveal = 2,
     Phantom = 3,
-    // Keccak256 = 4,
-    // Int256 = 5,
-    // Beq256 = 6,
+    Keccak256 = 4,
+    Int256 = 5,
+    Beq256 = 6,
 }
 
 /// Different funct3 for custom RISC-V instructions using the [CUSTOM_1] 7-bit opcode prefix.
@@ -30,30 +30,30 @@ pub enum Custom1Funct3 {
     Pairing = 3,
 }
 
-// /// imm options for system phantom instructions
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-// #[repr(u16)]
-// pub enum PhantomImm {
-//     HintInput = 0,
-//     PrintStr,
-// }
+/// imm options for system phantom instructions
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum PhantomImm {
+    HintInput = 0,
+    PrintStr,
+}
 
-// /// funct7 options for 256-bit integer instructions.
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-// #[repr(u8)]
-// pub enum Int256Funct7 {
-//     Add = 0,
-//     Sub,
-//     Xor,
-//     Or,
-//     And,
-//     Sll,
-//     Srl,
-//     Sra,
-//     Slt,
-//     Sltu,
-//     Mul,
-// }
+/// funct7 options for 256-bit integer instructions.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u8)]
+pub enum Int256Funct7 {
+    Add = 0,
+    Sub,
+    Xor,
+    Or,
+    And,
+    Sll,
+    Srl,
+    Sra,
+    Slt,
+    Sltu,
+    Mul,
+}
 
 pub const MODULAR_ARITHMETIC_MAX_KINDS: u8 = 8;
 
@@ -112,3 +112,4 @@ pub enum PairingBaseFunct7 {
     MulBy02345,
     HintFinalExp,
 }
+*/

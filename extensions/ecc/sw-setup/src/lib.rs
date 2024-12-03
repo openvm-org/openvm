@@ -79,10 +79,10 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     {
                         let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
                         custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
+                            OPCODE,
+                            ECC_FUNCT3,
                             SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                             uninit.as_mut_ptr(),
                             p1 as *const #struct_name,
                             p2 as *const #struct_name
@@ -105,10 +105,10 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
+                            OPCODE,
+                            ECC_FUNCT3,
                             SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * ((SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize)),
                             self as *mut #struct_name,
                             self as *const #struct_name,
                             p2 as *const #struct_name
@@ -132,10 +132,10 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     {
                         let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
                         custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
+                            OPCODE,
+                            ECC_FUNCT3,
                             SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                             uninit.as_mut_ptr(),
                             p as *const #struct_name,
                             "x0"
@@ -159,10 +159,10 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         custom_insn_r!(
-                            CUSTOM_1,
-                            Custom1Funct3::ShortWeierstrass as usize,
+                            OPCODE,
+                            ECC_FUNCT3,
                             SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * ((SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize)),
                             self as *mut #struct_name,
                             self as *const #struct_name,
                             "x0"
@@ -374,21 +374,21 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                        OPCODE,
+                        ECC_FUNCT3,
+                        SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         p2.as_ptr()
                     );
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                        OPCODE,
+                        ECC_FUNCT3,
+                        SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE

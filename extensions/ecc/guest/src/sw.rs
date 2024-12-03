@@ -10,9 +10,8 @@ use hex_literal::hex;
 use k256::Secp256k1;
 #[cfg(target_os = "zkvm")]
 use {
-    axvm_platform::constants::{Custom1Funct3, SwBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
+    crate::{OPCODE, SwBaseFunct7, ECC_FUNCT3},
+    axvm_platform::custom_insn_r, core::mem::MaybeUninit
 };
 
 use super::group::{CyclicGroup, Group};

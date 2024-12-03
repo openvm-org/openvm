@@ -578,11 +578,13 @@ dependencies = [
 name = "axvm-algebra-guest"
 version = "0.1.0"
 dependencies = [
+ "axvm",
  "axvm-platform",
  "halo2curves-axiom 0.7.0",
  "num-bigint-dig",
  "serde",
  "serde-big-array",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1124,6 +1126,7 @@ dependencies = [
  "axvm-algebra-moduli-setup",
  "axvm-ecc-guest",
  "axvm-platform",
+ "axvm-rv32im-guest",
  "ecdsa",
  "elliptic-curve",
  "group 0.13.0",
@@ -1226,7 +1229,6 @@ name = "axvm-rv32im-guest"
 version = "0.1.0"
 dependencies = [
  "axvm-platform",
- "strum",
 ]
 
 [[package]]

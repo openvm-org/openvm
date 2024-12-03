@@ -7,7 +7,6 @@
 // Re-export bincode for consistent version for serialization and deserialization across crates.
 pub use bincode;
 
-pub mod constants;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod custom_insn;
 #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]

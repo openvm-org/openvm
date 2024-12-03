@@ -10,13 +10,14 @@ use axvm_algebra_guest::{
     Field, IntMod,
 };
 use axvm_ecc_guest::AffinePoint;
-use axvm_platform::constants::{PairingBaseFunct7, PAIRING_MAX_KINDS};
 pub use final_exp::*;
 pub use line::*;
 pub use miller_loop::*;
 pub use miller_step::*;
 pub(crate) use operations::*;
 pub use sextic_ext_field::*;
+
+use crate::PairingBaseFunct7;
 
 pub trait PairingIntrinsics {
     type Fp: Field + IntMod;
@@ -54,7 +55,7 @@ pub trait PairingCheck {
 }
 
 pub const fn shifted_funct7<P: PairingIntrinsics>(funct7: PairingBaseFunct7) -> usize {
-    P::PAIRING_IDX * (PAIRING_MAX_KINDS as usize) + funct7 as usize
+    P::PAIRING_IDX * (PairingBaseFunct7::PAIRING_MAX_KINDS as usize) + funct7 as usize
 }
 
 #[derive(Debug, Clone, PartialEq)]

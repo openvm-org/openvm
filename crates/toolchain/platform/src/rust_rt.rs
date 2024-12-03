@@ -20,15 +20,16 @@
 //! * It includes a panic handler.
 //! * It includes an allocator.
 
+// Importing `axvm_rv32im_guest` here would create a circular dependency
 #[cfg(target_os = "zkvm")]
-use crate::constants::CUSTOM_0;
+const SYSTEM_OPCODE: u8 = 0x0b;
 
 extern crate alloc;
 
 #[inline(always)]
 pub fn terminate<const EXIT_CODE: u8>() {
     #[cfg(target_os = "zkvm")]
-    crate::custom_insn_i!(CUSTOM_0, 0, "x0", "x0", EXIT_CODE);
+    crate::custom_insn_i!(SYSTEM_OPCODE, 0, "x0", "x0", EXIT_CODE);
     #[cfg(not(target_os = "zkvm"))]
     {
         unimplemented!()
