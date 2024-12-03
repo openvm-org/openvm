@@ -1,7 +1,7 @@
 extern crate core;
 
 use std::{
-    fs::{read_to_string, write},
+    fs::{create_dir_all, read_to_string, write},
     path::Path,
     sync::Arc,
 };
@@ -120,7 +120,11 @@ impl Sdk {
     ) -> Result<(AggConfig, AggProvingKey)> {
         let agg_pk: AggProvingKey = AggProvingKey::keygen(config);
         if let Some(output_path) = output_path {
+            if let Some(parent) = output_path.as_ref().parent() {
+                create_dir_all(parent)?;
+            }
             let json = serde_json::to_string(&agg_pk)?;
+            println!("agg_pk: {}", json);
             if write(output_path, json).is_err() {
                 return Err(eyre!("Failed to write aggregator proving key to file"));
             }
