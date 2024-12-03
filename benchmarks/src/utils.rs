@@ -93,7 +93,7 @@ where
     });
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-        commit_app_exe(app_config, exe)
+        commit_app_exe(&app_config, exe)
     });
     // 3. Executes runtime again without metric collection and generate trace.
     time(gauge!("execute_and_trace_gen_time_ms"), || {

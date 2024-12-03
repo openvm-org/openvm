@@ -28,6 +28,7 @@ use axvm_sdk::{
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
         root::types::RootVmVerifierPvs,
     },
+    Sdk,
 };
 use p3_baby_bear::BabyBear;
 
@@ -72,10 +73,10 @@ where
         builder.compile_isa()
     };
 
-    let app_pk = AppProvingKey::keygen(app_config.clone());
+    let app_committed_exe = commit_app_exe(&app_config, program);
+    let app_pk = AppProvingKey::keygen(app_config);
+    let leaf_committed_exe = generate_leaf_committed_exe(&agg_config, &app_pk);
     let (agg_pk, dummy) = AggProvingKey::dummy_proof_and_keygen(agg_config);
-    let app_committed_exe = commit_app_exe(app_config, program);
-    let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
     (
         StarkProver::new(app_pk, app_committed_exe)
             .with_agg_pk_and_leaf_committed_exe(agg_pk, leaf_committed_exe),
@@ -279,6 +280,35 @@ fn test_e2e_app_log_blowup_1() {
         &e2e_prover.agg_pk().root_verifier_pk,
         dummy_internal_proof,
         &root_proof,
+    );
+}
+
+#[test]
+fn test_agg_keygen_store_and_load() {
+    const AGG_PK_PATH: &str = "temp/agg_pk.json";
+
+    let sdk = Sdk;
+    let agg_config = AggConfig {
+        max_num_user_public_values: NUM_PUB_VALUES,
+        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(4),
+        internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(3),
+        root_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
+        compiler_options: CompilerOptions {
+            enable_cycle_tracker: true,
+            compile_prints: true,
+            ..Default::default()
+        },
+    };
+
+    let (_, agg_pk) = sdk.agg_keygen(agg_config, Some(AGG_PK_PATH)).unwrap();
+    let (file_config, file_pk) = sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
+    assert_eq!(
+        agg_config.max_num_user_public_values,
+        file_config.max_num_user_public_values
+    );
+    assert_eq!(
+        agg_pk.root_verifier_pk.air_heights,
+        file_pk.root_verifier_pk.air_heights
     );
 }
 
