@@ -52,7 +52,6 @@ mod bn254 {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bn254"])?;
@@ -84,7 +83,6 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bn254"])?;
@@ -138,7 +136,6 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bn254"])?;
@@ -183,7 +180,6 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bn254"])?;
@@ -233,7 +229,6 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bn254"])?;
@@ -322,7 +317,6 @@ mod bls12_381 {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bls12_381"])?;
@@ -354,7 +348,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bls12_381"])?;
@@ -409,7 +402,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;
@@ -454,7 +446,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bls12_381"])?;
@@ -510,7 +501,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bls12_381"])?;
@@ -564,7 +554,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program_with_features("final_exp_hint", ["bls12_381"])?;

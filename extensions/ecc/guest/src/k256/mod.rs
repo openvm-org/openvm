@@ -3,13 +3,6 @@ use core::ops::{Add, AddAssign, Neg};
 
 use axvm_algebra_guest::IntMod;
 use hex_literal::hex;
-use k256::Secp256k1;
-#[cfg(target_os = "zkvm")]
-use {
-    axvm_platform::constants::{Custom1Funct3, SwBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
-    core::mem::MaybeUninit,
-};
 
 use super::group::{CyclicGroup, Group};
 use crate::sw::IntrinsicCurve;
@@ -47,7 +40,7 @@ impl CyclicGroup for Secp256k1Point {
     };
 }
 
-impl IntrinsicCurve for Secp256k1 {
+impl IntrinsicCurve for k256::Secp256k1 {
     type Scalar = Secp256k1Scalar;
     type Point = Secp256k1Point;
 }
