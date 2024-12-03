@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 axvm-ecc = { workspace = true, features = ["halo2curves"] }
+ax-ecc-execution = { workspace = true }
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.7-git", default-features = false, features = ["halo2-pse"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }

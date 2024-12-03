@@ -444,6 +444,7 @@ dependencies = [
 name = "ax-snark-verifier"
 version = "0.1.0"
 dependencies = [
+ "ax-ecc-execution",
  "axvm-ecc",
  "axvm-ecc-constants",
  "ff 0.13.0",
