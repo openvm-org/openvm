@@ -12,10 +12,10 @@ axvm-algebra-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.gi
 axvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false, features = [
     "k256",
 ] }
-revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-features = false, features = [
+revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false, features = [
     "axvm",
 ] }
-revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-features = false }
+revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false }
 
 [features]
 default = []
