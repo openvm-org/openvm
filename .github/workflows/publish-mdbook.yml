@@ -39,15 +39,12 @@ jobs:
           just lint-book-toc
           mdbook build
 
-      # Deploy the book to a specific branch
-      - name: Deploy to target branch
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}  # Token stored in GitHub Secrets
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git fetch origin
-          git switch --create mdbook-vercel origin/mdbook-vercel || git switch mdbook-vercel
-          rm -rf *  # Clear old files
-          cp -r book/* .  # Copy the book output
-          git add .
-          git commit -m "Triggered by commit ${{ github.sha }}" || echo "Nothing to commit"
-          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} mdbook-vercel
+          cd book
+          vercel --prod --token $VERCEL_TOKEN --project axvm-book
