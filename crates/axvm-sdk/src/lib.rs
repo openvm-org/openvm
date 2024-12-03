@@ -18,6 +18,8 @@ use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     system::program::trace::AxVmCommittedExe,
 };
+#[cfg(feature = "static-verifier")]
+use axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit;
 use axvm_native_recursion::types::InnerConfig;
 use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
 use config::{AggConfig, AppConfig};
@@ -25,11 +27,6 @@ use eyre::{eyre, Result};
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
 use prover::generate_leaf_committed_exe;
-#[cfg(feature = "static-verifier")]
-use {
-    axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit, config::AggConfig,
-    keygen::AggProvingKey,
-};
 
 pub mod commit;
 pub mod config;
