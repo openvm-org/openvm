@@ -50,5 +50,5 @@ jobs:
         run: |
           cd book
           mkdir .vercel
-          echo `{"projectId":"$VERCEL_PROJECT_ID","orgId":"$VERCEL_ORG_ID"}` > .vercel/project.json
+          echo "{\"projectId\":\"$VERCEL_PROJECT_ID\",\"orgId\":\"$VERCEL_ORG_ID\"}" > .vercel/project.json
           vercel --prod --token $VERCEL_TOKEN
