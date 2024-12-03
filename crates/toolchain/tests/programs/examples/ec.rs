@@ -5,9 +5,8 @@ use core::hint::black_box;
 
 use axvm_algebra_guest::IntMod;
 use axvm_ecc_guest::{
-    msm,
-    sw::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    Group,
+    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
+    msm, Group,
 };
 use hex_literal::hex;
 
