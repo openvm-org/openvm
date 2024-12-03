@@ -2,9 +2,9 @@ name: Publish mdBook to Vercel
 
 on:
   push:
-    branches: ["chore/mdbook-deploy"]
+    branches: ["main"]
     paths:
-      - "**"
+      - "book/**"
 
 jobs:
   publish:
