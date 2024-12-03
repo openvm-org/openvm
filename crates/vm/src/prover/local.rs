@@ -60,29 +60,6 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
-where
-    Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
-{
-    pub fn prove_without_continuations(
-        &self,
-        input: impl Into<VecDeque<Vec<Val<SC>>>>,
-    ) -> Vec<Proof<SC>> {
-        let e = E::new(self.pk.fri_params);
-        let vm = VirtualMachine::new_with_overridden_trace_heights(
-            e,
-            self.pk.vm_config.clone(),
-            self.overridden_heights.clone(),
-        );
-        let results = vm
-            .execute_and_generate_with_cached_program(self.committed_exe.clone(), input)
-            .unwrap();
-        vm.prove(&self.pk.vm_pk, results)
-    }
-}
-
 impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
     for VmLocalProver<SC, VC, E>
 where

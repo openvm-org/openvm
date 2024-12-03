@@ -101,9 +101,9 @@ where
     })?;
     // 4. Executes runtime once with full metric collection for flamegraphs (slow).
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
-    // generate_app_proof_without_continuations will emit metrics for proof time of each
+    // generate_app_proof will emit metrics for proof time of each
     let prover = StarkProver::new(app_pk, committed_exe);
-    let proofs = prover.generate_app_proof_without_continuations(input_stream);
+    let proofs = prover.generate_app_proof(input_stream).per_segment;
     // 6. Verify STARK proofs.
     let vk = prover.app_pk.app_vm_pk.vm_pk.get_vk();
     vm.verify(&vk, proofs.clone()).expect("Verification failed");

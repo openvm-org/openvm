@@ -49,6 +49,7 @@ where
             let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
             let vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.app_fri_params.max_constraint_degree());
+            assert!(config.app_vm_config.system().continuation_enabled);
             VmProvingKey {
                 fri_params: config.app_fri_params,
                 vm_config: config.app_vm_config.clone(),

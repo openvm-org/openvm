@@ -150,18 +150,6 @@ where
         ContinuationVmProver::prove(&self.app_prover, input)
     }
 
-    pub fn generate_app_proof_without_continuations(&self, input: Vec<Vec<F>>) -> Vec<Proof<SC>> {
-        #[cfg(feature = "bench-metrics")]
-        {
-            execute_app_exe_for_metrics_collection(
-                &self.app_pk,
-                &self.app_committed_exe,
-                input.clone(),
-            );
-        }
-        self.app_prover.prove_without_continuations(input)
-    }
-
     pub fn generate_e2e_proof_with_metric_spans(
         &self,
         input: Vec<Vec<F>>,
