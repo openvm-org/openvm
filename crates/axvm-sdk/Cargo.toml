@@ -7,6 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+axvm-build = { workspace = true }
 axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
 axvm-native-recursion = { workspace = true }
@@ -25,6 +26,7 @@ derivative = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 static_assertions.workspace = true
+eyre.workspace = true
 async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
