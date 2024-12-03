@@ -326,11 +326,9 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 use super::#struct_name;
 
-                impl axvm_algebra_guest::IntMod for #struct_name {
+                impl IntMod for #struct_name {
                     type Repr = [u8; #limbs];
                     type SelfRef<'a> = &'a Self;
-
-                    const MOD_IDX: usize = #mod_idx;
 
                     const MODULUS: Self::Repr = [#(#modulus_bytes),*];
 
