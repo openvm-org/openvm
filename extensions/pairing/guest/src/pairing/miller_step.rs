@@ -5,7 +5,7 @@ use axvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
-    crate::{PAIRING_FUNCT3, OPCODE, PairingBaseFunct7},
+    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };

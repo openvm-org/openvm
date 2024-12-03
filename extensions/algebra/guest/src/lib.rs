@@ -1,5 +1,5 @@
 #![no_std]
-use strum_macros::FromRepr;
+extern crate self as axvm_algebra_guest;
 
 pub const OPCODE: u8 = 0x2b;
 pub const MODULAR_ARITHMETIC_FUNCT3: u8 = 0b000;
@@ -53,6 +53,7 @@ pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 pub use serde_big_array::BigArray;
+use strum_macros::FromRepr;
 
 /// Field traits
 pub mod field;

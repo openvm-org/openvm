@@ -1,4 +1,4 @@
-use axvm_ecc_guest::{SwBaseFunct7, ECC_FUNCT3, OPCODE};
+use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Rv32WeierstrassOpcode, UsizeOpcode,
 };
@@ -22,7 +22,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
         if opcode != OPCODE {
             return None;
         }
-        if funct3 != ECC_FUNCT3 {
+        if funct3 != SW_FUNCT3 {
             return None;
         }
 

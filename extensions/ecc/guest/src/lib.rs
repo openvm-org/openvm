@@ -1,9 +1,9 @@
 #![no_std]
 use strum_macros::FromRepr;
+extern crate self as axvm_ecc_guest;
 
-// TODO: when moving the actual guest program to this crate, make everything use these constants.
 pub const OPCODE: u8 = 0x2b;
-pub const ECC_FUNCT3: u8 = 0b001;
+pub const SW_FUNCT3: u8 = 0b001;
 
 /// Short Weierstrass curves are configurable.
 /// The funct7 field equals `curve_idx * SHORT_WEIERSTRASS_MAX_KINDS + base_funct7`.
@@ -20,7 +20,6 @@ impl SwBaseFunct7 {
 }
 
 extern crate alloc;
-extern crate self as axvm_ecc_guest;
 
 pub use axvm_algebra_guest as algebra;
 pub use axvm_ecc_sw_setup as sw_setup;
