@@ -7,7 +7,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::exe::AxVmExe;
+use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_native_recursion::testing_utils::inner::build_verification_program;

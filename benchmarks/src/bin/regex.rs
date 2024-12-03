@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::exe::AxVmExe;
+use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::NativeConfig;
