@@ -64,24 +64,17 @@ where
     ) -> Self::Fp12 {
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
-        let mut P = P.to_vec();
-        let mut Q = Q.to_vec();
 
-        // Remove any (P, Q) pairs in which P or Q is the point at infinity
-        let mut indices_to_remove: Vec<usize> = P
+        // Filter out the pair with infinity points
+        let valid_pairs: Vec<_> = P
             .iter()
             .zip(Q.iter())
             .enumerate()
-            .filter(|(_, (p, q))| p.is_infinity() || q.is_infinity())
-            .map(|(i, _)| i)
+            .filter(|(_, (p, q))| !p.is_infinity() && !q.is_infinity())
             .collect();
 
-        // Remove from back to front to maintain correct indices
-        indices_to_remove.reverse();
-        for i in indices_to_remove {
-            P.remove(i);
-            Q.remove(i);
-        }
+        let P: Vec<_> = valid_pairs.iter().map(|(_, (p, _))| (*p).clone()).collect();
+        let Q: Vec<_> = valid_pairs.iter().map(|(_, (_, q))| (*q).clone()).collect();
 
         let xy_fracs = P
             .iter()
