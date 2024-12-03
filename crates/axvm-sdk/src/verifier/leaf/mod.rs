@@ -19,8 +19,9 @@ use axvm_native_recursion::{
 use crate::{
     verifier::{
         common::{
-            assert_or_assign_connector_pvs, assert_or_assign_memory_pvs, get_connector_pvs,
-            get_memory_pvs, get_program_commit, types::VmVerifierPvs,
+            assert_or_assign_connector_pvs, assert_or_assign_memory_pvs,
+            assert_required_air_for_app_vm_present, get_connector_pvs, get_memory_pvs,
+            get_program_commit, types::VmVerifierPvs,
         },
         leaf::types::UserPublicValuesRootProof,
         utils::VariableP2Compressor,
@@ -63,6 +64,7 @@ impl<VC: VmConfig<F>> LeafVmVerifierConfig<VC> {
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
             builder.range(0, proofs.len()).for_each(|i, builder| {
                 let proof = builder.get(&proofs, i);
+                assert_required_air_for_app_vm_present(builder, &proof);
                 StarkVerifier::verify::<DuplexChallengerVariable<C>>(
                     builder, &pcs, &m_advice, &proof,
                 );

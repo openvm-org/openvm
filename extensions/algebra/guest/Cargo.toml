@@ -8,6 +8,7 @@ description = "axVM guest library for algebra over rings and fields, including m
 [dependencies]
 axvm = { workspace = true }
 axvm-platform = { workspace = true }
+axvm-algebra-moduli-setup = { workspace = true }
 serde = { workspace = true }
 serde-big-array = "0.5.1"
 strum_macros = { workspace = true }

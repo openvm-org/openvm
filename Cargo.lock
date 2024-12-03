@@ -578,7 +578,7 @@ dependencies = [
 name = "axvm-algebra-guest"
 version = "0.1.0"
 dependencies = [
- "axvm",
+ "axvm-algebra-moduli-setup",
  "axvm-platform",
  "halo2curves-axiom 0.7.0",
  "num-bigint-dig",
@@ -1126,14 +1126,10 @@ dependencies = [
  "axvm-algebra-moduli-setup",
  "axvm-ecc-guest",
  "axvm-platform",
- "axvm-rv32im-guest",
- "ecdsa",
- "elliptic-curve",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
- "k256",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-traits",

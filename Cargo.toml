@@ -9,27 +9,27 @@ repository = "https://github.com/axiom-crypto/"
 [workspace]
 members = [
     "benchmarks",
-    "crates/axvm-sdk",    
+    "crates/axvm-sdk",
     "crates/cargo-axiom",
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
     "crates/circuits/derive",
     "crates/stark-backend",
-    "crates/stark-sdk",    
+    "crates/stark-sdk",
     "crates/toolchain/transpiler",
     "crates/toolchain/axvm",
-    "crates/toolchain/build",    
+    "crates/toolchain/build",
     "crates/toolchain/instructions",
     "crates/toolchain/instructions/derive",
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
-    "crates/vm",    
+    "crates/vm",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
-    "extensions/algebra/moduli-setup",    
+    "extensions/algebra/moduli-setup",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
@@ -55,7 +55,7 @@ members = [
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
-    "extensions/rv32-adapters"
+    "extensions/rv32-adapters",
 ]
 resolver = "2"
 

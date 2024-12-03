@@ -7,7 +7,7 @@ use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
 use axvm_ecc_circuit::WeierstrassExtension;
-use axvm_ecc_constants::{BLS12381, BN254, SECP256K1};
+use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -15,32 +15,7 @@ use eyre::Result;
 use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
 
-use crate::utils::build_example_program;
-
 type F = BabyBear;
-
-// TODO(INT-2746): this is temporary, we will fix the macro first, and the primes should not be hardcoded later.
-pub fn get_testing_config() -> Rv32PairingConfig {
-    let primes = [
-        SECP256K1.MODULUS.clone(),
-        SECP256K1.ORDER.clone(),
-        BLS12381.MODULUS.clone(),
-        BN254.MODULUS.clone(),
-    ];
-    Rv32PairingConfig {
-        system: SystemConfig::default().with_continuations(),
-        base: Default::default(),
-        mul: Default::default(),
-        io: Default::default(),
-        modular: ModularExtension::new(primes.to_vec()),
-        fp2: Fp2Extension::new(primes.to_vec()),
-        weierstrass: WeierstrassExtension::new(vec![
-            PairingCurve::Bn254.curve_config(),
-            PairingCurve::Bls12_381.curve_config(),
-        ]),
-        pairing: PairingExtension::new(vec![PairingCurve::Bn254, PairingCurve::Bls12_381]),
-    }
-}
 
 mod bn254 {
     use std::iter;
@@ -61,11 +36,25 @@ mod bn254 {
     use axvm_transpiler::transpiler::Transpiler;
 
     use super::*;
+    use crate::utils::build_example_program_with_features;
 
-    #[ignore]
+    pub fn get_testing_config() -> Rv32PairingConfig {
+        let primes = [BN254.MODULUS.clone()];
+        Rv32PairingConfig {
+            system: SystemConfig::default().with_continuations(),
+            base: Default::default(),
+            mul: Default::default(),
+            io: Default::default(),
+            modular: ModularExtension::new(primes.to_vec()),
+            fp2: Fp2Extension::new(primes.to_vec()),
+            weierstrass: WeierstrassExtension::new(vec![]),
+            pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
+        }
+    }
+
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
-        let elf = build_example_program("fp12_mul")?;
+        let elf = build_example_program_with_features("fp12_mul", ["bn254"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -94,10 +83,9 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
-        let elf = build_example_program("pairing_line")?;
+        let elf = build_example_program_with_features("pairing_line", ["bn254"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -148,10 +136,9 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
-        let elf = build_example_program("pairing_miller_step")?;
+        let elf = build_example_program_with_features("pairing_miller_step", ["bn254"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -193,10 +180,9 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
-        let elf = build_example_program("pairing_miller_loop")?;
+        let elf = build_example_program_with_features("pairing_miller_loop", ["bn254"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -208,16 +194,6 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         );
 
-        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
-        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        // let mut enabled_moduli = exe
-        //     .custom_op_config
-        //     .intrinsics
-        //     .field_arithmetic
-        //     .primes
-        //     .iter()
-        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-        //     .collect::<Vec<_>>();
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
@@ -253,10 +229,9 @@ mod bn254 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
-        let elf = build_example_program("pairing_check")?;
+        let elf = build_example_program_with_features("pairing_check", ["bn254"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -267,17 +242,6 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-
-        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
-        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        // let mut enabled_moduli = exe
-        //     .custom_op_config
-        //     .intrinsics
-        //     .field_arithmetic
-        //     .primes
-        //     .iter()
-        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-        //     .collect::<Vec<_>>();
 
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -337,11 +301,25 @@ mod bls12_381 {
     use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
+    use crate::utils::build_example_program_with_features;
 
-    #[ignore]
+    pub fn get_testing_config() -> Rv32PairingConfig {
+        let primes = [BLS12381.MODULUS.clone()];
+        Rv32PairingConfig {
+            system: SystemConfig::default().with_continuations(),
+            base: Default::default(),
+            mul: Default::default(),
+            io: Default::default(),
+            modular: ModularExtension::new(primes.to_vec()),
+            fp2: Fp2Extension::new(primes.to_vec()),
+            weierstrass: WeierstrassExtension::new(vec![]),
+            pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
+        }
+    }
+
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
-        let elf = build_example_program("fp12_mul")?;
+        let elf = build_example_program_with_features("fp12_mul", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -370,10 +348,9 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
-        let elf = build_example_program("pairing_line")?;
+        let elf = build_example_program_with_features("pairing_line", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -425,10 +402,10 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
+    #[ignore = "fixme"]
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
-        let elf = build_example_program("pairing_miller_step")?;
+        let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -470,10 +447,9 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
-        let elf = build_example_program("pairing_miller_loop")?;
+        let elf = build_example_program_with_features("pairing_miller_loop", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -484,17 +460,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-
-        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
-        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        // let mut enabled_moduli = exe
-        //     .custom_op_config
-        //     .intrinsics
-        //     .field_arithmetic
-        //     .primes
-        //     .iter()
-        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-        //     .collect::<Vec<_>>();
 
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -537,10 +502,9 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
-        let elf = build_example_program("pairing_check")?;
+        let elf = build_example_program_with_features("pairing_check", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -551,17 +515,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-
-        // TODO[yj]: Unfortunate workaround until MOD_IDX issue is resolved
-        // let exe = axvm_circuit::arch::instructions::exe::AxVmExe::<F>::from(elf.clone());
-        // let mut enabled_moduli = exe
-        //     .custom_op_config
-        //     .intrinsics
-        //     .field_arithmetic
-        //     .primes
-        //     .iter()
-        //     .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-        //     .collect::<Vec<_>>();
 
         let executor = VmExecutor::<F, _>::new(get_testing_config());
 
@@ -602,10 +555,9 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore]
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
-        let elf = build_example_program("final_exp_hint")?;
+        let elf = build_example_program_with_features("final_exp_hint", ["bls12_381"])?;
         let axvm_exe = AxVmExe::from_elf(
             elf,
             Transpiler::<F>::default()

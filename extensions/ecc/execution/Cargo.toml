@@ -5,8 +5,12 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+axvm-pairing-guest = { workspace = true, features = [
+    "halo2curves",
+    "bn254",
+    "bls12_381",
+] }
 axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
-axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true

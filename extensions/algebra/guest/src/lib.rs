@@ -40,6 +40,7 @@ impl ComplexExtFieldBaseFunct7 {
 
 /// Modular arithmetic traits for use with axVM intrinsics.
 extern crate alloc;
+
 use alloc::vec::Vec;
 use core::{
     fmt::Debug,
@@ -47,6 +48,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+pub use axvm_algebra_moduli_setup as moduli_setup;
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;

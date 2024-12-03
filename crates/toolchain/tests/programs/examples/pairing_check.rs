@@ -1,3 +1,4 @@
+#![feature(cfg_match)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -9,21 +10,23 @@ use axvm_pairing_guest::pairing::PairingCheck;
 
 axvm::entry!(main);
 
+#[cfg(feature = "bn254")]
 mod bn254 {
     use alloc::format;
 
     use axvm_algebra_guest::IntMod;
-    use axvm_pairing_guest::{
-        bls12_381::{setup_Bls12_381Fp, setup_Bls12_381Fp_fp2},
-        bn254::{Bn254, Fp, Fp2},
-    };
+    use axvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
 
+    axvm_algebra_moduli_setup::moduli_init!(
+        "21888242871839275222246405745257275088696311157297823662689037894645226208583"
+    );
+
     pub fn test_pairing_check(io: &[u8]) {
         axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
-        setup_Bls12_381Fp();
-        setup_Bls12_381Fp_fp2();
+        setup_all_moduli();
+        setup_all_complex_extensions();
         let s0 = &io[0..32 * 2];
         let s1 = &io[32 * 2..32 * 4];
         let q0 = &io[32 * 4..32 * 8];
@@ -42,21 +45,22 @@ mod bn254 {
     }
 }
 
+#[cfg(feature = "bls12_381")]
 mod bls12_381 {
 
     use alloc::format;
 
     use axvm_algebra_guest::IntMod;
-    use axvm_pairing_guest::bls12_381::{
-        setup_Bls12_381Fp, setup_Bls12_381Fp_fp2, Bls12_381, Fp, Fp2,
-    };
+    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
 
+    axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+
     pub fn test_pairing_check(io: &[u8]) {
+        setup_all_moduli();
+        setup_all_complex_extensions();
         axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
-        setup_Bls12_381Fp();
-        setup_Bls12_381Fp_fp2();
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];
@@ -76,13 +80,12 @@ mod bls12_381 {
 }
 
 pub fn main() {
+    #[allow(unused_variables)]
     let io = read_vec();
-    const BN254_SIZE: usize = 32 * 12;
-    const BLS12_381_SIZE: usize = 48 * 12;
 
-    match io.len() {
-        BN254_SIZE => bn254::test_pairing_check(&io),
-        BLS12_381_SIZE => bls12_381::test_pairing_check(&io),
-        _ => panic!("Invalid input length"),
+    cfg_match! {
+        cfg(feature = "bn254") => { bn254::test_pairing_check(&io); }
+        cfg(feature = "bls12_381") => { bls12_381::test_pairing_check(&io); }
+        _ => { panic!("No curve feature enabled") }
     }
 }

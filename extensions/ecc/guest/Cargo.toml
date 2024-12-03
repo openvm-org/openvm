@@ -14,7 +14,7 @@ rand.workspace = true
 strum_macros.workspace = true
 ecdsa = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
-k256 = { workspace = true }
+k256 = { workspace = true, optional = true }
 hex-literal = { workspace = true }
 axvm-algebra-guest = { workspace = true }
 axvm-ecc-sw-setup = { workspace = true }
@@ -32,7 +32,10 @@ num-bigint.workspace = true
 num-traits.workspace = true
 
 [features]
-default = []
+default = ["k256"]
 std = ["axvm/std"]
+# features to enable specific curves in guest programs
+# only enable for the curves you use as it affects the init! macro
+k256 = ["dep:k256"]
 # TODO[yj]: Switch to `halo2curves`
 halo2curves = ["dep:halo2curves-axiom", "axvm-algebra-guest/halo2curves"]

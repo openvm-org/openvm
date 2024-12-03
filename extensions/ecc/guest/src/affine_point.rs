@@ -2,7 +2,7 @@ use core::ops::Neg;
 
 use axvm_algebra_guest::Field;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[repr(C)]
 pub struct AffinePoint<F> {
     pub x: F,
@@ -22,6 +22,10 @@ impl<F: Field> AffinePoint<F> {
             x: self.x.clone(),
             y: Neg::neg(&self.y),
         }
+    }
+
+    pub fn is_infinity(&self) -> bool {
+        self.x == F::ZERO && self.y == F::ZERO
     }
 }
 

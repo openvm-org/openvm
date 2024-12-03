@@ -18,4 +18,7 @@ pub trait AffineCoords<F>: Clone {
 
     /// Returns the generator point of the elliptic curve.
     fn generator() -> Self;
+
+    /// Returns whether the point is the point at infinity or not.
+    fn is_infinity(&self) -> bool;
 }

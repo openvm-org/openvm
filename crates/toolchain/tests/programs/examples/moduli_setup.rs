@@ -6,20 +6,24 @@ extern crate alloc;
 use axvm_algebra_guest::IntMod;
 
 axvm::entry!(main);
-axvm_algebra_moduli_setup::moduli_setup! {
-    bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
+axvm_algebra_moduli_setup::moduli_declare! {
+    Bls12381 { modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787" },
     Mod1e18 { modulus = "1000000000000000003" },
 }
 
-axvm_algebra_moduli_setup::moduli_setup! {
+axvm_algebra_moduli_setup::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
+axvm_algebra_moduli_setup::moduli_init! {
+    "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+    "1000000000000000003",
+    "0x1fffffffffffffff",
+}
+
 pub fn main() {
-    setup_bls12381();
-    setup_Mod1e18();
-    setup_Mersenne61();
-    let x = bls12381::from_repr(core::array::from_fn(|i| i as u8));
+    setup_all_moduli();
+    let x = Bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
     let y = Mod1e18::from_u32(100);

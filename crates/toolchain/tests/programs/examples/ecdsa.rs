@@ -9,8 +9,20 @@ use hex_literal::hex;
 use k256::ecdsa::{self, RecoveryId, Signature};
 axvm::entry!(main);
 
+use axvm_ecc_guest::k256::Secp256k1Coord;
+axvm_algebra_moduli_setup::moduli_init! {
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+}
+axvm_ecc_sw_setup::sw_init! {
+    Secp256k1Coord,
+}
+
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {
+    setup_all_moduli();
+    setup_all_curves();
+
     let msg = b"example message";
 
     let signature = Signature::try_from(

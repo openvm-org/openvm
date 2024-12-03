@@ -1,5 +1,8 @@
 use alloc::vec::Vec;
-use core::ops::{Mul, Neg};
+use core::{
+    iter::zip,
+    ops::{Mul, Neg},
+};
 
 use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use axvm_ecc_guest::AffinePoint;
@@ -65,6 +68,12 @@ where
         assert!(!P.is_empty());
         assert_eq!(P.len(), Q.len());
 
+        // Filter out the pair with infinity points
+        let (P, Q): (Vec<_>, Vec<_>) = zip(P, Q)
+            .filter(|(p, q)| !p.is_infinity() && !q.is_infinity())
+            .map(|(p, q)| (p.clone(), q.clone()))
+            .unzip();
+
         let xy_fracs = P
             .iter()
             .map(|P| ((&P.x).div_unsafe(&P.y), (&Self::Fp::ONE).div_unsafe(&P.y)))
@@ -77,7 +86,7 @@ where
 
         let mut Q_acc = Q.to_vec();
 
-        let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, Q, c.clone(), &xy_fracs);
+        let (f_out, Q_acc_out) = Self::pre_loop(Q_acc, &Q, c.clone(), &xy_fracs);
         let mut f = f_out;
         Q_acc = Q_acc_out;
 
@@ -117,7 +126,7 @@ where
                 let (Q_out, lines_S_plus_Q, lines_S_plus_Q_plus_S): (Vec<_>, Vec<_>, Vec<_>) =
                     Q_acc
                         .iter()
-                        .zip(Q)
+                        .zip(&Q)
                         .map(|(Q_acc, q)| {
                             // OPT[jpw]: cache the neg q outside of the loop
                             let q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
@@ -146,7 +155,7 @@ where
             f = Self::evaluate_lines_vec(f, lines);
         }
 
-        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), Q, c, &xy_fracs);
+        let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), &Q, c, &xy_fracs);
         f = f_out;
 
         f

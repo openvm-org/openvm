@@ -34,7 +34,7 @@ use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField32;
 
-use crate::utils::build_example_program;
+use crate::utils::{build_example_program, build_example_program_with_features};
 
 type F = BabyBear;
 
@@ -102,7 +102,7 @@ fn test_complex_runtime() -> Result<()> {
 
 #[test]
 fn test_ec_runtime() -> Result<()> {
-    let elf = build_example_program("ec")?;
+    let elf = build_example_program_with_features("ec", ["k256"])?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()
@@ -156,7 +156,7 @@ impl Rv32ModularKeccak256Config {
 
 #[test]
 fn test_ecdsa_runtime() -> Result<()> {
-    let elf = build_example_program("ecdsa")?;
+    let elf = build_example_program_with_features("ecdsa", ["k256"])?;
     let config = Rv32ModularKeccak256Config::new(vec![SECP256K1_CONFIG.clone()]);
     let executor = VmExecutor::<F, _>::new(config);
 

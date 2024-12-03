@@ -7,21 +7,24 @@ use std::sync::atomic::AtomicUsize;
 use axvm_macros_common::{string_to_bytes, MacroArgs};
 use proc_macro::TokenStream;
 use quote::format_ident;
-use syn::parse_macro_input;
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, LitStr, Token,
+};
 
 static MOD_IDX: AtomicUsize = AtomicUsize::new(0);
 
 /// This macro generates the code to setup the modulus for a given prime. Also it places the moduli into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
 /// ```
-/// moduli_setup! {
+/// moduli_declare! {
 ///     Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
 ///     Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
 /// }
 /// ```
 /// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on).
 #[proc_macro]
-pub fn moduli_setup(input: TokenStream) -> TokenStream {
+pub fn moduli_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
 
     let mut output = Vec::new();
@@ -76,36 +79,44 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
             .collect::<Vec<_>>();
         let num_bytes = modulus_bytes.len();
 
+        let modulus_hex = modulus_bytes
+            .iter()
+            .rev()
+            .map(|x| format!("{:02x}", x))
+            .collect::<Vec<_>>()
+            .join("");
+        // TODO: can this be simplified?
+        macro_rules! create_extern_func {
+            ($name:ident) => {
+                let $name = syn::Ident::new(
+                    &format!("{}_{}", stringify!($name), modulus_hex),
+                    span.into(),
+                );
+            };
+        }
+        create_extern_func!(add_extern_func);
+        create_extern_func!(sub_extern_func);
+        create_extern_func!(mul_extern_func);
+        create_extern_func!(div_extern_func);
+        create_extern_func!(is_eq_extern_func);
+
         let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
         let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
-
-        let serialized_modulus =
-            core::iter::once(1) // 1 for "modulus"
-                .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of variables in the elf
-                .chain((modulus_bytes.len() as u32).to_le_bytes().iter().copied())
-                .chain(modulus_bytes.iter().copied())
-                .collect::<Vec<_>>();
-        let serialized_name = syn::Ident::new(
-            &format!("AXIOM_SERIALIZED_MODULUS_{}", mod_idx),
-            span.into(),
-        );
-        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
-        let setup_function_fp2 =
-            syn::Ident::new(&format!("setup_{}_fp2", struct_name), span.into());
-        let serialized_len = serialized_modulus.len();
 
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
-            #[cfg(target_os = "zkvm")]
-            #[link_section = ".axiom"]
-            #[no_mangle]
-            #[used]
-            static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
-
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
             pub struct #struct_name(#[serde(with = "axvm_algebra_guest::BigArray")] [u8; #limbs]);
+
+            extern "C" {
+                fn #add_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #sub_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #mul_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #div_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool;
+            }
 
             impl #struct_name {
                 #[inline(always)]
@@ -129,16 +140,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::AddMod as usize
-                                + Self::MOD_IDX
-                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            self as *mut Self,
-                            self as *const Self,
-                            other as *const Self
-                        )
+                        unsafe {
+                            #add_extern_func(
+                                self as *mut Self as usize,
+                                self as *const Self as usize,
+                                other as *const Self as usize,
+                            );
+                        }
                     }
                 }
 
@@ -153,16 +161,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::SubMod as usize
-                                + Self::MOD_IDX
-                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            self as *mut Self,
-                            self as *const Self,
-                            other as *const Self
-                        )
+                        unsafe {
+                            #sub_extern_func(
+                                self as *mut Self as usize,
+                                self as *const Self as usize,
+                                other as *const Self as usize,
+                            );
+                        }
                     }
                 }
 
@@ -176,16 +181,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::MulMod as usize
-                                + Self::MOD_IDX
-                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            self as *mut Self,
-                            self as *const Self,
-                            other as *const Self
-                        )
+                        unsafe {
+                            #mul_extern_func(
+                                self as *mut Self as usize,
+                                self as *const Self as usize,
+                                other as *const Self as usize,
+                            );
+                        }
                     }
                 }
 
@@ -199,16 +201,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::DivMod as usize
-                                + Self::MOD_IDX
-                                    * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            self as *mut Self,
-                            self as *const Self,
-                            other as *const Self
-                        )
+                        unsafe {
+                            #div_extern_func(
+                                self as *mut Self as usize,
+                                self as *const Self as usize,
+                                other as *const Self as usize,
+                            );
+                        }
                     }
                 }
 
@@ -226,14 +225,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::AddMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            dst_ptr,
-                            self as *const #struct_name,
-                            other as *const #struct_name
-                        );
+                        unsafe {
+                            #add_extern_func(
+                                dst_ptr as usize,
+                                self as *const #struct_name as usize,
+                                other as *const #struct_name as usize,
+                            );
+                        }
                     }
                 }
 
@@ -251,14 +249,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::SubMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            dst_ptr,
-                            self as *const #struct_name,
-                            other as *const #struct_name
-                        );
+                        unsafe {
+                            #sub_extern_func(
+                                dst_ptr as usize,
+                                self as *const #struct_name as usize,
+                                other as *const #struct_name as usize,
+                            );
+                        }
                     }
                 }
 
@@ -276,14 +273,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::MulMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            dst_ptr,
-                            self as *const #struct_name,
-                            other as *const #struct_name
-                        );
+                        unsafe {
+                            #mul_extern_func(
+                                dst_ptr as usize,
+                                self as *const #struct_name as usize,
+                                other as *const #struct_name as usize,
+                            );
+                        }
                     }
                 }
 
@@ -298,14 +294,13 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     #[cfg(target_os = "zkvm")]
                     {
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        axvm_platform::custom_insn_r!(
-                            axvm_algebra_guest::OPCODE,
-                            axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                            axvm_algebra_guest::ModArithBaseFunct7::DivMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                            uninit.as_mut_ptr(),
-                            self as *const #struct_name,
-                            other as *const #struct_name
-                        );
+                        unsafe {
+                            #div_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                self as *const #struct_name as usize,
+                                other as *const #struct_name as usize,
+                            );
+                        }
                         unsafe { uninit.assume_init() }
                     }
                 }
@@ -318,19 +313,9 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        let mut x: u32;
                         unsafe {
-                            core::arch::asm!(
-                                ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                                opcode = const axvm_algebra_guest::OPCODE,
-                                funct3 = const axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                                funct7 = const axvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + Self::MOD_IDX * (axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                                rd = out(reg) x,
-                                rs1 = in(reg) self as *const #struct_name,
-                                rs2 = in(reg) other as *const #struct_name
-                            );
+                            #is_eq_extern_func(self as *const #struct_name as usize, other as *const #struct_name as usize)
                         }
-                        x != 0
                     }
                 }
             }
@@ -668,17 +653,155 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
             impl axvm_algebra_guest::Reduce for #struct_name {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
-                    let mut res = <Self as IntMod>::ZERO;
+                    let mut res = <Self as axvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
                     let mut base = Self::from_le_bytes(&[255u8; #limbs]);
-                    base += <Self as IntMod>::ONE;
+                    base += <Self as axvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
                         res = res * &base + Self::from_le_bytes(chunk);
                     }
                     res
                 }
             }
+        });
 
+        output.push(result);
+    }
+
+    TokenStream::from_iter(output)
+}
+
+struct ModuliDefine {
+    items: Vec<LitStr>,
+}
+
+impl Parse for ModuliDefine {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let items = input.parse_terminated(<LitStr as Parse>::parse, Token![,])?;
+        Ok(Self {
+            items: items.into_iter().collect(),
+        })
+    }
+}
+
+#[proc_macro]
+pub fn moduli_init(input: TokenStream) -> TokenStream {
+    let ModuliDefine { items } = parse_macro_input!(input as ModuliDefine);
+
+    let mut externs = Vec::new();
+    let mut setups = Vec::new();
+    let mut axiom_section = Vec::new();
+    let mut setup_all_moduli = Vec::new();
+    let mut setup_all_complex_extensions = Vec::new();
+
+    let span = proc_macro::Span::call_site();
+
+    for (mod_idx, item) in items.into_iter().enumerate() {
+        let modulus = item.value();
+        println!("[init] modulus #{} = {}", mod_idx, modulus);
+
+        // TODO: chore: move all duplicated code to a function
+        let modulus_bytes = string_to_bytes(&modulus);
+        let mut limbs = modulus_bytes.len();
+
+        if limbs < 32 {
+            limbs = 32;
+            proc_macro::Diagnostic::new(proc_macro::Level::Warning, "`limbs` has been set to 32 because it was too small; this is going to be changed once we support more flexible reads").emit();
+        }
+
+        // The largest power of two so that at most 10% of all space is wasted
+        let block_size = 1usize << ((limbs - 1) ^ (limbs + limbs / 9)).ilog2();
+        let limbs = limbs.next_multiple_of(block_size);
+        let modulus_bytes = modulus_bytes
+            .into_iter()
+            .chain(vec![0u8; limbs])
+            .take(limbs)
+            .collect::<Vec<_>>();
+
+        let modulus_hex = modulus_bytes
+            .iter()
+            .rev()
+            .map(|x| format!("{:02x}", x))
+            .collect::<Vec<_>>()
+            .join("");
+
+        let serialized_modulus =
+            core::iter::once(1) // 1 for "modulus"
+                .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of variables in the elf
+                .chain((modulus_bytes.len() as u32).to_le_bytes().iter().copied())
+                .chain(modulus_bytes.iter().copied())
+                .collect::<Vec<_>>();
+        let serialized_name = syn::Ident::new(
+            &format!("AXIOM_SERIALIZED_MODULUS_{}", mod_idx),
+            span.into(),
+        );
+        let serialized_len = serialized_modulus.len();
+        let setup_function = syn::Ident::new(&format!("setup_{}", mod_idx), span.into());
+        let setup_function_fp2 = syn::Ident::new(&format!("setup_{}_fp2", mod_idx), span.into());
+
+        axiom_section.push(quote::quote_spanned! { span.into() =>
+            #[cfg(target_os = "zkvm")]
+            #[link_section = ".axiom"]
+            #[no_mangle]
+            #[used]
+            static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
+        });
+
+        for op_type in ["add", "sub", "mul", "div"] {
+            let func_name = syn::Ident::new(
+                &format!("{}_extern_func_{}", op_type, modulus_hex),
+                span.into(),
+            );
+            let mut chars = op_type.chars().collect::<Vec<_>>();
+            chars[0] = chars[0].to_ascii_uppercase();
+            let local_opcode = syn::Ident::new(
+                &format!("{}Mod", chars.iter().collect::<String>()),
+                span.into(),
+            );
+            externs.push(quote::quote_spanned! { span.into() =>
+                #[no_mangle]
+                extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
+                    axvm_platform::custom_insn_r!(
+                        axvm_platform::constants::CUSTOM_1,
+                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                        axvm_platform::constants::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                        rd,
+                        rs1,
+                        rs2
+                    )
+                }
+            });
+        }
+
+        let is_eq_extern_func =
+            syn::Ident::new(&format!("is_eq_extern_func_{}", modulus_hex), span.into());
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool {
+                let mut x: u32;
+                unsafe {
+                    core::arch::asm!(
+                        ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
+                        opcode = const axvm_platform::constants::CUSTOM_1,
+                        funct3 = const axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
+                        funct7 = const axvm_platform::constants::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                        rd = out(reg) x,
+                        rs1 = in(reg) rs1,
+                        rs2 = in(reg) rs2
+                    );
+                }
+                x != 0
+            }
+        });
+
+        setup_all_moduli.push(quote::quote_spanned! { span.into() =>
+            #setup_function();
+        });
+        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
+            #setup_function_fp2();
+        });
+
+        setups.push(quote::quote_spanned! { span.into() =>
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -694,7 +817,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
-                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         axvm_algebra_guest::OPCODE,
                         axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
@@ -737,7 +860,7 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         axvm_algebra_guest::OPCODE,
                         axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
@@ -761,9 +884,20 @@ pub fn moduli_setup(input: TokenStream) -> TokenStream {
                 }
             }
         });
-
-        output.push(result);
     }
 
-    TokenStream::from_iter(output)
+    TokenStream::from(quote::quote_spanned! { span.into() =>
+        #(#axiom_section)*
+        #[cfg(target_os = "zkvm")]
+        mod axvm_intrinsics_ffi {
+            #(#externs)*
+        }
+        #(#setups)*
+        pub fn setup_all_moduli() {
+            #(#setup_all_moduli)*
+        }
+        pub fn setup_all_complex_extensions() {
+            #(#setup_all_complex_extensions)*
+        }
+    })
 }

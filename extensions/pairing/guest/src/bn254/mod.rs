@@ -1,5 +1,5 @@
 use axvm_algebra_guest::{Field, IntMod};
-use axvm_algebra_moduli_setup::moduli_setup;
+use axvm_algebra_moduli_setup::moduli_declare;
 
 mod fp12;
 mod fp2;
@@ -61,7 +61,7 @@ impl Bn254 {
     };
 }
 
-moduli_setup! {
+moduli_declare! {
     Bn254Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 }
 

@@ -50,6 +50,9 @@ where
     type Fp2 = <P as PairingIntrinsics>::Fp2;
 
     /// Miller double step
+    /// Assumption: s is not point at infinity.
+    /// The case y = 0 does not happen as long as the curve satisfies that 0 = X^3 + c' has no solutions in Fp2.
+    /// The curve G1Affine and twist G2Affine are both chosen for bn254, bls12_381 so that this never happens.
     fn miller_double_step(
         s: &AffinePoint<Self::Fp2>,
     ) -> (AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>) {
@@ -125,6 +128,8 @@ where
     }
 
     /// Miller double and add step (2S + Q implemented as S + Q + S for efficiency)
+    /// Assumption: Q != +- S && (S+Q) != +-S, so that there is no division by zero.
+    /// The way this is used in miller loop, this is always satisfied.
     fn miller_double_and_add_step(
         s: &AffinePoint<Self::Fp2>,
         q: &AffinePoint<Self::Fp2>,

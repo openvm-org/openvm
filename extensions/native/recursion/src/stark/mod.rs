@@ -197,6 +197,15 @@ where
                 let main_commit = builder.get(main_trace_commits, i);
                 challenger.observe_digest(builder, main_commit);
             });
+        builder.range(0, air_proofs.len()).for_each(|i, builder| {
+            let air_proof = builder.get(air_proofs, i);
+            let log_degree = if builder.flags.static_only {
+                builder.eval(C::F::from_canonical_usize(air_proof.log_degree.value()))
+            } else {
+                builder.unsafe_cast_var_to_felt(air_proof.log_degree.get_var())
+            };
+            challenger.observe(builder, log_degree);
+        });
 
         let challenges_per_phase = builder.array(num_phases);
 

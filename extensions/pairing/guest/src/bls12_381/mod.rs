@@ -1,5 +1,5 @@
 use axvm_algebra_guest::{Field, IntMod};
-use axvm_algebra_moduli_setup::moduli_setup;
+use axvm_algebra_moduli_setup::moduli_declare;
 
 mod fp12;
 mod fp2;
@@ -22,7 +22,7 @@ pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
-moduli_setup! {
+moduli_declare! {
     Bls12_381Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
 }
 

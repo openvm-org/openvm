@@ -2,7 +2,10 @@ use std::array;
 
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::{
-    arch::{CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_CACHED_TRACE_INDEX},
+    arch::{
+        CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+        PUBLIC_VALUES_AIR_ID,
+    },
     system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
 };
 use axvm_native_compiler::{ir::Config, prelude::*};
@@ -161,4 +164,34 @@ pub fn assert_single_segment_vm_exit_successfully_with_connector_air_id<C: Confi
     builder.assert_felt_eq(connector_pvs.is_terminate, C::F::ONE);
     // Exit code should be 0
     builder.assert_felt_eq(connector_pvs.exit_code, C::F::ZERO);
+}
+
+// TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
+// that is implemented, this function can be removed.
+pub fn assert_required_air_for_agg_vm_present<C: Config>(
+    builder: &mut Builder<C>,
+    proof: &StarkProofVariable<C>,
+) {
+    // FIXME: what if PUBLIC_VALUES_AIR_ID(3) >= proof.per_air.len()?
+    let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
+    builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
+    let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
+    builder.assert_eq::<Usize<_>>(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
+    let public_values_air = builder.get(&proof.per_air, PUBLIC_VALUES_AIR_ID);
+    builder.assert_eq::<Usize<_>>(public_values_air.air_id, RVar::from(PUBLIC_VALUES_AIR_ID));
+}
+
+// TODO: This is a temporary solution. VK should be able to specify which AIRs are required. Once
+// that is implemented, this function can be removed.
+pub fn assert_required_air_for_app_vm_present<C: Config>(
+    builder: &mut Builder<C>,
+    proof: &StarkProofVariable<C>,
+) {
+    // FIXME: what if MERKLE_AIR_ID(4) >= proof.per_air.len()?
+    let program_air = builder.get(&proof.per_air, PROGRAM_AIR_ID);
+    builder.assert_eq::<Usize<_>>(program_air.air_id, RVar::from(PROGRAM_AIR_ID));
+    let connector_air = builder.get(&proof.per_air, CONNECTOR_AIR_ID);
+    builder.assert_eq::<Usize<_>>(connector_air.air_id, RVar::from(CONNECTOR_AIR_ID));
+    let public_values_air = builder.get(&proof.per_air, MERKLE_AIR_ID);
+    builder.assert_eq::<Usize<_>>(public_values_air.air_id, RVar::from(MERKLE_AIR_ID));
 }

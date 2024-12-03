@@ -5,12 +5,18 @@ use axvm_algebra_guest::{
     field::{Complex, ComplexConjugate},
     DivAssignUnsafe, DivUnsafe, IntMod,
 };
-use axvm_ecc_guest::sw::{setup_fp2, Secp256k1Coord};
 
 axvm::entry!(main);
 
+axvm_algebra_moduli_setup::moduli_declare! {
+    Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
+}
+axvm_algebra_moduli_setup::moduli_init!(
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+);
+
 pub fn main() {
-    setup_fp2();
+    setup_all_complex_extensions();
     let mut a = Complex::new(
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 10)),
         Secp256k1Coord::from_repr(core::array::from_fn(|_| 21)),

@@ -5,16 +5,25 @@ use core::hint::black_box;
 
 use axvm_algebra_guest::IntMod;
 use axvm_ecc_guest::{
-    msm,
-    sw::{setup_curves, Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    Group,
+    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
+    msm, Group,
 };
 use hex_literal::hex;
 
 axvm::entry!(main);
 
+axvm_algebra_moduli_setup::moduli_init! {
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+}
+
+axvm_ecc_sw_setup::sw_init! {
+    Secp256k1Coord,
+}
+
 pub fn main() {
-    setup_curves();
+    setup_all_moduli();
+    setup_all_curves();
 
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add

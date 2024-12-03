@@ -214,3 +214,58 @@ fn test_bls12381_miller_loop() {
 
     assert_eq!(final_f, compare_final);
 }
+
+#[test]
+fn test_bls12381_miller_loop_identity() {
+    let mut rng = StdRng::seed_from_u64(33);
+    let h2c_p = G1Affine::identity();
+    let h2c_q = G2Affine::random(&mut rng);
+
+    let p = AffinePoint {
+        x: convert_bls12381_halo2_fq_to_fp(Fq::ZERO),
+        y: convert_bls12381_halo2_fq_to_fp(Fq::ZERO),
+    };
+    let q = AffinePoint {
+        x: convert_bls12381_halo2_fq2_to_fp2(h2c_q.x),
+        y: convert_bls12381_halo2_fq2_to_fp2(h2c_q.y),
+    };
+
+    let f = Bls12_381::multi_miller_loop(&[p], &[q]);
+    let f_fq12 = convert_bls12381_fp12_to_halo2_fq12(f);
+    let wrapped_f = MillerLoopResult(f_fq12);
+    let final_f = wrapped_f.final_exponentiation();
+
+    // halo2curves implementation
+    let h2c_q_prepared = G2Prepared::from(h2c_q);
+    let compare_miller =
+        halo2curves_axiom::bls12_381::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
+    let compare_final = compare_miller.final_exponentiation();
+    assert_eq!(final_f, compare_final);
+}
+
+#[test]
+fn test_bls12381_miller_loop_identity_2() {
+    let mut rng = StdRng::seed_from_u64(33);
+    let h2c_p = G1Affine::random(&mut rng);
+    let h2c_q = G2Affine::identity();
+    let p = AffinePoint {
+        x: convert_bls12381_halo2_fq_to_fp(h2c_p.x),
+        y: convert_bls12381_halo2_fq_to_fp(h2c_p.y),
+    };
+    let q = AffinePoint {
+        x: convert_bls12381_halo2_fq2_to_fp2(Fq2::ZERO),
+        y: convert_bls12381_halo2_fq2_to_fp2(Fq2::ZERO),
+    };
+
+    let f = Bls12_381::multi_miller_loop(&[p], &[q]);
+    let f_fq12 = convert_bls12381_fp12_to_halo2_fq12(f);
+    let wrapped_f = MillerLoopResult(f_fq12);
+    let final_f = wrapped_f.final_exponentiation();
+
+    // halo2curves implementation
+    let h2c_q_prepared = G2Prepared::from(h2c_q);
+    let compare_miller =
+        halo2curves_axiom::bls12_381::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
+    let compare_final = compare_miller.final_exponentiation();
+    assert_eq!(final_f, compare_final);
+}

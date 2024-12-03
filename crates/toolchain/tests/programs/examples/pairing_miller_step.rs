@@ -1,3 +1,5 @@
+#![feature(cfg_match)]
+#![allow(unused_imports)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -8,10 +10,15 @@ use axvm_pairing_guest::pairing::MillerStep;
 
 axvm::entry!(main);
 
+#[cfg(feature = "bn254")]
 mod bn254 {
     use axvm_pairing_guest::bn254::{Bn254, Fp2};
 
     use super::*;
+
+    axvm_algebra_moduli_setup::moduli_init!(
+        "21888242871839275222246405745257275088696311157297823662689037894645226208583"
+    );
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 32 * 12);
@@ -76,10 +83,13 @@ mod bn254 {
     }
 }
 
+#[cfg(feature = "bls12_381")]
 mod bls12_381 {
     use axvm_pairing_guest::bls12_381::{Bls12_381, Fp2};
 
     use super::*;
+
+    axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 48 * 12);
@@ -141,19 +151,22 @@ mod bls12_381 {
 }
 
 pub fn main() {
+    #[allow(unused_variables)]
     let io = read_vec();
-    const BN254_SIZE: usize = 32 * 32;
-    const BLS12_381_SIZE: usize = 48 * 32;
 
-    match io.len() {
-        BN254_SIZE => {
+    cfg_match! {
+        cfg(feature = "bn254") => {
+            bn254::setup_all_moduli();
+            bn254::setup_all_complex_extensions();
             bn254::test_miller_step(&io[..32 * 12]);
             bn254::test_miller_double_and_add_step(&io[32 * 12..]);
         }
-        BLS12_381_SIZE => {
+        cfg(feature = "bls12_381") => {
+            bls12_381::setup_all_moduli();
+            bls12_381::setup_all_complex_extensions();
             bls12_381::test_miller_step(&io[..48 * 12]);
             bls12_381::test_miller_double_and_add_step(&io[48 * 12..]);
         }
-        _ => panic!("Invalid input length"),
+        _ => { panic!("No curve feature enabled") }
     }
 }

@@ -362,7 +362,7 @@ fn test_vm_initial_memory() {
 fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, None), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64), 0),
         native: Default::default(),
     }
     .with_continuations();
@@ -713,7 +713,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64, None), 0)
+        system: SystemConfig::new(3, MemoryConfig::new(1, 1, 16, 10, 6, 64), 0)
             .with_continuations(),
         native: Default::default(),
     };

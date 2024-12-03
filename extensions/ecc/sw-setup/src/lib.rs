@@ -6,7 +6,10 @@ use std::sync::atomic::AtomicUsize;
 
 use axvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, ExprPath};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Expr, ExprPath, Path, Token,
+};
 
 static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 
@@ -17,7 +20,8 @@ static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 ///     [TODO]
 /// }
 /// ```
-/// This [TODO add description].
+///
+/// For this macro to work, you must import the `elliptic_curve` crate and the `axvm_ecc_guest` crate..
 #[proc_macro]
 pub fn sw_setup(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -49,9 +53,32 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
         let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+
+        macro_rules! create_extern_func {
+            ($name:ident) => {
+                let $name = syn::Ident::new(
+                    &format!(
+                        "{}_{}",
+                        stringify!($name),
+                        intmod_type
+                            .segments
+                            .iter()
+                            .map(|x| x.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("_")
+                    ),
+                    span.into(),
+                );
+            };
+        }
+        create_extern_func!(sw_add_ne_extern_func);
+        create_extern_func!(sw_double_extern_func);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
+            extern "C" {
+                fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #sw_double_extern_func(rd: usize, rs1: usize);
+            }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
@@ -77,16 +104,14 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                        custom_insn_r!(
-                            OPCODE,
-                            ECC_FUNCT3,
-                            SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            uninit.as_mut_ptr(),
-                            p1 as *const #struct_name,
-                            p2 as *const #struct_name
-                        );
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                        unsafe {
+                            #sw_add_ne_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p1 as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize
+                            )
+                        };
                         unsafe { uninit.assume_init() }
                     }
                 }
@@ -104,15 +129,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        custom_insn_r!(
-                            OPCODE,
-                            ECC_FUNCT3,
-                            SwBaseFunct7::SwAddNe as usize + Self::EC_IDX
-                                * ((SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize)),
-                            self as *mut #struct_name,
-                            self as *const #struct_name,
-                            p2 as *const #struct_name
-                        );
+                        unsafe {
+                            #sw_add_ne_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize
+                            )
+                        };
                     }
                 }
 
@@ -130,16 +153,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        let mut uninit: MaybeUninit<#struct_name> = MaybeUninit::uninit();
-                        custom_insn_r!(
-                            OPCODE,
-                            ECC_FUNCT3,
-                            SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                            uninit.as_mut_ptr(),
-                            p as *const #struct_name,
-                            "x0"
-                        );
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                        unsafe {
+                            #sw_double_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p as *const #struct_name as usize,
+                            )
+                        };
                         unsafe { uninit.assume_init() }
                     }
                 }
@@ -158,30 +178,27 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        custom_insn_r!(
-                            OPCODE,
-                            ECC_FUNCT3,
-                            SwBaseFunct7::SwDouble as usize + Self::EC_IDX
-                                * ((SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize)),
-                            self as *mut #struct_name,
-                            self as *const #struct_name,
-                            "x0"
-                        );
+                        unsafe {
+                            #sw_double_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize
+                            )
+                        };
                     }
                 }
             }
 
-            impl SwPoint for #struct_name {
+            impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
                 type Coordinate = #intmod_type;
 
                 // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
-                fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
+                fn from_encoded_point<C: elliptic_curve::Curve>(p: &elliptic_curve::sec1::EncodedPoint<C>) -> Self
                 where
-                    C::FieldBytesSize: ModulusSize
+                    C::FieldBytesSize: elliptic_curve::sec1::ModulusSize
                 {
                     match p.coordinates() {
-                        Coordinates::Identity => Self::identity(),
-                        Coordinates::Uncompressed { x, y } => {
+                        elliptic_curve::sec1::Coordinates::Identity => Self::identity(),
+                        elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
                             // Sec1 bytes are in big endian.
                             let x = Self::Coordinate::from_be_bytes(x.as_ref());
                             let y = Self::Coordinate::from_be_bytes(y.as_ref());
@@ -190,8 +207,8 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                             Self { x, y }
 
                         }
-                        Coordinates::Compact { x } => unimplemented!(),
-                        Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
+                        elliptic_curve::sec1::Coordinates::Compact { x } => unimplemented!(),
+                        elliptic_curve::sec1::Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
                     }
                 }
 
@@ -228,13 +245,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
 
                 fn identity() -> Self {
                     Self {
-                        x: <#intmod_type as IntMod>::ZERO,
-                        y: <#intmod_type as IntMod>::ZERO,
+                        x: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
+                        y: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
                     }
                 }
 
                 fn is_identity(&self) -> bool {
-                    self.x == <#intmod_type as IntMod>::ZERO && self.y == <#intmod_type as IntMod>::ZERO
+                    self.x == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO
                 }
 
                 fn double(&self) -> Self {
@@ -252,7 +269,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Add<&#struct_name> for #struct_name {
+            impl core::ops::Add<&#struct_name> for #struct_name {
                 type Output = Self;
 
                 fn add(mut self, p2: &#struct_name) -> Self::Output {
@@ -261,7 +278,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Add for #struct_name {
+            impl core::ops::Add for #struct_name {
                 type Output = Self;
 
                 fn add(self, rhs: Self) -> Self::Output {
@@ -269,7 +286,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Add<&#struct_name> for &#struct_name {
+            impl core::ops::Add<&#struct_name> for &#struct_name {
                 type Output = #struct_name;
 
                 fn add(self, p2: &#struct_name) -> Self::Output {
@@ -278,7 +295,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                     } else if p2.is_identity() {
                         self.clone()
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO {
                             #struct_name::identity()
                         } else {
                             #struct_name::double_impl(self)
@@ -289,14 +306,14 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl AddAssign<&#struct_name> for #struct_name {
+            impl core::ops::AddAssign<&#struct_name> for #struct_name {
                 fn add_assign(&mut self, p2: &#struct_name) {
                     if self.is_identity() {
                         *self = p2.clone();
                     } else if p2.is_identity() {
                         // do nothing
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO {
                             *self = Self::identity();
                         } else {
                             Self::double_assign_impl(self);
@@ -307,13 +324,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl AddAssign for #struct_name {
+            impl core::ops::AddAssign for #struct_name {
                 fn add_assign(&mut self, rhs: Self) {
                     self.add_assign(&rhs);
                 }
             }
 
-            impl Neg for #struct_name {
+            impl core::ops::Neg for #struct_name {
                 type Output = Self;
 
                 fn neg(self) -> Self::Output {
@@ -324,7 +341,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Sub<&#struct_name> for #struct_name {
+            impl core::ops::Sub<&#struct_name> for #struct_name {
                 type Output = Self;
 
                 fn sub(self, rhs: &#struct_name) -> Self::Output {
@@ -332,7 +349,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Sub for #struct_name {
+            impl core::ops::Sub for #struct_name {
                 type Output = #struct_name;
 
                 fn sub(self, rhs: Self) -> Self::Output {
@@ -340,7 +357,7 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Sub<&#struct_name> for &#struct_name {
+            impl core::ops::Sub<&#struct_name> for &#struct_name {
                 type Output = #struct_name;
 
                 fn sub(self, p2: &#struct_name) -> Self::Output {
@@ -348,18 +365,97 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl SubAssign<&#struct_name> for #struct_name {
+            impl core::ops::SubAssign<&#struct_name> for #struct_name {
                 fn sub_assign(&mut self, p2: &#struct_name) {
                     self.sub_assign(p2.clone());
                 }
             }
 
-            impl SubAssign for #struct_name {
+            impl core::ops::SubAssign for #struct_name {
                 fn sub_assign(&mut self, rhs: Self) {
                     self.add_assign(rhs.neg());
                 }
             }
+        });
+        output.push(result);
+    }
 
+    TokenStream::from_iter(output)
+}
+
+struct SwDefine {
+    items: Vec<Path>,
+}
+
+impl Parse for SwDefine {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
+        Ok(Self {
+            items: items
+                .into_iter()
+                .map(|e| {
+                    if let Expr::Path(p) = e {
+                        p.path
+                    } else {
+                        panic!("expected path");
+                    }
+                })
+                .collect(),
+        })
+    }
+}
+
+#[proc_macro]
+pub fn sw_init(input: TokenStream) -> TokenStream {
+    let SwDefine { items } = parse_macro_input!(input as SwDefine);
+
+    let mut externs = Vec::new();
+    let mut setups = Vec::new();
+    let mut setup_all_curves = Vec::new();
+
+    let span = proc_macro::Span::call_site();
+
+    for (ec_idx, item) in items.into_iter().enumerate() {
+        let str_path = item
+            .segments
+            .iter()
+            .map(|x| x.ident.to_string())
+            .collect::<Vec<_>>()
+            .join("_");
+        let add_ne_extern_func =
+            syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
+        let double_extern_func =
+            syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
+                axvm_platform::custom_insn_r!(
+                    axvm_platform::constants::CUSTOM_1,
+                    axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
+                    axvm_platform::constants::SwBaseFunct7::SwAddNe as usize + #ec_idx
+                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd,
+                    rs1,
+                    rs2
+                );
+            }
+
+            #[no_mangle]
+            extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
+                axvm_platform::custom_insn_r!(
+                    axvm_platform::constants::CUSTOM_1,
+                    axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
+                    axvm_platform::constants::SwBaseFunct7::SwDouble as usize + #ec_idx
+                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rd,
+                    rs1,
+                    "x0"
+                );
+            }
+        });
+
+        let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
+        setups.push(quote::quote_spanned! { span.into() =>
             // make a setup function that sends setup op to ec add, ec double. fp2 ?
             #[allow(non_snake_case)]
             pub fn #setup_function() {
@@ -367,12 +463,13 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
-                    let modulus_bytes = <#intmod_type as IntMod>::MODULUS;
-                    let one = <#intmod_type as IntMod>::ONE.as_le_bytes();
+                    let modulus_bytes = <#item as axvm_algebra_guest::IntMod>::MODULUS;
+                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_BYTES];
+                    one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
-                    let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         OPCODE,
                         ECC_FUNCT3,
@@ -396,8 +493,21 @@ pub fn sw_setup(input: TokenStream) -> TokenStream {
                 }
             }
         });
-        output.push(result);
+
+        setup_all_curves.push(quote::quote_spanned! { span.into() =>
+            #setup_function();
+        });
     }
 
-    TokenStream::from_iter(output)
+    TokenStream::from(quote::quote_spanned! { span.into() =>
+        // #(#axiom_section)*
+        #[cfg(target_os = "zkvm")]
+        mod axvm_intrinsics_ffi_2 {
+            #(#externs)*
+        }
+        #(#setups)*
+        pub fn setup_all_curves() {
+            #(#setup_all_curves)*
+        }
+    })
 }

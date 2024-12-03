@@ -59,6 +59,10 @@ impl AffineCoords<Fq> for G1Affine {
     fn generator() -> Self {
         G1Affine::generator()
     }
+
+    fn is_infinity(&self) -> bool {
+        self.x == Fq::ZERO && self.y == Fq::ZERO
+    }
 }
 
 impl AffineCoords<Fq2> for G2Affine {
@@ -89,5 +93,9 @@ impl AffineCoords<Fq2> for G2Affine {
 
     fn generator() -> Self {
         G2Affine::generator()
+    }
+
+    fn is_infinity(&self) -> bool {
+        self.x == Fq2::ZERO && self.y == Fq2::ZERO
     }
 }

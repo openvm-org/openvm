@@ -1,4 +1,4 @@
-name: Publish mdBook to GitHub Pages
+name: Publish mdBook to Vercel
 
 on:
   push:
@@ -32,20 +32,23 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm@9.1.0
 
-      - name: Install pnpm deps
-        run: pnpm i --frozen-lockfile
-
       - name: Build the book
         run: |
           cd book
+          pnpm i --frozen-lockfile
           just lint-book-toc
           mdbook build
 
-      - name: Add CNAME file
-        run: echo "vm.axiom.xyz" > ./book/CNAME
+      - name: Install Vercel CLI
+        run: npm install -g vercel
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: book
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}  # Token stored in GitHub Secrets
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          cd book/book
+          mkdir .vercel
+          echo "{\"projectId\":\"$VERCEL_PROJECT_ID\",\"orgId\":\"$VERCEL_ORG_ID\"}" > .vercel/project.json
+          vercel --prod --token $VERCEL_TOKEN

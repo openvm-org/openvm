@@ -7,6 +7,13 @@ use axvm_circuit::{
 };
 use axvm_native_compiler::prelude::*;
 
+#[derive(Debug, Clone, Copy)]
+pub struct SpecialAirIds {
+    pub program_air_id: usize,
+    pub connector_air_id: usize,
+    pub public_values_air_id: usize,
+}
+
 #[derive(Debug, Clone, Copy, AlignedBorrow)]
 #[repr(C)]
 pub struct VmVerifierPvs<T> {

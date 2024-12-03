@@ -114,30 +114,7 @@ pub struct MemoryConfig {
 
 #### Keygen
 
-Given a `VmConfig`, we instantiate a `VmChipSet` using `VmConfig.create_chip_set()`, which holds the necessary set of chips to generate a proof for execution of the corresponding Modular VM. These chips should partition the set of supported opcodes in this VM.
-
-**`VmChipSet` will be replaced by `VmChipComplex` very soon.**
-
-```rust
-pub struct VmChipSet<F: PrimeField32> {
-    pub executors: BTreeMap<usize, AxVmInstructionExecutor<F>>,
-
-    // ATTENTION: chip destruction should follow the following field order:
-    pub program_chip: ProgramChip<F>,
-    pub connector_chip: VmConnectorChip<F>,
-    /// PublicValuesChip is disabled when num_public_values == 0.
-    pub public_values_chip: Option<Rc<RefCell<PublicValuesChip<F>>>>,
-    pub chips: Vec<AxVmChip<F>>,
-    pub memory_controller: MemoryControllerRef<F>,
-    pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-}
-```
-
-Keygen is done via `VmConfig.generate_pk()`, which:
-
-- Calls `VmConfig.create_chip_set()` to create a `VmChipSet`
-- Adds all Airs in the `VmChipSet` to the `MultiStarkKeygenBuilder<SC>`
-- Calls `MultiStarkKeygenBuilder<SC>.generate_pk()`
+TODO: Update for `VmChipComplex`.
 
 #### Trace Generation
 
@@ -390,56 +367,3 @@ pub struct ImmInstruction<T> {
     pub imm: T
 }
 ```
-
-### List of Adapters, Interfaces, and ProcessedInstructions (20241026)
-
-#### Non-Heap Adapters
-
-| Name                      | # Read Operands | # Write Operands | Read Size | Write Size | Notes                                 | Interface                        | PI                   |
-| ------------------------- | --------------- | ---------------- | --------- | ---------- | ------------------------------------- | -------------------------------- | -------------------- |
-| Rv32BaseAluAdapterChip    | 2               | 1                | 4         | 4          | `rs2` can be native `imm`             | BasicAdapterInterface            | MinimalInstruction   |
-| Rv32BranchAdapterChip     | 2               | 0                | 4         |            | regs only, `PI` includes native `imm` | BasicAdapterInterface            | ImmInstruction       |
-| Rv32JalrAdapterChip       | 1               | 1                | 4         | 4          | regs, `PI` includes native `imm`      | BasicAdapterInterface            | ImmInstruction       |
-| Rv32LoadStoreAdapterChip  |                 |                  |           |            | non-uniform adapter interface         | Rv32LoadStoreAdapterAirInterface | LoadStoreInstruction |
-| Rv32MultAdapterChip       | 2               | 1                | 4         | 4          | from regs, no `imm`                   | BasicAdapterInterface            | MinimalInstruction   |
-| Rv32RdWriteAdapterChip    | 0               | 1                |           | 4          | `PI` includes `imm`                   | BasicAdapterInterface            | ImmInstruction       |
-| Rv32CondRdWriteAdapterAir | 0               | 1                |           | 4          | regs,`PI` includes `imm`              | BasicAdapterInterface            | ImmInstruction       |
-| ConvertAdapter            | 1               | 1                | var       | var        | diff as, no immp                      | BasicAdapterInterface            | MinimalInstruction   |
-| GenericNativeAdapter      | <= 2            | <= 1             | 1         | 1          | `imm` supported                       | BasicAdapterInterface            | MinimalInstruction   |
-| NativeVectorizedAdapter   | 2               | 1                | var       | var        | `a_as = b_as`, read size = write size | BasicAdapterInterface            | MinimalInstruction   |
-
-#### Heap Adapters
-
-| Name                     | Interface               | PI                 | # Read Operands | # Write Operands | Reg Type | Num Reads | Num Writes | Read Size | Write Size |
-| ------------------------ | ----------------------- | ------------------ | --------------- | ---------------- | -------- | --------- | ---------- | --------- | ---------- |
-| Rv32VecHeapAdapterChip   | VecHeapAdapterInterface | MinimalInstruction | <= 2            | <= 1             | RV       | var       | var        | var       | var        |
-| NativeVecHeapAdapterChip | VecHeapAdapterInterface | MinimalInstruction | 2               | 1                | Native   | var       | var        | var       | var        |
-
-#### Interfaces
-
-| Name                             | Reads                              | Writes                          | PI                   |
-| -------------------------------- | ---------------------------------- | ------------------------------- | -------------------- |
-| BasicAdapterInterface            | `[[T; READ_SIZE]; NUM_READS]`      | `[[T; WRITE_SIZE]; NUM_WRITES]` | Generic              |
-| Rv32LoadStoreAdapterAirInterface | `[[AB::Var; 4]; 2]`                | `[[AB::Var; 4]; 1]`             | LoadStoreInstruction |
-| VecHeapAdapterInterface          | `[[[T; READ_SIZE]; NUM_READS]; R]` | `[[T; WRITE_SIZE]; NUM_WRITES]` | MinimalInstruction   |
-| DynAdapterInterface              | `DynArray<T>`                      | `DynArray<T>`                   | `DynArray<T>`        |
-
-| Name                                 | Typedef                                                            |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| Rv32LoadStoreAdapterRuntimeInterface | `BasicAdapterInterface<LoadStoreProcessedInstruction, 2, 1, 4, 4>` |
-
-#### Instructions
-
-| Name                       | Fields                                                                   |
-| -------------------------- | ------------------------------------------------------------------------ |
-| MinimalInstruction         | is_valid, opcode                                                         |
-| ImmInstruction             | is_valid, opcode, imm                                                    |
-| LoadStoreInstruction       | is_valid, opcode, is_load, is_hint                                       |
-| NativeLoadStoreInstruction | is_valid, opcode, is_loadw, is_loadw2, is_storew2, is_storew2, is_shintw |
-
-## Common Gotchas
-
-- Failing to condition constraints on `is_valid`
-  - Unused rows will be filled with all 0's, meaning that constraints in `eval()` should usually be conditioned on an `is_valid: AB::Expr` to ensure they hold on unused rows.
-- Constraint degree too high:
-  - We use a constraint degree of 3, which if exceeded may result in a `lde.height() >= domain.size()` error message due to FRI parameters being dependent on degree.

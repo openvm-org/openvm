@@ -10,13 +10,15 @@ use axvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
-use p3_field::{ExtensionField, PrimeField};
+use p3_field::{ExtensionField, PrimeField, PrimeField32};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
+        gates::{
+            circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip, RangeInstructions,
+        },
         halo2_proofs::halo2curves::bn256::Fr,
         utils::{biguint_to_fe, ScalarField},
-        Context,
+        Context, QuantumCell,
     },
     util::arithmetic::PrimeField as _,
 };
@@ -249,8 +251,18 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::CastFV(a, b) => {
                         let felt = felts[&b.0];
+                        #[allow(clippy::comparison_chain)]
                         let reduced_felt = if felt.max_bits > BABYBEAR_MAX_BITS {
                             f_chip.reduce(ctx, felt)
+                        } else if felt.max_bits == BABYBEAR_MAX_BITS {
+                            // Ensure cast is canonical
+                            f_chip.range.check_less_than(
+                                ctx,
+                                felt.value,
+                                QuantumCell::Constant(Fr::from(BabyBear::ORDER_U32 as u64)),
+                                BABYBEAR_MAX_BITS,
+                            );
+                            felt
                         } else {
                             felt
                         };
