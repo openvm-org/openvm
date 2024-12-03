@@ -1,6 +1,7 @@
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::ChipUsageGetter;
 use axvm_circuit::system::memory::MemoryTraceHeights;
+use axvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use derive_new::new;
 use p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -171,7 +172,7 @@ impl Default for SystemConfig {
         Self::new(
             DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
             Default::default(),
-            0,
+            DEFAULT_MAX_NUM_PUBLIC_VALUES,
         )
     }
 }

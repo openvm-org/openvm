@@ -141,7 +141,11 @@ where
     pub fn generate_app_proof(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
         #[cfg(feature = "bench-metrics")]
         {
-            bench_app_proof(&self.app_pk, &self.app_committed_exe, input.clone());
+            execute_app_exe_for_metrics_collection(
+                &self.app_pk,
+                &self.app_committed_exe,
+                input.clone(),
+            );
         }
         ContinuationVmProver::prove(&self.app_prover, input)
     }
@@ -149,7 +153,11 @@ where
     pub fn generate_app_proof_without_continuations(&self, input: Vec<Vec<F>>) -> Vec<Proof<SC>> {
         #[cfg(feature = "bench-metrics")]
         {
-            bench_app_proof(&self.app_pk, &self.app_committed_exe, input.clone());
+            execute_app_exe_for_metrics_collection(
+                &self.app_pk,
+                &self.app_committed_exe,
+                input.clone(),
+            );
         }
         self.app_prover.prove_without_continuations(input)
     }
@@ -283,7 +291,7 @@ fn single_segment_prove<E: StarkFriEngine<SC>>(
 }
 
 #[cfg(feature = "bench-metrics")]
-fn bench_app_proof<VC: VmConfig<F>>(
+fn execute_app_exe_for_metrics_collection<VC: VmConfig<F>>(
     app_pk: &AppProvingKey<VC>,
     app_committed_exe: &Arc<AxVmCommittedExe<SC>>,
     input: Vec<Vec<F>>,
