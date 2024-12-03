@@ -364,8 +364,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
+        tracing::debug!("ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended}");
         let shift_amount = ptr_val % 4;
-        assert!(ptr_val < (1 << self.air.pointer_max_bits));
+        assert!(
+            ptr_val < (1 << self.air.pointer_max_bits),
+            "ptr_val: {ptr_val} >= 2 ** {}",
+            self.air.pointer_max_bits
+        );
 
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
         self.range_checker_chip.add_count(
