@@ -4,13 +4,14 @@
 extern crate alloc;
 
 use axvm::io::read_vec;
+#[allow(unused_imports)]
 use axvm_ecc_guest::k256::Secp256k1Coord;
 use revm_precompile::secp256k1::ec_recover_run;
 use revm_primitives::alloy_primitives::Bytes;
 
 axvm::entry!(main);
 
-axvm_algebra::moduli_setup::moduli_init! {
+axvm_algebra_guest::moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }

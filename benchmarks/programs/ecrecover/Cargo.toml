@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 # This cannot be local path because we need axvm version to be consistent with revm's axvm.
 axvm = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
+axvm-platform = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
 axvm-algebra-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
 axvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false, features = [
     "k256",
@@ -19,3 +20,10 @@ revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", default-
 [features]
 default = []
 std = ["axvm/std"]
+
+[patch."ssh://git@github.com/axiom-crypto/afs-prototype.git"]
+axvm = { path = "../../../crates/toolchain/axvm" }
+axvm-platform = { path = "../../../crates/toolchain/platform" }
+axvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
+axvm-ecc-guest = { path = "../../../extensions/ecc/guest", features = ["k256"] }
+axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
