@@ -49,4 +49,6 @@ jobs:
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
         run: |
           cd book
-          VERCEL_PROJECT_ID=$VERCEL_PROJECT_ID VERCEL_ORG_ID=$VERCEL_ORG_ID vercel --prod --token $VERCEL_TOKEN
+          mkdir .vercel
+          echo `{"projectId":"$VERCEL_PROJECT_ID","orgId":"$VERCEL_ORG_ID"}` > .vercel/project.json
+          vercel --prod --token $VERCEL_TOKEN
