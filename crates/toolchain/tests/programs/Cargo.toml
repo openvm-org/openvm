@@ -42,8 +42,8 @@ bls12_381 = ["axvm-pairing-guest/bls12_381"]
 k256 = ["axvm-ecc-guest/k256", "dep:k256"]
 
 [profile.release]
-panic = "unwind"
-lto = "fat"      # decrease binary size
+panic = "abort"
+lto = "fat"     # decrease binary size
 # strip = "symbols"
 
 [[example]]
