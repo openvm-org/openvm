@@ -364,7 +364,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let imm_extended = imm + imm_sign * 0xffff0000;
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
-        tracing::debug!("ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended}");
+        tracing::trace!("ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended}");
         let shift_amount = ptr_val % 4;
         assert!(
             ptr_val < (1 << self.air.pointer_max_bits),
