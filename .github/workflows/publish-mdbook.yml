@@ -49,4 +49,4 @@ jobs:
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
         run: |
           cd book
-          vercel --prod --token $VERCEL_TOKEN
+          VERCEL_PROJECT_ID=$VERCEL_PROJECT_ID VERCEL_ORG_ID=$VERCEL_ORG_ID vercel --prod --token $VERCEL_TOKEN
