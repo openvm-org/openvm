@@ -10,7 +10,9 @@ axvm::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
 
-axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+axvm_algebra_moduli_setup::moduli_init!(
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+);
 
 pub fn main() {
     setup_all_moduli();

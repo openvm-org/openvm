@@ -13,12 +13,12 @@ use hex_literal::hex;
 
 axvm::entry!(main);
 
-axvm::moduli_init! {
+axvm_algebra_moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 
-axvm::sw_init! {
+axvm_ecc_sw_setup::sw_init! {
     Secp256k1Coord,
 }
 

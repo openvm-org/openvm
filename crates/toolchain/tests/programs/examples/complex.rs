@@ -5,17 +5,15 @@ use axvm_algebra_guest::{
     field::{Complex, ComplexConjugate},
     DivAssignUnsafe, DivUnsafe, IntMod,
 };
-<<<<<<< HEAD:toolchain/tests/programs/examples/complex.rs
-=======
-use axvm_ecc_guest::sw::{setup_fp2, Secp256k1Coord};
->>>>>>> main:crates/toolchain/tests/programs/examples/complex.rs
 
 axvm::entry!(main);
 
 axvm::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
-axvm::moduli_init!("0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
+axvm_algebra_moduli_setup::moduli_init!(
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+);
 
 pub fn main() {
     setup_all_complex_extensions();

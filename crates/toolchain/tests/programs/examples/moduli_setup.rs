@@ -15,7 +15,7 @@ axvm_algebra_moduli_setup::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-axvm::moduli_init! {
+axvm_algebra_moduli_setup::moduli_init! {
     "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
     "1000000000000000003",
     "0x1fffffffffffffff",

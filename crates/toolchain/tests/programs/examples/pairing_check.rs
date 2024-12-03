@@ -22,7 +22,7 @@ mod bn254 {
 
     use super::*;
 
-    axvm::moduli_init!(
+    axvm_algebra_moduli_setup::moduli_init!(
         "21888242871839275222246405745257275088696311157297823662689037894645226208583"
     );
 
@@ -53,19 +53,12 @@ mod bls12_381 {
 
     use alloc::format;
 
-<<<<<<< HEAD:toolchain/tests/programs/examples/pairing_check.rs
-    use axvm_algebra::IntMod;
-    use axvm_ecc::bls12_381::{Bls12_381, Fp, Fp2};
-=======
     use axvm_algebra_guest::IntMod;
-    use axvm_pairing_guest::bls12_381::{
-        setup_Bls12_381Fp, setup_Bls12_381Fp_fp2, Bls12_381, Fp, Fp2,
-    };
->>>>>>> main:crates/toolchain/tests/programs/examples/pairing_check.rs
+    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
 
-    axvm::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+    axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
 
     pub fn test_pairing_check(io: &[u8]) {
         setup_all_moduli();
