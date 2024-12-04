@@ -8,10 +8,6 @@ use axvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
     RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
-use axvm_rv32im_guest::{
-    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
-    RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
-};
 use axvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension,
