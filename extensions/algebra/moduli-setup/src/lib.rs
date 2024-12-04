@@ -802,6 +802,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
 
         setups.push(quote::quote_spanned! { span.into() =>
+            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, and setup result might overwrite so register in use.
+            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -851,6 +853,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 }
             }
 
+            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, and setup result might overwrite so register in use.
+            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function_fp2() {
                 #[cfg(target_os = "zkvm")]
