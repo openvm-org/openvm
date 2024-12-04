@@ -418,7 +418,6 @@ where
         let mut keygen_builder = self.engine.keygen_builder();
         let chip_complex = self.config().create_chip_complex().unwrap();
         for air in chip_complex.airs() {
-            println!("air: {}", air.name());
             keygen_builder.add_air(air);
         }
         keygen_builder.generate_pk()

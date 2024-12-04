@@ -31,6 +31,9 @@ use axvm_sdk::{
     Sdk,
 };
 use p3_baby_bear::BabyBear;
+use utils::{assert_agg_config_eq, assert_agg_pk_eq};
+
+mod utils;
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -302,14 +305,8 @@ fn test_agg_keygen_store_and_load() {
 
     let (_, agg_pk) = sdk.agg_keygen(agg_config, Some(AGG_PK_PATH)).unwrap();
     let (file_config, file_pk) = sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
-    assert_eq!(
-        agg_config.max_num_user_public_values,
-        file_config.max_num_user_public_values
-    );
-    assert_eq!(
-        agg_pk.root_verifier_pk.air_heights,
-        file_pk.root_verifier_pk.air_heights
-    );
+    assert_agg_config_eq(&agg_config, &file_config);
+    assert_agg_pk_eq(&agg_pk, &file_pk);
 }
 
 #[cfg(feature = "static-verifier")]
