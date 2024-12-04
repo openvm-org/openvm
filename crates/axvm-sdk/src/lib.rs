@@ -126,9 +126,12 @@ impl Sdk {
                 create_dir_all(parent)?;
             }
             println!("2");
-            let json = serde_json::to_string(&agg_pk.leaf_vm_pk)?;
-            println!("leaf_vm_pk: {}", json);
-            panic!("{}", json);
+            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.fri_params)?;
+            println!("leaf_vm_pk.fri_params: {}", json);
+            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_config)?;
+            println!("leaf_vm_pk.vm_config: {}", json);
+            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk)?;
+            println!("leaf_vm_pk.vm_pk: {}", json);
             // let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
             // println!("internal_vm_pk: {}", json);
             // let json = serde_json::to_string(&agg_pk.internal_committed_exe)?;
