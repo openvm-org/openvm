@@ -34,7 +34,7 @@ jobs:
       - name: Run axvm-instructions tests
         working-directory: crates/toolchain/instructions
         run: |
-          cargo nextest run
+          cargo nextest run --no-tests
 
       - name: Run transpiler tests
         working-directory: crates/toolchain/transpiler
