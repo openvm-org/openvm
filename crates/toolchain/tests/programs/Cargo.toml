@@ -30,6 +30,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 [features]
 default = []
 std = [
+    "serde/std",
     "axvm/std",
     "axvm-algebra-guest/std",
     "axvm-bigint-guest/std",
