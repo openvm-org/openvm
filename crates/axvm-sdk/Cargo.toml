@@ -17,7 +17,7 @@ ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
 axvm-circuit = { workspace = true }
 
-bincode = { version = "2.0.0-rc", default-features = false, features = [ "serde" ] }
+bincode = { version = "2.0.0-rc.3", default-features = false, features = [ "serde" ] }
 derivative = { workspace = true }
 serde = { workspace = true }
 static_assertions.workspace = true
