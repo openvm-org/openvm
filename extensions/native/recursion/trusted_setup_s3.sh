@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [[ -z $1 ]]; then
-    maxk=23
+    maxk=24
 else
     maxk=$1
 fi

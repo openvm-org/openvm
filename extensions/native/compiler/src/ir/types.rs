@@ -13,7 +13,7 @@ use super::{
 /// A variable that represents a native field element.
 ///
 /// Used for counters, simple loops, etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Var<N>(pub u32, pub PhantomData<N>);
 
 /// A variable that represents an emulated field element.
@@ -29,8 +29,8 @@ pub struct Felt<F>(pub u32, pub PhantomData<F>);
 pub struct Ext<F, EF>(pub u32, pub PhantomData<(F, EF)>);
 
 /// A variable that represents either a constant or variable counter.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Usize<N: PrimeField> {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Usize<N> {
     /// A compile time variable. It should only be used in static mode.
     Const(Rc<RefCell<N>>),
     Var(Var<N>),

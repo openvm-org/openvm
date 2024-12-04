@@ -1,11 +1,12 @@
 use core::ops::{Add, Sub};
 
 use p3_field::{Field, PrimeField};
+use serde::{Deserialize, Serialize};
 
 use super::{Builder, Config, DslIr, MemIndex, MemVariable, RVar, SymbolicVar, Var, Variable};
 
 /// A point to a location in memory.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Ptr<N> {
     pub address: Var<N>,
 }

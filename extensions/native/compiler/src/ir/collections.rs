@@ -3,6 +3,7 @@ use std::cell::RefCell;
 
 use itertools::Itertools;
 use p3_field::AbstractField;
+use serde::{Deserialize, Serialize};
 
 use super::{
     Builder, Config, FromConstant, MemIndex, MemVariable, Ptr, RVar, Ref, SymbolicVar, Usize, Var,
@@ -10,7 +11,7 @@ use super::{
 };
 
 /// A logical array.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Array<C: Config, T> {
     /// Array of some local variables or constants, which can only be manipulated statically. It
     /// only exists in the DSL syntax and isn't backed by memory.

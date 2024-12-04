@@ -316,7 +316,7 @@ mod static_verifier {
         config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     };
     use axvm_native_compiler::prelude::Witness;
-    use axvm_native_recursion::witness::Witnessable;
+    use axvm_native_recursion::{halo2::wrapper::Halo2WrapperCircuit, witness::Witnessable};
     use axvm_sdk::keygen::RootVerifierProvingKey;
 
     use crate::SC;
@@ -324,16 +324,25 @@ mod static_verifier {
     pub(crate) fn test_static_verifier(
         root_verifier_pk: &RootVerifierProvingKey,
         dummy_internal_proof: Proof<SC>,
-        root_proot: &Proof<BabyBearPoseidon2OuterConfig>,
+        root_proof: &Proof<BabyBearPoseidon2OuterConfig>,
     ) {
         // Here we intend to use a dummy root proof to generate a static verifier circuit in order
         // to test if the static verifier circuit can handle a different root proof.
         let dummy_root_proof = root_verifier_pk.generate_dummy_root_proof(dummy_internal_proof);
-        let static_verifier = root_verifier_pk.keygen_static_verifier(23, dummy_root_proof);
+        let static_verifier = root_verifier_pk.keygen_static_verifier(24, dummy_root_proof);
         let mut witness = Witness::default();
-        root_proot.write(&mut witness);
+        root_proof.write(&mut witness);
         // Here the proof is verified inside.
         // FIXME: explicitly verify the proof.
-        static_verifier.prove(witness);
+        let static_verifier_proof = static_verifier.prove(witness);
+        let verifier_wrapper =
+            Halo2WrapperCircuit::keygen_auto_tune(static_verifier.generate_dummy_snark());
+        assert_eq!(
+            verifier_wrapper.pinning.config_params.num_advice_per_phase,
+            vec![1]
+        );
+        let evm_verifier = verifier_wrapper.generate_evm_verifier();
+        let (evm_proof, pvs) = verifier_wrapper.prove_for_evm(static_verifier_proof);
+        Halo2WrapperCircuit::evm_verify(evm_verifier, evm_proof, pvs);
     }
 }

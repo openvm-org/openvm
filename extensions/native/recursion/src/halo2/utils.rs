@@ -24,10 +24,12 @@ use snark_verifier_sdk::{
     NativeLoader, PlonkVerifier, Snark, SHPLONK,
 };
 
-static KZG_PARAMS_23: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+static KZG_PARAMS_23: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| gen_kzg_params(23));
+
+pub(crate) fn gen_kzg_params(k: u32) -> ParamsKZG<Bn256> {
     let mut rng = StdRng::seed_from_u64(42);
-    ParamsKZG::setup(23, &mut rng)
-});
+    ParamsKZG::setup(k, &mut rng)
+}
 
 lazy_static! {
     // TODO: this should be dynamic. hard code for now.

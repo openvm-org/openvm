@@ -83,6 +83,7 @@ async fn main() -> Result<()> {
             "Fibonacci Continuation Program",
         );
         #[cfg(feature = "static-verifier")]
+        #[allow(unused_variables)]
         let static_verifier_snark = info_span!("static verifier", group = "static_verifier")
             .in_scope(|| {
                 let static_verifier = prover

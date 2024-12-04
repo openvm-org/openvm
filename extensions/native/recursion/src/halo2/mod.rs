@@ -4,6 +4,7 @@ pub mod verifier;
 pub mod testing_utils;
 #[cfg(test)]
 mod tests;
+pub mod wrapper;
 
 use std::fmt::Debug;
 
@@ -15,8 +16,9 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::extension::BinomialExtensionField;
+use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::{
-    halo2::gen_snark_shplonk,
+    halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::halo2_base::{
         gates::{
             circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
@@ -28,7 +30,7 @@ use snark_verifier_sdk::{
             plonk::{keygen_pk2, ProvingKey},
         },
     },
-    CircuitExt, Snark,
+    CircuitExt, Snark, SHPLONK,
 };
 
 use crate::halo2::utils::read_params;
@@ -37,7 +39,7 @@ use crate::halo2::utils::read_params;
 #[derive(Debug, Clone)]
 pub struct Halo2Prover;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DslOperations<C: Config> {
     pub operations: TracedVec<DslIr<C>>,
     pub num_public_values: usize,
@@ -51,6 +53,14 @@ pub struct Halo2ProvingPinning {
     pub break_points: MultiPhaseThreadBreakPoints,
     /// Number of public values per column in order.
     pub num_pvs: Vec<usize>,
+}
+
+impl Halo2ProvingPinning {
+    pub fn generate_dummy_snark(&self) -> Snark {
+        let k = self.config_params.k;
+        let params = read_params(k as u32);
+        gen_dummy_snark_from_vk::<SHPLONK>(&params, self.pk.get_vk(), self.num_pvs.clone(), None)
+    }
 }
 
 impl Halo2Prover {

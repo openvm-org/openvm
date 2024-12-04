@@ -2,9 +2,9 @@ name: axVM SDK Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["**"]
+    branches: [ "**" ]
     paths:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
@@ -32,6 +32,8 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
+      - name: Install solc # svm should support arm64 linux
+        run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
       - name: Install architecture specific tools
         run: |

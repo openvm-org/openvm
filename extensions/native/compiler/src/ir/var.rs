@@ -1,7 +1,7 @@
 use std::array;
 
 use itertools::izip;
-use p3_field::PrimeField;
+use serde::{Deserialize, Serialize};
 
 use super::{Builder, Config, Ptr, RVar};
 
@@ -31,8 +31,8 @@ pub trait Variable<C: Config>: Clone {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct MemIndex<N: PrimeField> {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct MemIndex<N> {
     pub index: RVar<N>,
     pub offset: usize,
     pub size: usize,

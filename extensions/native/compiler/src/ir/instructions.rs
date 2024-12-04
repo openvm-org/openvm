@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
 /// Programs written in the DSL can compile both to the recursive zkVM and the R1CS or Plonk-ish
 /// circuits.
-#[derive(Debug, Clone, strum_macros::Display)]
+#[derive(Debug, Clone, strum_macros::Display, Serialize, Deserialize)]
 pub enum DslIr<C: Config> {
     // Immediates.
     /// Assigns an immediate to a variable (var = imm).

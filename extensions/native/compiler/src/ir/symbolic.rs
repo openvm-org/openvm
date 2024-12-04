@@ -12,6 +12,7 @@ use std::{
 };
 
 use p3_field::{AbstractField, ExtensionField, Field, FieldArray, PrimeField};
+use serde::{Deserialize, Serialize};
 
 use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};
 
@@ -90,8 +91,8 @@ pub enum SymbolicExt<F: Field, EF: Field> {
 }
 
 /// A right value of Var. It should never be assigned with a value.
-#[derive(Debug, Copy, Clone)]
-pub enum RVar<N: Field> {
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum RVar<N> {
     Const(N),
     Val(Var<N>),
 }

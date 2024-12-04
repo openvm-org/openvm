@@ -8,10 +8,8 @@ edition.workspace = true
 ax-stark-backend = { workspace = true }
 axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
-axvm-native-compiler-derive = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
-ax-circuit-primitives = { workspace = true }
 
 p3-field = { workspace = true }
 p3-commit = { workspace = true }
@@ -24,12 +22,10 @@ p3-challenger = { workspace = true }
 p3-bn254-fr = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-merkle-tree = { workspace = true }
-zkhash = { workspace = true }
 snark-verifier-sdk = { workspace = true, features = [
     "loader_evm",
     "revm",
 ], optional = true }
-ff = { workspace = true, features = ["derive", "derive_bits"] }
 itertools.workspace = true
 rand.workspace = true
 serde.workspace = true
@@ -41,7 +37,6 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-ax-circuit-primitives.workspace = true
 axvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
 [features]
