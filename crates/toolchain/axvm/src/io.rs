@@ -66,7 +66,9 @@ fn read_vec_by_len(len: usize) -> Vec<u8> {
     }
     #[cfg(not(target_os = "zkvm"))]
     {
-        read_n_bytes(capacity).into_iter().take(len).collect()
+        let mut buffer = Vec::with_capacity(capacity);
+        buffer.append(&mut read_n_bytes(len));
+        buffer
     }
 }
 
