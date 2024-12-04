@@ -24,7 +24,7 @@ use axvm_native_recursion::types::InnerConfig;
 use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
-use eyre::{eyre, Result};
+use eyre::Result;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
 use prover::generate_leaf_committed_exe;
@@ -120,16 +120,15 @@ impl Sdk {
         output_path: Option<P>,
     ) -> Result<(AggConfig, AggProvingKey)> {
         let agg_pk: AggProvingKey = AggProvingKey::keygen(config);
+        let ret = (config, agg_pk);
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.as_ref().parent() {
                 create_dir_all(parent)?;
             }
-            let output: Vec<u8> = serialize(&agg_pk).unwrap();
-            if write(output_path, output).is_err() {
-                return Err(eyre!("Failed to write aggregator proving key to file"));
-            }
+            let output: Vec<u8> = serialize(&ret)?;
+            write(output_path, output)?;
         }
-        Ok((config, agg_pk))
+        Ok(ret)
     }
 
     pub fn load_agg_pk_from_file<P: AsRef<Path>>(
