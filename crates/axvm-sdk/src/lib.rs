@@ -1,7 +1,7 @@
 extern crate core;
 
 use std::{
-    fs::{create_dir_all, read_to_string, write},
+    fs::{create_dir_all, read, write},
     path::Path,
     sync::Arc,
 };
@@ -22,6 +22,7 @@ use axvm_circuit::{
 use axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit;
 use axvm_native_recursion::types::InnerConfig;
 use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
+use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::{eyre, Result};
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
@@ -123,28 +124,8 @@ impl Sdk {
             if let Some(parent) = output_path.as_ref().parent() {
                 create_dir_all(parent)?;
             }
-            println!("per_air length: {}", agg_pk.leaf_vm_pk.vm_pk.per_air.len());
-            for i in 0..agg_pk.leaf_vm_pk.vm_pk.per_air.len() {
-                let json =
-                    serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[i].preprocessed_data);
-                if json.is_err() {
-                    panic!("{:?}", json.err());
-                }
-                println!(
-                    "leaf_vm_pk.vm_pk.per_air[{}].preprocessed_data: {}",
-                    i,
-                    json.unwrap()
-                );
-                let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[i].vk);
-                if json.is_err() {
-                    panic!("{:?}", json.err());
-                }
-                println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json.unwrap());
-            }
-            println!("Done!!");
-
-            let json = serde_json::to_string(&agg_pk)?;
-            if write(output_path, json).is_err() {
+            let output: Vec<u8> = serialize(&agg_pk).unwrap();
+            if write(output_path, output).is_err() {
                 return Err(eyre!("Failed to write aggregator proving key to file"));
             }
         }
@@ -155,7 +136,7 @@ impl Sdk {
         &self,
         agg_pk_path: P,
     ) -> Result<(AggConfig, AggProvingKey)> {
-        let (config, agg_pk) = serde_json::from_str(&read_to_string(agg_pk_path)?)?;
+        let (config, agg_pk) = deserialize(&read(agg_pk_path)?)?;
         Ok((config, agg_pk))
     }
 
