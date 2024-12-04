@@ -77,7 +77,7 @@ pub unsafe extern "C" fn sys_rand(_recv_buf: *mut u32, _words: usize) {
 ///
 /// `msg_ptr` must be aligned and dereferenceable.
 #[no_mangle]
-pub unsafe extern "C" fn sys_panic(msg_ptr: *const u8, len: usize) -> ! {
+unsafe extern "C" fn sys_panic(msg_ptr: *const u8, len: usize) -> ! {
     raw_print_str_from_bytes(msg_ptr, len);
     terminate::<{ exit_code::PANIC }>();
     unreachable!()
