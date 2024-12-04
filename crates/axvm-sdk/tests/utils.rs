@@ -1,7 +1,6 @@
 use ax_stark_sdk::{ax_stark_backend::config::StarkGenericConfig, config::FriParameters};
 use axvm_circuit::{prover::types::VmProvingKey, system::program::trace::AxVmCommittedExe};
 use axvm_sdk::{config::AggConfig, keygen::AggProvingKey};
-use bincode::config::standard;
 use serde::Serialize;
 
 pub fn assert_agg_config_eq(a: &AggConfig, b: &AggConfig) {
@@ -64,7 +63,7 @@ fn assert_committed_exe_eq<SC: StarkGenericConfig>(
 }
 
 fn assert_serialize_eq<T: Serialize>(a: &T, b: &T) {
-    let a_bytes = bincode::serde::encode_to_vec(a, standard()).unwrap();
-    let b_bytes = bincode::serde::encode_to_vec(b, standard()).unwrap();
+    let a_bytes = bincode::serialize(a).unwrap();
+    let b_bytes = bincode::serialize(b).unwrap();
     assert_eq!(a_bytes, b_bytes);
 }
