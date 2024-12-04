@@ -288,7 +288,7 @@ fn test_e2e_app_log_blowup_1() {
 
 #[test]
 fn test_agg_keygen_store_and_load() {
-    const AGG_PK_PATH: &str = "temp/agg_pk.json";
+    const AGG_PK_PATH: &str = "temp/agg_pk.out";
 
     let sdk = Sdk;
     let agg_config = AggConfig {
