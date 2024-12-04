@@ -131,6 +131,9 @@ impl Sdk {
             let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_config)?;
             println!("leaf_vm_pk.vm_config: {}", json);
             for (i, air) in agg_pk.leaf_vm_pk.vm_pk.per_air.iter().enumerate() {
+                if i < 13 {
+                    continue;
+                }
                 let json = serde_json::to_string(&air.preprocessed_data)?;
                 println!(
                     "leaf_vm_pk.vm_pk.per_air[{}].preprocessed_data: {}",
