@@ -10,6 +10,7 @@ axvm-platform = { path = "../../platform" }
 
 axvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
 axvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
+axvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
 axvm-bigint-guest = { path = "../../../../extensions/bigint/guest" }
 axvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
 axvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }

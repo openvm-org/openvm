@@ -498,27 +498,6 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     write!(f, "{:?} + {:?} * u", self.c0, self.c1)
                 }
             }
-
-            impl axvm_algebra_guest::field::Field for #struct_name {
-                type SelfRef<'a>
-                    = &'a Self
-                where
-                    Self: 'a;
-
-                const ZERO: Self = Self::ZERO;
-                const ONE: Self = Self::ONE;
-
-                fn double_assign(&mut self) {
-                    Field::double_assign(&mut self.c0);
-                    Field::double_assign(&mut self.c1);
-                }
-
-                fn square_assign(&mut self) {
-                    unsafe {
-                        self.mul_refs_impl(self, self as *const Self as *mut Self);
-                    }
-                }
-            }
         });
         output.push(result);
     }
@@ -597,5 +576,51 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         mod axvm_intrinsics_ffi_complex {
             #(#externs)*
         }
+    })
+}
+
+#[proc_macro]
+pub fn complex_impl_field(input: TokenStream) -> TokenStream {
+    let ComplexDefine { items } = parse_macro_input!(input as ComplexDefine);
+
+    let mut output = Vec::new();
+
+    let span = proc_macro::Span::call_site();
+
+    for item in items.into_iter() {
+        let str_path = item
+            .segments
+            .iter()
+            .map(|x| x.ident.to_string())
+            .collect::<Vec<_>>()
+            .join("_");
+        let struct_name = syn::Ident::new(&str_path, span.into());
+
+        output.push(quote::quote_spanned! { span.into() =>
+            impl axvm_algebra_guest::field::Field for #struct_name {
+                type SelfRef<'a>
+                    = &'a Self
+                where
+                    Self: 'a;
+
+                const ZERO: Self = Self::ZERO;
+                const ONE: Self = Self::ONE;
+
+                fn double_assign(&mut self) {
+                    axvm_algebra_guest::field::Field::double_assign(&mut self.c0);
+                    axvm_algebra_guest::field::Field::double_assign(&mut self.c1);
+                }
+
+                fn square_assign(&mut self) {
+                    unsafe {
+                        self.mul_refs_impl(self, self as *const Self as *mut Self);
+                    }
+                }
+            }
+        });
+    }
+
+    TokenStream::from(quote::quote_spanned! { span.into() =>
+        #(#output)*
     })
 }

@@ -18,6 +18,7 @@ axvm_algebra_complex_macros::complex_declare! {
 
 axvm_algebra_complex_macros::complex_init! {
     Complex,
+    Fp2,
 }
 
 pub fn main() {
@@ -36,7 +37,7 @@ pub fn main() {
         res += &a * &Complex::new(Secp256k1Coord::ZERO, -b.c1.double());
         res.div_assign_unsafe(&b * &b.clone().conjugate());
 
-        if a.clone().div_unsafe(&b) - res != Complex::<Secp256k1Coord>::ZERO {
+        if a.clone().div_unsafe(&b) - res != Complex::ZERO {
             panic!();
         }
 
