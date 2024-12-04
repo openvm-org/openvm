@@ -52,9 +52,9 @@ dependencies = [
 
 [[package]]
 name = "allocator-api2"
-version = "0.2.20"
+version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45862d1c77f2228b9e10bc609d5bc203d86ebc9b87ad8d5d5167a6c9abf739d9"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "alloy-primitives"
@@ -92,7 +92,7 @@ checksum = "2b09cae092c27b6f1bde952653a22708691802e57bfef4a2973b80bea21efd3f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -310,7 +310,7 @@ checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -321,7 +321,7 @@ checksum = "3c87f3f15e7794432337fc718554eaa4dc8f04c9677a950ffe366f20a162ae42"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -337,7 +337,7 @@ dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -377,8 +377,9 @@ dependencies = [
 name = "ax-ecc-execution"
 version = "0.1.0"
 dependencies = [
- "axvm-ecc",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-pairing-guest",
  "ff 0.13.0",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -393,16 +394,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-ecc-primitives"
+name = "ax-mod-circuit-builder"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
  "ax-ecc-execution",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-circuit",
  "axvm-ecc-constants",
+ "axvm-instructions",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
+ "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
  "num-traits",
@@ -412,7 +416,7 @@ dependencies = [
  "p3-matrix",
  "p3-util",
  "rand 0.8.5",
- "sha3 0.10.8",
+ "sha3",
  "tracing",
 ]
 
@@ -445,8 +449,9 @@ name = "ax-snark-verifier"
 version = "0.1.0"
 dependencies = [
  "ax-ecc-execution",
- "axvm-ecc",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-pairing-guest",
  "ff 0.13.0",
  "group 0.13.0",
  "halo2curves-axiom 0.7.0",
@@ -548,11 +553,160 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
- "axvm-sw-setup",
+ "axvm-rv32im-guest",
  "chrono",
  "hex-literal",
+ "num-bigint-dig",
+ "num-traits",
+ "serde",
+]
+
+[[package]]
+name = "axvm-algebra-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "axvm-rv32-adapters",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-matrix",
+ "rand 0.8.5",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-algebra-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-algebra-moduli-setup",
+ "axvm-platform",
+ "halo2curves-axiom 0.7.0",
+ "num-bigint-dig",
+ "serde",
+ "serde-big-array",
+]
+
+[[package]]
+name = "axvm-algebra-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-algebra-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-benchmarks"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
+ "axvm-build",
+ "axvm-circuit",
+ "axvm-ecc-circuit",
+ "axvm-ecc-transpiler",
+ "axvm-keccak256-circuit",
+ "axvm-keccak256-guest",
+ "axvm-keccak256-transpiler",
+ "axvm-native-circuit",
+ "axvm-native-compiler",
+ "axvm-native-recursion",
+ "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
+ "axvm-sdk",
+ "axvm-transpiler",
+ "clap",
+ "criterion",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "k256",
+ "metrics",
+ "num-bigint-dig",
+ "p3-baby-bear",
+ "p3-field",
+ "pprof",
+ "rand_chacha",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-bigint-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32-adapters",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "p3-keccak-air",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-bigint-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-platform",
  "num-bigint-dig",
  "num-traits",
  "serde",
@@ -560,35 +714,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-algebra"
+name = "axvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [
- "axvm-platform",
- "halo2curves-axiom 0.7.0",
- "num-bigint-dig",
-]
-
-[[package]]
-name = "axvm-benchmarks"
-version = "0.1.0"
-dependencies = [
- "ax-stark-sdk",
- "axvm-build",
- "axvm-circuit",
- "axvm-native-compiler",
- "axvm-recursion",
- "axvm-sdk",
+ "axvm-instructions",
  "axvm-transpiler",
- "clap",
- "criterion",
- "eyre",
- "hex",
- "metrics",
  "p3-field",
- "pprof",
- "tempfile",
- "tokio",
- "tracing",
+ "rrs-lib",
+ "strum_macros",
 ]
 
 [[package]]
@@ -613,16 +746,21 @@ dependencies = [
  "async-trait",
  "ax-circuit-derive",
  "ax-circuit-primitives",
- "ax-ecc-execution",
- "ax-ecc-primitives",
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-bigint-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc",
+ "axvm-ecc-circuit",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-instructions",
+ "axvm-keccak256-circuit",
+ "axvm-native-circuit",
+ "axvm-pairing-circuit",
+ "axvm-rv32im-circuit",
  "backtrace",
  "cfg-if",
  "derivative",
@@ -658,7 +796,7 @@ dependencies = [
  "parking_lot",
  "rand 0.8.5",
  "rand_xoshiro",
- "rustc-hash 2.0.0",
+ "rustc-hash 2.1.0",
  "serde",
  "static_assertions",
  "strum",
@@ -679,15 +817,52 @@ dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
-name = "axvm-ecc"
+name = "axvm-ecc-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "axvm-algebra-circuit",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-constants",
+ "axvm-instructions",
+ "axvm-rv32-adapters",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "p3-baby-bear",
+ "p3-field",
+ "strum",
+]
+
+[[package]]
+name = "axvm-ecc-constants"
+version = "0.1.0"
+dependencies = [
+ "hex-literal",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-traits",
+]
+
+[[package]]
+name = "axvm-ecc-guest"
 version = "0.1.0"
 dependencies = [
  "axvm",
- "axvm-algebra",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
  "ecdsa",
  "elliptic-curve",
@@ -700,16 +875,29 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "rand 0.8.5",
+ "serde",
  "strum_macros",
 ]
 
 [[package]]
-name = "axvm-ecc-constants"
+name = "axvm-ecc-sw-setup"
 version = "0.1.0"
 dependencies = [
- "lazy_static",
- "num-bigint-dig",
- "num-traits",
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-ecc-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -739,23 +927,92 @@ dependencies = [
  "quote",
  "strum",
  "strum_macros",
- "syn 2.0.89",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-keccak256-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "p3-keccak-air",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-keccak256-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
+ "serde",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "axvm-keccak256-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
 ]
 
 [[package]]
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
-name = "axvm-moduli-setup"
+name = "axvm-native-circuit"
 version = "0.1.0"
 dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.89",
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-poseidon2-air",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "parking_lot",
+ "rand 0.8.5",
+ "serde",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
 ]
 
 [[package]]
@@ -766,6 +1023,7 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
+ "axvm-native-circuit",
  "axvm-native-compiler-derive",
  "backtrace",
  "cfg-if",
@@ -798,39 +1056,25 @@ name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "p3-field",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
-name = "axvm-platform"
-version = "0.1.0"
-dependencies = [
- "axvm-moduli-setup",
- "bincode 2.0.0-rc.3",
- "bytemuck",
- "critical-section",
- "embedded-alloc",
- "getrandom",
- "libm",
- "stability",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-recursion"
+name = "axvm-native-recursion"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
+ "axvm-native-circuit",
  "axvm-native-compiler",
  "axvm-native-compiler-derive",
- "axvm-recursion",
+ "axvm-native-recursion",
  "cfg-if",
  "ff 0.13.0",
  "itertools 0.13.0",
@@ -861,44 +1105,215 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-pairing-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-ecc-execution",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-ecc-circuit",
+ "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-instructions",
+ "axvm-pairing-guest",
+ "axvm-rv32-adapters",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "rand 0.8.5",
+ "strum",
+]
+
+[[package]]
+name = "axvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-guest",
+ "axvm-ecc-sw-setup",
+ "axvm-platform",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "rand 0.8.5",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-pairing-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-platform"
+version = "0.1.0"
+dependencies = [
+ "axvm-algebra-moduli-setup",
+ "bincode 2.0.0-rc.3",
+ "bytemuck",
+ "critical-section",
+ "embedded-alloc",
+ "getrandom",
+ "libm",
+ "stability",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-rv32-adapters"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "axvm-rv32im-circuit",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-traits",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-rv32im-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-circuit-derive",
+ "axvm-instructions",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "parking_lot",
+ "rand 0.8.5",
+ "strum",
+ "test-case",
+ "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "axvm-rv32im-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm-platform",
+]
+
+[[package]]
+name = "axvm-rv32im-transpiler"
+version = "0.1.0"
+dependencies = [
+ "axvm-instructions",
+ "axvm-transpiler",
+ "p3-field",
+ "rrs-lib",
+ "tracing",
+]
+
+[[package]]
 name = "axvm-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "ax-poseidon2-air",
  "ax-stark-sdk",
+ "axvm-build",
  "axvm-circuit",
+ "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
+ "axvm-rv32im-circuit",
+ "axvm-transpiler",
  "derivative",
+ "eyre",
+ "metrics",
  "p3-baby-bear",
  "serde",
  "serde_json",
  "static_assertions",
-]
-
-[[package]]
-name = "axvm-sw-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.89",
+ "tracing",
 ]
 
 [[package]]
 name = "axvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
+ "ax-circuit-derive",
  "ax-ecc-execution",
+ "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
+ "axvm-bigint-circuit",
+ "axvm-bigint-transpiler",
  "axvm-build",
  "axvm-circuit",
+ "axvm-ecc-circuit",
  "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-ecc-transpiler",
+ "axvm-keccak256-circuit",
+ "axvm-keccak256-transpiler",
+ "axvm-pairing-circuit",
+ "axvm-pairing-guest",
+ "axvm-pairing-transpiler",
+ "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "axvm-transpiler",
+ "derive_more 1.0.0",
  "eyre",
  "num-bigint-dig",
  "p3-baby-bear",
+ "p3-field",
  "rand 0.8.5",
  "serde",
  "tempfile",
@@ -909,11 +1324,20 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-circuit",
+ "axvm-algebra-transpiler",
+ "axvm-bigint-circuit",
  "axvm-build",
  "axvm-circuit",
+ "axvm-ecc-constants",
  "axvm-instructions",
  "axvm-platform",
+ "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
+ "derive_more 1.0.0",
  "elf",
  "eyre",
  "num-bigint-dig",
@@ -924,6 +1348,7 @@ dependencies = [
  "strum",
  "tempfile",
  "test-case",
+ "tracing",
 ]
 
 [[package]]
@@ -1007,7 +1432,7 @@ dependencies = [
  "regex",
  "rustc-hash 1.1.0",
  "shlex",
- "syn 2.0.89",
+ "syn 2.0.90",
  "which",
 ]
 
@@ -1070,28 +1495,12 @@ dependencies = [
 
 [[package]]
 name = "block-buffer"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
-dependencies = [
- "block-padding",
- "generic-array",
-]
-
-[[package]]
-name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
 ]
-
-[[package]]
-name = "block-padding"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "bls12_381"
@@ -1144,9 +1553,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
+checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
 
 [[package]]
 name = "c-kzg"
@@ -1200,6 +1609,9 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",
+ "axvm-keccak256-circuit",
+ "axvm-keccak256-transpiler",
+ "axvm-rv32im-transpiler",
  "axvm-transpiler",
  "capstone",
  "cargo_metadata",
@@ -1225,9 +1637,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-platform"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24b1f0365a6c6bb4020cd05806fd0d33c44d38046b8bd7f0e40814b9763cabfc"
+checksum = "e35af189006b9c0f00a064685c727031e3ed2d8020f7ba284d78cc2671bd36ea"
 dependencies = [
  "serde",
 ]
@@ -1254,9 +1666,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd9de9f2205d5ef3fd67e685b0df337994ddd4495e2a28d185500d0e1edfea47"
+checksum = "f34d93e62b03caf570cccc334cbc6c2fceca82f39211051345108adcba3eebdc"
 dependencies = [
  "jobserver",
  "libc",
@@ -1363,7 +1775,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1396,9 +1808,9 @@ checksum = "0b396d1f76d455557e1218ec8066ae14bba60b4b36ecd55577ba979f5db7ecaa"
 
 [[package]]
 name = "const-hex"
-version = "1.13.2"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "487981fa1af147182687064d0a2c336586d337a606595ced9ffb0c685c250c73"
+checksum = "4b0485bab839b018a8f1723fc5391819fea5f8f0f32288ef8a735fd096b6160c"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1661,7 +2073,7 @@ checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1674,7 +2086,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version 0.4.1",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1694,7 +2106,7 @@ checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1712,7 +2124,7 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
- "block-buffer 0.10.4",
+ "block-buffer",
  "const-oid",
  "crypto-common",
  "subtle",
@@ -1768,7 +2180,7 @@ checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1878,7 +2290,7 @@ checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1910,12 +2322,12 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "errno"
-version = "0.3.9"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "534c5cf6194dfab3db3242765c03bbe257cf92f22b38f6bc0c58d59108a820ba"
+checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2099,7 +2511,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -2177,7 +2589,7 @@ version = "0.1.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a23c779b38253fe1538102da44ad5bd5378495a61d2c4ee18d64eaa61ae5995"
 dependencies = [
- "halo2_proofs 0.1.0",
+ "halo2_proofs",
 ]
 
 [[package]]
@@ -2197,7 +2609,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rustc-hash 1.1.0",
- "sha3 0.10.8",
+ "sha3",
  "tracing",
 ]
 
@@ -2208,7 +2620,6 @@ source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.4.1-git#2fe81
 dependencies = [
  "getset",
  "halo2-axiom",
- "halo2_proofs 0.3.0",
  "itertools 0.11.0",
  "log",
  "num-bigint 0.4.6",
@@ -2253,47 +2664,6 @@ dependencies = [
  "pasta_curves 0.4.1",
  "rand_core 0.6.4",
  "rayon",
-]
-
-[[package]]
-name = "halo2_proofs"
-version = "0.3.0"
-source = "git+https://github.com/privacy-scaling-explorations/halo2.git?tag=v0.3.0#73408a140737d8336490452193b21f5a7a94e7de"
-dependencies = [
- "blake2b_simd",
- "ff 0.13.0",
- "group 0.13.0",
- "halo2curves 0.6.1",
- "rand_chacha",
- "rand_core 0.6.4",
- "rayon",
- "sha3 0.9.1",
- "tracing",
-]
-
-[[package]]
-name = "halo2curves"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db81d01d0bbfec9f624d7590fc6929ee2537a64ec1e080d8f8c9e2d2da291405"
-dependencies = [
- "blake2b_simd",
- "ff 0.13.0",
- "group 0.13.0",
- "hex",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "pairing 0.23.0",
- "pasta_curves 0.5.1",
- "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rayon",
- "serde",
- "serde_arrays",
- "static_assertions",
- "subtle",
 ]
 
 [[package]]
@@ -2576,7 +2946,7 @@ checksum = "1ec89e9337638ecdc08744df490b221a7399bf8d164eb52a665454e60e075ad6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -2617,7 +2987,7 @@ checksum = "a0eb5a3343abf848c0984fe4604b2b105da9539376e24fc0a3b0007411ae4fd9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -2628,9 +2998,9 @@ checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
 name = "indexmap"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
+checksum = "62f822373a4fe84d4bb149bf54e584a7f4abec90e072ed49cda0edea5b95471f"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.2",
@@ -2720,10 +3090,11 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.72"
+version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a88f1bda2bd75b0452a14784937d796722fdebfe50df998aeb3f0b7603019a9"
+checksum = "a865e038f7f6ed956f788f0d7d60c541fff74c7bd74272c5d4cf15c63743e705"
 dependencies = [
+ "once_cell",
  "wasm-bindgen",
 ]
 
@@ -2780,9 +3151,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.166"
+version = "0.2.167"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2ccc108bbc0b1331bd061864e7cd823c0cab660bbe6970e66e2c0614decde36"
+checksum = "09d6582e104315a817dff97f75133544b2e094ee22447d2acf4a74e189ba06fc"
 
 [[package]]
 name = "libgit2-sys"
@@ -2798,9 +3169,9 @@ dependencies = [
 
 [[package]]
 name = "libloading"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
+checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
  "windows-targets 0.52.6",
@@ -3218,12 +3589,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b410bbe7e14ab526a0e86877eb47c6996a2bd7746f027ba551028c925390e4e9"
 
 [[package]]
-name = "opaque-debug"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3283,7 +3648,7 @@ version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=9b267c4#9b267c411cc8965c709b27d7b0ef81e225603c59"
 dependencies = [
  "ff 0.13.0",
- "halo2curves 0.7.0",
+ "halo2curves",
  "num-bigint 0.4.6",
  "p3-field",
  "p3-poseidon2",
@@ -3592,7 +3957,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -3800,7 +4165,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64d1ec885c64d0457d564db4ec299b2dae3f9c02808b8ad9c3a089c591b18033"
 dependencies = [
  "proc-macro2",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -3856,7 +4221,7 @@ dependencies = [
  "proc-macro-error-attr2",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4289,9 +4654,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc-hash"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
+checksum = "c7fb8039b3032c191086b10f11f319a6e99e1e82889c5cc6046f515c9db1d497"
 
 [[package]]
 name = "rustc-hex"
@@ -4374,7 +4739,7 @@ checksum = "7f81c2fde025af7e69b1d1420531c8a8811ca898919db177141a85313b1cb932"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4446,6 +4811,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-big-array"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_arrays"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4462,7 +4836,7 @@ checksum = "ad1e866f866923f252f05c889987993144fb74e722403468a4ebd70c3cd756c0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4506,18 +4880,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest 0.10.7",
-]
-
-[[package]]
-name = "sha3"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
-dependencies = [
- "block-buffer 0.9.0",
- "digest 0.9.0",
- "keccak",
- "opaque-debug",
 ]
 
 [[package]]
@@ -4609,7 +4971,7 @@ dependencies = [
  "revm",
  "ruint",
  "serde",
- "sha3 0.10.8",
+ "sha3",
 ]
 
 [[package]]
@@ -4658,7 +5020,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d904e7009df136af5297832a3ace3370cd14ff1546a232f4f185036c2736fcac"
 dependencies = [
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4710,7 +5072,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4781,9 +5143,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.89"
+version = "2.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d46482f1c1c87acd84dea20c1bf5ebff4c757009ed6bf19cfd36fb10e92c4e"
+checksum = "919d3b74a5dd0ccd15aeb8f93e7006bd9e14c295087c9896a110f490752bcf31"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4798,7 +5160,7 @@ checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4855,7 +5217,7 @@ dependencies = [
  "cfg-if",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4866,7 +5228,7 @@ checksum = "5c89e72a01ed4c579669add59014b9a524d609c0c88c6a585ce37485879f6ffb"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
  "test-case-core",
 ]
 
@@ -4889,7 +5251,7 @@ checksum = "5999e24eaa32083191ba4e425deb75cdf25efefabe5aaccb7446dd0d4122a3f5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4920,7 +5282,7 @@ checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5043,7 +5405,7 @@ checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5099,7 +5461,7 @@ checksum = "395ae124c09f9e6918a2310af6038fba074bcf474ac352496d5910dd59a2226d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5138,9 +5500,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
+checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
 dependencies = [
  "matchers",
  "nu-ansi-term",
@@ -5312,9 +5674,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.95"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "128d1e363af62632b8eb57219c8fd7877144af57558fb2ef0368d0087bddeb2e"
+checksum = "d15e63b4482863c109d70a7b8706c1e364eb6ea449b201a76c5b89cedcec2d5c"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -5323,24 +5685,24 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-backend"
-version = "0.2.95"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb6dd4d3ca0ddffd1dd1c9c04f94b868c37ff5fac97c30b97cff2d74fce3a358"
+checksum = "8d36ef12e3aaca16ddd3f67922bc63e48e953f126de60bd33ccc0101ef9998cd"
 dependencies = [
  "bumpalo",
  "log",
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.95"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e79384be7f8f5a9dd5d7167216f022090cf1f9ec128e6e6a482a2cb5c5422c56"
+checksum = "705440e08b42d3e4b36de7d66c944be628d579796b8090bfa3471478a2260051"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -5348,28 +5710,28 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.95"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26c6ab57572f7a24a4985830b120de1594465e5d500f24afe89e16b4e833ef68"
+checksum = "98c9ae5a76e46f4deecd0f0255cc223cfa18dc9b261213b8aa0c7b36f61b3f1d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.95"
+version = "0.2.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65fc09f10666a9f147042251e0dda9c18f166ff7de300607007e96bdebc1068d"
+checksum = "6ee99da9c5ba11bd675621338ef6fa52296b76b83305e9b6e5c77d4c286d6d49"
 
 [[package]]
 name = "web-sys"
-version = "0.3.72"
+version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6488b90108c040df0fe62fa815cbdee25124641df01814dd7282749234c6112"
+checksum = "a98bc3c33f0fe7e59ad7cd041b89034fa82a7c2d4365ca538dda6cdaf513863c"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -5622,7 +5984,7 @@ checksum = "2380878cad4ac9aac1e2435f3eb4020e8374b5f13c296cb75b4620ff8e229154"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
  "synstructure",
 ]
 
@@ -5644,7 +6006,7 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5664,7 +6026,7 @@ checksum = "595eed982f7d355beb85837f651fa22e90b3c044842dc7f2c2842c086f295808"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
  "synstructure",
 ]
 
@@ -5685,7 +6047,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5707,7 +6069,7 @@ checksum = "6eafa6dfb17584ea3e2bd6e76e0cc15ad7af12b09abdd1ca55961bed9b1063c6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.89",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -5732,6 +6094,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2",
- "sha3 0.10.8",
+ "sha3",
  "subtle",
 ]
