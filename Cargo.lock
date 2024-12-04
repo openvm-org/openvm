@@ -351,7 +351,6 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
- "num-integer",
  "num-traits",
  "p3-air",
  "p3-baby-bear",
@@ -367,7 +366,6 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "parking_lot",
  "rand 0.8.5",
  "test-case",
  "tracing",
@@ -531,8 +529,6 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-algebra-moduli-setup",
- "axvm-ecc-sw-setup",
  "axvm-platform",
  "axvm-rv32im-guest",
  "chrono",
@@ -676,13 +672,9 @@ dependencies = [
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "p3-keccak-air",
- "parking_lot",
  "rand 0.8.5",
- "strum",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -757,18 +749,14 @@ dependencies = [
  "derivative",
  "derive-new",
  "derive_more 1.0.0",
- "enum-utils",
  "eyre",
  "getset",
  "halo2curves-axiom 0.7.0",
  "hex",
- "hex-literal",
  "inferno",
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
- "num-bigint-dig",
- "num-traits",
  "once_cell",
  "p3-air",
  "p3-baby-bear",
@@ -778,7 +766,6 @@ dependencies = [
  "p3-fri",
  "p3-goldilocks",
  "p3-keccak",
- "p3-keccak-air",
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-merkle-tree",
@@ -790,12 +777,9 @@ dependencies = [
  "rustc-hash 2.1.0",
  "serde",
  "static_assertions",
- "strum",
- "strum_macros",
  "test-case",
  "test-log",
  "thiserror",
- "tiny-keccak",
  "toml",
  "tracing",
  "zkhash",
@@ -944,7 +928,6 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "p3-keccak-air",
- "parking_lot",
  "rand 0.8.5",
  "strum",
  "test-case",
@@ -995,25 +978,19 @@ dependencies = [
  "axvm-circuit-derive",
  "axvm-instructions",
  "axvm-native-compiler",
- "axvm-native-compiler-derive",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
  "hex",
- "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "p3-baby-bear",
- "p3-field",
- "p3-symmetric",
  "parking_lot",
  "rand 0.8.5",
  "serde",
  "strum",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -1026,12 +1003,14 @@ dependencies = [
  "axvm-circuit",
  "axvm-instructions",
  "axvm-instructions-derive",
+ "axvm-native-circuit",
  "axvm-native-compiler-derive",
  "axvm-rv32im-transpiler",
  "backtrace",
  "cfg-if",
  "hex",
  "itertools 0.13.0",
+ "lazy_static",
  "metrics",
  "num-bigint 0.4.6",
  "num-bigint-dig",
@@ -1050,6 +1029,8 @@ dependencies = [
  "snark-verifier-sdk",
  "strum",
  "strum_macros",
+ "test-case",
+ "test-log",
  "tracing",
  "zkhash",
 ]
@@ -1083,9 +1064,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
- "num-bigint-dig",
  "once_cell",
- "p3-air",
  "p3-baby-bear",
  "p3-bn254-fr",
  "p3-challenger",
@@ -1094,9 +1073,7 @@ dependencies = [
  "p3-field",
  "p3-fri",
  "p3-matrix",
- "p3-maybe-rayon",
  "p3-merkle-tree",
- "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
  "rand 0.8.5",
@@ -1179,7 +1156,6 @@ dependencies = [
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
- "axvm-algebra-moduli-setup",
  "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
@@ -1199,23 +1175,15 @@ dependencies = [
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
- "axvm-circuit-derive",
  "axvm-instructions",
  "axvm-rv32im-circuit",
  "derive-new",
- "derive_more 1.0.0",
- "eyre",
  "hex",
- "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "num-traits",
- "parking_lot",
  "rand 0.8.5",
- "strum",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -1273,7 +1241,6 @@ name = "axvm-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ax-poseidon2-air",
  "ax-stark-sdk",
  "axvm-build",
  "axvm-circuit",
@@ -1335,8 +1302,6 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-algebra-transpiler",
  "axvm-build",
@@ -2266,30 +2231,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
 
 [[package]]
-name = "enum-utils"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed327f716d0d351d86c9fd3398d20ee39ad8f681873cc081da2ca1c10fed398a"
-dependencies = [
- "enum-utils-from-str",
- "failure",
- "proc-macro2",
- "quote",
- "serde_derive_internals",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "enum-utils-from-str"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d49be08bad6e4ca87b2b8e74146987d4e5cb3b7512efa50ef505b51a22227ee1"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
 name = "enumn"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2368,15 +2309,6 @@ checksum = "7cd915d99f24784cdc19fd37ef22b97e3ff0ae756c7e492e9fbfe897d61e2aec"
 dependencies = [
  "indenter",
  "once_cell",
-]
-
-[[package]]
-name = "failure"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32e9bd16cc02eae7db7ef620b392808b89f6a5e16bb3497d159c6b92a0f4f86"
-dependencies = [
- "backtrace",
 ]
 
 [[package]]
@@ -4844,17 +4776,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.90",
-]
-
-[[package]]
-name = "serde_derive_internals"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dbab34ca63057a1f15280bdf3c39f2b1eb1b54c17e98360e511637aef7418c6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

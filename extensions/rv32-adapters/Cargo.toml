@@ -12,20 +12,12 @@ ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-instructions = { workspace = true } 
+axvm-instructions = { workspace = true }
 
-parking_lot.workspace = true
-strum.workspace = true
-tiny-keccak.workspace = true
-hex-literal.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 derive-new.workspace = true
-derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
-eyre.workspace = true
-num-traits.workspace = true
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }

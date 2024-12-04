@@ -2,12 +2,9 @@ use std::sync::Arc;
 
 use ax_circuit_primitives::{var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator};
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+use axvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
+    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
@@ -15,7 +12,10 @@ use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
 
-use crate::{FieldExpr, FieldExprCols};
+use crate::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    FieldExpr, FieldExprCols,
+};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {

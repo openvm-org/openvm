@@ -84,14 +84,11 @@ mod tests {
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
     use ax_mod_circuit_builder::{
-        test_utils::{bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
+        test_utils::{biguint_to_limbs, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
         ExprBuilderConfig,
     };
     use axvm_algebra_transpiler::Fp2Opcode;
-    use axvm_circuit::{
-        arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        utils::biguint_to_limbs,
-    };
+    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use axvm_ecc_constants::BN254;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};

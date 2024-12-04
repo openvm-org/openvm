@@ -12,9 +12,7 @@ axvm-platform = { workspace = true, features = [
     "rust-runtime",
     "export-getrandom",
 ] }
-axvm-rv32im-guest = { workspace = true }    
-axvm-algebra-moduli-setup = { workspace = true }
-axvm-ecc-sw-setup = { workspace = true }
+axvm-rv32im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
 

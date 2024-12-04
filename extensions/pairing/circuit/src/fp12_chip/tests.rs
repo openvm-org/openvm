@@ -4,15 +4,14 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::{
-    test_utils::{bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec},
+    test_utils::{
+        biguint_to_limbs, bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec,
+    },
     ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::{
-    arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
-    utils::biguint_to_limbs,
-};
+use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};

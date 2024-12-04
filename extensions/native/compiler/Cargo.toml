@@ -37,13 +37,18 @@ cfg-if = { workspace = true }
 strum = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4.3"
 p3-challenger = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
-rand = "0.8.5"
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-native-circuit = { workspace = true }
+ax-stark-sdk = { workspace = true }
+hex.workspace = true
+rand.workspace = true
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
 
 [features]
 default = ["parallel", "halo2-compiler"]

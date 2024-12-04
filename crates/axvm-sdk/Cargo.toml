@@ -13,7 +13,6 @@ axvm-native-compiler = { workspace = true }
 axvm-native-recursion = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
 axvm-transpiler = { workspace = true }
-ax-poseidon2-air = { workspace = true }
 ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
 axvm-circuit = { workspace = true }

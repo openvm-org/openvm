@@ -5,16 +5,14 @@ use ax_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use ax_mod_circuit_builder::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr,
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
 use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use axvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+use axvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
+    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use axvm_instructions::{instruction::Instruction, UsizeOpcode};
 use itertools::Itertools;

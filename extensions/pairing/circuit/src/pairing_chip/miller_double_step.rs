@@ -88,13 +88,12 @@ mod tests {
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
     use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
-    use ax_mod_circuit_builder::test_utils::{bls12381_fq_to_biguint, bn254_fq_to_biguint};
+    use ax_mod_circuit_builder::test_utils::{
+        biguint_to_limbs, bls12381_fq_to_biguint, bn254_fq_to_biguint,
+    };
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::{
-        arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
-        utils::biguint_to_limbs,
-    };
+    use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
