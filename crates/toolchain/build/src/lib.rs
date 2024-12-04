@@ -21,7 +21,7 @@ pub use self::config::{DockerOptions, GuestOptions};
 mod config;
 
 #[allow(dead_code)]
-const RUSTUP_TOOLCHAIN_NAME: &str = "axiom";
+const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
