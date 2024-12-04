@@ -580,6 +580,7 @@ name = "axvm-algebra-guest"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm",
  "axvm-algebra-moduli-setup",
  "axvm-platform",
  "halo2curves-axiom 0.7.0",

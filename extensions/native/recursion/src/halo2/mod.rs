@@ -5,7 +5,7 @@ pub mod testing_utils;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt::Debug, fs::File};
+use std::fmt::Debug;
 
 use axvm_native_compiler::{
     constraints::halo2::compiler::{Halo2ConstraintCompiler, Halo2State},
@@ -67,6 +67,7 @@ impl Halo2Prover {
         builder: BaseCircuitBuilder<Fr>,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
+        #[allow(unused_variables)] collect_metrics: bool,
     ) -> BaseCircuitBuilder<Fr> {
         let mut state = Halo2State {
             builder,
@@ -75,6 +76,12 @@ impl Halo2Prover {
         state.load_witness(witness);
 
         let backend = Halo2ConstraintCompiler::<C>::new(dsl_operations.num_public_values);
+        #[cfg(feature = "bench-metrics")]
+        let backend = if collect_metrics {
+            backend.with_collect_metrics()
+        } else {
+            backend
+        };
         backend.constrain_halo2(&mut state, dsl_operations.operations);
 
         state.builder
@@ -91,7 +98,7 @@ impl Halo2Prover {
         witness: Witness<C>,
     ) -> Vec<Vec<Fr>> {
         let builder = Self::builder(CircuitBuilderStage::Mock, k);
-        let mut builder = Self::populate(builder, dsl_operations, witness);
+        let mut builder = Self::populate(builder, dsl_operations, witness, true);
 
         let public_instances = builder.instances();
         println!("Public instances: {:?}", public_instances);
@@ -113,7 +120,7 @@ impl Halo2Prover {
         witness: Witness<C>,
     ) -> Halo2ProvingPinning {
         let builder = Self::builder(CircuitBuilderStage::Keygen, k);
-        let mut builder = Self::populate(builder, dsl_operations, witness);
+        let mut builder = Self::populate(builder, dsl_operations, witness, true);
         builder.calculate_params(Some(20));
 
         let params = read_params(k as u32);
@@ -141,8 +148,8 @@ impl Halo2Prover {
             .map(|x| x.len())
             .collect_vec();
 
-        let file = File::create("halo2_final.json").unwrap();
-        serde_json::to_writer(file, &break_points).unwrap();
+        // let file = File::create("halo2_final.json").unwrap();
+        // serde_json::to_writer(file, &break_points).unwrap();
         Halo2ProvingPinning {
             pk,
             config_params,
@@ -161,10 +168,13 @@ impl Halo2Prover {
         witness: Witness<C>,
     ) -> Snark {
         let k = config_params.k;
+        let params = read_params(k as u32);
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
-        let builder = Self::populate(builder, dsl_operations, witness);
+        let builder = Self::populate(builder, dsl_operations, witness, false);
         #[cfg(feature = "bench-metrics")]
         {
             let stats = builder.statistics();
@@ -173,12 +183,6 @@ impl Halo2Prover {
             let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
             metrics::gauge!("halo2_total_cells").set(total_cell as f64);
         }
-
-        let params = read_params(k as u32);
-
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-
         let snark = gen_snark_shplonk(&params, pk, builder, None::<&str>);
 
         #[cfg(feature = "bench-metrics")]

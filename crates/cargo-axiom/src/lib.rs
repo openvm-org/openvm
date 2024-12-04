@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 
 use eyre::{Context, Result};
 
-pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly";
+pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 pub const AXVM_VERSION_MESSAGE: &str = concat!(
     "axvm",
