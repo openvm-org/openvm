@@ -1,3 +1,14 @@
+mod curve;
+mod final_exp;
+mod line;
+mod miller_loop;
+
+pub use curve::*;
+pub use line::*;
+
+#[cfg(test)]
+mod tests;
+
 use axvm_algebra_guest::field::{Field, FieldExtension};
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;

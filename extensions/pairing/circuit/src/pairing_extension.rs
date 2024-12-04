@@ -336,7 +336,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
 pub(crate) mod phantom {
     use std::collections::VecDeque;
 
-    use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
     use ax_stark_backend::p3_field::PrimeField32;
     use axvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -401,6 +400,7 @@ pub(crate) mod phantom {
         match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
                 use axvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
+                use axvm_pairing_guest::halo2curves_shims::bn254::Bn254;
                 const N: usize = 32;
                 debug_assert_eq!(BN254.NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {
@@ -443,6 +443,7 @@ pub(crate) mod phantom {
             }
             Some(PairingCurve::Bls12_381) => {
                 use axvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
+                use axvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
                 const N: usize = 48;
                 debug_assert_eq!(BLS12381.NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {

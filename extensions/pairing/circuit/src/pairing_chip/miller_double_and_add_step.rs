@@ -101,7 +101,6 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_execution::curves::bn254::Bn254;
     use ax_mod_circuit_builder::test_utils::{biguint_to_limbs, bn254_fq_to_biguint};
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
@@ -109,7 +108,7 @@ mod tests {
     use axvm_ecc_constants::BN254;
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::pairing::MillerStep;
+    use axvm_pairing_guest::{bn254::Bn254, pairing::MillerStep};
     use axvm_pairing_transpiler::PairingOpcode;
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::bn256::G2Affine;

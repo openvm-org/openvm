@@ -1,19 +1,21 @@
+use alloc::vec::Vec;
+
 use axvm_ecc_guest::{
-    algebra::{DivUnsafe, Field},
+    algebra::{field::FieldExtension, DivUnsafe, Field},
     AffinePoint,
 };
-use axvm_pairing_guest::{
-    bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
-    pairing::{
-        Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
-    },
-};
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2};
 use itertools::izip;
 
-use super::Bls12_381;
+use super::Bn254;
+use crate::{
+    bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
+    pairing::{
+        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
+    },
+};
 
-impl MillerStep for Bls12_381 {
+impl MillerStep for Bn254 {
     type Fp2 = Fq2;
 
     /// Miller double step
@@ -122,23 +124,23 @@ impl MillerStep for Bls12_381 {
 }
 
 #[allow(non_snake_case)]
-impl MultiMillerLoop for Bls12_381 {
+impl MultiMillerLoop for Bn254 {
     type Fp = Fq;
     type Fp12 = Fq12;
 
-    const SEED_ABS: u64 = BLS12_381_SEED_ABS;
-    const PSEUDO_BINARY_ENCODING: &[i8] = &BLS12_381_PSEUDO_BINARY_ENCODING;
+    const SEED_ABS: u64 = BN254_SEED;
+    const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PSEUDO_BINARY_ENCODING;
 
     fn evaluate_lines_vec(f: Fq12, lines: Vec<EvaluatedLine<Fq2>>) -> Fq12 {
         let mut f = f;
         let mut lines = lines;
         if lines.len() % 2 == 1 {
-            f = Self::mul_by_023(&f, &lines.pop().unwrap());
+            f = Self::mul_by_013(&f, &lines.pop().unwrap());
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
-                let prod = Self::mul_023_by_023(line0, line1);
-                f = Self::mul_by_02345(&f, &prod);
+                let prod = Self::mul_013_by_013(line0, line1);
+                f = Self::mul_by_01234(&f, &prod);
             } else {
                 panic!("lines.len() % 2 should be 0 at this point");
             }
@@ -146,54 +148,31 @@ impl MultiMillerLoop for Bls12_381 {
         f
     }
 
-    /// The expected output of this function when running the Miller loop with embedded exponent is c^3 * l_{3Q}
     fn pre_loop(
         Q_acc: Vec<AffinePoint<Fq2>>,
-        Q: &[AffinePoint<Fq2>],
+        _Q: &[AffinePoint<Fq2>],
         c: Option<Fq12>,
         xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
         let mut f = if let Some(mut c) = c {
-            // for the miller loop with embedded exponent, f will be set to c at the beginning of the function, and we
-            // will multiply by c again due to the last two values of the pseudo-binary encoding (BN12_381_PBE) being 1.
-            // Therefore, the final value of f at the end of this block is c^3.
-            let mut c3 = c;
             c.square_assign();
-            c3 *= &c;
-            c3
+            c
         } else {
             Self::Fp12::ONE
         };
 
         let mut Q_acc = Q_acc;
+        let mut initial_lines = Vec::<EvaluatedLine<Fq2>>::new();
 
-        // Special case the first iteration of the Miller loop with pseudo_binary_encoding = 1:
-        // this means that the first step is a double and add, but we need to separate the two steps since the optimized
-        // `miller_double_and_add_step` will fail because Q_acc is equal to Q_signed on the first iteration
         let (Q_out_double, lines_2S) = Q_acc
             .into_iter()
             .map(|Q| Self::miller_double_step(&Q))
             .unzip::<_, _, Vec<_>, Vec<_>>();
         Q_acc = Q_out_double;
 
-        let mut initial_lines = Vec::<EvaluatedLine<Fq2>>::new();
-
         let lines_iter = izip!(lines_2S.iter(), xy_fracs.iter());
         for (line_2S, xy_frac) in lines_iter {
             let line = line_2S.evaluate(xy_frac);
-            initial_lines.push(line);
-        }
-
-        let (Q_out_add, lines_S_plus_Q) = Q_acc
-            .iter()
-            .zip(Q.iter())
-            .map(|(Q_acc, Q)| Self::miller_add_step(Q_acc, Q))
-            .unzip::<_, _, Vec<_>, Vec<_>>();
-        Q_acc = Q_out_add;
-
-        let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
-        for (lines_S_plus_Q, xy_frac) in lines_iter {
-            let line = lines_S_plus_Q.evaluate(xy_frac);
             initial_lines.push(line);
         }
 
@@ -202,21 +181,67 @@ impl MultiMillerLoop for Bls12_381 {
         (f, Q_acc)
     }
 
-    /// After running the main body of the Miller loop, we conjugate f due to the curve seed x being negative.
     fn post_loop(
         f: &Fq12,
         Q_acc: Vec<AffinePoint<Fq2>>,
-        _Q: &[AffinePoint<Fq2>],
+        Q: &[AffinePoint<Fq2>],
         _c: Option<Fq12>,
-        _xy_fracs: &[(Fq, Fq)],
+        xy_fracs: &[(Fq, Fq)],
     ) -> (Fq12, Vec<AffinePoint<Fq2>>) {
-        // Conjugate for negative component of the seed
-        // Explanation:
-        // The general Miller loop formula implies that f_{-x} = 1/f_x. To avoid an inversion, we use the fact that
-        // for the final exponentiation, we only need the Miller loop result up to multiplication by some proper subfield
-        // of Fp12. Using the fact that Fp12 is a quadratic extension of Fp6, we have that f_x * conjugate(f_x) * 1/f_x lies in Fp6.
-        // Therefore we conjugate f_x instead of taking the inverse.
-        let f = f.conjugate();
+        let mut Q_acc = Q_acc;
+        let mut lines = Vec::<EvaluatedLine<Fq2>>::new();
+
+        let x_to_q_minus_1_over_3 = FROBENIUS_COEFF_FQ6_C1[1];
+        let x_to_q_sq_minus_1_over_3 = FROBENIUS_COEFF_FQ6_C1[2];
+        let q1_vec = Q
+            .iter()
+            .map(|Q| {
+                let x = Q.x.frobenius_map(1);
+                let x = x * x_to_q_minus_1_over_3;
+                let y = Q.y.frobenius_map(1);
+                let y = y * XI_TO_Q_MINUS_1_OVER_2;
+                AffinePoint { x, y }
+            })
+            .collect::<Vec<_>>();
+
+        let (Q_out_add, lines_S_plus_Q) = Q_acc
+            .iter()
+            .zip(q1_vec.iter())
+            .map(|(Q_acc, q1)| Self::miller_add_step(Q_acc, q1))
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        Q_acc = Q_out_add;
+
+        let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
+            lines.push(line);
+        }
+
+        let q2_vec = Q
+            .iter()
+            .map(|Q| {
+                // There is a frobenius mapping π²(Q) that we skip here since it is equivalent to the identity mapping
+                let x = Q.x * x_to_q_sq_minus_1_over_3;
+                AffinePoint { x, y: Q.y }
+            })
+            .collect::<Vec<_>>();
+
+        let (Q_out_add, lines_S_plus_Q) = Q_acc
+            .iter()
+            .zip(q2_vec.iter())
+            .map(|(Q_acc, q2)| Self::miller_add_step(Q_acc, q2))
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        Q_acc = Q_out_add;
+
+        let lines_iter = izip!(lines_S_plus_Q.iter(), xy_fracs.iter());
+        for (lines_S_plus_Q, xy_frac) in lines_iter {
+            let line = lines_S_plus_Q.evaluate(xy_frac);
+            lines.push(line);
+        }
+
+        let mut f = *f;
+        f = Self::evaluate_lines_vec(f, lines);
+
         (f, Q_acc)
     }
 }

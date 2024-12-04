@@ -87,7 +87,6 @@ mod tests {
     use ax_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_execution::curves::{bls12_381::Bls12_381, bn254::Bn254};
     use ax_mod_circuit_builder::test_utils::{
         biguint_to_limbs, bls12381_fq_to_biguint, bn254_fq_to_biguint,
     };
@@ -97,7 +96,7 @@ mod tests {
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::pairing::MillerStep;
+    use axvm_pairing_guest::{bls12_381::Bls12_381, bn254::Bn254, pairing::MillerStep};
     use axvm_pairing_transpiler::PairingOpcode;
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use rand::{rngs::StdRng, SeedableRng};

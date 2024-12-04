@@ -28,6 +28,11 @@ group = "0.13.0"
 num-bigint-dig.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
+lazy_static.workspace = true
+axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+subtle = "2.6.1"
 
 [features]
 default = []

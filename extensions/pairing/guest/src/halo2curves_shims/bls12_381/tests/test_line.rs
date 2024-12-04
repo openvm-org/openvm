@@ -1,12 +1,14 @@
 use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use axvm_pairing_guest::pairing::{FromLineMType, LineMulMType};
 use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::curves::bls12_381::{tangent_line_023, Bls12_381};
+use crate::{
+    halo2curves_shims::bls12_381::{tangent_line_023, Bls12_381},
+    pairing::{FromLineMType, LineMulMType},
+};
 
 #[test]
 fn test_mul_023_by_023() {

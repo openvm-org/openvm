@@ -1,13 +1,15 @@
+extern crate std;
+
 use std::ops::{Add, Mul, Neg, Sub};
 
 use axvm_ecc_guest::{
     algebra::{field::FieldExtension, Field},
     AffinePoint,
 };
-use axvm_pairing_guest::pairing::{EvaluatedLine, LineMulDType};
 use halo2curves_axiom::bn256::{Fq12, Fq2};
 
 use super::{Bn254, BN254_XI};
+use crate::pairing::{EvaluatedLine, LineMulDType};
 
 impl LineMulDType<Fq2, Fq12> for Bn254 {
     /// Multiplies two lines in 013-form to get an element in 01234-form

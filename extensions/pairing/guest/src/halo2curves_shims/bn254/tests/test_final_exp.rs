@@ -1,14 +1,16 @@
+use alloc::vec::Vec;
+
 use axvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
-use axvm_pairing_guest::{
-    affine_point::AffineCoords,
-    pairing::{FinalExp, MultiMillerLoop},
-};
 use halo2curves_axiom::bn256::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Num;
 
-use crate::curves::bn254::Bn254;
+use crate::{
+    affine_point::AffineCoords,
+    halo2curves_shims::bn254::Bn254,
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 #[test]
 #[allow(non_snake_case)]
@@ -48,7 +50,7 @@ fn test_bn254_assert_final_exp_is_one_scalar1() {
 #[allow(non_snake_case)]
 fn assert_final_exp_one<const N: usize>(a: &[i32; N], b: &[i32; N]) {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) = generate_test_points_generator_scalar::<N>(a, b);
-    let f = Bn254::multi_miller_loop(&P_ecpoints, &Q_ecpoints);
+    let f = Bn254::multi_miller_loop(&P_ecpoints.as_slice(), &Q_ecpoints.as_slice());
     Bn254::assert_final_exp_is_one(&f, &P_ecpoints, &Q_ecpoints);
 }
 
@@ -68,8 +70,8 @@ pub fn generate_test_points_generator_scalar<const N: usize>(
     Vec<AffinePoint<Fq2>>,
 ) {
     assert!(N % 2 == 0, "Must have even number of P and Q scalars");
-    let mut P_vec: Vec<G1Affine> = vec![];
-    let mut Q_vec: Vec<G2Affine> = vec![];
+    let mut P_vec: Vec<G1Affine> = Vec::new();
+    let mut Q_vec: Vec<G2Affine> = Vec::new();
     for i in 0..N {
         let s_a = Fr::from(a[i].unsigned_abs() as u64);
         let p = G1Affine::generator() * s_a;

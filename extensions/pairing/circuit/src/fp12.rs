@@ -203,7 +203,6 @@ impl Fp12 {
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
-    use ax_ecc_execution::axvm_ecc_guest::algebra::field::FieldExtension;
     use ax_mod_circuit_builder::{test_utils::*, *};
     use ax_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
@@ -213,6 +212,7 @@ mod tests {
         p3_baby_bear::BabyBear, utils::create_seeded_rng,
     };
     use axvm_ecc_constants::BN254;
+    use axvm_ecc_guest::algebra::field::FieldExtension;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
 
     use super::*;

@@ -9,7 +9,6 @@ description = "Tests for the axVM toolchain starting from Rust"
 
 [dependencies]
 ax-circuit-derive.workspace = true
-ax-ecc-execution.workspace = true
 ax-stark-backend.workspace = true
 ax-stark-sdk.workspace = true
 axvm-circuit = { workspace = true, features = ["test-utils"] }

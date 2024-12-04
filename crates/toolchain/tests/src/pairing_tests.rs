@@ -1,13 +1,11 @@
 #![allow(non_snake_case)]
 
-use ax_ecc_execution::axvm_ecc_guest::{
-    algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint,
-};
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_constants::{BLS12381, BN254};
+use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -20,15 +18,12 @@ type F = BabyBear;
 mod bn254 {
     use std::iter;
 
-    use ax_ecc_execution::{
-        axvm_ecc_guest::halo2curves::{
-            bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            ff::Field,
-        },
-        curves::bn254::Bn254,
-    };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use axvm_pairing_guest::{affine_point::AffineCoords, pairing::MillerStep};
+    use axvm_ecc_guest::halo2curves::{
+        bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        ff::Field,
+    };
+    use axvm_pairing_guest::{affine_point::AffineCoords, bn254::Bn254, pairing::MillerStep};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -284,16 +279,13 @@ mod bn254 {
 }
 
 mod bls12_381 {
-    use ax_ecc_execution::{
         axvm_ecc_guest::{
             halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
             AffinePoint,
-        },
-        curves::bls12_381::Bls12_381,
     };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use axvm_ecc_guest::algebra::IntMod;
-    use axvm_pairing_guest::pairing::{LineMulMType, MillerStep};
+    use axvm_pairing_guest::{bls12_381::Bls12_381, pairing::{LineMulMType, MillerStep}};
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,

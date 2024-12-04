@@ -3,7 +3,6 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::curves::bn254::{tangent_line_013, Bn254};
 use ax_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint,
@@ -16,7 +15,10 @@ use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_constants::BN254;
 use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-use axvm_pairing_guest::pairing::{Evaluatable, LineMulDType, UnevaluatedLine};
+use axvm_pairing_guest::{
+    bn254::{tangent_line_013, Bn254},
+    pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
+};
 use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,

@@ -1,12 +1,16 @@
+use alloc::vec::Vec;
+
 use axvm_ecc_guest::{algebra::Field, AffinePoint};
-use axvm_pairing_guest::pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop};
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
 };
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
-use crate::{curves::bls12_381::Bls12_381, tests::utils::generate_test_points};
+use crate::{
+    halo2curves_shims::{bls12_381::Bls12_381, tests::utils::generate_test_points},
+    pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop},
+};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {

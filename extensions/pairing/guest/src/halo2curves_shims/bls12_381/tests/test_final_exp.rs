@@ -1,11 +1,15 @@
+use alloc::vec::Vec;
+
 use axvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
-use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Num;
 
-use crate::curves::bls12_381::{Bls12_381, SEED_NEG};
+use crate::{
+    halo2curves_shims::bls12_381::{Bls12_381, SEED_NEG},
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 #[test]
 #[allow(non_snake_case)]
@@ -55,8 +59,8 @@ fn generate_test_points_bls12_381(
     Vec<AffinePoint<Fq>>,
     Vec<AffinePoint<Fq2>>,
 ) {
-    let mut P_vec = vec![];
-    let mut Q_vec = vec![];
+    let mut P_vec = Vec::new();
+    let mut Q_vec = Vec::new();
     for i in 0..2 {
         let p = G1Affine::generator() * a[i];
         let mut p = G1Affine::from(p);

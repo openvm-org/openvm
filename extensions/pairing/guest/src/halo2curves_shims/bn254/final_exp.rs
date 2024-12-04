@@ -1,11 +1,11 @@
 use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
+use crate::pairing::{FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp for Bn254 {

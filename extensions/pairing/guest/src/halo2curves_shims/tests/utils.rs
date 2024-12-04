@@ -1,8 +1,11 @@
+use alloc::vec::Vec;
+
+use axvm_algebra_guest::Field;
 use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use axvm_pairing_guest::affine_point::AffineCoords;
-use ff::Field;
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
+
+use crate::affine_point::AffineCoords;
 
 /// Generates a set of random G1 and G2 points from a random seed and outputs the vectors of P and Q points as well as
 /// the corresponding P and Q EcPoint structs.

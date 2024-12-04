@@ -2,11 +2,11 @@ use axvm_ecc_guest::{
     algebra::{ExpBytes, Field},
     AffinePoint,
 };
-use axvm_pairing_guest::pairing::{FinalExp, MultiMillerLoop};
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use num_bigint::BigUint;
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
+use crate::pairing::{FinalExp, MultiMillerLoop};
 
 #[allow(non_snake_case)]
 impl FinalExp for Bls12_381 {

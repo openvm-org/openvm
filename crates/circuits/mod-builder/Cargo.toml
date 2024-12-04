@@ -17,7 +17,7 @@ ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
 axvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
-ax-ecc-execution = { workspace = true, optional = true }
+axvm-pairing-guest = { workspace = true, optional = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true
@@ -31,11 +31,11 @@ ax-circuit-primitives = { workspace = true }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 lazy_static.workspace = true
-ax-ecc-execution = { workspace = true }
+axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 axvm-ecc-constants = { workspace = true }
 halo2curves-axiom = { workspace = true }
 
 [features]
 default = []
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:halo2curves-axiom", "dep:ax-ecc-execution"]
+test-utils = ["dep:halo2curves-axiom", "dep:axvm-pairing-guest"]
