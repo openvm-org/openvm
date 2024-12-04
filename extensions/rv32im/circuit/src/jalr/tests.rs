@@ -13,7 +13,7 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS, AxVmOpcode, UsizeOpcode};
 use axvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
@@ -58,7 +58,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         Instruction::from_usize(
-            opcode as usize + Rv32JalrOpcode::default_offset(),
+            AxVmOpcode::with_default_offset(opcode),
             [a, b, imm as usize, 1, 0, (a != 0) as usize, 0],
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),

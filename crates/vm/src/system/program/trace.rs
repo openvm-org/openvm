@@ -8,7 +8,7 @@ use ax_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{exe::AxVmExe, program::Program, SystemOpcode, UsizeOpcode};
+use axvm_instructions::{exe::AxVmExe, program::Program, AxVmOpcode, SystemOpcode};
 use derivative::Derivative;
 use itertools::Itertools;
 use p3_field::{Field, PrimeField64};
@@ -124,7 +124,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
 
 pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
     Instruction::from_usize(
-        SystemOpcode::TERMINATE.with_default_offset(),
+        AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE),
         [0, 0, EXIT_CODE_FAIL],
     )
 }

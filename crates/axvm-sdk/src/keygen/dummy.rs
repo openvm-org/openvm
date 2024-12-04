@@ -13,8 +13,8 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         instructions::{
-            exe::AxVmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
-            UsizeOpcode,
+            exe::AxVmExe, instruction::Instruction, program::Program, AxVmOpcode,
+            SystemOpcode::TERMINATE,
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
@@ -207,7 +207,7 @@ fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<AxVmCommittedExe<SC
 
 fn dummy_app_program() -> Program<F> {
     let mut ret = Program::from_instructions(&[Instruction::from_isize(
-        TERMINATE.with_default_offset(),
+        AxVmOpcode::with_default_offset(TERMINATE),
         0,
         0,
         0,

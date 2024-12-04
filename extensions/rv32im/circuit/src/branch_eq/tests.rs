@@ -54,7 +54,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
     tester.execute_with_pc(
         chip,
         Instruction::from_isize(
-            opcode as usize,
+            AxVmOpcode::from_canonical_usize(opcode as usize),
             rs1 as isize,
             rs2 as isize,
             imm as isize,
@@ -145,7 +145,10 @@ fn run_rv32_beq_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(opcode as usize, [0, 0, imm as usize, 1, 1]),
+        Instruction::from_usize(
+            AxVmOpcode::from_canonical_usize(opcode as usize),
+            [0, 0, imm as usize, 1, 1],
+        ),
     );
 
     let trace_width = chip.trace_width();

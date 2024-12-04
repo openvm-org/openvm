@@ -22,9 +22,16 @@ pub struct Instruction<F> {
 
 impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_isize(opcode: usize, a: isize, b: isize, c: isize, d: isize, e: isize) -> Self {
+    pub fn from_isize(
+        opcode: AxVmOpcode,
+        a: isize,
+        b: isize,
+        c: isize,
+        d: isize,
+        e: isize,
+    ) -> Self {
         Self {
-            opcode: AxVmOpcode(opcode),
+            opcode,
             a: isize_to_field::<F>(a),
             b: isize_to_field::<F>(b),
             c: isize_to_field::<F>(c),
@@ -35,11 +42,11 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
+    pub fn from_usize<const N: usize>(opcode: AxVmOpcode, operands: [usize; N]) -> Self {
         let mut operands = operands.map(F::from_canonical_usize).to_vec();
         operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
-            opcode: AxVmOpcode(opcode),
+            opcode,
             a: operands[0],
             b: operands[1],
             c: operands[2],
@@ -52,7 +59,7 @@ impl<F: Field> Instruction<F> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
-        opcode: usize,
+        opcode: AxVmOpcode,
         a: isize,
         b: isize,
         c: isize,
@@ -62,7 +69,7 @@ impl<F: Field> Instruction<F> {
         g: isize,
     ) -> Self {
         Self {
-            opcode: AxVmOpcode(opcode),
+            opcode,
             a: isize_to_field::<F>(a),
             b: isize_to_field::<F>(b),
             c: isize_to_field::<F>(c),
@@ -95,7 +102,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: AxVmOpcode(0), // there is no real default opcode, this field must always be set
+            opcode: AxVmOpcode::from_canonical_usize(0), // there is no real default opcode, this field must always be set
             a: T::default(),
             b: T::default(),
             c: T::default(),

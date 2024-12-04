@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, UsizeOpcode};
 use axvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
@@ -199,7 +199,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         Instruction::from_usize(
-            opcode as usize + NativeLoadStoreOpcode::default_offset(),
+            AxVmOpcode::with_default_offset(opcode),
             [data.a, data.b, data.c, data.d, data.e, data.f, data.g]
                 .map(|x| x.as_canonical_u32() as usize),
         ),

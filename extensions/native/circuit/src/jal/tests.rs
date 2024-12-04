@@ -13,7 +13,7 @@ use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use axvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode,
+    AxVmOpcode, UsizeOpcode,
 };
 use axvm_native_compiler::NativeJalOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
@@ -38,7 +38,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         Instruction::from_usize(
-            JAL as usize + NativeJalOpcode::default_offset(),
+            AxVmOpcode::with_default_offset(JAL),
             [a, imm as usize, 0, d, 0, 0, 0],
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
