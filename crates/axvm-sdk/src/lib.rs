@@ -119,10 +119,13 @@ impl Sdk {
         output_path: Option<P>,
     ) -> Result<(AggConfig, AggProvingKey)> {
         let agg_pk: AggProvingKey = AggProvingKey::keygen(config);
+        println!("0");
         if let Some(output_path) = output_path {
+            println!("1");
             if let Some(parent) = output_path.as_ref().parent() {
                 create_dir_all(parent)?;
             }
+            println!("2");
             let json = serde_json::to_string(&agg_pk)?;
             println!("agg_pk: {}", json);
             if write(output_path, json).is_err() {
