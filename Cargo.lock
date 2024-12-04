@@ -575,6 +575,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axvm-algebra-complex-macros"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
 name = "axvm-algebra-guest"
 version = "0.1.0"
 dependencies = [
@@ -1119,6 +1128,7 @@ name = "axvm-pairing-guest"
 version = "0.1.0"
 dependencies = [
  "axvm",
+ "axvm-algebra-complex-macros",
  "axvm-algebra-guest",
  "axvm-algebra-moduli-setup",
  "axvm-ecc-guest",

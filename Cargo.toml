@@ -116,6 +116,7 @@ axvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features =
 axvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
 axvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 axvm-algebra-moduli-setup = { path = "extensions/algebra/moduli-setup", default-features = false }
+axvm-algebra-complex-macros = { path = "extensions/algebra/guest/src/field/complex-macros", default-features = false }
 axvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 axvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
 axvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }

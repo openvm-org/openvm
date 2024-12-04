@@ -1,13 +1,8 @@
+use alloc::vec::Vec;
 use core::{
     fmt::Debug,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
-
-/// Complex quadratic extension of any ring.
-mod complex;
-use alloc::vec::Vec;
-
-pub use complex::*;
 
 use crate::{DivAssignUnsafe, DivUnsafe};
 
