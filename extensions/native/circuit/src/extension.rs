@@ -4,7 +4,8 @@ use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        SystemPort, VmChipComplex, VmConfig, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
@@ -94,9 +95,12 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<NativeExecutor<F>, NativePeriphery<F>>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+            ..
+        } = builder.system_port();
 
         let mut load_store_chip = KernelLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
