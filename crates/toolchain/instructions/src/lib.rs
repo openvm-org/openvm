@@ -2,7 +2,9 @@
 
 #![allow(non_camel_case_types)]
 
+use ax_stark_backend::p3_field::Field;
 use axvm_instructions_derive::UsizeOpcode;
+use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod exe;
@@ -24,6 +26,42 @@ pub trait UsizeOpcode {
 
     fn with_default_offset(&self) -> usize {
         self.as_usize() + Self::default_offset()
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
+pub struct AxVmOpcode(usize);
+
+impl AxVmOpcode {
+    /// Returns the opcode without the offset.
+    pub fn remove_offset(&self, offset: usize) -> usize {
+        self.0 - offset
+    }
+
+    /// Returns the opcode as a canonical usize.
+    pub fn as_canonical_usize(&self) -> usize {
+        self.0
+    }
+
+    /// Create a new [AxVmOpcode] from a canonical usize.
+    pub fn from_canonical_usize(value: usize) -> Self {
+        Self(value)
+    }
+
+    /// Returns the corresponding [AxVmOpcode] from `opcode`.
+    pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> AxVmOpcode {
+        Self(opcode.with_default_offset())
+    }
+
+    /// Convert the AxVmOpcode into a field element.
+    pub fn to_field<F: Field>(&self) -> F {
+        F::from_canonical_usize(self.0)
+    }
+}
+
+impl std::fmt::Display for AxVmOpcode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

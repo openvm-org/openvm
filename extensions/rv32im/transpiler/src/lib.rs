@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
-    UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
+    SystemOpcode, UsizeOpcode,
 };
 use axvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
@@ -62,7 +62,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
             (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
                 Some(Instruction {
-                    opcode: SystemOpcode::TERMINATE.with_default_offset(),
+                    opcode: AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE),
                     c: F::from_canonical_u8(
                         dec_insn.imm.try_into().expect("exit code must be byte"),
                     ),

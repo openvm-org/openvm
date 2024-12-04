@@ -15,8 +15,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
-    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode,
+    program::Program, AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode,
+    SystemOpcode, UsizeOpcode,
 };
 use derive_more::derive::From;
 use getset::Getters;
@@ -192,8 +192,6 @@ pub struct VmComplexTraceHeights {
 }
 
 type ExecutorId = usize;
-/// TODO: create newtype
-type AxVmOpcode = usize;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChipId {
@@ -523,7 +521,10 @@ impl<F: PrimeField32> SystemComplex<F> {
                 memory_controller.clone(),
             );
             inventory
-                .add_executor(chip, [PublishOpcode::default_offset()])
+                .add_executor(
+                    chip,
+                    [AxVmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
+                )
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -550,7 +551,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
+        let phantom_opcode = AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM);
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
             PROGRAM_BUS,

@@ -153,7 +153,7 @@ where
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_index = opcode.remove_offset(self.air.offset);
         let data: DynArray<_> = reads.into();
         let data = data.0;
         debug_assert_eq!(data.len(), 2 * num_limbs);

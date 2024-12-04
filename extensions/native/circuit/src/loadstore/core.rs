@@ -148,7 +148,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = *instruction;
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.remove_offset(self.air.offset));
         let (pointer_reads, data_read) = reads.into();
 
         let data_write = if local_opcode == NativeLoadStoreOpcode::SHINTW {
@@ -163,7 +163,7 @@ where
 
         let output = AdapterRuntimeContext::without_pc(data_write);
         let record = KernelLoadStoreCoreRecord {
-            opcode: NativeLoadStoreOpcode::from_usize(opcode - self.air.offset),
+            opcode: NativeLoadStoreOpcode::from_usize(opcode.remove_offset(self.air.offset)),
             pointer_reads,
             data_read,
             data_write,

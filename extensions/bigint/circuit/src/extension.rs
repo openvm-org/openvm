@@ -18,7 +18,7 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode};
+use axvm_instructions::{program::DEFAULT_PC_STEP, AxVmOpcode, UsizeOpcode};
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -141,7 +141,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             base_alu_chip,
-            Rv32BaseAlu256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BaseAlu256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let less_than_chip = Rv32LessThan256Chip::new(
@@ -159,7 +159,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             less_than_chip,
-            Rv32LessThan256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32LessThan256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let branch_equal_chip = Rv32BranchEqual256Chip::new(
@@ -174,7 +174,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             branch_equal_chip,
-            Rv32BranchEqual256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BranchEqual256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let branch_less_than_chip = Rv32BranchLessThan256Chip::new(
@@ -192,7 +192,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             branch_less_than_chip,
-            Rv32BranchLessThan256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32BranchLessThan256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let multiplication_chip = Rv32Multiplication256Chip::new(
@@ -207,7 +207,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             multiplication_chip,
-            Rv32Mul256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32Mul256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let shift_chip = Rv32Shift256Chip::new(
@@ -226,7 +226,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         );
         inventory.add_executor(
             shift_chip,
-            Rv32Shift256Opcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32Shift256Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         Ok(inventory)

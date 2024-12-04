@@ -138,7 +138,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = FieldArithmeticOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode_index =
+            FieldArithmeticOpcode::from_usize(opcode.remove_offset(self.air.offset));
 
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];

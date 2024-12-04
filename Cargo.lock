@@ -881,6 +881,7 @@ dependencies = [
 name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-instructions-derive",
  "backtrace",
  "derive-new",
@@ -888,7 +889,6 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "p3-baby-bear",
- "p3-field",
  "serde",
  "strum",
  "strum_macros",

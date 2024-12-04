@@ -11,7 +11,7 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::UsizeOpcode;
+use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
@@ -106,7 +106,9 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
-                    addsub_opcodes.clone().map(|x| x + class_offset),
+                    addsub_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_32.clone(),
@@ -116,7 +118,9 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
-                    muldiv_opcodes.clone().map(|x| x + class_offset),
+                    muldiv_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
@@ -127,7 +131,9 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
-                    addsub_opcodes.clone().map(|x| x + class_offset),
+                    addsub_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_48.clone(),
@@ -137,7 +143,9 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),
-                    muldiv_opcodes.clone().map(|x| x + class_offset),
+                    muldiv_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

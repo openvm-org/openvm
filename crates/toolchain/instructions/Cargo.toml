@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-p3-field.workspace = true
+ax-stark-backend.workspace = true
 axvm-instructions-derive.workspace = true
 
 backtrace = { workspace = true, features = ["serde"] }

@@ -166,7 +166,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_index = opcode.remove_offset(self.air.offset);
 
         let data: [[F; EXT_DEG]; 2] = reads.into();
         let y: [F; EXT_DEG] = data[0];

@@ -159,7 +159,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         assert_eq!(
-            MulOpcode::from_usize(opcode - self.air.offset),
+            MulOpcode::from_usize(opcode.remove_offset(self.air.offset)),
             MulOpcode::MUL
         );
 

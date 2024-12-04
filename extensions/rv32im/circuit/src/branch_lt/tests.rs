@@ -23,7 +23,7 @@ use axvm_circuit::{
     },
     utils::{generate_long_number, i32_to_f},
 };
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS, AxVmOpcode, UsizeOpcode};
 use axvm_rv32im_transpiler::BranchLessThanOpcode;
 use rand::{rngs::StdRng, Rng};
 
@@ -501,7 +501,7 @@ fn execute_pc_increment_sanity_test() {
         BranchLessThanCoreChip::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(bitwise_chip, 0);
 
     let mut instruction = Instruction::<F> {
-        opcode: BranchLessThanOpcode::BLT.as_usize(),
+        opcode: AxVmOpcode::from_canonical_usize(BranchLessThanOpcode::BLT.as_usize()),
         c: F::from_canonical_u8(8),
         ..Default::default()
     };
@@ -514,7 +514,7 @@ fn execute_pc_increment_sanity_test() {
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
-    instruction.opcode = BranchLessThanOpcode::BGE.as_usize();
+    instruction.opcode = AxVmOpcode::from_canonical_usize(BranchLessThanOpcode::BGE.as_usize());
     let result = <BranchLessThanCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,

@@ -51,7 +51,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         program_cells.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc_idx]), // hacky: we should switch execution_frequencies into hashmap
             BabyBear::from_canonical_usize(pc_idx * (DEFAULT_PC_STEP as usize)),
-            BabyBear::from_canonical_usize(instruction.opcode),
+            instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
             instruction.c,
@@ -185,7 +185,7 @@ fn test_program_negative() {
         program_rows.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc_idx]),
             BabyBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
-            BabyBear::from_canonical_usize(instruction.opcode),
+            instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
             instruction.c,

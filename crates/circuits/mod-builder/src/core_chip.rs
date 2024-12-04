@@ -221,7 +221,7 @@ where
         }
 
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_index = opcode.remove_offset(self.air.offset);
         let mut flags = vec![];
 
         // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is needed.

@@ -108,7 +108,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
                 pc: F::from_canonical_u32(pc),
-                opcode: F::from_canonical_usize(instruction.opcode),
+                opcode: instruction.opcode.to_field(),
                 a: instruction.a,
                 b: instruction.b,
                 c: instruction.c,

@@ -98,7 +98,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, b, .. } = instruction;
         assert_eq!(
-            NativeJalOpcode::from_usize(opcode - self.air.offset),
+            NativeJalOpcode::from_usize(opcode.remove_offset(self.air.offset)),
             NativeJalOpcode::JAL
         );
 

@@ -10,7 +10,7 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_instructions::{
-    program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode,
+    program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode,
 };
 use axvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -112,7 +112,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         inventory.add_executor(
             load_store_chip,
-            NativeLoadStoreOpcode::iter().map(|x| x.with_default_offset()),
+            NativeLoadStoreOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let branch_equal_chip = KernelBranchEqChip::new(
@@ -126,7 +126,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             branch_equal_chip,
-            NativeBranchEqualOpcode::iter().map(|x| x.with_default_offset()),
+            NativeBranchEqualOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let jal_chip = KernelJalChip::new(
@@ -136,7 +136,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             jal_chip,
-            NativeJalOpcode::iter().map(|x| x.with_default_offset()),
+            NativeJalOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::new(
@@ -150,7 +150,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             field_arithmetic_chip,
-            FieldArithmeticOpcode::iter().map(|x| x.with_default_offset()),
+            FieldArithmeticOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let field_extension_chip = FieldExtensionChip::new(
@@ -160,7 +160,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             field_extension_chip,
-            FieldExtensionOpcode::iter().map(|x| x.with_default_offset()),
+            FieldExtensionOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let fri_reduced_opening_chip = FriReducedOpeningChip::new(
@@ -171,7 +171,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
-            FriOpcode::iter().map(|x| x.with_default_offset()),
+            FriOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let poseidon2_chip = Poseidon2Chip::from_poseidon2_config(
@@ -188,7 +188,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         );
         inventory.add_executor(
             poseidon2_chip,
-            Poseidon2Opcode::iter().map(|x| x.with_default_offset()),
+            Poseidon2Opcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         builder.add_phantom_sub_executor(
