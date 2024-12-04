@@ -7,7 +7,7 @@ on:
     branches: ["**"]
     paths:
       - "crates/vm/**"
-      - "extensions/native/compiler/**"
+      - "extensions/native/circuit/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -31,7 +31,7 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run compiler tests
-        working-directory: extensions/native/compiler
+      - name: Run circuit and compiler tests
+        working-directory: extensions/native/circuit
         run: |
           cargo nextest run --cargo-profile=fast --features parallel
