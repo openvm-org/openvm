@@ -130,8 +130,9 @@ impl Sdk {
             println!("leaf_vm_pk.fri_params: {}", json);
             let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_config)?;
             println!("leaf_vm_pk.vm_config: {}", json);
+            println!("per_air: {}", agg_pk.leaf_vm_pk.vm_pk.per_air.len());
             for (i, air) in agg_pk.leaf_vm_pk.vm_pk.per_air.iter().enumerate() {
-                if i <= 14 {
+                if i < 14 {
                     continue;
                 }
                 let json = serde_json::to_string(&air.preprocessed_data)?;
