@@ -12,8 +12,8 @@ use hex_literal::hex;
 use p3_baby_bear::BabyBear;
 
 use crate::utils::{
-    build_example_program, calculate_data_hash, ecdsa_sign, generate_keystore_address,
-    generate_salt,
+    build_example_program, calculate_data_hash, calculate_keystore_address, calculate_salt,
+    ecdsa_sign,
 };
 
 type F = BabyBear;
@@ -117,30 +117,40 @@ fn test_m_of_n_ecdsa() -> Result<()> {
 
     let m = 2;
     let n = 3;
-    let msg = "message";
-    let msg_hash = keccak256(msg.as_bytes());
+    let msg = b"message";
+    let msg_hash = keccak256(msg);
 
+    // Default Anvil private keys
     #[allow(clippy::useless_vec)]
     let private_keys = vec![
-        hex!("a62970f3597fe2a380571fd51e3f962b2d13eb97219beee4cc360165b21d74df"),
-        // hex!("0c7580ce67946a4480e671cfa63d68eb9692e59f289a08b1fd114b4fccd18a3b"),
-        hex!("15b11c59e8755155ff74f035a97abce181c33c756329337752eeaf5228f49ea8"),
+        hex!("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"),
+        // hex!("59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"),
+        hex!("5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"),
     ];
     let eoa_addrs = vec![
-        hex!("4f7a43ff0e4e4224c724cdd39ae69db06e6d3410"),
-        hex!("130eb76ab81b76a74cf6820ecf3820cdc5179609"),
-        hex!("b7f1d32f02bd66d25c9ff1f60b67acc4790b0930"),
+        hex!("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"),
+        hex!("70997970c51812dc3a010c7d01b50e0d17dc79c8"),
+        hex!("3c44cdddb6a900fa2b585dd299e03d12fa4293bc"),
     ];
-
     let vk_hash = keccak256(&hex!(
         "0000000000000000000000000000000000000000000000000000000000000000"
     ));
-    let salt = generate_salt(0);
+
+    let salt = calculate_salt(0);
     let data_hash = calculate_data_hash(m, n, eoa_addrs.clone());
-    let keystore_address = generate_keystore_address(salt, data_hash, vk_hash);
+    let keystore_address = calculate_keystore_address(salt, data_hash, vk_hash);
+    let full_hash = keccak256(
+        [
+            keystore_address.to_vec(),
+            data_hash.to_vec(),
+            msg_hash.to_vec(),
+        ]
+        .concat()
+        .as_slice(),
+    );
     let signatures: Vec<[u8; 65]> = private_keys
         .iter()
-        .map(|k| ecdsa_sign(*k, keystore_address, data_hash, &msg_hash))
+        .map(|k| ecdsa_sign(*k, full_hash))
         .collect::<Vec<_>>();
 
     let inputs = Inputs {

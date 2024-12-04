@@ -4,11 +4,10 @@
 extern crate alloc;
 
 use alloc::{collections::btree_set::BTreeSet, vec::Vec};
-use core::hint::black_box;
 
 use axvm::{intrinsics::keccak256, io::read};
-use axvm_ecc::{AffinePoint, VerifyingKey};
-use k256::ecdsa::{self, RecoveryId, Signature};
+use axvm_ecc::VerifyingKey;
+use k256::ecdsa::{RecoveryId, Signature};
 
 axvm::entry!(main);
 
@@ -75,30 +74,38 @@ pub fn main() {
     );
     assert_eq!(data_hash, io.data_hash);
 
+    let full_hash = keccak256(
+        [
+            io.keystore_address.to_vec(),
+            io.data_hash.to_vec(),
+            io.msg_hash.to_vec(),
+        ]
+        .concat()
+        .as_slice(),
+    );
+
     // Verify the signatures are valid
     for sig in signatures.iter() {
         // Reconstruct Signature struct
         // Signature is for `keccak256(keystoreAddress || dataHash || msgHash)`
+        // We take the first 64 bytes because the 65th byte (recovery ID) is not part of k256::ecdsa::Signature
         let signature = Signature::from_slice(&sig[..64]).expect("Invalid signature");
         let recovery_id = RecoveryId::new((sig[64] & 1) == 1, (sig[64] >> 1) == 1);
 
         // Get verifying key from signature and verify the signature
-        let vk = VerifyingKey::recover_from_prehash(&io.msg_hash, &signature, recovery_id)
+        let vk = VerifyingKey::recover_from_prehash(&full_hash, &signature, recovery_id)
             .expect("Unable to recover from prehash");
-        vk.verify_prehashed(&io.msg_hash, &signature).unwrap();
+        vk.verify_prehashed(&full_hash, &signature).unwrap();
 
         // Get ethereum address from verifying key (public key)
         let enc_pt = vk.0.to_encoded_point(false);
-        let pt_bytes = &enc_pt.as_bytes();
-        assert_eq!(pt_bytes.len(), 65);
-        assert_eq!(pt_bytes[0], 4);
+        let pt_bytes = enc_pt.as_bytes();
         let eth_addr: [u8; 20] = keccak256(&pt_bytes[1..])[12..]
             .try_into()
             .expect("Invalid ethereum address");
 
-        // Check that the ethereum address calculated from the public key is in the list of EOA addresses
-        // assert!(io.eoa_addrs.contains(&eth_addr));
-        assert_eq!(io.eoa_addrs[0], eth_addr);
+        // // Check that the ethereum address calculated from the public key is in the list of EOA addresses
+        assert!(io.eoa_addrs.contains(&eth_addr));
     }
 }
 

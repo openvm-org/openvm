@@ -22,7 +22,7 @@ tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
 rand = { workspace = true }
 hex-literal = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa-core", "ecdsa"] }
+k256 = { workspace = true, features = ["ecdsa-core", "ecdsa", "expose-field"] }
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true
 
