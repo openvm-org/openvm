@@ -145,12 +145,7 @@ impl Sdk {
                 }
                 println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json.unwrap());
             }
-            // let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
-            // println!("internal_vm_pk: {}", json);
-            // let json = serde_json::to_string(&agg_pk.internal_committed_exe)?;
-            // println!("internal_committed_exe: {}", json);
             // let json = serde_json::to_string(&agg_pk)?;
-            // println!("agg_pk: {}", json);
             if write(output_path, json).is_err() {
                 return Err(eyre!("Failed to write aggregator proving key to file"));
             }
