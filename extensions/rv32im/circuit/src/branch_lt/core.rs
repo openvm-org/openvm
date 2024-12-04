@@ -342,14 +342,14 @@ where
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
 pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    local_opcode_index: BranchLessThanOpcode,
+    local_opcode: BranchLessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
-    let signed = local_opcode_index == BranchLessThanOpcode::BLT
-        || local_opcode_index == BranchLessThanOpcode::BGE;
-    let ge_op = local_opcode_index == BranchLessThanOpcode::BGE
-        || local_opcode_index == BranchLessThanOpcode::BGEU;
+    let signed =
+        local_opcode == BranchLessThanOpcode::BLT || local_opcode == BranchLessThanOpcode::BGE;
+    let ge_op =
+        local_opcode == BranchLessThanOpcode::BGE || local_opcode == BranchLessThanOpcode::BGEU;
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     for i in (0..NUM_LIMBS).rev() {

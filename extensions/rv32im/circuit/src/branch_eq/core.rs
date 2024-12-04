@@ -219,18 +219,18 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
-    local_opcode_index: BranchEqualOpcode,
+    local_opcode: BranchEqualOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, F) {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
-                local_opcode_index == BranchEqualOpcode::BNE,
+                local_opcode == BranchEqualOpcode::BNE,
                 i,
                 (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
             );
         }
     }
-    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::ZERO)
+    (local_opcode == BranchEqualOpcode::BEQ, 0, F::ZERO)
 }
