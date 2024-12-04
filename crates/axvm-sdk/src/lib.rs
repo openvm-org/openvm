@@ -141,9 +141,9 @@ impl Sdk {
             // println!("internal_committed_exe: {}", json);
             // let json = serde_json::to_string(&agg_pk)?;
             // println!("agg_pk: {}", json);
-            // if write(output_path, json).is_err() {
-            //     return Err(eyre!("Failed to write aggregator proving key to file"));
-            // }
+            if write(output_path, json).is_err() {
+                return Err(eyre!("Failed to write aggregator proving key to file"));
+            }
         }
         Ok((config, agg_pk))
     }
