@@ -1,14 +1,18 @@
-use axvm_circuit::arch::instructions::{program::Program, *};
+use axvm_circuit::arch::instructions::program::Program;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
-    program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
-    FriOpcode::FRI_REDUCED_OPENING,
+    program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
+    PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
 };
+use axvm_rv32im_transpiler::BranchEqualOpcode;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
-use program::DEFAULT_PC_STEP;
 use serde::{Deserialize, Serialize};
 
-use crate::asm::{AsmInstruction, AssemblyCode};
+use crate::{
+    asm::{AsmInstruction, AssemblyCode},
+    FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
+    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct CompilerOptions {
@@ -634,7 +638,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::FriReducedOpening(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
-            opcode: options.opcode_with_offset(FRI_REDUCED_OPENING),
+            opcode: options.opcode_with_offset(FriOpcode::FRI_REDUCED_OPENING),
             a: i32_f(a),
             b: i32_f(b),
             c: i32_f(res),

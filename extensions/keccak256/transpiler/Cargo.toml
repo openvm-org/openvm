@@ -11,3 +11,5 @@ axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 axvm-keccak256-guest = { workspace = true }
+axvm-instructions-derive = { workspace = true }
+strum = { workspace = true }

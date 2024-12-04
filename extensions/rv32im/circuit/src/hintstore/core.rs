@@ -18,11 +18,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ExecutionError, MinimalInstruction, Result, Streams,
     VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32HintStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32HintStoreOpcode;
 use parking_lot::Mutex;
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -72,8 +69,9 @@ where
 
         builder.assert_bool(cols.is_valid);
 
-        let expected_opcode = AB::Expr::from_canonical_usize(HINT_STOREW as usize)
-            + AB::Expr::from_canonical_usize(self.offset);
+        let expected_opcode =
+            AB::Expr::from_canonical_usize(Rv32HintStoreOpcode::HINT_STOREW as usize)
+                + AB::Expr::from_canonical_usize(self.offset);
 
         for i in 0..RV32_REGISTER_NUM_LIMBS / 2 {
             self.bus

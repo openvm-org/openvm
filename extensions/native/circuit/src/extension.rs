@@ -9,14 +9,19 @@ use axvm_circuit::{
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::*;
+use axvm_instructions::{
+    program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode,
+};
+use axvm_native_compiler::{
+    FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
+    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
+};
 use axvm_rv32im_circuit::BranchEqualCoreChip;
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
 use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
-use program::DEFAULT_PC_STEP;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

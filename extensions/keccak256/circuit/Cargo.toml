@@ -14,6 +14,7 @@ axvm-circuit = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
+axvm-keccak256-transpiler = { workspace = true }
 
 p3-keccak-air = { workspace = true }
 

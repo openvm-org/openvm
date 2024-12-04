@@ -5,12 +5,13 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
+use axvm_algebra_transpiler::Fp2Opcode;
 use axvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::{Fp2Opcode, UsizeOpcode};
+use axvm_instructions::UsizeOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;

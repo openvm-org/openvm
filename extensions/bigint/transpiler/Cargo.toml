@@ -11,3 +11,6 @@ axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 axvm-bigint-guest = { workspace = true }
+axvm-instructions-derive = { workspace = true }
+strum = { workspace = true }
+axvm-rv32im-transpiler = { workspace = true }

@@ -22,7 +22,8 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{instruction::Instruction, ShiftOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_rv32im_transpiler::ShiftOpcode;
 use rand::Rng;
 
 use super::{core::run_shift, Rv32ShiftChip, ShiftCoreChip};

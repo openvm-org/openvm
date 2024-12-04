@@ -9,12 +9,12 @@ repository.workspace = true
 [dependencies]
 ax-circuit-derive.workspace = true
 ax-stark-backend.workspace = true
-axvm-rv32im-circuit.workspace = true
-axvm-bigint-circuit.workspace = true
-axvm-algebra-circuit.workspace = true
+#axvm-rv32im-circuit.workspace = true
+#axvm-bigint-circuit.workspace = true
+#axvm-algebra-circuit.workspace = true
+#axvm-ecc-constants.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
-axvm-ecc-constants.workspace = true
 
 p3-field.workspace = true
 

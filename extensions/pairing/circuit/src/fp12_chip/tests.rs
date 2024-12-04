@@ -14,9 +14,8 @@ use axvm_circuit::{
     utils::biguint_to_limbs,
 };
 use axvm_ecc_constants::{BLS12381, BN254};
-use axvm_instructions::{
-    riscv::RV32_CELL_BITS, Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode, UsizeOpcode,
-};
+use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use axvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
 

@@ -32,22 +32,21 @@ use axvm_instructions::{
     exe::AxVmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
-    BranchEqualOpcode::*,
-    FieldArithmeticOpcode::*,
-    FieldExtensionOpcode::*,
-    NativeBranchEqualOpcode,
-    NativeJalOpcode::*,
-    NativeLoadStoreOpcode::*,
-    NativePhantom, PhantomDiscriminant,
+    PhantomDiscriminant,
     Poseidon2Opcode::*,
     PublishOpcode::PUBLISH,
-    Rv32KeccakOpcode::*,
     SysPhantom,
     SystemOpcode::*,
     UsizeOpcode,
 };
 use axvm_keccak256_circuit::{utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery};
+use axvm_keccak256_transpiler::Rv32KeccakOpcode::*;
 use axvm_native_circuit::{Native, NativeConfig, NativeExecutor, NativePeriphery};
+use axvm_native_compiler::{
+    FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+    NativeLoadStoreOpcode::*, NativePhantom,
+};
+use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use derive_more::derive::From;
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField32};

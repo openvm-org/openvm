@@ -1,11 +1,24 @@
 use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Rv32WeierstrassOpcode, UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode};
+use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
-use strum::EnumCount;
+use strum::{EnumCount, EnumIter, FromRepr};
+
+// to be deleted and replaced by Rv32SwOpcode
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x600]
+#[allow(non_camel_case_types)]
+#[repr(usize)]
+pub enum Rv32WeierstrassOpcode {
+    EC_ADD_NE,
+    SETUP_EC_ADD_NE,
+    EC_DOUBLE,
+    SETUP_EC_DOUBLE,
+}
 
 #[derive(Default)]
 pub struct EccTranspilerExtension;

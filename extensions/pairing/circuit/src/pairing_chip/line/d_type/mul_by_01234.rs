@@ -7,7 +7,7 @@ use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::Fp2;
 use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_instructions::PairingOpcode;
+use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 
 use crate::Fp12;

@@ -14,7 +14,8 @@ use axvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,
 };
-use axvm_instructions::{instruction::Instruction, FieldExtensionOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::FieldExtensionOpcode;
 use rand::Rng;
 use strum::EnumCount;
 

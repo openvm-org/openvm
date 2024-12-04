@@ -13,9 +13,8 @@ use axvm_circuit::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_ecc_circuit::CurveConfig;
 use axvm_ecc_constants::{BLS12381, BN254};
-use axvm_instructions::{
-    Fp12Opcode, PairingOpcode, PairingPhantom, PhantomDiscriminant, UsizeOpcode,
-};
+use axvm_instructions::{PhantomDiscriminant, UsizeOpcode};
+use axvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;

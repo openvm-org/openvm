@@ -15,7 +15,8 @@ use axvm_circuit::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
 };
-use axvm_instructions::{instruction::Instruction, FieldArithmeticOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::FieldArithmeticOpcode;
 use rand::Rng;
 use strum::EnumCount;
 

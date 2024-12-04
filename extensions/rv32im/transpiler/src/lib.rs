@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
-    Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom, SystemOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
+    UsizeOpcode,
 };
 use axvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
@@ -19,7 +19,9 @@ use rrs_lib::{
     process_instruction,
 };
 
+mod instructions;
 pub mod rrs;
+pub use instructions::*;
 
 #[derive(Default)]
 pub struct Rv32ITranspilerExtension;

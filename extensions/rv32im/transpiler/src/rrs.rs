@@ -11,6 +11,12 @@ use rrs_lib::{
     InstructionProcessor,
 };
 
+use crate::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
+    ShiftOpcode,
+};
+
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
 pub(crate) struct InstructionTranspiler<F>(pub PhantomData<F>);
 

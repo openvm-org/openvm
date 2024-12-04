@@ -8,6 +8,9 @@ description = "axVM circuit extension for native VM"
 [dependencies]
 ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
+p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-symmetric = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-poseidon2-air = { workspace = true }
@@ -15,6 +18,8 @@ axvm-circuit = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
+axvm-native-compiler = { workspace = true }
+axvm-native-compiler-derive = { workspace = true }
 
 parking_lot.workspace = true
 strum.workspace = true

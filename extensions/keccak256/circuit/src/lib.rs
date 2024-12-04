@@ -27,9 +27,9 @@ use axvm_circuit::{
     },
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
-    Rv32KeccakOpcode, UsizeOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode,
 };
+use axvm_keccak256_transpiler::Rv32KeccakOpcode;
 use axvm_rv32im_circuit::adapters::read_rv32_register;
 
 // ==== Constants for register/memory adapter ====

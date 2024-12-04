@@ -23,9 +23,8 @@ use axvm_circuit::{
     },
     utils::{generate_long_number, i32_to_f},
 };
-use axvm_instructions::{
-    instruction::Instruction, program::PC_BITS, BranchLessThanOpcode, UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use axvm_rv32im_transpiler::BranchLessThanOpcode;
 use rand::{rngs::StdRng, Rng};
 
 use super::{

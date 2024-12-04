@@ -15,7 +15,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, CastfOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_native_compiler::CastfOpcode;
 use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 // LIMB_BITS is the size of the limbs in bits.
 pub(crate) const LIMB_BITS: usize = 8;

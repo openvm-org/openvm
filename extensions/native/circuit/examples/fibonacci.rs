@@ -1,3 +1,5 @@
+use ax_stark_backend::p3_field;
+use ax_stark_sdk::p3_baby_bear;
 use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{
     asm::AsmBuilder,

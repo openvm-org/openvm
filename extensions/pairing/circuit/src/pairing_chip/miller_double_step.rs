@@ -5,11 +5,9 @@ use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_circuit::Fp2;
-use axvm_circuit::{
-    arch::{instructions::PairingOpcode, VmChipWrapper},
-    system::memory::MemoryControllerRef,
-};
+use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
+use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 // Input: AffinePoint<Fp2>: 4 field elements
@@ -94,16 +92,14 @@ mod tests {
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
     use axvm_circuit::{
-        arch::{
-            instructions::PairingOpcode, testing::VmChipTestBuilder, VmChipWrapper,
-            BITWISE_OP_LOOKUP_BUS,
-        },
+        arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS},
         utils::biguint_to_limbs,
     };
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use axvm_pairing_guest::pairing::MillerStep;
+    use axvm_pairing_transpiler::PairingOpcode;
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use rand::{rngs::StdRng, SeedableRng};
 

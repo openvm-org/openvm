@@ -15,7 +15,8 @@ use axvm_circuit::arch::{
     instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError, Result,
     Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, NativeLoadStoreOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_native_compiler::NativeLoadStoreOpcode;
 use parking_lot::Mutex;
 use strum::IntoEnumIterator;
 

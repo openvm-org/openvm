@@ -16,8 +16,9 @@ use axvm_circuit::{
 };
 use axvm_ecc_constants::BN254;
 use axvm_ecc_guest::AffinePoint;
-use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::pairing::{Evaluatable, LineMulDType, UnevaluatedLine};
+use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,

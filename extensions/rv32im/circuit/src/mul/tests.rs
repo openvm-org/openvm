@@ -20,7 +20,8 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{instruction::Instruction, MulOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_rv32im_transpiler::MulOpcode;
 
 use super::core::run_mul;
 use crate::{

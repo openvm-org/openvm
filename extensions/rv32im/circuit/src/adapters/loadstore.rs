@@ -35,9 +35,9 @@ use axvm_circuit::{
 use axvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    Rv32LoadStoreOpcode::{self, *},
     UsizeOpcode,
 };
+use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::RV32_CELL_BITS;

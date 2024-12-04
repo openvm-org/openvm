@@ -1,12 +1,79 @@
 use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
-    BranchEqualOpcode, LessThanOpcode, MulOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
-    Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, UsizeOpcode,
+};
+use axvm_instructions_derive::UsizeOpcode;
+use axvm_rv32im_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, RType};
+use strum::IntoEnumIterator;
+
+// =================================================================================================
+// Intrinsics: 256-bit Integers
+// =================================================================================================
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x400]
+pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
+
+impl Rv32BaseAlu256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BaseAluOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x405]
+pub struct Rv32Shift256Opcode(pub ShiftOpcode);
+
+impl Rv32Shift256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        ShiftOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x408]
+pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
+
+impl Rv32LessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        LessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x420]
+pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
+
+impl Rv32BranchEqual256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchEqualOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x425]
+pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
+
+impl Rv32BranchLessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchLessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x450]
+pub struct Rv32Mul256Opcode(pub MulOpcode);
+
+impl Rv32Mul256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        MulOpcode::iter().map(Self)
+    }
+}
 
 #[derive(Default)]
 pub struct Int256TranspilerExtension;

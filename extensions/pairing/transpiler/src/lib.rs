@@ -1,12 +1,81 @@
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Fp12Opcode, PairingOpcode,
-    PairingPhantom, PhantomDiscriminant, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, UsizeOpcode,
 };
+use axvm_instructions_derive::UsizeOpcode;
 use axvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
-use strum::EnumCount;
+use strum::{EnumCount, EnumIter, FromRepr};
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x750]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum PairingOpcode {
+    MILLER_DOUBLE_STEP,
+    MILLER_DOUBLE_AND_ADD_STEP,
+    EVALUATE_LINE,
+    MUL_013_BY_013,
+    MUL_BY_01234,
+    MUL_023_BY_023,
+    MUL_BY_02345,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x700]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Fp12Opcode {
+    ADD,
+    SUB,
+    MUL,
+}
+const FP12_OPS: usize = 4;
+
+pub struct Bn254Fp12Opcode(Fp12Opcode);
+
+impl UsizeOpcode for Bn254Fp12Opcode {
+    fn default_offset() -> usize {
+        Fp12Opcode::default_offset()
+    }
+
+    fn from_usize(value: usize) -> Self {
+        Self(Fp12Opcode::from_usize(value))
+    }
+
+    fn as_usize(&self) -> usize {
+        self.0.as_usize()
+    }
+}
+
+pub struct Bls12381Fp12Opcode(Fp12Opcode);
+
+impl UsizeOpcode for Bls12381Fp12Opcode {
+    fn default_offset() -> usize {
+        Fp12Opcode::default_offset() + FP12_OPS
+    }
+
+    fn from_usize(value: usize) -> Self {
+        Self(Fp12Opcode::from_usize(value - FP12_OPS))
+    }
+
+    fn as_usize(&self) -> usize {
+        self.0.as_usize() + FP12_OPS
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum PairingPhantom {
+    /// Uses `b` to determine the curve: `b` is the discriminant of `PairingCurve` kind.
+    /// Peeks at `[r32{0}(a)..r32{0}(a) + Fp::NUM_LIMBS * 12]_2` to get `f: Fp12` and then resets the hint stream to equal `final_exp_hint(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` as `Fp::NUM_LIMBS * 12 * 2` bytes.
+    HintFinalExp = 0x30,
+}
 
 #[derive(Default)]
 pub struct PairingTranspilerExtension;

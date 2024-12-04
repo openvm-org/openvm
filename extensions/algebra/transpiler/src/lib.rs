@@ -2,14 +2,44 @@ use axvm_algebra_guest::{
     ComplexExtFieldBaseFunct7, ModArithBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3,
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
 };
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Fp2Opcode,
-    Rv32ModularArithmeticOpcode, UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode};
+use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
-use strum::EnumCount;
+use strum::{EnumCount, EnumIter, FromRepr};
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x500]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Rv32ModularArithmeticOpcode {
+    ADD,
+    SUB,
+    SETUP_ADDSUB,
+    MUL,
+    DIV,
+    SETUP_MULDIV,
+    IS_EQ,
+    SETUP_ISEQ,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x710]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Fp2Opcode {
+    ADD,
+    SUB,
+    SETUP_ADDSUB,
+    MUL,
+    DIV,
+    SETUP_MULDIV,
+}
 
 #[derive(Default)]
 pub struct ModularTranspilerExtension;

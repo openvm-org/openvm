@@ -5,11 +5,8 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::{
-    instruction::Instruction,
-    FriOpcode::{self, FRI_REDUCED_OPENING},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
 use itertools::Itertools;
 use rand::Rng;
 

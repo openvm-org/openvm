@@ -13,3 +13,4 @@ rrs-lib = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 axvm-algebra-guest = { workspace = true }
+axvm-instructions-derive = { workspace = true }
