@@ -119,37 +119,46 @@ impl Sdk {
         output_path: Option<P>,
     ) -> Result<(AggConfig, AggProvingKey)> {
         let agg_pk: AggProvingKey = AggProvingKey::keygen(config);
-        println!("0");
         if let Some(output_path) = output_path {
-            println!("1");
             if let Some(parent) = output_path.as_ref().parent() {
                 create_dir_all(parent)?;
             }
-            println!("2");
-            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.fri_params)?;
-            println!("leaf_vm_pk.fri_params: {}", json);
-            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_config)?;
-            println!("leaf_vm_pk.vm_config: {}", json);
-            println!("per_air: {}", agg_pk.leaf_vm_pk.vm_pk.per_air.len());
-            for (i, air) in agg_pk.leaf_vm_pk.vm_pk.per_air.iter().enumerate() {
-                if i < 14 {
-                    continue;
-                }
-                let json = serde_json::to_string(&air.preprocessed_data)?;
-                println!(
-                    "leaf_vm_pk.vm_pk.per_air[{}].preprocessed_data: {}",
-                    i, json
-                );
-                let json = serde_json::to_string(&air.vk);
-                if json.is_err() {
-                    panic!("{:?}", json.err());
-                }
-                println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json.unwrap());
+            println!("per_air length: {}", agg_pk.leaf_vm_pk.vm_pk.per_air.len());
+            let json =
+                serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[15].preprocessed_data);
+            if json.is_err() {
+                panic!("{:?}", json.err());
             }
+            println!(
+                "leaf_vm_pk.vm_pk.per_air[15].preprocessed_data: {}",
+                json.unwrap()
+            );
+            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[15].vk);
+            if json.is_err() {
+                panic!("{:?}", json.err());
+            }
+            println!("leaf_vm_pk.vm_pk.per_air[15].vk: {}", json.unwrap());
+            let json =
+                serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[14].preprocessed_data);
+            if json.is_err() {
+                panic!("{:?}", json.err());
+            }
+            println!(
+                "leaf_vm_pk.vm_pk.per_air[14].preprocessed_data: {}",
+                json.unwrap()
+            );
+            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[14].vk);
+            if json.is_err() {
+                panic!("{:?}", json.err());
+            }
+            println!("leaf_vm_pk.vm_pk.per_air[14].vk: {}", json.unwrap());
+
+            println!("Done!!");
+
             // let json = serde_json::to_string(&agg_pk)?;
-            if write(output_path, json).is_err() {
-                return Err(eyre!("Failed to write aggregator proving key to file"));
-            }
+            // if write(output_path, json).is_err() {
+            //     return Err(eyre!("Failed to write aggregator proving key to file"));
+            // }
         }
         Ok((config, agg_pk))
     }
