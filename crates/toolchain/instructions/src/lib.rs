@@ -6,7 +6,6 @@ use axvm_instructions_derive::UsizeOpcode;
 use strum::IntoEnumIterator;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
-pub mod config;
 mod curves;
 pub mod exe;
 pub mod instruction;
