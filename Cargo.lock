@@ -451,6 +451,7 @@ dependencies = [
  "ax-ecc-execution",
  "axvm-ecc-constants",
  "axvm-ecc-guest",
+ "axvm-keccak256-guest",
  "axvm-pairing-guest",
  "ff 0.13.0",
  "group 0.13.0",
