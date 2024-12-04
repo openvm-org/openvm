@@ -457,6 +457,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
         setups.push(quote::quote_spanned! { span.into() =>
             // make a setup function that sends setup op to ec add, ec double. fp2 ?
+            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
+            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
