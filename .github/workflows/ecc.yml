@@ -36,10 +36,10 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ecc-execution crate tests
-        working-directory: extensions/ecc/execution
+      - name: Run pairing-guest crate tests
+        working-directory: extensions/pairing/guest
         run: |
-          cargo nextest run --cargo-profile=fast
+          cargo nextest run --cargo-profile=fast --features=bn254,bls12_381,halo2curves
 
       - name: Run ecc-circuits crate tests
         working-directory: extensions/ecc/circuit

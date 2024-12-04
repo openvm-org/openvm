@@ -23,7 +23,9 @@ mod bn254 {
         bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
         ff::Field,
     };
-    use axvm_pairing_guest::{affine_point::AffineCoords, bn254::Bn254, pairing::MillerStep};
+    use axvm_pairing_guest::{
+        affine_point::AffineCoords, halo2curves_shims::bn254::Bn254, pairing::MillerStep,
+    };
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -279,13 +281,16 @@ mod bn254 {
 }
 
 mod bls12_381 {
-        axvm_ecc_guest::{
-            halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            AffinePoint,
-    };
     use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use axvm_ecc_guest::algebra::IntMod;
-    use axvm_pairing_guest::{bls12_381::Bls12_381, pairing::{LineMulMType, MillerStep}};
+    use axvm_ecc_guest::{
+        algebra::IntMod,
+        halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        AffinePoint,
+    };
+    use axvm_pairing_guest::{
+        halo2curves_shims::bls12_381::Bls12_381,
+        pairing::{LineMulMType, MillerStep},
+    };
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
