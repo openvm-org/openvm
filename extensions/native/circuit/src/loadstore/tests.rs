@@ -3,11 +3,8 @@ use std::sync::Arc;
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
-use axvm_instructions::{
-    instruction::Instruction,
-    NativeLoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 

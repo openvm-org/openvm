@@ -11,9 +11,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode, UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use axvm_native_compiler::NativeJalOpcode;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

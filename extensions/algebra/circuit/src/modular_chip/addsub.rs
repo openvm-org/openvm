@@ -5,17 +5,16 @@ use ax_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use ax_mod_circuit_builder::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_circuit::{
-    arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
-        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use axvm_circuit::arch::{
+    instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+    DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode};
+use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;

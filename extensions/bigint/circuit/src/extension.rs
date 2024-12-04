@@ -6,6 +6,10 @@ use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
 use ax_stark_backend::p3_field::PrimeField32;
+use axvm_bigint_transpiler::{
+    Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
+    Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
+};
 use axvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
@@ -14,13 +18,12 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::*;
+use axvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode};
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
 use derive_more::derive::From;
-use program::DEFAULT_PC_STEP;
 
 use crate::*;
 

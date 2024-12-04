@@ -1,12 +1,16 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{array, cell::RefCell, rc::Rc, sync::Arc};
 
-use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use ax_circuit_primitives::{
+    bigint::utils::big_uint_to_limbs,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 use ax_stark_sdk::utils::create_seeded_rng;
+use axvm_circuit::utils::generate_long_number;
 use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, Zero};
+use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use p3_baby_bear::BabyBear;
 use p3_field::PrimeField64;
-use rand::RngCore;
+use rand::{rngs::StdRng, RngCore};
 
 use crate::{ExprBuilder, ExprBuilderConfig};
 
@@ -49,4 +53,31 @@ pub fn evaluate_biguint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
         res = res * base.clone() + BigUint::from_u64(limb.as_canonical_u64()).unwrap();
     }
     res
+}
+
+// little endian.
+// Warning: This function only returns the last NUM_LIMBS*LIMB_BITS bits of
+//          the input, while the input can have more than that.
+pub fn biguint_to_limbs<const NUM_LIMBS: usize>(
+    mut x: BigUint,
+    limb_size: usize,
+) -> [u32; NUM_LIMBS] {
+    let mut result = [0; NUM_LIMBS];
+    let base = BigUint::from_u32(1 << limb_size).unwrap();
+    for r in result.iter_mut() {
+        *r = (x.clone() % &base).to_u32().unwrap();
+        x /= &base;
+    }
+    assert!(x.is_zero());
+    result
+}
+
+pub fn generate_field_element<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    modulus: &BigUint,
+    rng: &mut StdRng,
+) -> [u32; NUM_LIMBS] {
+    let x = generate_long_number::<NUM_LIMBS, LIMB_BITS>(rng);
+    let bigint = BigUint::new(x.to_vec()) % modulus;
+    let vec = big_uint_to_limbs(&bigint, LIMB_BITS);
+    array::from_fn(|i| if i < vec.len() { vec[i] as u32 } else { 0 })
 }

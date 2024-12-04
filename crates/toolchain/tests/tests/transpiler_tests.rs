@@ -49,7 +49,7 @@ fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
 #[test]
 fn test_decode_elf() -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("data/rv32im-empty-program-elf"))?;
+    let data = read(dir.join("tests/data/rv32im-empty-program-elf"))?;
     let elf = Elf::decode(&data, MEM_SIZE as u32)?;
     dbg!(elf);
     Ok(())
@@ -58,8 +58,8 @@ fn test_decode_elf() -> Result<()> {
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
 // `riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostartfiles -e _start -Ttext 0 fib.S -o rv32im-fib-from-as`
 // riscv64-unknown-elf-gcc supports rv32im if you set -march target
-#[test_case("data/rv32im-fib-from-as")]
-#[test_case("data/rv32im-intrin-from-as")]
+#[test_case("tests/data/rv32im-fib-from-as")]
+#[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
@@ -76,8 +76,8 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test_case("data/rv32im-exp-from-as")]
-#[test_case("data/rv32im-fib-from-as")]
+#[test_case("tests/data/rv32im-exp-from-as")]
+#[test_case("tests/data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = AxVmExe::from_elf(
@@ -125,7 +125,7 @@ impl Rv32ModularFp2Int256Config {
     }
 }
 
-#[test_case("data/rv32im-intrin-from-as")]
+#[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
         vec![SECP256K1.MODULUS.clone(), SECP256K1.ORDER.clone()],
@@ -149,7 +149,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 #[test]
 fn test_terminate_prove() -> Result<()> {
     let config = Rv32ImConfig::default();
-    let elf = get_elf("data/rv32im-terminate-from-as")?;
+    let elf = get_elf("tests/data/rv32im-terminate-from-as")?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()

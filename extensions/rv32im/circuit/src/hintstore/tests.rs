@@ -21,11 +21,8 @@ use axvm_circuit::{
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32HintStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 

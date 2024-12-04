@@ -22,7 +22,8 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{instruction::Instruction, BaseAluOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_rv32im_transpiler::BaseAluOpcode;
 use rand::Rng;
 
 use super::{core::run_alu, BaseAluCoreChip, Rv32BaseAluChip};

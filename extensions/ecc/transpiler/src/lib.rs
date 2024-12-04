@@ -1,31 +1,26 @@
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, Rv32WeierstrassOpcode, UsizeOpcode,
-};
+use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
+use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode};
+use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
-use strum::EnumCount;
-use strum_macros::FromRepr;
+use strum::{EnumCount, EnumIter, FromRepr};
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x600]
+#[allow(non_camel_case_types)]
+#[repr(usize)]
+pub enum Rv32WeierstrassOpcode {
+    EC_ADD_NE,
+    SETUP_EC_ADD_NE,
+    EC_DOUBLE,
+    SETUP_EC_DOUBLE,
+}
 
 #[derive(Default)]
 pub struct EccTranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x2b;
-pub(crate) const FUNCT3: u8 = 0b001;
-
-// TODO: this should be moved to `guest` crate
-pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;
-
-/// Short Weierstrass curves are configurable.
-/// The funct7 field equals `curve_idx * SHORT_WEIERSTRASS_MAX_KINDS + base_funct7`.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum SwBaseFunct7 {
-    SwAddNe = 0,
-    SwDouble,
-    SwSetup,
-}
 
 impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
@@ -39,17 +34,20 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
         if opcode != OPCODE {
             return None;
         }
-        if funct3 != FUNCT3 {
+        if funct3 != SW_FUNCT3 {
             return None;
         }
 
         let instruction = {
             // short weierstrass ec
-            assert!(Rv32WeierstrassOpcode::COUNT <= SHORT_WEIERSTRASS_MAX_KINDS as usize);
+            assert!(
+                Rv32WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize
+            );
             let dec_insn = RType::new(instruction_u32);
-            let base_funct7 = (dec_insn.funct7 as u8) % SHORT_WEIERSTRASS_MAX_KINDS;
-            let curve_idx_shift = ((dec_insn.funct7 as u8) / SHORT_WEIERSTRASS_MAX_KINDS) as usize
-                * Rv32WeierstrassOpcode::COUNT;
+            let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
+            let curve_idx_shift =
+                ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize
+                    * Rv32WeierstrassOpcode::COUNT;
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
                     0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,

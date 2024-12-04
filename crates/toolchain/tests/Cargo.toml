@@ -30,6 +30,8 @@ axvm-keccak256-circuit.workspace = true
 axvm-ecc-constants.workspace = true
 axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+axvm-instructions = { workspace = true }
+axvm-platform = { workspace = true }
 
 p3-baby-bear.workspace = true
 p3-field.workspace = true

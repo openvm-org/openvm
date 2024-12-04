@@ -6,10 +6,12 @@ edition.workspace = true
 description = "axVM guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
 
 [dependencies]
+axvm = { workspace = true }
 axvm-platform = { workspace = true }
 axvm-algebra-moduli-setup = { workspace = true }
 serde = { workspace = true }
 serde-big-array = "0.5.1"
+strum_macros = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true

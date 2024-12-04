@@ -15,11 +15,10 @@ axvm-circuit = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
+axvm-native-compiler = { workspace = true }
 
 parking_lot.workspace = true
 strum.workspace = true
-tiny-keccak.workspace = true
-hex-literal.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 derive-new.workspace = true

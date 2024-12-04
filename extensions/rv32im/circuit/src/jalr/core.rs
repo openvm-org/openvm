@@ -19,12 +19,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    program::PC_BITS,
-    Rv32JalrOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 
 use crate::adapters::{compose, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 

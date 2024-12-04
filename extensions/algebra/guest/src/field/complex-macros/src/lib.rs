@@ -578,10 +578,10 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
-                        axvm_platform::constants::ComplexExtFieldBaseFunct7::#local_opcode as usize
-                            + #complex_idx * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                        axvm_algebra_guest::OPCODE,
+                        axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        axvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
+                            + #complex_idx * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd,
                         rs1,
                         rs2

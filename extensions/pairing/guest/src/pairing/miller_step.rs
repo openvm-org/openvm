@@ -5,7 +5,7 @@ use axvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
+    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     axvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
@@ -88,8 +88,8 @@ where
             let mut uninit: MaybeUninit<(AffinePoint<Self::Fp2>, UnevaluatedLine<Self::Fp2>)> =
                 MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
+                OPCODE,
+                PAIRING_FUNCT3,
                 shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleStep),
                 uninit.as_mut_ptr(),
                 s as *const _,
@@ -185,8 +185,8 @@ where
                 UnevaluatedLine<Self::Fp2>,
             )> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
+                OPCODE,
+                PAIRING_FUNCT3,
                 shifted_funct7::<P>(PairingBaseFunct7::MillerDoubleAndAddStep),
                 uninit.as_mut_ptr(),
                 s as *const _,

@@ -15,12 +15,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    FieldExtensionOpcode,
-    FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::FieldExtensionOpcode::{self, *};
 use itertools::izip;
 
 pub const BETA: usize = 11;

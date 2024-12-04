@@ -1,7 +1,26 @@
 #![no_std]
+use strum_macros::FromRepr;
+extern crate self as axvm_ecc_guest;
+
+/// This is custom-1 defined in RISC-V spec document
+pub const OPCODE: u8 = 0x2b;
+pub const SW_FUNCT3: u8 = 0b001;
+
+/// Short Weierstrass curves are configurable.
+/// The funct7 field equals `curve_idx * SHORT_WEIERSTRASS_MAX_KINDS + base_funct7`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u8)]
+pub enum SwBaseFunct7 {
+    SwAddNe = 0,
+    SwDouble,
+    SwSetup,
+}
+
+impl SwBaseFunct7 {
+    pub const SHORT_WEIERSTRASS_MAX_KINDS: u8 = 8;
+}
 
 extern crate alloc;
-extern crate self as axvm_ecc_guest;
 
 pub use axvm_algebra_guest as algebra;
 pub use axvm_ecc_sw_setup as sw_setup;

@@ -15,7 +15,6 @@ bincode = { version = "2.0.0-rc", default-features = false, features = [
     "serde",
 ] }
 strum_macros.workspace = true
-axvm-algebra-moduli-setup = { workspace = true }
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.

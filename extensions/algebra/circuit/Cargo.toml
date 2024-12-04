@@ -16,6 +16,7 @@ ax-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
 axvm-rv32-adapters = { workspace = true }
+axvm-algebra-transpiler = { workspace = true }
 
 p3-air = { workspace = true }
 p3-field = { workspace = true }

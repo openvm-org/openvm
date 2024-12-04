@@ -430,10 +430,10 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 axvm_platform::custom_insn_r!(
-                    axvm_platform::constants::CUSTOM_1,
-                    axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                    axvm_platform::constants::SwBaseFunct7::SwAddNe as usize + #ec_idx
-                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    ::axvm_ecc_guest::OPCODE,
+                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
+                    ::axvm_ecc_guest::SwBaseFunct7::SwAddNe as usize + #ec_idx
+                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     rs2
@@ -443,10 +443,10 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 axvm_platform::custom_insn_r!(
-                    axvm_platform::constants::CUSTOM_1,
-                    axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                    axvm_platform::constants::SwBaseFunct7::SwDouble as usize + #ec_idx
-                        * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    ::axvm_ecc_guest::OPCODE,
+                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
+                    ::axvm_ecc_guest::SwBaseFunct7::SwDouble as usize + #ec_idx
+                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     "x0"
@@ -457,6 +457,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
         setups.push(quote::quote_spanned! { span.into() =>
             // make a setup function that sends setup op to ec add, ec double. fp2 ?
+            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
+            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -471,21 +473,21 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                        ::axvm_ecc_guest::OPCODE,
+                        ::axvm_ecc_guest::SW_FUNCT3 as usize,
+                        ::axvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         p2.as_ptr()
                     );
                     axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ShortWeierstrass as usize,
-                        axvm_platform::constants::SwBaseFunct7::SwSetup as usize
+                        ::axvm_ecc_guest::OPCODE,
+                        ::axvm_ecc_guest::SW_FUNCT3 as usize,
+                        ::axvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (axvm_platform::constants::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE

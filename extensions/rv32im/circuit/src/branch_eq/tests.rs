@@ -17,9 +17,8 @@ use axvm_circuit::arch::{
     BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
     VmChipWrapper, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction, program::PC_BITS, BranchEqualOpcode, UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use axvm_rv32im_transpiler::BranchEqualOpcode;
 use rand::{rngs::StdRng, Rng};
 
 use super::{

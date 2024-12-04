@@ -13,9 +13,9 @@ use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
 use axvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    NativeJalOpcode::{self, *},
     UsizeOpcode,
 };
+use axvm_native_compiler::NativeJalOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
 use super::{

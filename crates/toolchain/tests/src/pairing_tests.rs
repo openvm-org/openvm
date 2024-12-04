@@ -402,7 +402,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    #[ignore = "fixme"]
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;

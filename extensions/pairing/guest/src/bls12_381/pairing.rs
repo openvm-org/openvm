@@ -9,8 +9,9 @@ use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1, PAIRING_MAX_KINDS},
+    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     axvm_platform::custom_insn_r,
+    axvm_rv32im_guest,
     core::mem::MaybeUninit,
 };
 
@@ -35,8 +36,8 @@ impl Evaluatable<Fp, Fp2> for UnevaluatedLine<Fp2> {
         {
             let mut uninit: MaybeUninit<EvaluatedLine<Fp2>> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
+                OPCODE,
+                PAIRING_FUNCT3,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::EvaluateLine),
                 uninit.as_mut_ptr(),
                 self as *const UnevaluatedLine<Fp2>,
@@ -79,8 +80,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
         {
             let mut uninit: MaybeUninit<[Fp2; 5]> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
+                OPCODE,
+                PAIRING_FUNCT3,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::Mul023By023),
                 uninit.as_mut_ptr(),
                 l0 as *const EvaluatedLine<Fp2>,
@@ -149,8 +150,8 @@ impl LineMulMType<Fp2, Fp12> for Bls12_381 {
         {
             let mut uninit: MaybeUninit<Fp12> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_1,
-                Custom1Funct3::Pairing as usize,
+                OPCODE,
+                PAIRING_FUNCT3,
                 shifted_funct7::<Bls12_381>(PairingBaseFunct7::MulBy02345),
                 uninit.as_mut_ptr(),
                 f as *const Fp12,
@@ -285,16 +286,16 @@ impl PairingCheck for Bls12_381 {
             unsafe {
                 core::arch::asm!(
                     ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
-                    opcode = const CUSTOM_1,
-                    funct3 = const (Custom1Funct3::Pairing as u8),
-                    funct7 = const ((Bls12_381::PAIRING_IDX as u8) * PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
+                    opcode = const OPCODE,
+                    funct3 = const PAIRING_FUNCT3,
+                    funct7 = const ((Bls12_381::PAIRING_IDX as u8) * PairingBaseFunct7::PAIRING_MAX_KINDS + PairingBaseFunct7::HintFinalExp as u8),
                     rs1 = in(reg) &p_fat_ptr,
                     rs2 = in(reg) &q_fat_ptr
                 );
                 let mut ptr = hint.as_ptr() as *const u8;
                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
                 for _ in (0..48 * 12 * 2).step_by(4) {
-                    axvm::hint_store_u32!(ptr, 0);
+                    axvm_rv32im_guest::hint_store_u32!(ptr, 0);
                     ptr = ptr.add(4);
                 }
                 hint.assume_init()

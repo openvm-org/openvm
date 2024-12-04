@@ -4,14 +4,12 @@ use ax_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
-use axvm_circuit::{
-    arch::{
-        instructions::Rv32WeierstrassOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-    },
-    utils::biguint_to_limbs,
+use ax_mod_circuit_builder::{
+    test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpressionCoreChip,
 };
+use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_constants::SampleEcPoints;
+use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;

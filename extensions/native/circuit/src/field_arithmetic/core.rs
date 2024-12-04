@@ -11,12 +11,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    FieldArithmeticOpcode,
-    FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_native_compiler::FieldArithmeticOpcode::{self, *};
 use itertools::izip;
 
 #[repr(C)]

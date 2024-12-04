@@ -14,9 +14,13 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::*;
+use axvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode};
+use axvm_rv32im_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
+    Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
+};
 use derive_more::derive::From;
-use program::DEFAULT_PC_STEP;
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};

@@ -10,17 +10,37 @@ use axvm_circuit::{
     arch::SingleSegmentVmExecutor,
     prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
 };
+use axvm_native_circuit::NativeConfig;
+use axvm_native_recursion::hints::Hintable;
 
-use crate::{keygen::RootVerifierProvingKey, OuterSC, F};
+use crate::{
+    keygen::RootVerifierProvingKey, verifier::root::types::RootVmVerifierInput, OuterSC, F, SC,
+};
 
 /// Local prover for a root verifier.
 pub struct RootVerifierLocalProver {
     pub root_verifier_pk: RootVerifierProvingKey,
+    executor_for_heights: SingleSegmentVmExecutor<F, NativeConfig>,
 }
 
 impl RootVerifierLocalProver {
     pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Self {
-        Self { root_verifier_pk }
+        let executor_for_heights =
+            SingleSegmentVmExecutor::<F, _>::new(root_verifier_pk.vm_pk.vm_config.clone());
+        Self {
+            root_verifier_pk,
+            executor_for_heights,
+        }
+    }
+    pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
+        let result = self
+            .executor_for_heights
+            .execute(
+                self.root_verifier_pk.root_committed_exe.exe.clone(),
+                input.write(),
+            )
+            .unwrap();
+        result.air_heights
     }
 }
 

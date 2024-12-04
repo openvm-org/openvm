@@ -3,8 +3,9 @@
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
 
-#[cfg(target_os = "zkvm")]
-use axvm_platform::constants::{Custom0Funct3, CUSTOM_0};
+/// This is custom-0 defined in RISC-V spec document
+pub const OPCODE: u8 = 0x0b;
+pub const FUNCT3: u8 = 0b100;
 
 /// The keccak256 cryptographic hash function.
 #[inline(always)]
@@ -39,14 +40,7 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[inline(always)]
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    axvm_platform::custom_insn_r!(
-        CUSTOM_0,
-        Custom0Funct3::Keccak256 as u8,
-        0x0,
-        output,
-        bytes,
-        len
-    );
+    axvm_platform::custom_insn_r!(OPCODE, FUNCT3, 0x0, output, bytes, len);
 }
 
 /// Sets `output` to the keccak256 hash of `input`.

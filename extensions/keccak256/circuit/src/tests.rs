@@ -14,7 +14,8 @@ use axvm_circuit::arch::{
     testing::{VmChipTestBuilder, VmChipTester},
     BITWISE_OP_LOOKUP_BUS,
 };
-use axvm_instructions::{instruction::Instruction, Rv32KeccakOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_keccak256_transpiler::Rv32KeccakOpcode;
 use hex::FromHex;
 use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;

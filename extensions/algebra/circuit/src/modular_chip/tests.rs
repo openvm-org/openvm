@@ -6,18 +6,17 @@ use ax_circuit_primitives::{
     },
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_mod_circuit_builder::ExprBuilderConfig;
+use ax_mod_circuit_builder::{
+    test_utils::{biguint_to_limbs, generate_field_element},
+    ExprBuilderConfig,
+};
 use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_circuit::{
-    arch::{
-        instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
-    },
-    utils::{biguint_to_limbs, generate_field_element},
+use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use axvm_circuit::arch::{
+    instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
 };
 use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
-};
+use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
 use axvm_rv32_adapters::{
     rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
 };

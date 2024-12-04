@@ -13,10 +13,7 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{
-    program::PC_BITS, riscv::RV32_CELL_BITS, BaseAluOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode, UsizeOpcode,
-};
+use axvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterChip,
     Rv32HeapBranchAdapterChip,
@@ -25,6 +22,9 @@ use axvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
     BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
     MultiplicationCoreChip, ShiftCoreChip,
+};
+use axvm_rv32im_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use rand::Rng;
 

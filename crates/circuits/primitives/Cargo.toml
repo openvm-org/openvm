@@ -9,22 +9,18 @@ description = "Library of plonky3 primitives for general purpose use in other ZK
 p3-air = { workspace = true }
 p3-baby-bear = { workspace = true, optional = true }
 p3-field = { workspace = true }
-p3-keccak = { workspace = true }
 p3-matrix = { workspace = true }
 p3-maybe-rayon = { workspace = true }
-p3-symmetric = { workspace = true }
 p3-util = { workspace = true }
 
 ax-stark-backend = { workspace = true }
 ax-circuit-derive = { workspace = true }
 
-parking_lot.workspace = true
 rand.workspace = true
 derive-new.workspace = true
 itertools.workspace = true
 num-bigint-dig.workspace = true
 num-traits.workspace = true
-num-integer.workspace = true
 lazy_static.workspace = true
 tracing.workspace = true
 

@@ -13,6 +13,10 @@ use axvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
 };
+use axvm_native_compiler::{
+    FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
+};
+use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -21,10 +25,7 @@ use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{
-        instructions::{
-            BranchEqualOpcode::*, FieldArithmeticOpcode::*, NativeBranchEqualOpcode,
-            NativeJalOpcode::*, NativeLoadStoreOpcode::*, SystemOpcode::*, UsizeOpcode,
-        },
+        instructions::{SystemOpcode::*, UsizeOpcode},
         READ_INSTRUCTION_BUS,
     },
     system::program::{trace::AxVmCommittedExe, ProgramBus, ProgramChip},

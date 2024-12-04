@@ -44,17 +44,17 @@ jobs:
       - name: Run ecc-circuits crate tests
         working-directory: extensions/ecc/circuit
         run: |
-          cargo nextest run --cargo-profile=fast 
+          cargo nextest run --cargo-profile=fast
 
       - name: Run pairing-circuits crate tests
         working-directory: extensions/pairing/circuit
         run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast 
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
 
       - name: Install cargo-axiom
         working-directory: crates/cargo-axiom
         run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .
 
       - name: Build axvm-ecc-guest crate for axvm

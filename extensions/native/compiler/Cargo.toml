@@ -12,12 +12,13 @@ p3-baby-bear = { workspace = true }
 p3-bn254-fr = { workspace = true }
 zkhash = { workspace = true }
 
-axvm-native-circuit = { workspace = true }
 axvm-native-compiler-derive = { workspace = true }
 axvm-instructions = { workspace = true }
+axvm-instructions-derive = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
+axvm-rv32im-transpiler = { workspace = true }
 # disable jemalloc to be compatible with afs-starkbackend
 snark-verifier-sdk = { workspace = true, optional = true }
 
@@ -36,13 +37,18 @@ cfg-if = { workspace = true }
 strum = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4.3"
 p3-challenger = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
-rand = "0.8.5"
 axvm-circuit = { workspace = true, features = ["test-utils"] }
+axvm-native-circuit = { workspace = true }
+ax-stark-sdk = { workspace = true }
+hex.workspace = true
+rand.workspace = true
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
 
 [features]
 default = ["parallel", "halo2-compiler"]

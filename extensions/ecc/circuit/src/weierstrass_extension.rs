@@ -11,7 +11,7 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_ecc_constants::SECP256K1;
-use axvm_instructions::Rv32WeierstrassOpcode; // TODO: opcode should be in crate too?
+use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_instructions::UsizeOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;

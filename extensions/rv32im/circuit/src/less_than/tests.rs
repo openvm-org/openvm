@@ -22,7 +22,8 @@ use axvm_circuit::{
     },
     utils::{generate_long_number, i32_to_f},
 };
-use axvm_instructions::{instruction::Instruction, LessThanOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_rv32im_transpiler::LessThanOpcode;
 use rand::Rng;
 
 use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ax_stark_sdk::{
     ax_stark_backend::{
         config::{Com, StarkGenericConfig},
+        keygen::types::MultiStarkVerifyingKey,
         prover::types::Proof,
         Chip,
     },
@@ -37,6 +38,7 @@ pub mod perm;
 pub struct AppProvingKey<VC> {
     pub app_vm_pk: VmProvingKey<SC, VC>,
 }
+pub type AppVerifyingKey = MultiStarkVerifyingKey<SC>;
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
@@ -61,6 +63,10 @@ where
 
     pub fn num_public_values(&self) -> usize {
         self.app_vm_pk.vm_config.system().num_public_values
+    }
+
+    pub fn get_vk(&self) -> AppVerifyingKey {
+        self.app_vm_pk.vm_pk.get_vk()
     }
 }
 
@@ -113,7 +119,7 @@ impl AggProvingKey {
         let internal_program = InternalVmVerifierConfig {
             leaf_fri_params: config.leaf_fri_params,
             internal_fri_params: config.internal_fri_params,
-            compiler_options: config.compiler_options.clone(),
+            compiler_options: config.compiler_options,
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
         let internal_committed_exe = Arc::new(AxVmCommittedExe::<SC>::commit(

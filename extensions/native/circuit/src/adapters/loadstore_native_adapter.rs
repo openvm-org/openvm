@@ -13,12 +13,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit::{
     arch::{
-        instructions::{
-            NativeLoadStoreOpcode::{self, *},
-            UsizeOpcode,
-        },
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
+        ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -30,6 +26,7 @@ use axvm_circuit::{
     },
 };
 use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use axvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,

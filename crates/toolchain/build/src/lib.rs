@@ -21,7 +21,7 @@ pub use self::config::{DockerOptions, GuestOptions};
 mod config;
 
 #[allow(dead_code)]
-const RUSTUP_TOOLCHAIN_NAME: &str = "axiom";
+const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
@@ -136,7 +136,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = sanitized_cmd("rustup")
-        .args(["+nightly", "which", "rustc"]) // TODO: switch +nightly to +axiom
+        .args(["+nightly-2024-10-30", "which", "rustc"]) // TODO: switch +nightly to +axiom
         .output()
         .expect("rustup failed to find nightly toolchain")
         .stdout;
@@ -147,7 +147,12 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     let mut cmd = sanitized_cmd("cargo");
     // TODO[jpw]: remove +nightly
-    let mut args = vec!["+nightly", subcmd, "--target", "riscv32im-risc0-zkvm-elf"];
+    let mut args = vec![
+        "+nightly-2024-10-30",
+        subcmd,
+        "--target",
+        "riscv32im-risc0-zkvm-elf",
+    ];
 
     if std::env::var("AXIOM_BUILD_LOCKED").is_ok() {
         args.push("--locked");

@@ -6,14 +6,14 @@ use core::{
     },
 };
 
-#[cfg(not(target_os = "zkvm"))]
-use {axvm::utils::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
 #[cfg(target_os = "zkvm")]
 use {
-    axvm_platform::constants::{Custom0Funct3, Int256Funct7, CUSTOM_0},
+    super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE},
     axvm_platform::custom_insn_r,
     core::{arch::asm, mem::MaybeUninit},
 };
+#[cfg(not(target_os = "zkvm"))]
+use {axvm::utils::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
 
 use crate::impl_bin_op;
 
@@ -78,8 +78,8 @@ impl_bin_op!(
     AddAssign,
     add,
     add_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Add as u8,
     +=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() + rhs.as_biguint()))}
@@ -91,8 +91,8 @@ impl_bin_op!(
     SubAssign,
     sub,
     sub_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Sub as u8,
     -=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(U256::MAX.as_biguint() + BigUint::one() + lhs.as_biguint() - rhs.as_biguint()))}
@@ -104,8 +104,8 @@ impl_bin_op!(
     MulAssign,
     mul,
     mul_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Mul as u8,
     *=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() * rhs.as_biguint()))}
@@ -117,8 +117,8 @@ impl_bin_op!(
     BitXorAssign,
     bitxor,
     bitxor_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Xor as u8,
     ^=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() ^ rhs.as_biguint()))}
@@ -130,8 +130,8 @@ impl_bin_op!(
     BitAndAssign,
     bitand,
     bitand_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::And as u8,
     &=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() & rhs.as_biguint()))}
@@ -143,8 +143,8 @@ impl_bin_op!(
     BitOrAssign,
     bitor,
     bitor_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Or as u8,
     |=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() | rhs.as_biguint()))}
@@ -156,8 +156,8 @@ impl_bin_op!(
     ShlAssign,
     shl,
     shl_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Sll as u8,
     <<=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() << rhs.limbs[0] as usize))}
@@ -169,8 +169,8 @@ impl_bin_op!(
     ShrAssign,
     shr,
     shr_assign,
-    CUSTOM_0,
-    Custom0Funct3::Int256 as u8,
+    OPCODE,
+    INT256_FUNCT3,
     Int256Funct7::Srl as u8,
     >>=,
     |lhs: &U256, rhs: &U256| -> U256 {U256::from_biguint(&(lhs.as_biguint() >> rhs.limbs[0] as usize))}
@@ -185,8 +185,8 @@ impl PartialEq for U256 {
                 asm!("li {res}, 1",
                     ".insn b {opcode}, {func3}, {rs1}, {rs2}, 8",
                     "li {res}, 0",
-                    opcode = const CUSTOM_0,
-                    func3 = const Custom0Funct3::Beq256 as u8,
+                    opcode = const OPCODE,
+                    func3 = const BEQ256_FUNCT3,
                     rs1 = in(reg) self as *const Self,
                     rs2 = in(reg) other as *const Self,
                     res = out(reg) is_equal
@@ -213,8 +213,8 @@ impl Ord for U256 {
         {
             let mut cmp_result = MaybeUninit::<U256>::uninit();
             custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
+                OPCODE,
+                INT256_FUNCT3,
                 Int256Funct7::Sltu as u8,
                 cmp_result.as_mut_ptr(),
                 self as *const Self,
@@ -225,8 +225,8 @@ impl Ord for U256 {
                 return Ordering::Less;
             }
             custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
+                OPCODE,
+                INT256_FUNCT3,
                 Int256Funct7::Sltu as u8,
                 &mut cmp_result as *mut U256,
                 other as *const Self,
@@ -248,8 +248,8 @@ impl Clone for U256 {
         {
             let mut uninit: MaybeUninit<Self> = MaybeUninit::uninit();
             custom_insn_r!(
-                CUSTOM_0,
-                Custom0Funct3::Int256 as u8,
+                OPCODE,
+                INT256_FUNCT3,
                 Int256Funct7::Add as u8,
                 uninit.as_mut_ptr(),
                 self as *const Self,

@@ -8,7 +8,8 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::{instruction::Instruction, CastfOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_native_compiler::CastfOpcode;
 use rand::{rngs::StdRng, Rng};
 
 use super::{

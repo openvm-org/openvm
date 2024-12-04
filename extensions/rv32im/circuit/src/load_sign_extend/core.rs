@@ -18,11 +18,8 @@ use ax_stark_backend::{
 use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32LoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 
 use crate::adapters::LoadStoreInstruction;
 

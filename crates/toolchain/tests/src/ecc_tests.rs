@@ -50,15 +50,9 @@ fn test_moduli_setup_runtime() -> Result<()> {
             .with_extension(ModularTranspilerExtension),
     );
 
-    let moduli = axvm_exe
-        .custom_op_config
-        .intrinsics
-        .field_arithmetic
-        .primes
-        .iter()
-        .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap())
-        .collect();
-    let config = Rv32ModularConfig::new(moduli);
+    let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
+        .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap());
+    let config = Rv32ModularConfig::new(moduli.to_vec());
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(axvm_exe, vec![])?;
     assert!(!executor.config.modular.supported_modulus.is_empty());

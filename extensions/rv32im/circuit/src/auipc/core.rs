@@ -18,11 +18,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32AuipcOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 

@@ -24,7 +24,8 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{instruction::Instruction, MulHOpcode};
+use axvm_instructions::instruction::Instruction;
+use axvm_rv32im_transpiler::MulHOpcode;
 use rand::rngs::StdRng;
 
 use super::core::run_mulh;
