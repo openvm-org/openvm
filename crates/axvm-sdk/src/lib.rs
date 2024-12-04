@@ -22,7 +22,10 @@ use axvm_circuit::{
 use axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit;
 use axvm_native_recursion::types::InnerConfig;
 use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
-use bincode::{deserialize, serialize};
+use bincode::{
+    config::standard,
+    serde::{decode_from_slice, encode_to_vec},
+};
 use config::{AggConfig, AppConfig};
 use eyre::Result;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
@@ -125,7 +128,7 @@ impl Sdk {
             if let Some(parent) = output_path.as_ref().parent() {
                 create_dir_all(parent)?;
             }
-            let output: Vec<u8> = serialize(&ret)?;
+            let output: Vec<u8> = encode_to_vec(&ret, standard())?;
             write(output_path, output)?;
         }
         Ok(ret)
@@ -135,8 +138,8 @@ impl Sdk {
         &self,
         agg_pk_path: P,
     ) -> Result<(AggConfig, AggProvingKey)> {
-        let (config, agg_pk) = deserialize(&read(agg_pk_path)?)?;
-        Ok((config, agg_pk))
+        let (ret, _) = decode_from_slice(&read(agg_pk_path)?, standard())?;
+        Ok(ret)
     }
 
     pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
