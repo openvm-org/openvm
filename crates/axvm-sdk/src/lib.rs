@@ -128,15 +128,16 @@ impl Sdk {
             println!("2");
             let json = serde_json::to_string(&agg_pk.leaf_vm_pk)?;
             println!("leaf_vm_pk: {}", json);
-            let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
-            println!("internal_vm_pk: {}", json);
-            let json = serde_json::to_string(&agg_pk.internal_committed_exe)?;
-            println!("internal_committed_exe: {}", json);
-            let json = serde_json::to_string(&agg_pk)?;
-            println!("agg_pk: {}", json);
-            if write(output_path, json).is_err() {
-                return Err(eyre!("Failed to write aggregator proving key to file"));
-            }
+            panic!("{}", json);
+            // let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
+            // println!("internal_vm_pk: {}", json);
+            // let json = serde_json::to_string(&agg_pk.internal_committed_exe)?;
+            // println!("internal_committed_exe: {}", json);
+            // let json = serde_json::to_string(&agg_pk)?;
+            // println!("agg_pk: {}", json);
+            // if write(output_path, json).is_err() {
+            //     return Err(eyre!("Failed to write aggregator proving key to file"));
+            // }
         }
         Ok((config, agg_pk))
     }
