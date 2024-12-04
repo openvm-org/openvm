@@ -1,6 +1,10 @@
 extern crate core;
 
-use std::{path::Path, sync::Arc};
+use std::{
+    fs::{create_dir_all, read, write},
+    path::Path,
+    sync::Arc,
+};
 
 use ax_stark_sdk::{
     ax_stark_backend::{prover::types::Proof, verifier::VerificationError, Chip},
@@ -14,17 +18,16 @@ use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     system::program::trace::AxVmCommittedExe,
 };
+#[cfg(feature = "static-verifier")]
+use axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit;
 use axvm_native_recursion::types::InnerConfig;
 use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
-use config::AppConfig;
+use bincode::{deserialize, serialize};
+use config::{AggConfig, AppConfig};
 use eyre::Result;
-use keygen::{AppProvingKey, AppVerifyingKey};
+use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
-#[cfg(feature = "static-verifier")]
-use {
-    axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit, config::AggConfig,
-    keygen::AggProvingKey,
-};
+use prover::generate_leaf_committed_exe;
 
 pub mod commit;
 pub mod config;
@@ -58,12 +61,7 @@ impl Sdk {
         todo!()
     }
 
-    pub fn app_keygen_and_commit_exe<VC: VmConfig<F>, P: AsRef<Path>>(
-        &self,
-        _config: AppConfig<VC>,
-        _exe: AxVmExe<F>,
-        _output_path: Option<P>,
-    ) -> Result<(AppProvingKey<VC>, Arc<AxVmCommittedExe<SC>>)>
+    pub fn app_keygen<VC: VmConfig<F>>(&self, _config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
@@ -71,9 +69,22 @@ impl Sdk {
         todo!()
     }
 
-    pub fn load_app_pk_from_cached_dir<VC: VmConfig<F>, P: AsRef<Path>>(
+    pub fn commit_app_exe<VC: VmConfig<F>>(
         &self,
-        _app_cache_path: P,
+        _config: AppConfig<VC>,
+        _exe: AxVmExe<F>,
+    ) -> Result<Arc<AxVmCommittedExe<SC>>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        todo!()
+    }
+
+    pub fn app_keygen_and_commit_exe<VC: VmConfig<F>>(
+        &self,
+        _config: AppConfig<VC>,
+        _exe: AxVmExe<F>,
     ) -> Result<(AppProvingKey<VC>, Arc<AxVmCommittedExe<SC>>)>
     where
         VC::Executor: Chip<SC>,
@@ -103,32 +114,68 @@ impl Sdk {
         todo!()
     }
 
-    #[cfg(feature = "static-verifier")]
-    pub fn agg_keygen_and_commit_leaf_exe<P: AsRef<Path>>(
+    pub fn agg_keygen<P: AsRef<Path>>(
         &self,
-        _config: AggConfig,
-        _output_path: Option<P>,
-    ) -> Result<(
-        AggProvingKey,
-        Arc<AxVmCommittedExe<SC>>,
-        Halo2VerifierCircuit,
-    )> {
+        config: AggConfig,
+        output_path: Option<P>,
+    ) -> Result<(AggConfig, AggProvingKey)> {
+        let agg_pk: AggProvingKey = AggProvingKey::keygen(config);
+        let ret = (config, agg_pk);
+        if let Some(output_path) = output_path {
+            if let Some(parent) = output_path.as_ref().parent() {
+                create_dir_all(parent)?;
+            }
+            let output: Vec<u8> = serialize(&ret)?;
+            write(output_path, output)?;
+        }
+        Ok(ret)
+    }
+
+    pub fn load_agg_pk_from_file<P: AsRef<Path>>(
+        &self,
+        agg_pk_path: P,
+    ) -> Result<(AggConfig, AggProvingKey)> {
+        let ret = deserialize(&read(agg_pk_path)?)?;
+        Ok(ret)
+    }
+
+    pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
+        &self,
+        config: AggConfig,
+        app_pk: &AppProvingKey<VC>,
+    ) -> Result<Arc<AxVmCommittedExe<SC>>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let leaf_exe = generate_leaf_committed_exe(&config, app_pk);
+        Ok(leaf_exe)
+    }
+
+    pub fn agg_keygen_and_generate_leaf_committed_exe<VC: VmConfig<F>>(
+        &self,
+        config: AggConfig,
+        app_pk: &AppProvingKey<VC>,
+    ) -> Result<(AggProvingKey, Arc<AxVmCommittedExe<SC>>)>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let (_, agg_pk) = self.agg_keygen(config, None::<&Path>)?;
+        let leaf_exe = self.generate_leaf_committed_exe(config, app_pk)?;
+        Ok((agg_pk, leaf_exe))
+    }
+
+    #[cfg(feature = "static-verifier")]
+    pub fn generate_static_verifier_circuit(
+        &self,
+        _agg_pk: AggProvingKey,
+    ) -> Result<Halo2VerifierCircuit> {
         todo!()
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn load_agg_pk_from_cached_dir<P: AsRef<Path>>(
-        &self,
-        _agg_cache_path: P,
-    ) -> Result<(
-        AggProvingKey,
-        Arc<AxVmCommittedExe<SC>>,
-        Halo2VerifierCircuit,
-    )> {
-        todo!()
-    }
-
-    #[cfg(feature = "static-verifier")]
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_e2e_proof<VC: VmConfig<F>, P: AsRef<Path>>(
         &self,
         _app_pk: AppProvingKey<VC>,
@@ -147,10 +194,7 @@ impl Sdk {
     }
 
     #[cfg(feature = "static-verifier")]
-    pub fn load_e2e_proof_from_cached_dir<P: AsRef<Path>>(
-        &self,
-        _e2e_proof_path: P,
-    ) -> Result<EvmProof> {
+    pub fn load_e2e_proof_from_file<P: AsRef<Path>>(&self, _e2e_proof_path: P) -> Result<EvmProof> {
         todo!()
     }
 

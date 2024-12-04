@@ -1249,12 +1249,12 @@ dependencies = [
  "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "axvm-transpiler",
+ "bincode 1.3.3",
  "derivative",
  "eyre",
  "metrics",
  "p3-baby-bear",
  "serde",
- "serde_json",
  "static_assertions",
  "tracing",
 ]

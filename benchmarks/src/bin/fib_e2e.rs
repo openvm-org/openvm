@@ -70,8 +70,8 @@ async fn main() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
     );
-    let app_committed_exe = commit_app_exe(app_config, exe);
-    let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &app_pk);
+    let app_committed_exe = commit_app_exe(&app_config, exe);
+    let leaf_committed_exe = generate_leaf_committed_exe(&agg_config, &app_pk);
 
     let prover = StarkProver::new(app_pk, app_committed_exe)
         .with_agg_pk_and_leaf_committed_exe(agg_pk, leaf_committed_exe);

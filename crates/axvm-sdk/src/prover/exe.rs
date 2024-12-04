@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub fn commit_app_exe<VC: VmConfig<F>>(
-    app_config: AppConfig<VC>,
+    app_config: &AppConfig<VC>,
     app_exe: impl Into<AxVmExe<F>>,
 ) -> Arc<AxVmCommittedExe<SC>> {
     let mut exe: AxVmExe<_> = app_exe.into();
@@ -27,7 +27,7 @@ pub fn commit_app_exe<VC: VmConfig<F>>(
 }
 
 pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
-    agg_config: AggConfig,
+    agg_config: &AggConfig,
     app_pk: &AppProvingKey<VC>,
 ) -> Arc<AxVmCommittedExe<SC>> {
     let app_vm_vk = app_pk.app_vm_pk.vm_pk.get_vk();

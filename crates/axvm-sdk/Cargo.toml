@@ -17,9 +17,9 @@ ax-stark-sdk = { workspace = true }
 p3-baby-bear = { workspace = true }
 axvm-circuit = { workspace = true }
 
+bincode = { workspace = true }
 derivative = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 static_assertions.workspace = true
 eyre.workspace = true
 async-trait.workspace = true
