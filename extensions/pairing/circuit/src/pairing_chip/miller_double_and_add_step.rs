@@ -108,7 +108,7 @@ mod tests {
     use axvm_ecc_constants::BN254;
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::{bn254::Bn254, pairing::MillerStep};
+    use axvm_pairing_guest::{halo2curves_shims::bn254::Bn254, pairing::MillerStep};
     use axvm_pairing_transpiler::PairingOpcode;
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::bn256::G2Affine;

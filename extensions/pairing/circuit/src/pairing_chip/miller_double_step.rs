@@ -96,7 +96,10 @@ mod tests {
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::{bls12_381::Bls12_381, bn254::Bn254, pairing::MillerStep};
+    use axvm_pairing_guest::{
+        halo2curves_shims::{bls12_381::Bls12_381, bn254::Bn254},
+        pairing::MillerStep,
+    };
     use axvm_pairing_transpiler::PairingOpcode;
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use rand::{rngs::StdRng, SeedableRng};

@@ -16,7 +16,7 @@ use axvm_ecc_constants::BN254;
 use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::{
-    bn254::{tangent_line_013, Bn254},
+    halo2curves_shims::bn254::{tangent_line_013, Bn254},
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
 };
 use axvm_pairing_transpiler::PairingOpcode;
