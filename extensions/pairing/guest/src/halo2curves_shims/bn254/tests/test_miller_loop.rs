@@ -19,8 +19,7 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
     let g2_prepareds = Q_vec
         .iter()
         .map(|q| G2Prepared::from(*q))
-        .
-        llect::<Vec<_>>();
+        .collect::<Vec<_>>();
     let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(terms.as_slice());
     let compare_final = compare_miller.final_exponentiation();
