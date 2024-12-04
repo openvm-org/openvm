@@ -139,8 +139,11 @@ impl Sdk {
                     "leaf_vm_pk.vm_pk.per_air[{}].preprocessed_data: {}",
                     i, json
                 );
-                let json = serde_json::to_string(&air.vk)?;
-                println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json);
+                let json = serde_json::to_string(&air.vk);
+                if json.is_err() {
+                    panic!("{:?}", json.err());
+                }
+                println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json.unwrap());
             }
             // let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
             // println!("internal_vm_pk: {}", json);
