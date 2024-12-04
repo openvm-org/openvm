@@ -130,11 +130,15 @@ impl Sdk {
             println!("leaf_vm_pk.fri_params: {}", json);
             let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_config)?;
             println!("leaf_vm_pk.vm_config: {}", json);
-            let json =
-                serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[0].preprocessed_data)?;
-            println!("leaf_vm_pk.vm_pk.per_air[0].preprocessed_data: {}", json);
-            let json = serde_json::to_string(&agg_pk.leaf_vm_pk.vm_pk.per_air[0].vk)?;
-            println!("leaf_vm_pk.vm_pk.per_air[0].vk: {}", json);
+            for (i, air) in agg_pk.leaf_vm_pk.vm_pk.per_air.iter().enumerate() {
+                let json = serde_json::to_string(&air.preprocessed_data)?;
+                println!(
+                    "leaf_vm_pk.vm_pk.per_air[{}].preprocessed_data: {}",
+                    i, json
+                );
+                let json = serde_json::to_string(&air.vk)?;
+                println!("leaf_vm_pk.vm_pk.per_air[{}].vk: {}", i, json);
+            }
             // let json = serde_json::to_string(&agg_pk.internal_vm_pk)?;
             // println!("internal_vm_pk: {}", json);
             // let json = serde_json::to_string(&agg_pk.internal_committed_exe)?;
