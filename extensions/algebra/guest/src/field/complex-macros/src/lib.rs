@@ -532,6 +532,8 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     let ComplexDefine { items } = parse_macro_input!(input as ComplexDefine);
 
     let mut externs = Vec::new();
+    let mut setups = Vec::new();
+    let mut setup_all_complex_extensions = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -568,6 +570,48 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                 }
             });
         }
+
+        let setup_function =
+            syn::Ident::new(&format!("setup_complex_{}", complex_idx), span.into());
+
+        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
+            #setup_function();
+        });
+        setups.push(quote::quote_spanned! { span.into() =>
+            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
+            #[inline(never)]
+            #[allow(non_snake_case)]
+            pub fn #setup_function() {
+                #[cfg(target_os = "zkvm")]
+                {
+                    let modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx + 1]];
+
+                    // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
+                    // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
+                    let mut uninit: core::mem::MaybeUninit<[u8; axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx + 1] - axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx]]> = core::mem::MaybeUninit::uninit();
+                    axvm_platform::custom_insn_r!(
+                        ::axvm_algebra_guest::OPCODE,
+                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                            + #complex_idx
+                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        modulus_bytes.as_ptr(),
+                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
+                    );
+                    axvm_platform::custom_insn_r!(
+                        ::axvm_algebra_guest::OPCODE,
+                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                            + #complex_idx
+                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                        uninit.as_mut_ptr(),
+                        modulus_bytes.as_ptr(),
+                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
+                    );
+                }
+            }
+        });
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
@@ -575,6 +619,10 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         #[cfg(target_os = "zkvm")]
         mod axvm_intrinsics_ffi_complex {
             #(#externs)*
+        }
+        #(#setups)*
+        pub fn setup_all_complex_extensions() {
+            #(#setup_all_complex_extensions)*
         }
     })
 }

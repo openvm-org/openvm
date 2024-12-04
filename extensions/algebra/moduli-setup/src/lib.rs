@@ -690,7 +690,11 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let mut setups = Vec::new();
     let mut axiom_section = Vec::new();
     let mut setup_all_moduli = Vec::new();
-    let mut setup_all_complex_extensions = Vec::new();
+
+    // List of all modular limbs in one (that is, with a compile-time known size) array.
+    let mut modular_limbs_flattened_list = Vec::<u8>::new();
+    // List of "bars" between adjacent modular limbs sublists.
+    let mut limb_list_borders = vec![0usize];
 
     let span = proc_macro::Span::call_site();
 
@@ -716,6 +720,9 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             .take(limbs)
             .collect::<Vec<_>>();
 
+        modular_limbs_flattened_list.extend(modulus_bytes.iter());
+        limb_list_borders.push(modular_limbs_flattened_list.len());
+
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
@@ -735,7 +742,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         );
         let serialized_len = serialized_modulus.len();
         let setup_function = syn::Ident::new(&format!("setup_{}", mod_idx), span.into());
-        let setup_function_fp2 = syn::Ident::new(&format!("setup_{}_fp2", mod_idx), span.into());
 
         axiom_section.push(quote::quote_spanned! { span.into() =>
             #[cfg(target_os = "zkvm")]
@@ -795,9 +801,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         setup_all_moduli.push(quote::quote_spanned! { span.into() =>
             #setup_function();
         });
-        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
-            #setup_function_fp2();
-        });
 
         setups.push(quote::quote_spanned! { span.into() =>
             // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
@@ -850,56 +853,24 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     );
                 }
             }
-
-            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
-            #[inline(never)]
-            #[allow(non_snake_case)]
-            pub fn #setup_function_fp2() {
-                #[cfg(target_os = "zkvm")]
-                {
-
-                    let modulus_bytes = &#serialized_name[6..];
-
-                    // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
-                    // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
-                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
-                    );
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
-                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
-                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
-                    );
-                }
-            }
         });
     }
 
+    let total_limbs_cnt = modular_limbs_flattened_list.len();
+    let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
         mod axvm_intrinsics_ffi {
             #(#externs)*
         }
+        pub mod axvm_intrinsics_meta_do_not_type_this_by_yourself {
+            pub const modular_limbs_list: [u8; #total_limbs_cnt] = [#(#modular_limbs_flattened_list),*];
+            pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
+        }
         #(#setups)*
         pub fn setup_all_moduli() {
             #(#setup_all_moduli)*
-        }
-        pub fn setup_all_complex_extensions() {
-            #(#setup_all_complex_extensions)*
         }
     })
 }

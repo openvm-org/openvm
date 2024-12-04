@@ -18,7 +18,6 @@ axvm_algebra_complex_macros::complex_declare! {
 
 axvm_algebra_complex_macros::complex_init! {
     Complex,
-    Fp2,
 }
 
 pub fn main() {
