@@ -1,10 +1,6 @@
 // Initial version taken from https://github.com/succinctlabs/sp1/blob/v2.0.0/crates/core/executor/src/disassembler/elf.rs under MIT License
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
-use std::{
-    cmp::min,
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-};
+use std::{cmp::min, collections::BTreeMap, fmt::Debug};
 
 #[cfg(feature = "function-span")]
 use axvm_instructions::exe::FnBound;
@@ -17,7 +13,6 @@ use elf::{
     ElfBytes,
 };
 use eyre::{self, bail, ContextCompat};
-use num_bigint_dig::BigUint;
 
 pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 
@@ -43,8 +38,6 @@ pub struct Elf {
     /// The upper bound of the number of public values the program would publish.
     /// TODO: read from project config.
     pub(crate) max_num_public_values: usize,
-    /// Field arithmetic configuration.
-    pub(crate) supported_moduli: Vec<String>,
     /// Debug info for spanning benchmark metrics by function.
     pub(crate) fn_bounds: FnBounds,
 }
@@ -56,7 +49,6 @@ impl Elf {
         pc_start: u32,
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
-        supported_moduli: Vec<String>,
         fn_bounds: FnBounds,
     ) -> Self {
         Self {
@@ -65,7 +57,6 @@ impl Elf {
             pc_base,
             memory_image,
             max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
-            supported_moduli,
             fn_bounds,
         }
     }
@@ -203,54 +194,11 @@ impl Elf {
             }
         }
 
-        // Get the prime moduli from the .axiom section.
-        let axiom_section_header = elf
-            .section_header_by_name(".axiom")
-            .expect("section table should be parsable");
-        let mut supported_moduli = HashMap::new();
-        if let Some(shdr) = axiom_section_header {
-            let data = elf.section_data(&shdr).unwrap();
-            let ptr = std::cell::Cell::new(0);
-            let next = || {
-                let result = *data
-                    .0
-                    .get(ptr.get())
-                    .expect("unexpected end of .axiom section");
-                ptr.set(ptr.get() + 1);
-                result
-            };
-            let next_u32 = || u32::from_le_bytes(std::array::from_fn(|_| next()));
-
-            while ptr.get() < data.0.len() {
-                match next() {
-                    1 => {
-                        let mod_idx = next() as u32;
-                        eprintln!("discovered modulus #{mod_idx}");
-                        supported_moduli.insert(mod_idx, {
-                            let cnt_bytes = next_u32() as usize;
-                            BigUint::from_bytes_le(
-                                &(0..cnt_bytes).map(|_| next()).collect::<Vec<_>>(),
-                            )
-                            .to_str_radix(10)
-                        });
-                    }
-                    _ => {
-                        unimplemented!()
-                    }
-                }
-            }
-        } else {
-            tracing::debug!("no .axiom section found");
-        }
-
         Ok(Elf::new(
             instructions,
             entry,
             base_address,
             image,
-            (0..supported_moduli.len())
-                .map(|x| supported_moduli[&(x as u32)].clone())
-                .collect(),
             fn_bounds,
         ))
     }

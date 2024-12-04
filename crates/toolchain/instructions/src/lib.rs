@@ -5,7 +5,6 @@
 use axvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
-pub mod config;
 pub mod exe;
 pub mod instruction;
 mod phantom;

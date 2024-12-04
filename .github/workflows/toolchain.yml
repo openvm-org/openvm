@@ -31,11 +31,6 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run axvm-instructions tests
-        working-directory: crates/toolchain/instructions
-        run: |
-          cargo nextest run
-
       - name: Run toolchain tests
         working-directory: crates/toolchain/tests
         run: |
