@@ -22,6 +22,7 @@
 
 // Importing `axvm_rv32im_guest` here would create a circular dependency
 #[cfg(target_os = "zkvm")]
+/// This is custom-0 defined in RISC-V spec document
 const SYSTEM_OPCODE: u8 = 0x0b;
 
 extern crate alloc;

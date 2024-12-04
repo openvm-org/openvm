@@ -1,6 +1,7 @@
 #![no_std]
 use strum_macros::FromRepr;
 
+/// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const PAIRING_FUNCT3: u8 = 0b011;
 

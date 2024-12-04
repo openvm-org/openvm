@@ -3,6 +3,7 @@
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
 
+/// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;
 pub const FUNCT3: u8 = 0b100;
 

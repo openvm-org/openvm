@@ -2,6 +2,7 @@
 use strum_macros::FromRepr;
 extern crate self as axvm_ecc_guest;
 
+/// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;
 

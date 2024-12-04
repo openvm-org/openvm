@@ -1,6 +1,7 @@
 #![no_std]
 extern crate self as axvm_algebra_guest;
 
+/// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const MODULAR_ARITHMETIC_FUNCT3: u8 = 0b000;
 pub const COMPLEX_EXT_FIELD_FUNCT3: u8 = 0b010;
