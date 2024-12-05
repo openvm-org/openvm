@@ -10,7 +10,10 @@ use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::{
-    bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI},
+    bls12_381::{
+        BLS12_381_BLOCK_SIZE, BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS,
+        BLS12_381_XI_ISIZE,
+    },
     halo2curves_shims::bls12_381::{tangent_line_023, Bls12_381},
     pairing::LineMulMType,
 };
@@ -27,9 +30,9 @@ use rand::{rngs::StdRng, SeedableRng};
 use super::*;
 
 type F = BabyBear;
-const NUM_LIMBS: usize = 48;
-const LIMB_BITS: usize = 8;
-const BLOCK_SIZE: usize = 16;
+const NUM_LIMBS: usize = BLS12_381_NUM_LIMBS;
+const LIMB_BITS: usize = BLS12_381_LIMB_BITS;
+const BLOCK_SIZE: usize = BLS12_381_BLOCK_SIZE;
 
 #[test]
 fn test_mul_023_by_023() {
@@ -52,7 +55,7 @@ fn test_mul_023_by_023() {
             num_limbs: BLS12_381_NUM_LIMBS,
             limb_bits: BLS12_381_LIMB_BITS,
         },
-        BLS12_381_XI,
+        BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 
@@ -151,7 +154,7 @@ fn test_mul_by_02345() {
             num_limbs: BLS12_381_NUM_LIMBS,
             limb_bits: BLS12_381_LIMB_BITS,
         },
-        BLS12_381_XI,
+        BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 

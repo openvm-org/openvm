@@ -30,7 +30,7 @@ lazy_static! {
     ));
 }
 
-pub const BLS12_381_XI: [isize; 2] = [1, 1];
+pub const BLS12_381_XI_ISIZE: [isize; 2] = [1, 1];
 pub const BLS12_381_NUM_LIMBS: usize = 48;
 pub const BLS12_381_LIMB_BITS: usize = 8;
 pub const BLS12_381_BLOCK_SIZE: usize = 16;
