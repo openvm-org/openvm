@@ -8,7 +8,6 @@ use elliptic_curve::{
     point::DecompressPoint,
     sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
-    PrimeField,
 };
 
 use crate::{
@@ -39,12 +38,14 @@ where
         for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     {
         let (r, s) = sig.split_scalars();
+        let r = Into::<FieldBytes<C>>::into(r);
+        let s = Into::<FieldBytes<C>>::into(s);
 
         let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
             bits2field::<C>(prehash).unwrap().as_ref(),
         );
 
-        let mut r_bytes = r.to_repr();
+        let mut r_bytes = r.clone();
         if recovery_id.is_x_reduced() {
             // TODO: maybe need to optimize this.
             match Option::<C::Uint>::from(
@@ -62,12 +63,11 @@ where
         }
         let R = C::Point::from_encoded_point::<C>(&R.unwrap().to_encoded_point(false));
 
-        let r =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
-        let s =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
-        let neg_u1 = z.div_unsafe(&r);
-        let u2 = s.div_unsafe(&r);
+        let r = <C as IntrinsicCurve>::Scalar::from_be_bytes(r.as_ref());
+        let s = <C as IntrinsicCurve>::Scalar::from_be_bytes(s.as_ref());
+        let neg_u1 = z.clone().div_unsafe(&r);
+        let u1 = z.div_unsafe(&s);
+        let u2 = s.clone().div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
         let public_key = msm(&[neg_u1, u2], &[NEG_G, R]);
 
@@ -75,7 +75,11 @@ where
             ecdsa::VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
         );
 
-        vk.verify_prehashed(prehash, sig)?;
+        // Verifying prehash
+        let u2 = r.clone().div_unsafe(&s);
+        let G = C::Point::GENERATOR;
+        let Q = C::Point::from_encoded_point::<C>(&vk.0.to_encoded_point(false));
+        Self::verify_prehashed_points(u1, u2, G, Q, r)?;
 
         Ok(vk)
     }
@@ -99,8 +103,21 @@ where
 
         let G = C::Point::GENERATOR;
         let Q = C::Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
-        let result = msm(&[u1, u2], &[G, Q]);
 
+        Self::verify_prehashed_points(u1, u2, G, Q, r)
+    }
+
+    fn verify_prehashed_points(
+        u1: <C as IntrinsicCurve>::Scalar,
+        u2: <C as IntrinsicCurve>::Scalar,
+        g: C::Point,
+        q: C::Point,
+        r: <C as IntrinsicCurve>::Scalar,
+    ) -> Result<()>
+    where
+        for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    {
+        let result = msm(&[u1, u2], &[g, q]);
         let x_in_scalar = <C as IntrinsicCurve>::Scalar::reduce_le_bytes(result.x().as_le_bytes());
         if x_in_scalar == r {
             Ok(())
