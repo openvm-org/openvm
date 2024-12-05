@@ -38,6 +38,7 @@ cfg-if = { workspace = true }
 
 [dev-dependencies]
 axvm-native-recursion = { workspace = true, features = ["test-utils"] }
+tempfile = "3.14.0"
 
 [features]
 default = ["parallel", "mimalloc"]

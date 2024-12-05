@@ -6,7 +6,7 @@ pub mod testing_utils;
 mod tests;
 pub mod wrapper;
 
-use std::fmt::Debug;
+use std::{fmt, fmt::Debug};
 
 use axvm_native_compiler::{
     constraints::halo2::compiler::{Halo2ConstraintCompiler, Halo2State},
@@ -16,7 +16,11 @@ use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_field::extension::BinomialExtensionField;
-use serde::{Deserialize, Serialize};
+use serde::{
+    de,
+    de::{MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 use snark_verifier_sdk::{
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::halo2_base::{
@@ -28,6 +32,7 @@ use snark_verifier_sdk::{
             dev::MockProver,
             halo2curves::bn256::{Fr, G1Affine},
             plonk::{keygen_pk2, ProvingKey},
+            SerdeFormat,
         },
     },
     CircuitExt, Snark, SHPLONK,
@@ -46,9 +51,16 @@ pub struct DslOperations<C: Config> {
 }
 
 /// Necessary metadata to prove a Halo2 circuit
-#[derive(Debug, Clone)]
+/// Attention: Deserializer of this struct is not generic. It only works for verifier/wrapper circuit.
+#[derive(Debug, Clone, Serialize)]
 pub struct Halo2ProvingPinning {
+    #[serde(serialize_with = "pk_serializer")]
     pub pk: ProvingKey<G1Affine>,
+    pub metadata: Halo2ProvingMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Halo2ProvingMetadata {
     pub config_params: BaseCircuitParams,
     pub break_points: MultiPhaseThreadBreakPoints,
     /// Number of public values per column in order.
@@ -57,9 +69,14 @@ pub struct Halo2ProvingPinning {
 
 impl Halo2ProvingPinning {
     pub fn generate_dummy_snark(&self) -> Snark {
-        let k = self.config_params.k;
+        let k = self.metadata.config_params.k;
         let params = read_params(k as u32);
-        gen_dummy_snark_from_vk::<SHPLONK>(&params, self.pk.get_vk(), self.num_pvs.clone(), None)
+        gen_dummy_snark_from_vk::<SHPLONK>(
+            &params,
+            self.pk.get_vk(),
+            self.metadata.num_pvs.clone(),
+            None,
+        )
     }
 }
 
@@ -162,9 +179,11 @@ impl Halo2Prover {
         // serde_json::to_writer(file, &break_points).unwrap();
         Halo2ProvingPinning {
             pk,
-            config_params,
-            break_points,
-            num_pvs,
+            metadata: Halo2ProvingMetadata {
+                config_params,
+                break_points,
+                num_pvs,
+            },
         }
     }
 
@@ -208,12 +227,81 @@ impl Halo2Prover {
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> Snark {
-        let Halo2ProvingPinning {
-            pk,
-            config_params,
-            break_points,
-            ..
-        } = Self::keygen(k, dsl_operations.clone(), witness.clone());
-        Self::prove(config_params, break_points, &pk, dsl_operations, witness)
+        let Halo2ProvingPinning { pk, metadata } =
+            Self::keygen(k, dsl_operations.clone(), witness.clone());
+        Self::prove(
+            metadata.config_params,
+            metadata.break_points,
+            &pk,
+            dsl_operations,
+            witness,
+        )
+    }
+}
+
+fn pk_serializer<S>(value: &ProvingKey<G1Affine>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_bytes(&value.to_bytes(SerdeFormat::RawBytes))
+}
+
+impl<'de> Deserialize<'de> for Halo2ProvingPinning {
+    fn deserialize<D>(deserializer: D) -> Result<Halo2ProvingPinning, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Pk,
+            Metadata,
+        }
+
+        struct Halo2ProvingPinningVisitor;
+
+        impl<'de> Visitor<'de> for Halo2ProvingPinningVisitor {
+            type Value = Halo2ProvingPinning;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a struct named Halo2ProvingPinning")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut pk_bytes: Option<Vec<u8>> = None;
+                let mut metadata: Option<Halo2ProvingMetadata> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Pk => {
+                            pk_bytes = Some(map.next_value()?);
+                        }
+                        Field::Metadata => {
+                            metadata = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let pk_bytes = pk_bytes.ok_or_else(|| de::Error::missing_field("pk"))?;
+                let metadata = metadata.ok_or_else(|| de::Error::missing_field("metadata"))?;
+                let pk = ProvingKey::<G1Affine>::from_bytes::<BaseCircuitBuilder<Fr>>(
+                    &pk_bytes,
+                    SerdeFormat::RawBytes,
+                    metadata.config_params.clone(),
+                )
+                .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {}", e)))?;
+
+                Ok(Halo2ProvingPinning { pk, metadata })
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "Halo2ProvingPinning",
+            &["pk", "metadata"],
+            Halo2ProvingPinningVisitor,
+        )
     }
 }

@@ -3,6 +3,7 @@ use ax_stark_sdk::config::{
     baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
 };
 use axvm_native_compiler::ir::Witness;
+use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::Snark;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     witness::Witnessable,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Halo2VerifierCircuit {
     pub pinning: Halo2ProvingPinning,
     pub dsl_ops: DslOperations<OuterConfig>,
@@ -38,8 +39,8 @@ pub fn generate_halo2_verifier_circuit(
 impl Halo2VerifierCircuit {
     pub fn prove(&self, witness: Witness<OuterConfig>) -> Snark {
         Halo2Prover::prove(
-            self.pinning.config_params.clone(),
-            self.pinning.break_points.clone(),
+            self.pinning.metadata.config_params.clone(),
+            self.pinning.metadata.break_points.clone(),
             &self.pinning.pk,
             self.dsl_ops.clone(),
             witness,

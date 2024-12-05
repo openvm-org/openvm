@@ -1095,6 +1095,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snark-verifier-sdk",
+ "tempfile",
  "tracing",
 ]
 

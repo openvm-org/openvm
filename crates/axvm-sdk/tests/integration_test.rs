@@ -338,7 +338,11 @@ mod static_verifier {
         let verifier_wrapper =
             Halo2WrapperCircuit::keygen_auto_tune(static_verifier.generate_dummy_snark());
         assert_eq!(
-            verifier_wrapper.pinning.config_params.num_advice_per_phase,
+            verifier_wrapper
+                .pinning
+                .metadata
+                .config_params
+                .num_advice_per_phase,
             vec![1]
         );
         let evm_verifier = verifier_wrapper.generate_evm_verifier();
