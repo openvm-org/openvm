@@ -3,7 +3,9 @@ use core::ops::{Add, AddAssign, Neg};
 
 use axvm_algebra_guest::IntMod;
 use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
 use lazy_static::lazy_static;
+#[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 
 use super::group::{CyclicGroup, Group};
