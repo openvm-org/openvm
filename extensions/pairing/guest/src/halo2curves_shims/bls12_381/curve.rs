@@ -5,7 +5,7 @@ use num_bigint::BigUint;
 use num_traits::Num;
 
 lazy_static! {
-    pub static ref BLS12381_XI: Fq2 = Fq2::from_coeffs([Fq::ONE, Fq::ONE]);
+    pub static ref BLS12_381_XI: Fq2 = Fq2::from_coeffs([Fq::ONE, Fq::ONE]);
 
     // polyFactor = (1-x)/3
     pub static ref POLY_FACTOR: BigUint = BigUint::from_str_radix("5044125407647214251", 10).unwrap();
