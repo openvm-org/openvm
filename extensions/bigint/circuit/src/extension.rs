@@ -97,9 +97,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             execution_bus,
             program_bus,
             memory_controller,
-            range_checker: range_checker_chip,
         } = builder.system_port();
-
+        let range_checker_chip = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()

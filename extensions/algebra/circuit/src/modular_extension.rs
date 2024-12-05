@@ -61,8 +61,8 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             execution_bus,
             program_bus,
             memory_controller,
-            range_checker,
         } = builder.system_port();
+        let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()

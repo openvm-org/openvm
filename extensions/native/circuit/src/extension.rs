@@ -99,7 +99,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             memory_controller,
-            ..
         } = builder.system_port();
 
         let mut load_store_chip = KernelLoadStoreChip::<F, 1>::new(

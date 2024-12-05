@@ -72,7 +72,6 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             execution_bus,
             program_bus,
             memory_controller,
-            ..
         } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()

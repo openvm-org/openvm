@@ -86,11 +86,11 @@ pub trait VmExtension<F: PrimeField32> {
 }
 
 /// SystemPort combines system resources needed by most extensions
+#[derive(Clone)]
 pub struct SystemPort<F> {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
     pub memory_controller: MemoryControllerRef<F>,
-    pub range_checker: Arc<VariableRangeCheckerChip>,
 }
 
 /// Builder for processing unit. Processing units extend an existing system unit.
@@ -139,7 +139,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
             execution_bus: self.system_base().execution_bus(),
             program_bus: self.system_base().program_bus(),
             memory_controller: self.memory_controller().clone(),
-            range_checker: self.system_base().range_checker_chip.clone(),
         }
     }
 

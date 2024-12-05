@@ -213,8 +213,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             execution_bus,
             program_bus,
             memory_controller,
-            range_checker,
         } = builder.system_port();
+        let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()
@@ -383,7 +383,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             execution_bus,
             program_bus,
             memory_controller,
-            ..
         } = builder.system_port();
 
         let bitwise_lu_chip = if let Some(chip) = builder
@@ -466,8 +465,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             execution_bus,
             program_bus,
             memory_controller,
-            range_checker,
         } = builder.system_port();
+        let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()
