@@ -22,7 +22,8 @@ use axvm_circuit::{
     },
     utils::{generate_long_number, i32_to_f},
 };
-use axvm_instructions::{instruction::Instruction, LessThanOpcode};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
+use axvm_rv32im_transpiler::LessThanOpcode;
 use rand::Rng;
 
 use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
@@ -153,7 +154,7 @@ fn run_rv32_lt_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(AxVmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let trace_width = chip.trace_width();

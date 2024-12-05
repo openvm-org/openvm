@@ -18,11 +18,8 @@ use axvm_circuit::{
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32LoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
 use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
@@ -93,7 +90,7 @@ fn set_and_execute(
     tester.execute(
         chip,
         Instruction::from_usize(
-            opcode as usize + Rv32LoadStoreOpcode::default_offset(),
+            AxVmOpcode::with_default_offset(opcode),
             [a, b, imm as usize, 1, mem_as],
         ),
     );

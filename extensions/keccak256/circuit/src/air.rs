@@ -19,10 +19,8 @@ use axvm_circuit::{
         MemoryAddress,
     },
 };
-use axvm_instructions::{
-    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    Rv32KeccakOpcode,
-};
+use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use axvm_keccak256_transpiler::Rv32KeccakOpcode;
 use axvm_rv32im_circuit::adapters::abstract_compose;
 use itertools::{izip, Itertools};
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, U64_LIMBS};

@@ -3,23 +3,23 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::curves::bn254::{tangent_line_013, Bn254};
 use ax_mod_circuit_builder::{
-    test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
+    test_utils::{
+        biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint,
+    },
     ExprBuilderConfig,
 };
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::{
-    arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    utils::biguint_to_limbs,
-};
-use axvm_ecc::{
+use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use axvm_ecc_guest::AffinePoint;
+use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use axvm_pairing_guest::{
+    bn254::{BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
+    halo2curves_shims::bn254::{tangent_line_013, Bn254},
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
-    AffinePoint,
 };
-use axvm_ecc_constants::BN254;
-use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,
@@ -54,11 +54,11 @@ fn test_mul_013_by_013() {
         adapter,
         tester.memory_controller(),
         ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
+            modulus: BN254_MODULUS.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         },
-        BN254.XI,
+        BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 
@@ -150,11 +150,11 @@ fn test_mul_by_01234() {
         adapter,
         tester.memory_controller(),
         ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
+            modulus: BN254_MODULUS.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         },
-        BN254.XI,
+        BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 
@@ -225,9 +225,9 @@ fn test_mul_by_01234() {
 fn test_evaluate_line() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BN254.MODULUS.clone(),
-        limb_bits: LIMB_BITS,
-        num_limbs: NUM_LIMBS,
+        modulus: BN254_MODULUS.clone(),
+        limb_bits: BN254_LIMB_BITS,
+        num_limbs: BN254_NUM_LIMBS,
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(

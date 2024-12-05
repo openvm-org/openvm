@@ -15,7 +15,8 @@ use axvm_circuit::{
     arch::testing::{memory::gen_pointer, VmChipTestBuilder},
     system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
 };
-use axvm_instructions::{instruction::Instruction, FieldArithmeticOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, UsizeOpcode};
+use axvm_native_compiler::FieldArithmeticOpcode;
 use rand::Rng;
 use strum::EnumCount;
 
@@ -85,7 +86,7 @@ fn new_field_arithmetic_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                opcode as usize,
+                AxVmOpcode::from_usize(opcode as usize),
                 [result_address, address1, address2, result_as, as1, as2],
             ),
         );
@@ -134,7 +135,10 @@ fn new_field_arithmetic_air_zero_div_zero() {
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(FieldArithmeticOpcode::DIV as usize, [5, 6, 7, 1, 1, 1]),
+        Instruction::from_usize(
+            AxVmOpcode::from_usize(FieldArithmeticOpcode::DIV as usize),
+            [5, 6, 7, 1, 1, 1],
+        ),
     );
 
     let mut chip_input = chip.generate_air_proof_input();
@@ -174,6 +178,9 @@ fn new_field_arithmetic_air_test_panic() {
     // should panic
     tester.execute(
         &mut chip,
-        Instruction::from_usize(FieldArithmeticOpcode::DIV as usize, [0, 0, 0, 1, 1, 1]),
+        Instruction::from_usize(
+            AxVmOpcode::from_usize(FieldArithmeticOpcode::DIV as usize),
+            [0, 0, 0, 1, 1, 1],
+        ),
     );
 }

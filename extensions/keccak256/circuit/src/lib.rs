@@ -27,9 +27,9 @@ use axvm_circuit::{
     },
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
-    Rv32KeccakOpcode, UsizeOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode,
 };
+use axvm_keccak256_transpiler::Rv32KeccakOpcode;
 use axvm_rv32im_circuit::adapters::read_rv32_register;
 
 // ==== Constants for register/memory adapter ====
@@ -138,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode = Rv32KeccakOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
         let mut memory = self.memory_controller.borrow_mut();

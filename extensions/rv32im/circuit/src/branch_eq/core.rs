@@ -15,7 +15,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, BranchEqualOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::BranchEqualOpcode;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -163,7 +164,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, c: imm, .. } = *instruction;
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode - self.air.offset);
+        let branch_eq_opcode =
+            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());
@@ -218,18 +220,18 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
-    local_opcode_index: BranchEqualOpcode,
+    local_opcode: BranchEqualOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, F) {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
-                local_opcode_index == BranchEqualOpcode::BNE,
+                local_opcode == BranchEqualOpcode::BNE,
                 i,
                 (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
             );
         }
     }
-    (local_opcode_index == BranchEqualOpcode::BEQ, 0, F::ZERO)
+    (local_opcode == BranchEqualOpcode::BEQ, 0, F::ZERO)
 }

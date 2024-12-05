@@ -1,14 +1,22 @@
-use axvm_instructions::{instruction::Instruction, Rv32KeccakOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_instructions_derive::UsizeOpcode;
+use axvm_keccak256_guest::{FUNCT3, OPCODE};
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
+use strum::{EnumCount, EnumIter, FromRepr};
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
+)]
+#[opcode_offset = 0x310]
+#[repr(usize)]
+pub enum Rv32KeccakOpcode {
+    KECCAK256,
+}
 
 #[derive(Default)]
 pub struct Keccak256TranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x0b;
-pub(crate) const FUNCT3: u8 = 0b100;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {

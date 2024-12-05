@@ -3,17 +3,18 @@ use std::sync::Arc;
 use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_ecc_execution::curves::bls12_381::{tangent_line_023, Bls12_381};
 use ax_mod_circuit_builder::{test_utils::*, ExprBuilderConfig};
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::{
-    arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    utils::biguint_to_limbs,
+use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use axvm_ecc_guest::AffinePoint;
+use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use axvm_pairing_guest::{
+    bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI_ISIZE},
+    halo2curves_shims::bls12_381::{tangent_line_023, Bls12_381},
+    pairing::LineMulMType,
 };
-use axvm_ecc::{pairing::LineMulMType, AffinePoint};
-use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{riscv::RV32_CELL_BITS, PairingOpcode, UsizeOpcode};
+use axvm_pairing_transpiler::PairingOpcode;
 use axvm_rv32_adapters::{
     rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip,
 };
@@ -47,11 +48,11 @@ fn test_mul_023_by_023() {
         adapter,
         tester.memory_controller(),
         ExprBuilderConfig {
-            modulus: BLS12381.MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
+            modulus: BLS12_381_MODULUS.clone(),
+            num_limbs: BLS12_381_NUM_LIMBS,
+            limb_bits: BLS12_381_LIMB_BITS,
         },
-        BLS12381.XI,
+        BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 
@@ -146,11 +147,11 @@ fn test_mul_by_02345() {
         adapter,
         tester.memory_controller(),
         ExprBuilderConfig {
-            modulus: BLS12381.MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
+            modulus: BLS12_381_MODULUS.clone(),
+            num_limbs: BLS12_381_NUM_LIMBS,
+            limb_bits: BLS12_381_LIMB_BITS,
         },
-        BLS12381.XI,
+        BLS12_381_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 

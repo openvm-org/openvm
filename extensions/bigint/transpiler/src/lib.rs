@@ -1,38 +1,83 @@
+use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, BaseAluOpcode,
-    BranchEqualOpcode, LessThanOpcode, MulOpcode, Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode,
-    Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode, ShiftOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, AxVmOpcode,
+    UsizeOpcode,
+};
+use axvm_instructions_derive::UsizeOpcode;
+use axvm_rv32im_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, RType};
-use strum_macros::FromRepr;
+use strum::IntoEnumIterator;
+
+// =================================================================================================
+// Intrinsics: 256-bit Integers
+// =================================================================================================
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x400]
+pub struct Rv32BaseAlu256Opcode(pub BaseAluOpcode);
+
+impl Rv32BaseAlu256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BaseAluOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x405]
+pub struct Rv32Shift256Opcode(pub ShiftOpcode);
+
+impl Rv32Shift256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        ShiftOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x408]
+pub struct Rv32LessThan256Opcode(pub LessThanOpcode);
+
+impl Rv32LessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        LessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x420]
+pub struct Rv32BranchEqual256Opcode(pub BranchEqualOpcode);
+
+impl Rv32BranchEqual256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchEqualOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x425]
+pub struct Rv32BranchLessThan256Opcode(pub BranchLessThanOpcode);
+
+impl Rv32BranchLessThan256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        BranchLessThanOpcode::iter().map(Self)
+    }
+}
+
+#[derive(Copy, Clone, Debug, UsizeOpcode)]
+#[opcode_offset = 0x450]
+pub struct Rv32Mul256Opcode(pub MulOpcode);
+
+impl Rv32Mul256Opcode {
+    pub fn iter() -> impl Iterator<Item = Self> {
+        MulOpcode::iter().map(Self)
+    }
+}
 
 #[derive(Default)]
 pub struct Int256TranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const OPCODE: u8 = 0x0b;
-pub(crate) const INT256_FUNCT3: u8 = 0b101;
-pub(crate) const BEQ256_FUNCT3: u8 = 0b110;
-
-// TODO: this should be moved to `guest` crate
-/// funct7 options for 256-bit integer instructions.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
-#[repr(u8)]
-pub enum Int256Funct7 {
-    Add = 0,
-    Sub,
-    Xor,
-    Or,
-    And,
-    Sll,
-    Srl,
-    Sra,
-    Slt,
-    Sltu,
-    Mul,
-}
 
 impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
@@ -94,7 +139,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             BEQ256_FUNCT3 => {
                 let dec_insn = BType::new(instruction_u32);
                 Some(Instruction::new(
-                    BranchEqualOpcode::BEQ as usize + Rv32BranchEqual256Opcode::default_offset(),
+                    AxVmOpcode::from_usize(
+                        BranchEqualOpcode::BEQ as usize
+                            + Rv32BranchEqual256Opcode::default_offset(),
+                    ),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     isize_to_field(dec_insn.imm as isize),

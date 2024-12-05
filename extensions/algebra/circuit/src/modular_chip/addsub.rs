@@ -5,17 +5,16 @@ use ax_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use ax_mod_circuit_builder::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
 };
 use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_circuit::{
-    arch::{
-        instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
-        DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use axvm_circuit::arch::{
+    instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
+    DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode};
+use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
@@ -154,7 +153,7 @@ where
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let data: DynArray<_> = reads.into();
         let data = data.0;
         debug_assert_eq!(data.len(), 2 * num_limbs);
@@ -170,7 +169,7 @@ where
         let x_biguint = limbs_to_biguint(&x, limb_bits);
         let y_biguint = limbs_to_biguint(&y, limb_bits);
 
-        let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_index);
+        let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_add_flag = match local_opcode {
             Rv32ModularArithmeticOpcode::ADD => true,
             Rv32ModularArithmeticOpcode::SUB | Rv32ModularArithmeticOpcode::SETUP_ADDSUB => false,

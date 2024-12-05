@@ -1,11 +1,14 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
-    Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom, SystemOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
+    SystemOpcode,
+};
+use axvm_rv32im_guest::{
+    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
+    RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 use axvm_transpiler::{
-    axvm_platform::constants::PhantomImm,
     util::{nop, unimp},
     TranspilerExtension,
 };
@@ -16,7 +19,9 @@ use rrs_lib::{
     process_instruction,
 };
 
+mod instructions;
 pub mod rrs;
+pub use instructions::*;
 
 #[derive(Default)]
 pub struct Rv32ITranspilerExtension;
@@ -26,18 +31,6 @@ pub struct Rv32MTranspilerExtension;
 
 #[derive(Default)]
 pub struct Rv32IoTranspilerExtension;
-
-// TODO: the opcode and func3 will be imported from `guest` crate
-pub(crate) const SYSTEM_OPCODE: u8 = 0x0b;
-pub(crate) const CSR_OPCODE: u8 = 0b1110011;
-pub(crate) const RV32_ALU_OPCODE: u8 = 0b0110011;
-pub(crate) const RV32M_FUNCT7: u8 = 0x01;
-
-pub(crate) const TERMINATE_FUNCT3: u8 = 0b000;
-pub(crate) const HINT_STORE_W_FUNCT3: u8 = 0b001;
-pub(crate) const REVEAL_FUNCT3: u8 = 0b010;
-pub(crate) const PHANTOM_FUNCT3: u8 = 0b011;
-pub(crate) const CSRRW_FUNCT3: u8 = 0b001;
 
 impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
@@ -69,7 +62,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
             (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
                 Some(Instruction {
-                    opcode: SystemOpcode::TERMINATE.with_default_offset(),
+                    opcode: AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE),
                     c: F::from_canonical_u8(
                         dec_insn.imm.try_into().expect("exit code must be byte"),
                     ),
@@ -158,7 +151,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                 let dec_insn = IType::new(instruction_u32);
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 Some(Instruction::from_isize(
-                    Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
+                    AxVmOpcode::with_default_offset(Rv32HintStoreOpcode::HINT_STOREW),
                     0,
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,
@@ -171,7 +164,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
                 Some(Instruction::from_isize(
-                    Rv32LoadStoreOpcode::STOREW.with_default_offset(),
+                    AxVmOpcode::with_default_offset(Rv32LoadStoreOpcode::STOREW),
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,

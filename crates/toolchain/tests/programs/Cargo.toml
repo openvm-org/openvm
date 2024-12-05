@@ -1,0 +1,61 @@
+[workspace]
+[package]
+name = "axvm-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../axvm" }
+axvm-platform = { path = "../../platform" }
+
+axvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
+axvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
+axvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
+axvm-bigint-guest = { path = "../../../../extensions/bigint/guest" }
+axvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
+axvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
+axvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
+axvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
+
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex-literal = { version = "0.4.1", default-features = false }
+k256 = { version = "0.13.3", default-features = false, features = [
+    "ecdsa-core",
+    "ecdsa",
+], optional = true }
+
+[features]
+default = []
+std = [
+    "serde/std",
+    "axvm/std",
+    "axvm-algebra-guest/std",
+    "axvm-bigint-guest/std",
+    "axvm-ecc-guest/std",
+    "axvm-keccak256-guest/std",
+    "axvm-pairing-guest/std",
+]
+bn254 = ["axvm-pairing-guest/bn254"]
+bls12_381 = ["axvm-pairing-guest/bls12_381"]
+k256 = ["axvm-ecc-guest/k256", "dep:k256"]
+
+[profile.release]
+panic = "abort"
+lto = "fat"     # decrease binary size
+# strip = "symbols"
+
+[[example]]
+name = "ec"
+required-features = ["k256"]
+
+[[example]]
+name = "ecdsa"
+required-features = ["k256"]
+
+[[example]]
+name = "final_exp_hint"
+required-features = ["bls12_381"]

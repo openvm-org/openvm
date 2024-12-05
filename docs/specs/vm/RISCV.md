@@ -58,7 +58,7 @@ We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **010101
 Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.axiom` section of the ELF file in the serialized format. This is achieved by the `setup_moduli!` macro: for example, the following code
 
 ```rust
-moduli_setup! {
+moduli_declare! {
     Bls12381 { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
     Bn254 { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 }

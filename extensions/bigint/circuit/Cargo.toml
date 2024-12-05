@@ -15,12 +15,9 @@ axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-rv32im-circuit = { workspace = true }
 axvm-rv32-adapters = { workspace = true }
+axvm-bigint-transpiler = { workspace = true }
+axvm-rv32im-transpiler = { workspace = true }
 
-p3-keccak-air = { workspace = true }
-
-parking_lot.workspace = true
-strum.workspace = true
-tiny-keccak.workspace = true
 hex-literal.workspace = true
 itertools.workspace = true
 tracing.workspace = true

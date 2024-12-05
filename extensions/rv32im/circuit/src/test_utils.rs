@@ -1,7 +1,7 @@
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use rand::{rngs::StdRng, Rng};
 
 use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
@@ -28,7 +28,7 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
     (
         Instruction::from_usize(
-            opcode_with_offset,
+            AxVmOpcode::from_usize(opcode_with_offset),
             [rd, rs1, rs2, 1, if rs2_is_imm { 0 } else { 1 }],
         ),
         rd,

@@ -1,0 +1,35 @@
+[package]
+name = "axvm-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+axvm-build = { workspace = true }
+axvm-native-circuit = { workspace = true }
+axvm-native-compiler = { workspace = true }
+axvm-native-recursion = { workspace = true }
+axvm-rv32im-circuit = { workspace = true }
+axvm-transpiler = { workspace = true }
+ax-stark-sdk = { workspace = true }
+p3-baby-bear = { workspace = true }
+p3-field = { workspace = true }
+axvm-circuit = { workspace = true }
+
+bincode = { workspace = true }
+derivative = { workspace = true }
+serde = { workspace = true }
+static_assertions.workspace = true
+eyre.workspace = true
+async-trait.workspace = true
+metrics.workspace = true
+tracing.workspace = true
+
+[features]
+default = ["parallel"]
+bench-metrics = ["axvm-native-recursion/bench-metrics"]
+static-verifier = ["axvm-native-recursion/static-verifier"]
+parallel = ["axvm-circuit/parallel"]
+test-utils = ["axvm-circuit/test-utils"]

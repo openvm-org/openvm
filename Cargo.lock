@@ -51,25 +51,54 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
+name = "alloy-eip2930"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+checksum = "0069cf0642457f87a01a014f6dc29d5d893cd4fd8fddf0c3cdfad1bb3ebafc41"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "serde",
+]
+
+[[package]]
+name = "alloy-eip7702"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c986539255fb839d1533c128e190e557e52ff652c9ef62939e233a81dd93f7e"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "derive_more 1.0.0",
+ "k256",
+ "serde",
+]
 
 [[package]]
 name = "alloy-primitives"
-version = "0.4.2"
+version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0628ec0ba5b98b3370bb6be17b12f23bfce8ee4ad83823325a20546d9b03b78"
+checksum = "9db948902dfbae96a73c2fbf1f7abec62af034ab883e4c777c3fd29702bd6e2c"
 dependencies = [
  "alloy-rlp",
  "bytes",
  "cfg-if",
  "const-hex",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
+ "foldhash",
+ "hashbrown 0.15.2",
  "hex-literal",
+ "indexmap",
  "itoa",
+ "k256",
+ "keccak-asm",
+ "paste",
+ "proptest",
+ "rand",
  "ruint",
+ "rustc-hash 2.1.0",
+ "serde",
+ "sha3",
  "tiny-keccak",
 ]
 
@@ -161,9 +190,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.93"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
+checksum = "c1fd03a028ef38ba2276dce7e33fcd6369c158a1bca17946c4b1b701891c1ff7"
 
 [[package]]
 name = "ark-ff"
@@ -277,7 +306,7 @@ checksum = "1df2c09229cbc5a028b1d70e00fdb2acee28b1055dfb5ca73eea49c5a25c4e7c"
 dependencies = [
  "colored",
  "num-traits",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -287,7 +316,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
 dependencies = [
  "num-traits",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -311,6 +340,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.90",
+]
+
+[[package]]
+name = "aurora-engine-modexp"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0aef7712851e524f35fbbb74fa6599c5cd8692056a1c36f9ca0d2001b670e7e5"
+dependencies = [
+ "hex",
+ "num",
 ]
 
 [[package]]
@@ -351,7 +390,6 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
- "num-integer",
  "num-traits",
  "p3-air",
  "p3-baby-bear",
@@ -367,29 +405,9 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "parking_lot",
- "rand 0.8.5",
+ "rand",
  "test-case",
  "tracing",
-]
-
-[[package]]
-name = "ax-ecc-execution"
-version = "0.1.0"
-dependencies = [
- "axvm-ecc",
- "axvm-ecc-constants",
- "ff 0.13.0",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rng",
- "subtle",
 ]
 
 [[package]]
@@ -397,12 +415,11 @@ name = "ax-mod-circuit-builder"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
- "ax-ecc-execution",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
- "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-pairing-guest",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
@@ -414,7 +431,7 @@ dependencies = [
  "p3-field",
  "p3-matrix",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "sha3",
  "tracing",
 ]
@@ -438,7 +455,7 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "test-case",
  "zkhash",
 ]
@@ -474,7 +491,7 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "rayon",
  "serde",
  "serde_json",
@@ -515,7 +532,7 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
  "serde_json",
  "static_assertions",
@@ -530,26 +547,13 @@ dependencies = [
 name = "axvm"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
  "axvm-platform",
  "axvm-rv32im-guest",
- "axvm-sw-setup",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
  "num-traits",
  "serde",
-]
-
-[[package]]
-name = "axvm-algebra"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "halo2curves-axiom 0.7.0",
- "num-bigint-dig",
- "serde",
- "serde-big-array",
 ]
 
 [[package]]
@@ -561,10 +565,11 @@ dependencies = [
  "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-algebra-transpiler",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-pairing-guest",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
@@ -579,16 +584,50 @@ dependencies = [
  "p3-baby-bear",
  "p3-field",
  "p3-matrix",
- "rand 0.8.5",
+ "rand",
  "strum",
  "tracing",
+]
+
+[[package]]
+name = "axvm-algebra-complex-macros"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-algebra-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-algebra-moduli-setup",
+ "axvm-platform",
+ "halo2curves-axiom 0.7.0",
+ "num-bigint-dig",
+ "serde",
+ "serde-big-array",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-algebra-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
 name = "axvm-algebra-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-algebra-guest",
  "axvm-instructions",
+ "axvm-instructions-derive",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
@@ -614,7 +653,7 @@ dependencies = [
  "axvm-keccak256-transpiler",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",
  "axvm-sdk",
@@ -646,11 +685,13 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
+ "axvm-bigint-transpiler",
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -658,13 +699,9 @@ dependencies = [
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "p3-keccak-air",
- "parking_lot",
- "rand 0.8.5",
- "strum",
+ "rand",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -677,18 +714,21 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "serde",
- "tiny-keccak",
+ "strum_macros",
 ]
 
 [[package]]
 name = "axvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-bigint-guest",
  "axvm-instructions",
+ "axvm-instructions-derive",
+ "axvm-rv32im-transpiler",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
- "strum_macros",
+ "strum",
 ]
 
 [[package]]
@@ -720,31 +760,29 @@ dependencies = [
  "axvm-bigint-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-keccak256-circuit",
+ "axvm-keccak256-transpiler",
  "axvm-native-circuit",
+ "axvm-native-compiler",
  "axvm-pairing-circuit",
  "axvm-rv32im-circuit",
+ "axvm-rv32im-transpiler",
  "backtrace",
  "cfg-if",
  "derivative",
  "derive-new",
  "derive_more 1.0.0",
- "enum-utils",
  "eyre",
  "getset",
  "halo2curves-axiom 0.7.0",
  "hex",
- "hex-literal",
  "inferno",
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
- "num-bigint-dig",
- "num-traits",
  "once_cell",
  "p3-air",
  "p3-baby-bear",
@@ -754,24 +792,20 @@ dependencies = [
  "p3-fri",
  "p3-goldilocks",
  "p3-keccak",
- "p3-keccak-air",
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-merkle-tree",
  "p3-symmetric",
  "p3-util",
  "parking_lot",
- "rand 0.8.5",
+ "rand",
  "rand_xoshiro",
  "rustc-hash 2.1.0",
  "serde",
  "static_assertions",
- "strum",
- "strum_macros",
  "test-case",
  "test-log",
  "thiserror",
- "tiny-keccak",
  "toml",
  "tracing",
  "zkhash",
@@ -788,28 +822,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-ecc"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-algebra",
- "axvm-platform",
- "ecdsa",
- "elliptic-curve",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "k256",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-traits",
- "rand 0.8.5",
- "serde",
- "strum_macros",
-]
-
-[[package]]
 name = "axvm-ecc-circuit"
 version = "0.1.0"
 dependencies = [
@@ -820,12 +832,14 @@ dependencies = [
  "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc-constants",
+ "axvm-ecc-guest",
+ "axvm-ecc-transpiler",
  "axvm-instructions",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
+ "lazy_static",
  "num-bigint-dig",
  "num-traits",
  "once_cell",
@@ -835,31 +849,57 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-ecc-constants"
+name = "axvm-ecc-guest"
 version = "0.1.0"
 dependencies = [
+ "axvm",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-sw-setup",
+ "axvm-platform",
+ "ecdsa",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
  "hex-literal",
+ "itertools 0.13.0",
+ "k256",
  "lazy_static",
+ "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-traits",
+ "rand",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "axvm-ecc-sw-setup"
+version = "0.1.0"
+dependencies = [
+ "axvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
 name = "axvm-ecc-transpiler"
 version = "0.1.0"
 dependencies = [
+ "axvm-ecc-guest",
  "axvm-instructions",
+ "axvm-instructions-derive",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
  "strum",
- "strum_macros",
 ]
 
 [[package]]
 name = "axvm-instructions"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-instructions-derive",
  "backtrace",
  "derive-new",
@@ -867,7 +907,6 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "p3-baby-bear",
- "p3-field",
  "serde",
  "strum",
  "strum_macros",
@@ -897,6 +936,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-keccak256-transpiler",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
@@ -906,8 +946,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "p3-keccak-air",
- "parking_lot",
- "rand 0.8.5",
+ "rand",
  "strum",
  "test-case",
  "test-log",
@@ -929,24 +968,18 @@ name = "axvm-keccak256-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-instructions-derive",
+ "axvm-keccak256-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
+ "strum",
 ]
 
 [[package]]
 name = "axvm-macros-common"
 version = "0.1.0"
 dependencies = [
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-moduli-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
  "syn 2.0.90",
 ]
 
@@ -962,21 +995,20 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-native-compiler",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
  "hex",
- "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
  "parking_lot",
- "rand 0.8.5",
+ "rand",
  "serde",
  "strum",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -988,12 +1020,15 @@ dependencies = [
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
+ "axvm-instructions-derive",
  "axvm-native-circuit",
  "axvm-native-compiler-derive",
+ "axvm-rv32im-transpiler",
  "backtrace",
  "cfg-if",
  "hex",
  "itertools 0.13.0",
+ "lazy_static",
  "metrics",
  "num-bigint 0.4.6",
  "num-bigint-dig",
@@ -1006,12 +1041,14 @@ dependencies = [
  "p3-field",
  "p3-merkle-tree",
  "p3-symmetric",
- "rand 0.8.5",
+ "rand",
  "serde",
  "serde_json",
  "snark-verifier-sdk",
  "strum",
  "strum_macros",
+ "test-case",
+ "test-log",
  "tracing",
  "zkhash",
 ]
@@ -1021,11 +1058,44 @@ name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "p3-field",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
+]
+
+[[package]]
+name = "axvm-native-recursion"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "axvm-circuit",
+ "axvm-native-circuit",
+ "axvm-native-compiler",
+ "axvm-native-recursion",
+ "cfg-if",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "once_cell",
+ "p3-baby-bear",
+ "p3-bn254-fr",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-matrix",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "p3-util",
+ "rand",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "tracing",
 ]
 
 [[package]]
@@ -1034,17 +1104,17 @@ version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
  "ax-circuit-primitives",
- "ax-ecc-execution",
  "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-instructions",
+ "axvm-pairing-guest",
+ "axvm-pairing-transpiler",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
@@ -1055,8 +1125,33 @@ dependencies = [
  "num-bigint-dig",
  "num-traits",
  "once_cell",
- "rand 0.8.5",
+ "rand",
  "strum",
+]
+
+[[package]]
+name = "axvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "axvm",
+ "axvm-algebra-complex-macros",
+ "axvm-algebra-guest",
+ "axvm-algebra-moduli-setup",
+ "axvm-ecc-guest",
+ "axvm-platform",
+ "axvm-rv32im-guest",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "rand",
+ "serde",
+ "strum_macros",
+ "subtle",
 ]
 
 [[package]]
@@ -1064,18 +1159,18 @@ name = "axvm-pairing-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-instructions-derive",
+ "axvm-pairing-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
  "strum",
- "strum_macros",
 ]
 
 [[package]]
 name = "axvm-platform"
 version = "0.1.0"
 dependencies = [
- "axvm-moduli-setup",
  "bincode 2.0.0-rc.3",
  "bytemuck",
  "critical-section",
@@ -1087,47 +1182,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axvm-recursion"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-native-compiler-derive",
- "axvm-recursion",
- "cfg-if",
- "ff 0.13.0",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint-dig",
- "once_cell",
- "p3-air",
- "p3-baby-bear",
- "p3-bn254-fr",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-util",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "tracing",
- "zkhash",
-]
-
-[[package]]
 name = "axvm-rv32-adapters"
 version = "0.1.0"
 dependencies = [
@@ -1136,23 +1190,15 @@ dependencies = [
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
- "axvm-circuit-derive",
  "axvm-instructions",
  "axvm-rv32im-circuit",
  "derive-new",
- "derive_more 1.0.0",
- "eyre",
  "hex",
- "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
- "num-traits",
- "parking_lot",
- "rand 0.8.5",
- "strum",
+ "rand",
  "test-case",
  "test-log",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -1167,6 +1213,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-instructions",
+ "axvm-rv32im-transpiler",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -1175,7 +1222,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "parking_lot",
- "rand 0.8.5",
+ "rand",
  "strum",
  "test-case",
  "test-log",
@@ -1187,6 +1234,7 @@ name = "axvm-rv32im-guest"
 version = "0.1.0"
 dependencies = [
  "axvm-platform",
+ "strum_macros",
 ]
 
 [[package]]
@@ -1194,9 +1242,12 @@ name = "axvm-rv32im-transpiler"
 version = "0.1.0"
 dependencies = [
  "axvm-instructions",
+ "axvm-instructions-derive",
+ "axvm-rv32im-guest",
  "axvm-transpiler",
  "p3-field",
  "rrs-lib",
+ "strum",
  "tracing",
 ]
 
@@ -1205,29 +1256,23 @@ name = "axvm-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ax-poseidon2-air",
  "ax-stark-sdk",
+ "axvm-build",
  "axvm-circuit",
  "axvm-native-circuit",
  "axvm-native-compiler",
- "axvm-recursion",
+ "axvm-native-recursion",
  "axvm-rv32im-circuit",
+ "axvm-transpiler",
+ "bincode 1.3.3",
  "derivative",
+ "eyre",
  "metrics",
  "p3-baby-bear",
+ "p3-field",
  "serde",
- "serde_json",
  "static_assertions",
  "tracing",
-]
-
-[[package]]
-name = "axvm-sw-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
 ]
 
 [[package]]
@@ -1235,7 +1280,6 @@ name = "axvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
- "ax-ecc-execution",
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-algebra-circuit",
@@ -1244,14 +1288,16 @@ dependencies = [
  "axvm-bigint-transpiler",
  "axvm-build",
  "axvm-circuit",
- "axvm-ecc",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-ecc-transpiler",
+ "axvm-instructions",
  "axvm-keccak256-circuit",
  "axvm-keccak256-transpiler",
  "axvm-pairing-circuit",
+ "axvm-pairing-guest",
  "axvm-pairing-transpiler",
+ "axvm-platform",
  "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",
  "axvm-transpiler",
@@ -1260,7 +1306,7 @@ dependencies = [
  "num-bigint-dig",
  "p3-baby-bear",
  "p3-field",
- "rand 0.8.5",
+ "rand",
  "serde",
  "tempfile",
  "test-case",
@@ -1270,18 +1316,12 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-stark-backend",
  "ax-stark-sdk",
- "axvm-algebra-circuit",
  "axvm-algebra-transpiler",
- "axvm-bigint-circuit",
  "axvm-build",
  "axvm-circuit",
- "axvm-ecc-constants",
  "axvm-instructions",
  "axvm-platform",
- "axvm-rv32im-circuit",
  "axvm-rv32im-transpiler",
  "derive_more 1.0.0",
  "elf",
@@ -1360,27 +1400,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "bindgen"
-version = "0.66.1"
+name = "bit-set"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
+checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
 dependencies = [
- "bitflags 2.6.0",
- "cexpr",
- "clang-sys",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "prettyplease",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 1.1.0",
- "shlex",
- "syn 2.0.90",
- "which",
+ "bit-vec",
 ]
+
+[[package]]
+name = "bit-vec"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitflags"
@@ -1457,7 +1489,7 @@ dependencies = [
  "ff 0.12.1",
  "group 0.12.1",
  "pairing 0.22.0",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -1505,16 +1537,16 @@ checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
 
 [[package]]
 name = "c-kzg"
-version = "0.1.1"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac926d808fb72fe09ebf471a091d6d72918876ccf0b4989766093d2d0d24a0ef"
+checksum = "f0307f72feab3300336fb803a57134159f6e20139af1357f36c54cb90d8e8928"
 dependencies = [
- "bindgen",
  "blst",
  "cc",
  "glob",
  "hex",
  "libc",
+ "once_cell",
  "serde",
 ]
 
@@ -1568,7 +1600,7 @@ dependencies = [
  "goblin",
  "hex",
  "prettytable-rs",
- "rand 0.8.5",
+ "rand",
  "regex",
  "rustc-demangle",
  "serde",
@@ -1622,15 +1654,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cexpr"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
-dependencies = [
- "nom",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1680,21 +1703,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "clang-sys"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b023947811758c97c59bf9d1c188fd619ad4718dcaa767947df1cadb14f39f4"
-dependencies = [
- "glob",
- "libc",
- "libloading",
-]
-
-[[package]]
 name = "clap"
-version = "4.5.21"
+version = "4.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb3b4b9e5a7c7514dfa52869339ee98b3156b0bfb4e8a77c4ff4babb64b1604f"
+checksum = "69371e34337c4c984bbe322360c2547210bf632eb2814bbe78a6e87a2935bd2b"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1702,9 +1714,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.21"
+version = "4.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b17a95aa67cc7b5ebd32aa5370189aa0d79069ef1c64ce893bd30fb24bff20ec"
+checksum = "6e24c1b4099818523236a8ca881d2b45db98dadfb4625cf6608c12069fcbbde1"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1912,7 +1924,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
 dependencies = [
  "generic-array",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
  "zeroize",
 ]
@@ -2053,6 +2065,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.90",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -2136,6 +2149,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
+
+[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2174,7 +2193,7 @@ dependencies = [
  "generic-array",
  "group 0.13.0",
  "pkcs8",
- "rand_core 0.6.4",
+ "rand_core",
  "sec1",
  "subtle",
  "zeroize",
@@ -2203,30 +2222,6 @@ name = "endian-type"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
-
-[[package]]
-name = "enum-utils"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed327f716d0d351d86c9fd3398d20ee39ad8f681873cc081da2ca1c10fed398a"
-dependencies = [
- "enum-utils-from-str",
- "failure",
- "proc-macro2",
- "quote",
- "serde_derive_internals",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "enum-utils-from-str"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d49be08bad6e4ca87b2b8e74146987d4e5cb3b7512efa50ef505b51a22227ee1"
-dependencies = [
- "proc-macro2",
- "quote",
-]
 
 [[package]]
 name = "enumn"
@@ -2310,15 +2305,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "failure"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32e9bd16cc02eae7db7ef620b392808b89f6a5e16bb3497d159c6b92a0f4f86"
-dependencies = [
- "backtrace",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2342,7 +2328,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
 dependencies = [
  "bitvec",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2355,7 +2341,7 @@ dependencies = [
  "bitvec",
  "byteorder",
  "ff_derive",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2394,10 +2380,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
 dependencies = [
  "byteorder",
- "rand 0.8.5",
+ "rand",
  "rustc-hex",
  "static_assertions",
 ]
+
+[[package]]
+name = "fnv"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "foldhash"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81ec6369c545a7d40e4589b5597581fa1c441fe1cce96dd1de43159910a36a2"
 
 [[package]]
 name = "form_urlencoded"
@@ -2407,12 +2405,6 @@ checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
 ]
-
-[[package]]
-name = "fuchsia-cprng"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 
 [[package]]
 name = "funty"
@@ -2504,7 +2496,7 @@ checksum = "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
 dependencies = [
  "ff 0.12.1",
  "memuse",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2515,7 +2507,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
  "ff 0.13.0",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -2552,8 +2544,8 @@ dependencies = [
  "itertools 0.11.0",
  "maybe-rayon",
  "pairing 0.23.0",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand",
+ "rand_core",
  "rustc-hash 1.1.0",
  "sha3",
  "tracing",
@@ -2589,9 +2581,9 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
  "rayon",
  "serde",
  "serde_json",
@@ -2608,7 +2600,7 @@ dependencies = [
  "ff 0.12.1",
  "group 0.12.1",
  "pasta_curves 0.4.1",
- "rand_core 0.6.4",
+ "rand_core",
  "rayon",
 ]
 
@@ -2631,8 +2623,8 @@ dependencies = [
  "pairing 0.23.0",
  "pasta_curves 0.5.1",
  "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand",
+ "rand_core",
  "rayon",
  "serde",
  "serde_arrays",
@@ -2660,8 +2652,8 @@ dependencies = [
  "pairing 0.23.0",
  "pasta_curves 0.5.1",
  "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand",
+ "rand_core",
  "serde",
  "serde_arrays",
  "sha2",
@@ -2685,8 +2677,8 @@ dependencies = [
  "pairing 0.23.0",
  "pasta_curves 0.5.1",
  "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand",
+ "rand_core",
  "rayon",
  "serde",
  "serde_arrays",
@@ -2717,7 +2709,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
- "allocator-api2",
 ]
 
 [[package]]
@@ -2725,6 +2716,9 @@ name = "hashbrown"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
+dependencies = [
+ "foldhash",
+]
 
 [[package]]
 name = "heck"
@@ -2766,15 +2760,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
-]
-
-[[package]]
-name = "home"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3d1354bf6b7235cb4a0576c2619fd4ed18183f689b12b006a0ee7329eeff9a5"
-dependencies = [
- "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3054,7 +3039,7 @@ dependencies = [
  "bls12_381",
  "ff 0.12.1",
  "group 0.12.1",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -3081,6 +3066,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keccak-asm"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "505d1856a39b200489082f90d897c3f07c455563880bc5952e38eabf731c83b6"
+dependencies = [
+ "digest 0.10.7",
+ "sha3-asm",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3088,12 +3083,6 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
  "spin",
 ]
-
-[[package]]
-name = "lazycell"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
@@ -3111,16 +3100,6 @@ dependencies = [
  "libc",
  "libz-sys",
  "pkg-config",
-]
-
-[[package]]
-name = "libloading"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
-dependencies = [
- "cfg-if",
- "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3297,12 +3276,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minimal-lexical"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
 name = "miniz_oxide"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3341,16 +3314,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "nom"
-version = "7.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
-dependencies = [
- "memchr",
- "minimal-lexical",
 ]
 
 [[package]]
@@ -3396,7 +3359,7 @@ checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
  "num-integer",
  "num-traits",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -3411,7 +3374,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "serde",
  "smallvec",
 ]
@@ -3510,7 +3473,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "num-traits",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -3574,7 +3537,7 @@ dependencies = [
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
- "rand 0.8.5",
+ "rand",
  "serde",
 ]
 
@@ -3599,7 +3562,7 @@ dependencies = [
  "p3-field",
  "p3-poseidon2",
  "p3-symmetric",
- "rand 0.8.5",
+ "rand",
  "serde",
 ]
 
@@ -3653,7 +3616,7 @@ dependencies = [
  "nums",
  "p3-maybe-rayon",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
  "tracing",
 ]
@@ -3688,7 +3651,7 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
 ]
 
@@ -3736,7 +3699,7 @@ dependencies = [
  "p3-field",
  "p3-maybe-rayon",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
  "tracing",
  "transpose",
@@ -3761,7 +3724,7 @@ dependencies = [
  "p3-matrix",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -3776,7 +3739,7 @@ dependencies = [
  "p3-maybe-rayon",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
  "tracing",
 ]
@@ -3796,7 +3759,7 @@ dependencies = [
  "p3-poseidon2",
  "p3-symmetric",
  "p3-util",
- "rand 0.8.5",
+ "rand",
  "serde",
  "tracing",
  "transpose",
@@ -3810,7 +3773,7 @@ dependencies = [
  "p3-field",
  "p3-mds",
  "p3-symmetric",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -3822,7 +3785,7 @@ dependencies = [
  "p3-field",
  "p3-mds",
  "p3-symmetric",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -3881,29 +3844,28 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec"
-version = "3.7.0"
+version = "3.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be4817d39f3272f69c59fe05d0535ae6456c2dc2fa1ba02910296c7e0a5c590"
+checksum = "306800abfa29c7f16596b5970a588435e3d5b3149683d00c12b699cc19f895ee"
 dependencies = [
  "arrayvec",
  "bitvec",
  "byte-slice-cast",
  "impl-trait-for-tuples",
  "parity-scale-codec-derive",
- "rustversion",
  "serde",
 ]
 
 [[package]]
 name = "parity-scale-codec-derive"
-version = "3.7.0"
+version = "3.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8781a75c6205af67215f382092b6e0a4ff3734798523e69073d4bcd294ec767b"
+checksum = "d830939c76d294956402033aee57a6da7b438f2294eb94864c37b0569053a42c"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.90",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3939,7 +3901,7 @@ dependencies = [
  "ff 0.12.1",
  "group 0.12.1",
  "lazy_static",
- "rand 0.8.5",
+ "rand",
  "static_assertions",
  "subtle",
 ]
@@ -3955,7 +3917,7 @@ dependencies = [
  "group 0.13.0",
  "hex",
  "lazy_static",
- "rand 0.8.5",
+ "rand",
  "serde",
  "static_assertions",
  "subtle",
@@ -3966,12 +3928,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "percent-encoding"
@@ -4062,7 +4018,7 @@ dependencies = [
  "ff 0.13.0",
  "lazy_static",
  "log",
- "rand 0.8.5",
+ "rand",
  "rand_xorshift",
  "thiserror",
 ]
@@ -4102,16 +4058,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
  "zerocopy",
-]
-
-[[package]]
-name = "prettyplease"
-version = "0.2.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64d1ec885c64d0457d564db4ec299b2dae3f9c02808b8ad9c3a089c591b18033"
-dependencies = [
- "proc-macro2",
- "syn 2.0.90",
 ]
 
 [[package]]
@@ -4185,13 +4131,17 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4c2511913b88df1637da85cc8d96ec8e43a3f8bb8ccb71ee1ac240d6f3df58d"
 dependencies = [
+ "bit-set",
+ "bit-vec",
  "bitflags 2.6.0",
  "lazy_static",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "rand_chacha",
  "rand_xorshift",
  "regex-syntax 0.8.5",
+ "rusty-fork",
+ "tempfile",
  "unarray",
 ]
 
@@ -4209,6 +4159,12 @@ dependencies = [
  "web-sys",
  "winapi",
 ]
+
+[[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-xml"
@@ -4246,36 +4202,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.3.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ac302d8f83c0c1974bf758f6b041c6c8ada916fbb44a609158ca8b064cc76c"
-dependencies = [
- "libc",
- "rand 0.4.6",
-]
-
-[[package]]
-name = "rand"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-dependencies = [
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "rdrand",
- "winapi",
-]
-
-[[package]]
-name = "rand"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -4285,23 +4218,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.6.4",
+ "rand_core",
 ]
-
-[[package]]
-name = "rand_core"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
-dependencies = [
- "rand_core 0.4.2",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
 
 [[package]]
 name = "rand_core"
@@ -4318,7 +4236,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -4327,7 +4245,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f97cdb2a36ed4183de61b2f824cc45c9f1037f28afe0a322e9fff4c108b5aaa"
 dependencies = [
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -4357,15 +4275,6 @@ checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
-]
-
-[[package]]
-name = "rdrand"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "678054eb77286b51581ba43620cc911abf02758c91f93f479767aed0f90458b2"
-dependencies = [
- "rand_core 0.3.1",
 ]
 
 [[package]]
@@ -4434,33 +4343,40 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "revm"
-version = "3.5.0"
+version = "18.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f4ca8ae0345104523b4af1a8a7ea97cfa1865cdb7a7c25d23c1a18d9b48598"
+checksum = "15689a3c6a8d14b647b4666f2e236ef47b5a5133cdfd423f545947986fff7013"
 dependencies = [
  "auto_impl",
+ "cfg-if",
+ "dyn-clone",
  "revm-interpreter",
  "revm-precompile",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "revm-interpreter"
-version = "1.3.0"
+version = "14.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f959cafdf64a7f89b014fa73dc2325001cf654b3d9400260b212d19a2ebe3da0"
+checksum = "74e3f11d0fed049a4a10f79820c59113a79b38aed4ebec786a79d5c667bfeb51"
 dependencies = [
  "revm-primitives",
+ "serde",
 ]
 
 [[package]]
 name = "revm-precompile"
-version = "2.2.0"
+version = "15.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d360a88223d85709d2e95d4609eb1e19c649c47e28954bfabae5e92bb37e83e"
+checksum = "e381060af24b750069a2b2d2c54bba273d84e8f5f9e8026fc9262298e26cc336"
 dependencies = [
+ "aurora-engine-modexp",
+ "blst",
  "c-kzg",
+ "cfg-if",
  "k256",
- "num",
  "once_cell",
  "revm-primitives",
  "ripemd",
@@ -4471,20 +4387,22 @@ dependencies = [
 
 [[package]]
 name = "revm-primitives"
-version = "1.3.0"
+version = "14.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51187b852d9e458816a2e19c81f1dd6c924077e1a8fccd16e4f044f865f299d7"
+checksum = "3702f132bb484f4f0d0ca4f6fbde3c82cfd745041abbedd6eda67730e1868ef0"
 dependencies = [
+ "alloy-eip2930",
+ "alloy-eip7702",
  "alloy-primitives",
- "alloy-rlp",
  "auto_impl",
  "bitflags 2.6.0",
  "bitvec",
  "c-kzg",
+ "cfg-if",
+ "dyn-clone",
  "enumn",
- "hashbrown 0.14.5",
  "hex",
- "once_cell",
+ "serde",
 ]
 
 [[package]]
@@ -4538,15 +4456,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rng"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daa6bba2ae9b3232e194e86d9a407e28c5d02fdfb85ea0e7e2e60f4d1e78aff2"
-dependencies = [
- "rand 0.3.23",
-]
-
-[[package]]
 name = "rrs-lib"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4572,7 +4481,7 @@ dependencies = [
  "parity-scale-codec",
  "primitive-types",
  "proptest",
- "rand 0.8.5",
+ "rand",
  "rlp",
  "ruint-macro",
  "serde",
@@ -4648,6 +4557,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e819f2bc632f285be6d7cd36e25940d45b2391dd6d9b939e79de557f7014248"
 
 [[package]]
+name = "rusty-fork"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb3dcc6e454c328bb824492db107ab7c0ae8fcffe4ad210136ef014458c1bc4f"
+dependencies = [
+ "fnv",
+ "quick-error",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4704,18 +4625,19 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.27.0"
+version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f"
+checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
+ "rand",
  "secp256k1-sys",
 ]
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.8.1"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70a129b9e9efbfb223753b9163c4ab3b13cff7fd9c7f010fbac25ab4099fa07e"
+checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
 dependencies = [
  "cc",
 ]
@@ -4786,22 +4708,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_derive_internals"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dbab34ca63057a1f15280bdf3c39f2b1eb1b54c17e98360e511637aef7418c6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "serde_json"
 version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7fceb2473b9166b2294ef05efcb65a3db80803f0b03ef86a5fc88a2b85ee377"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -4839,6 +4751,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3-asm"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28efc5e327c837aa837c59eae585fc250715ef939ac32881bcc11677cd02d46"
+dependencies = [
+ "cc",
+ "cfg-if",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4860,7 +4782,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -4884,7 +4806,7 @@ checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
 [[package]]
 name = "snark-verifier"
 version = "0.1.8"
-source = "git+https://github.com/axiom-crypto/snark-verifier?branch=chore/ruint-pin#f847c0179659b27e4b6b3992ce1bc00505c52628"
+source = "git+https://github.com/axiom-crypto/snark-verifier?branch=zkvm-v0.1#9b617fc0539a5f5e009f8d907cf74040f90d4f85"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -4895,7 +4817,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "pairing 0.23.0",
- "rand 0.8.5",
+ "rand",
  "revm",
  "ruint",
  "serde",
@@ -4905,7 +4827,7 @@ dependencies = [
 [[package]]
 name = "snark-verifier-sdk"
 version = "0.1.8"
-source = "git+https://github.com/axiom-crypto/snark-verifier?branch=chore/ruint-pin#f847c0179659b27e4b6b3992ce1bc00505c52628"
+source = "git+https://github.com/axiom-crypto/snark-verifier?branch=zkvm-v0.1#9b617fc0539a5f5e009f8d907cf74040f90d4f85"
 dependencies = [
  "ark-std 0.3.0",
  "bincode 1.3.3",
@@ -4918,7 +4840,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-integer",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "rand_chacha",
  "serde",
  "serde_json",
@@ -5012,7 +4934,7 @@ dependencies = [
  "byteorder",
  "crunchy",
  "lazy_static",
- "rand 0.8.5",
+ "rand",
  "rustc-hex",
 ]
 
@@ -5254,9 +5176,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.36"
+version = "0.3.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
+checksum = "35e7868883861bd0e56d9ac6efcaaca0d6d5d82a2a7ec8209ff492c07cf37b21"
 dependencies = [
  "deranged",
  "itoa",
@@ -5277,9 +5199,9 @@ checksum = "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
 
 [[package]]
 name = "time-macros"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f252a68540fde3a3877aeea552b832b40ab9a69e318efd078774a01ddee1ccf"
+checksum = "2834e6017e3e5e4b9834939793b282bc03b37a3336245fa820e35e233e2a85de"
 dependencies = [
  "num-conv",
  "time-core",
@@ -5316,9 +5238,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.41.1"
+version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
+checksum = "5cec9b21b0450273377fc97bd4c33a8acffc8c996c987a7c5b319a0083707551"
 dependencies = [
  "backtrace",
  "pin-project-lite",
@@ -5503,6 +5425,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
+name = "unicode-xid"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
 name = "unroll"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5585,6 +5513,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dcc60c0624df774c82a0ef104151231d37da4962957d691c011c852b2473314"
 
 [[package]]
+name = "wait-timeout"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f200f5b12eb75f8c1ed65abd4b2db8a6e1b138a20de009dacee265a2498f3f6"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5663,18 +5600,6 @@ checksum = "a98bc3c33f0fe7e59ad7cd041b89034fa82a7c2d4365ca538dda6cdaf513863c"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "which"
-version = "4.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87ba24419a2078cd2b0f2ede2691b6c66d8e47836da3b6db8265ebad47afbfc7"
-dependencies = [
- "either",
- "home",
- "once_cell",
- "rustix",
 ]
 
 [[package]]
@@ -6019,7 +5944,7 @@ dependencies = [
  "jubjub",
  "lazy_static",
  "pasta_curves 0.5.1",
- "rand 0.8.5",
+ "rand",
  "serde",
  "sha2",
  "sha3",

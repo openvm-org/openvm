@@ -20,7 +20,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, DivRemOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::DivRemOpcode;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use strum::IntoEnumIterator;
@@ -386,7 +387,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let divrem_opcode = DivRemOpcode::from_usize(opcode - self.air.offset);
+        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
         let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;

@@ -11,7 +11,7 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
 use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
-use axvm_instructions::Rv32WeierstrassOpcode;
+use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use num_bigint_dig::BigUint;
 use p3_field::PrimeField32;
@@ -49,6 +49,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcAddNe",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -84,6 +85,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcDouble",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

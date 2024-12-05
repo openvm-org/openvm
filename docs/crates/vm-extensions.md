@@ -102,10 +102,8 @@ pub trait VmConfig<F: PrimeField32> {
 }
 ```
 
-A `VmConfig` is a struct that is a `SystemConfig` together with a collection of extensions. From the config we should be able to **deterministically** use `create_chip_complex` to create `VmChipComplex`.
-
-We will have a macro so that `VmConfig` is auto-implemented
-when you do: **macro implementation in progress, do it manually for now**
+A `VmConfig` is a struct that is a `SystemConfig` together with a collection of extensions. From the config we should be able to **deterministically** use `create_chip_complex` to create `VmChipComplex`. The `VmConfig` macro will
+automatically implement `VmConfig` using the `#[system]` and `#[extension]` attributes:
 
 ```rust
 #[derive(VmConfig)]
@@ -159,16 +157,14 @@ For each extension's inventory generation, the `VmInventoryBuilder` is provided 
 The top level structs of `VirtualMachine`, `VmExecutor`, `SegmentExecutor` remain almost entirely the same, but now has `VmConfig` as a generic:
 
 ```rust
-pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
+pub struct VirtualMachine<SC: StarkGenericConfig, E, VC>;
 ```
 
-We refer to the code on usage, which should be straightforward.
+TODO: discuss usage
 
 ## Examples
 
-`Rv32I, Rv32M` implement `VmExtension<F>` [here](https://github.com/axiom-crypto/afs-prototype/blob/main/vm/src/extensions/rv32im.rs) corresponding to the RISC-V 32-bit base, multiplication instruction sets, respectively. There is a manual implementation of `Rv32IConfig, Rv32ImConfig: VmConfig<F>` that will be replaced by a macro. The implementation is currently in `vm/src/extensions` but will be moved into a separate crate once stable.
-
-Toolchain tests using the new constructions [here](https://github.com/axiom-crypto/afs-prototype/blob/2cc5c3b28e3fd6d8a01c1edce76f8da3aaffbafe/toolchain/tests/src/basic_tests.rs#L21).
+The `extensions/` folder contains extensions implementing all non-system functionality via several extensions.  For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
 
 # Design Choices
 

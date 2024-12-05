@@ -1,7 +1,7 @@
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_rv32im_circuit::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use rand::{rngs::StdRng, Rng};
 
@@ -36,7 +36,7 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
     let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, 128);
 
     Instruction::from_isize(
-        opcode_with_offset,
+        AxVmOpcode::from_usize(opcode_with_offset),
         reg3 as isize,
         reg1 as isize,
         reg2 as isize,
@@ -70,7 +70,7 @@ pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
     let (reg3, _) = tester.write_heap_pointer_default(RV32_REGISTER_NUM_LIMBS, pointer_increment);
 
     Instruction::from_isize(
-        opcode_with_offset,
+        AxVmOpcode::from_usize(opcode_with_offset),
         reg3 as isize,
         reg1 as isize,
         reg2 as isize,
@@ -97,7 +97,7 @@ pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
     };
 
     Instruction::from_isize(
-        opcode_with_offset,
+        AxVmOpcode::from_usize(opcode_with_offset),
         reg1 as isize,
         reg2 as isize,
         imm,
@@ -128,7 +128,7 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
     (
         Instruction::from_usize(
-            opcode_with_offset,
+            AxVmOpcode::from_usize(opcode_with_offset),
             [rd, rs1, rs2, 1, if rs2_is_imm { 0 } else { 1 }],
         ),
         rd,

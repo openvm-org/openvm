@@ -8,9 +8,9 @@ description = "Guest extension for Int256"
 [dependencies]
 axvm = { workspace = true }
 axvm-platform = { workspace = true }
+strum_macros = { workspace = true }
 
 serde = { workspace = true, features = ["alloc"] }
-tiny-keccak.workspace = true
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true

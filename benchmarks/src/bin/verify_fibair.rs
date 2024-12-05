@@ -10,9 +10,10 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
+use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use clap::Parser;
 use eyre::Result;
 use tracing::info_span;
@@ -34,18 +35,19 @@ fn main() -> Result<()> {
             .run_test(vec![fib_chip.generate_air_proof_input()])
             .unwrap();
         let max_constraint_degree = ((1 << agg_log_blowup) + 1).min(7);
-        let config = NativeConfig::aggregation(0, max_constraint_degree);
+        let config =
+            NativeConfig::aggregation(DEFAULT_MAX_NUM_PUBLIC_VALUES, max_constraint_degree)
+                .with_continuations();
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
         };
         info_span!("Verify Fibonacci AIR", group = "verify_fibair",).in_scope(|| {
-            let (program, input_stream) =
-                build_verification_program(vdata, compiler_options.clone());
+            let (program, input_stream) = build_verification_program(vdata, compiler_options);
             let engine = BabyBearPoseidon2Engine::new(
                 FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
             );
-            bench_from_exe(engine, config.clone(), program, input_stream)
+            bench_from_exe(engine, config.clone(), program, input_stream.into())
         })
     })?;
     Ok(())

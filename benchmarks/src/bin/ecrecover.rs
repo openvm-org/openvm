@@ -30,7 +30,7 @@ use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_recursion::testing_utils::inner::build_verification_program;
+use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -38,6 +38,7 @@ use axvm_rv32im_circuit::{
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use axvm_sdk::StdIn;
 use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use derive_more::derive::From;
@@ -151,7 +152,7 @@ fn main() -> Result<()> {
                 let engine = BabyBearPoseidon2Engine::new(
                     FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
                 );
-                bench_from_exe(engine, vm_config, exe, input_stream)
+                bench_from_exe(engine, vm_config, exe, input_stream.into())
             })?;
 
         Ok(())

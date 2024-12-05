@@ -10,11 +10,8 @@ use ax_stark_backend::{
 use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32LoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 
 use crate::adapters::LoadStoreInstruction;
 
@@ -265,7 +262,8 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
 
         let (reads, shift_amount) = reads.into();
         let shift = shift_amount.as_canonical_u32();

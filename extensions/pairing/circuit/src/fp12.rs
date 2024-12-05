@@ -203,7 +203,6 @@ impl Fp12 {
 #[cfg(test)]
 mod tests {
     use ax_circuit_primitives::TraceSubRowGenerator;
-    use ax_ecc_execution::axvm_ecc::algebra::field::FieldExtension;
     use ax_mod_circuit_builder::{test_utils::*, *};
     use ax_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
@@ -212,7 +211,8 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         p3_baby_bear::BabyBear, utils::create_seeded_rng,
     };
-    use axvm_ecc_constants::BN254;
+    use axvm_ecc_guest::algebra::field::FieldExtension;
+    use axvm_pairing_guest::bn254::BN254_MODULUS;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
 
     use super::*;
@@ -237,7 +237,7 @@ mod tests {
             panic!("Only one of fp12_fn_addsub or fp12_fn_mul must be provided");
         }
 
-        let prime = BN254.MODULUS.clone();
+        let prime = BN254_MODULUS.clone();
         let (range_checker, builder) = setup(&prime);
 
         let mut x_fp12 = Fp12::new(builder.clone());

@@ -35,9 +35,9 @@ use axvm_circuit::{
 use axvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    Rv32LoadStoreOpcode::{self, *},
     UsizeOpcode,
 };
+use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::RV32_CELL_BITS;
@@ -355,7 +355,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
         let rs1_val = compose(rs1_record.data);
@@ -365,7 +365,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
-        assert!(ptr_val < (1 << self.air.pointer_max_bits));
+        assert!(
+            ptr_val < (1 << self.air.pointer_max_bits),
+            "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+            self.air.pointer_max_bits
+        );
 
         let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
         self.range_checker_chip.add_count(
@@ -424,7 +428,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             opcode, a, d, e, ..
         } = *instruction;
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let write_record = match local_opcode {
             STOREW | STOREH | STOREB => {

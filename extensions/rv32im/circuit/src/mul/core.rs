@@ -16,7 +16,8 @@ use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, MulOpcode, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_rv32im_transpiler::MulOpcode;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -158,7 +159,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         assert_eq!(
-            MulOpcode::from_usize(opcode - self.air.offset),
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             MulOpcode::MUL
         );
 
