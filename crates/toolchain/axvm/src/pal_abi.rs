@@ -184,9 +184,8 @@ pub unsafe extern "C" fn sys_getenv(
     _varname: *const u8,
     _varname_len: usize,
 ) -> usize {
-    crate::io::print("sys_getenv is todo");
-    terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    crate::io::print("sys_getenv is todo; returning 0");
+    0
 }
 
 /// Retrieves the count of arguments provided to program execution.
@@ -195,9 +194,8 @@ pub unsafe extern "C" fn sys_getenv(
 /// data being returned. Returned data is entirely in the control of the host.
 #[no_mangle]
 pub extern "C" fn sys_argc() -> usize {
-    crate::io::print("sys_argc is todo");
-    terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    crate::io::print("sys_argc is todo; returning 0");
+    0
 }
 
 /// Retrieves the argument with arg_index, and stores as much
@@ -223,9 +221,8 @@ pub unsafe extern "C" fn sys_argv(
     _out_nwords: usize,
     _arg_index: usize,
 ) -> usize {
-    crate::io::print("sys_argv is todo");
-    terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    crate::io::print("sys_argv is todo; returning 0");
+    0
 }
 
 /// Deprecated, use `sys_alloc_aligned` instead.
