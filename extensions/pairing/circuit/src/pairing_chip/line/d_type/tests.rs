@@ -15,7 +15,7 @@ use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_guest::AffinePoint;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::{
-    bn254::{BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI},
+    bn254::{BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
     halo2curves_shims::bn254::{tangent_line_013, Bn254},
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
 };
@@ -58,7 +58,7 @@ fn test_mul_013_by_013() {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         },
-        BN254_XI,
+        BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 
@@ -154,7 +154,7 @@ fn test_mul_by_01234() {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         },
-        BN254_XI,
+        BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
     );
 

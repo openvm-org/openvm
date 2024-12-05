@@ -78,7 +78,7 @@ mod tests {
     use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use axvm_ecc_guest::algebra::field::FieldExtension;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI};
+    use axvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
     use axvm_rv32_adapters::rv32_write_heap_default_with_increment;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
@@ -115,7 +115,7 @@ mod tests {
             adapter,
             tester.memory_controller(),
             config,
-            BN254_XI,
+            BN254_XI_ISIZE,
             Fp12Opcode::default_offset(),
         );
 

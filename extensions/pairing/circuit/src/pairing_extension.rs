@@ -14,8 +14,8 @@ use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_ecc_circuit::CurveConfig;
 use axvm_instructions::{PhantomDiscriminant, UsizeOpcode};
 use axvm_pairing_guest::{
-    bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI},
-    bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI},
+    bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
+    bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use axvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
@@ -50,8 +50,8 @@ impl PairingCurve {
 
     pub fn xi(&self) -> [isize; 2] {
         match self {
-            PairingCurve::Bn254 => BN254_XI,
-            PairingCurve::Bls12_381 => BLS12_381_XI,
+            PairingCurve::Bn254 => BN254_XI_ISIZE,
+            PairingCurve::Bls12_381 => BLS12_381_XI_ISIZE,
         }
     }
 }
