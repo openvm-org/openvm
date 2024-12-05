@@ -14,8 +14,11 @@ use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::{
-    bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI},
-    bn254::{BN254_MODULUS, BN254_XI},
+    bls12_381::{
+        BLS12_381_BLOCK_SIZE, BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS,
+        BLS12_381_XI,
+    },
+    bn254::{BN254_BLOCK_SIZE, BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI},
 };
 use axvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
@@ -23,16 +26,15 @@ use num_bigint_dig::BigUint;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 
-const BN254_NUM_LIMBS: usize = 32;
-const BN254_LIMB_BITS: usize = 8;
-
-const BLS12381_NUM_LIMBS: usize = 64;
-const BLS12381_LIMB_BITS: usize = 8;
-
 type F = BabyBear;
 
 #[allow(clippy::too_many_arguments)]
-fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+fn test_fp12_fn<
+    const INPUT_SIZE: usize,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const BLOCK_SIZE: usize,
+>(
     mut tester: VmChipTestBuilder<F>,
     expr: FieldExpr,
     offset: usize,
@@ -55,12 +57,13 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         bitwise_bus,
     ));
 
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, NUM_LIMBS, NUM_LIMBS>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_controller(),
-        bitwise_chip.clone(),
-    );
+    let adapter =
+        Rv32VecHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE, BLOCK_SIZE>::new(
+            tester.execution_bus(),
+            tester.program_bus(),
+            tester.memory_controller(),
+            bitwise_chip.clone(),
+        );
 
     let x_limbs = x
         .iter()
@@ -107,7 +110,7 @@ fn test_fp12_add_bn254() {
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(1));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(2));
 
-    test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
+    test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
         Bn254Fp12Opcode::default_offset(),
@@ -135,7 +138,7 @@ fn test_fp12_sub_bn254() {
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(59));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(3));
 
-    test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
+    test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
         Bn254Fp12Opcode::default_offset(),
@@ -165,7 +168,7 @@ fn test_fp12_mul_bn254() {
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(5));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(25));
 
-    test_fp12_fn::<BN254_NUM_LIMBS, BN254_LIMB_BITS>(
+    test_fp12_fn::<12, BN254_NUM_LIMBS, BN254_LIMB_BITS, BN254_BLOCK_SIZE>(
         tester,
         expr,
         Bn254Fp12Opcode::default_offset(),
@@ -193,7 +196,7 @@ fn test_fp12_add_bls12381() {
     let x = bls12381_fq12_random(3);
     let y = bls12381_fq12_random(99);
 
-    test_fp12_fn::<BLS12381_NUM_LIMBS, BLS12381_LIMB_BITS>(
+    test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
         Bls12381Fp12Opcode::default_offset(),
@@ -221,7 +224,7 @@ fn test_fp12_sub_bls12381() {
     let x = bls12381_fq12_random(8);
     let y = bls12381_fq12_random(9);
 
-    test_fp12_fn::<BLS12381_NUM_LIMBS, BLS12381_LIMB_BITS>(
+    test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
         Bls12381Fp12Opcode::default_offset(),
@@ -253,7 +256,7 @@ fn test_fp12_mul_bls12381() {
     let x = bls12381_fq12_random(5);
     let y = bls12381_fq12_random(25);
 
-    test_fp12_fn::<BLS12381_NUM_LIMBS, BLS12381_LIMB_BITS>(
+    test_fp12_fn::<36, BLS12_381_NUM_LIMBS, BLS12_381_LIMB_BITS, BLS12_381_BLOCK_SIZE>(
         tester,
         expr,
         Bls12381Fp12Opcode::default_offset(),
@@ -261,6 +264,6 @@ fn test_fp12_mul_bls12381() {
         "Bls12381Fp12Mul",
         x,
         y,
-        82,
+        46,
     );
 }
