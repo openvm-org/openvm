@@ -59,7 +59,7 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+axvm-ecc-guest = { workspace = true, features = ["halo2curves", "secp256k1"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 
 axvm-native-circuit.workspace = true
