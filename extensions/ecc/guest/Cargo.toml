@@ -33,7 +33,7 @@ num-traits.workspace = true
 lazy_static.workspace = true
 
 [features]
-default = ["k256"]
+default = []
 std = ["axvm/std"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro

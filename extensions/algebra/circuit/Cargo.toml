@@ -38,8 +38,4 @@ halo2curves-axiom = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
-axvm-pairing-guest = { workspace = true, features = [
-    "halo2curves",
-    "bn254",
-    "bls12_381",
-] }
+axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

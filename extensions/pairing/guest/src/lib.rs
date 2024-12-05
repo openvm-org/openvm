@@ -42,8 +42,8 @@ pub mod halo2curves_shims;
 pub mod pairing;
 
 /// Types for BLS12-381 curve with intrinsic functions.
-#[cfg(any(feature = "halo2curves", feature = "bls12_381"))]
+#[cfg(feature = "bls12_381")]
 pub mod bls12_381;
 /// Types for BN254 curve with intrinsic functions.
-#[cfg(any(feature = "halo2curves", feature = "bn254"))]
+#[cfg(feature = "bn254")]
 pub mod bn254;
