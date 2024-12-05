@@ -137,7 +137,7 @@ where
         let Instruction { opcode, .. } = instruction.clone();
 
         assert_eq!(
-            opcode.remove_offset(self.air.offset),
+            opcode.local_opcode_idx(self.air.offset),
             CastfOpcode::CASTF as usize
         );
 

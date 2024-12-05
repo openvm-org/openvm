@@ -139,7 +139,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             BEQ256_FUNCT3 => {
                 let dec_insn = BType::new(instruction_u32);
                 Some(Instruction::new(
-                    AxVmOpcode::from_canonical_usize(
+                    AxVmOpcode::from_usize(
                         BranchEqualOpcode::BEQ as usize
                             + Rv32BranchEqual256Opcode::default_offset(),
                     ),

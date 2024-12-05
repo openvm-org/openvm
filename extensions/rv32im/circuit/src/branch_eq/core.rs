@@ -164,7 +164,8 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, c: imm, .. } = *instruction;
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.remove_offset(self.air.offset));
+        let branch_eq_opcode =
+            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let x = data[0].map(|x| x.as_canonical_u32());

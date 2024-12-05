@@ -28,7 +28,7 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
     (
         Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(opcode_with_offset),
+            AxVmOpcode::from_usize(opcode_with_offset),
             [rd, rs1, rs2, 1, if rs2_is_imm { 0 } else { 1 }],
         ),
         rd,

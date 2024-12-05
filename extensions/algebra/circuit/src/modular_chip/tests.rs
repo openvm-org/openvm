@@ -147,7 +147,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            AxVmOpcode::from_canonical_usize(chip.core.air.offset + op),
+            AxVmOpcode::from_usize(chip.core.air.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -276,7 +276,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            AxVmOpcode::from_canonical_usize(chip.core.air.offset + op),
+            AxVmOpcode::from_usize(chip.core.air.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,

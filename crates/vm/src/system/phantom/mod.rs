@@ -102,9 +102,7 @@ impl<F> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: AxVmOpcode::from_canonical_usize(
-                    offset + SystemOpcode::PHANTOM.as_usize(),
-                ),
+                phantom_opcode: AxVmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
             },
             rows: vec![],
             memory: memory_controller,

@@ -155,10 +155,7 @@ fn run_rv32_shift_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(opcode as usize),
-            [0, 0, 0, 1, 1],
-        ),
+        Instruction::from_usize(AxVmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let bit_shift = prank_vals

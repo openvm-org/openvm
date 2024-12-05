@@ -139,7 +139,7 @@ fn run_rv32_mul_negative_test(
     tester.execute(
         &mut chip,
         Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(MulOpcode::MUL as usize),
+            AxVmOpcode::from_usize(MulOpcode::MUL as usize),
             [0, 0, 0, 1, 0],
         ),
     );

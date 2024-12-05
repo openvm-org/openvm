@@ -226,7 +226,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, c: imm, .. } = *instruction;
-        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.remove_offset(self.air.offset));
+        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let a = data[0].map(|x| x.as_canonical_u32());

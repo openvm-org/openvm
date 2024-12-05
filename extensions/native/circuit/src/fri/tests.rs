@@ -111,7 +111,7 @@ fn fri_mat_opening_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                AxVmOpcode::from_canonical_usize(FRI_REDUCED_OPENING as usize + offset),
+                AxVmOpcode::from_usize(FRI_REDUCED_OPENING as usize + offset),
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,

@@ -108,7 +108,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_32.clone(),
@@ -120,7 +120,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
@@ -133,7 +133,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
                     addsub_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_48.clone(),
@@ -145,7 +145,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),
                     muldiv_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_canonical_usize(x + class_offset)),
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

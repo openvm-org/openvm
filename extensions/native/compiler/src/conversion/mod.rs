@@ -40,7 +40,7 @@ impl Default for CompilerOptions {
 impl CompilerOptions {
     pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> AxVmOpcode {
         let offset = Opcode::default_offset();
-        AxVmOpcode::from_canonical_usize(offset + opcode.as_usize())
+        AxVmOpcode::from_usize(offset + opcode.as_usize())
     }
 }
 

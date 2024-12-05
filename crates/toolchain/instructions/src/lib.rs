@@ -33,29 +33,29 @@ pub trait UsizeOpcode {
 pub struct AxVmOpcode(usize);
 
 impl AxVmOpcode {
-    /// Returns the opcode without the offset.
-    pub fn remove_offset(&self, offset: usize) -> usize {
-        self.0 - offset
+    /// Returns the corresponding `local_opcode_idx`
+    pub fn local_opcode_idx(&self, offset: usize) -> usize {
+        self.as_usize() - offset
     }
 
-    /// Returns the opcode as a canonical usize.
-    pub fn as_canonical_usize(&self) -> usize {
+    /// Returns the opcode as a usize
+    pub fn as_usize(&self) -> usize {
         self.0
     }
 
-    /// Create a new [AxVmOpcode] from a canonical usize.
-    pub fn from_canonical_usize(value: usize) -> Self {
+    /// Create a new [AxVmOpcode] from a usize
+    pub fn from_usize(value: usize) -> Self {
         Self(value)
     }
 
-    /// Returns the corresponding [AxVmOpcode] from `opcode`.
-    pub fn with_default_offset<Opcode: UsizeOpcode>(opcode: Opcode) -> AxVmOpcode {
-        Self(opcode.with_default_offset())
+    /// Returns the corresponding [AxVmOpcode] from `local_opcode` with default offset
+    pub fn with_default_offset<Opcode: UsizeOpcode>(local_opcode: Opcode) -> AxVmOpcode {
+        Self(local_opcode.with_default_offset())
     }
 
-    /// Convert the AxVmOpcode into a field element.
+    /// Convert the AxVmOpcode into a field element
     pub fn to_field<F: Field>(&self) -> F {
-        F::from_canonical_usize(self.0)
+        F::from_canonical_usize(self.as_usize())
     }
 }
 

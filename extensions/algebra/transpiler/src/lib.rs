@@ -85,9 +85,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                     _ => panic!("invalid opcode"),
                 };
                 Some(Instruction::new(
-                    AxVmOpcode::from_canonical_usize(
-                        local_opcode.with_default_offset() + mod_idx_shift,
-                    ),
+                    AxVmOpcode::from_usize(local_opcode.with_default_offset() + mod_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::ZERO, // rs2 = 0
@@ -163,9 +161,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
                     _ => panic!("invalid opcode"),
                 };
                 Some(Instruction::new(
-                    AxVmOpcode::from_canonical_usize(
-                        local_opcode.with_default_offset() + complex_idx_shift,
-                    ),
+                    AxVmOpcode::from_usize(local_opcode.with_default_offset() + complex_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::ZERO, // rs2 = 0

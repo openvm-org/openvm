@@ -215,7 +215,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 assert!(next_state.timestamp > timestamp);
                 #[cfg(feature = "bench-metrics")]
                 if collect_metrics {
-                    opcode_name = Some(executor.get_opcode_name(opcode.as_canonical_usize()));
+                    opcode_name = Some(executor.get_opcode_name(opcode.as_usize()));
                 }
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;

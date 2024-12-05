@@ -263,7 +263,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode.remove_offset(self.air.offset));
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
 
         let (reads, shift_amount) = reads.into();
         let shift = shift_amount.as_canonical_u32();

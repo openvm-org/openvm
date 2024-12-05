@@ -102,7 +102,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: AxVmOpcode::from_canonical_usize(0), // there is no real default opcode, this field must always be set
+            opcode: AxVmOpcode::from_usize(0), // there is no real default opcode, this field must always be set
             a: T::default(),
             b: T::default(),
             c: T::default(),

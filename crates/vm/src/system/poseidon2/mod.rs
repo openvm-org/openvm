@@ -176,8 +176,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                         d: instruction.d,
                         e: instruction.e,
                         is_compress_opcode: F::from_bool(
-                            instruction.opcode
-                                == AxVmOpcode::from_canonical_usize(COMP_POS2 as usize),
+                            instruction.opcode == AxVmOpcode::from_usize(COMP_POS2 as usize),
                         ),
                     },
                     aux: Poseidon2VmAuxCols {
@@ -262,9 +261,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode = opcode.remove_offset(self.offset);
+        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
 
-        let local_opcode = Poseidon2Opcode::from_usize(local_opcode);
+        let local_opcode = Poseidon2Opcode::from_usize(local_opcode_idx);
 
         assert!(matches!(local_opcode, COMP_POS2 | PERM_POS2));
         debug_assert_eq!(WIDTH, CHUNK * 2);
@@ -315,7 +314,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         self.records.push(Poseidon2Record::FromInstruction {
             instruction: Instruction {
-                opcode: AxVmOpcode::from_canonical_usize(local_opcode as usize),
+                opcode: AxVmOpcode::from_usize(local_opcode as usize),
                 ..instruction
             },
             from_state,

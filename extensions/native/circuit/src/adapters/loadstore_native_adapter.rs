@@ -281,7 +281,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             g,
             ..
         } = *instruction;
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.remove_offset(self.offset));
+        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let read1_as = d;
         let read1_ptr = c;

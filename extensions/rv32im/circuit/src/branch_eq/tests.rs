@@ -54,7 +54,7 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
     tester.execute_with_pc(
         chip,
         Instruction::from_isize(
-            AxVmOpcode::from_canonical_usize(opcode as usize),
+            AxVmOpcode::from_usize(opcode as usize),
             rs1 as isize,
             rs2 as isize,
             imm as isize,
@@ -146,7 +146,7 @@ fn run_rv32_beq_negative_test(
     tester.execute(
         &mut chip,
         Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(opcode as usize),
+            AxVmOpcode::from_usize(opcode as usize),
             [0, 0, imm as usize, 1, 1],
         ),
     );
@@ -266,7 +266,7 @@ fn execute_pc_increment_sanity_test() {
     let core = BranchEqualCoreChip::<RV32_REGISTER_NUM_LIMBS>::new(0, 4);
 
     let mut instruction = Instruction::<F> {
-        opcode: AxVmOpcode::from_canonical_usize(BranchEqualOpcode::BEQ.as_usize()),
+        opcode: AxVmOpcode::from_usize(BranchEqualOpcode::BEQ.as_usize()),
         c: F::from_canonical_u8(8),
         ..Default::default()
     };
@@ -280,7 +280,7 @@ fn execute_pc_increment_sanity_test() {
     let (output, _) = result.expect("execute_instruction failed");
     assert!(output.to_pc.is_none());
 
-    instruction.opcode = AxVmOpcode::from_canonical_usize(BranchEqualOpcode::BNE.as_usize());
+    instruction.opcode = AxVmOpcode::from_usize(BranchEqualOpcode::BNE.as_usize());
     let result = <BranchEqualCoreChip<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
         F,
         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,

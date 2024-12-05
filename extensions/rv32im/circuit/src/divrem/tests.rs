@@ -79,7 +79,7 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
     tester.execute(
         chip,
         Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(opcode as usize),
+            AxVmOpcode::from_usize(opcode as usize),
             [rd, rs1, rs2, 1, 0],
         ),
     );
@@ -266,17 +266,11 @@ fn run_rv32_divrem_negative_test(
     };
     tester.execute(
         &mut chip,
-        Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(div_opcode as usize),
-            [0, 0, 0, 1, 1],
-        ),
+        Instruction::from_usize(AxVmOpcode::from_usize(div_opcode as usize), [0, 0, 0, 1, 1]),
     );
     tester.execute(
         &mut chip,
-        Instruction::from_usize(
-            AxVmOpcode::from_canonical_usize(rem_opcode as usize),
-            [0, 0, 0, 1, 1],
-        ),
+        Instruction::from_usize(AxVmOpcode::from_usize(rem_opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let (q, r, b_sign, c_sign, q_sign, case) =

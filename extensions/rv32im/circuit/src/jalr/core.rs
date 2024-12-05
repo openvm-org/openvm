@@ -209,7 +209,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
-        let local_opcode = Rv32JalrOpcode::from_usize(opcode.remove_offset(self.air.offset));
+        let local_opcode = Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
