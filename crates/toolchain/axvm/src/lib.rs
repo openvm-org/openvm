@@ -12,9 +12,6 @@ extern crate alloc;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
-#[cfg(all(not(feature = "heap-embedded-alloc"), target_os = "zkvm"))]
-#[allow(unused_imports)]
-use axvm_platform::heap::bump::HEAP;
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;
