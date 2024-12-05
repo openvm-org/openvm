@@ -44,6 +44,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![is_add_flag, is_sub_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2AddSub",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

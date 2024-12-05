@@ -692,7 +692,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let mut setup_all_moduli = Vec::new();
 
     // List of all modular limbs in one (that is, with a compile-time known size) array.
-    let mut modular_limbs_flattened_list = Vec::<u8>::new();
+    let mut two_modular_limbs_flattened_list = Vec::<u8>::new();
     // List of "bars" between adjacent modular limbs sublists.
     let mut limb_list_borders = vec![0usize];
 
@@ -720,8 +720,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             .take(limbs)
             .collect::<Vec<_>>();
 
-        modular_limbs_flattened_list.extend(modulus_bytes.iter());
-        limb_list_borders.push(modular_limbs_flattened_list.len());
+        // We need two copies of modular limbs for Fp2 setup.
+        two_modular_limbs_flattened_list.extend(modulus_bytes.iter());
+        two_modular_limbs_flattened_list.extend(modulus_bytes.iter());
+        limb_list_borders.push(two_modular_limbs_flattened_list.len());
 
         let modulus_hex = modulus_bytes
             .iter()
@@ -856,7 +858,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
     }
 
-    let total_limbs_cnt = modular_limbs_flattened_list.len();
+    let total_limbs_cnt = two_modular_limbs_flattened_list.len();
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #(#axiom_section)*
@@ -865,7 +867,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             #(#externs)*
         }
         pub mod axvm_intrinsics_meta_do_not_type_this_by_yourself {
-            pub const modular_limbs_list: [u8; #total_limbs_cnt] = [#(#modular_limbs_flattened_list),*];
+            pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
         }
         #(#setups)*

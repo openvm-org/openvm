@@ -11,6 +11,7 @@ use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_field::{AbstractField, Field, PrimeField32};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -165,6 +166,9 @@ pub struct FieldExpressionCoreChip {
     pub range_checker: Arc<VariableRangeCheckerChip>,
 
     pub name: String,
+
+    /// Whether to finalize the trace. True if all-zero rows don't satisfy the constraints (e.g. there is int_add)
+    pub should_finalize: bool,
 }
 
 impl FieldExpressionCoreChip {
@@ -175,12 +179,14 @@ impl FieldExpressionCoreChip {
         opcode_flag_idx: Vec<usize>,
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
+        should_finalize: bool,
     ) -> Self {
         let air = FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx);
         Self {
             air,
             range_checker,
             name: name.to_string(),
+            should_finalize,
         }
     }
 
@@ -271,5 +277,26 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+
+    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
+        if !self.should_finalize {
+            return;
+        }
+        // We will copy over the core part of last row to padded rows (all rows after num_records).
+        assert!(num_records > 0);
+        let adapter_width = trace.width() - <Self::Air as BaseAir<F>>::width(&self.air);
+        let last_row = trace
+            .rows()
+            .nth(num_records - 1)
+            .unwrap()
+            .collect::<Vec<_>>();
+        let last_row_core = last_row.split_at(adapter_width).1;
+        for row in trace.rows_mut().skip(num_records) {
+            let core_row = row.split_at_mut(adapter_width).1;
+            // The same as last row, except "is_valid" (the first element of core part) is zero.
+            core_row.copy_from_slice(last_row_core);
+            core_row[0] = F::ZERO;
+        }
     }
 }

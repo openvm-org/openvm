@@ -47,5 +47,6 @@ derive_more = { workspace = true, features = ["from"] }
 num-bigint-dig.workspace = true
 
 [features]
-default = ["parallel"]
+# default = ["parallel"]
+default = []
 parallel = ["axvm-circuit/parallel"]

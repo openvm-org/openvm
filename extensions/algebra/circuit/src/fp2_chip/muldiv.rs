@@ -46,6 +46,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![is_mul_flag, is_div_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2MulDiv",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -69,6 +70,8 @@ pub fn fp2_muldiv_expr(
 
     let mut rvar = Fp2::select(is_mul_flag, &z, &x);
     let fp2_constraint = lvar.mul(&mut y).sub(&mut rvar);
+    // When it's SETUP op, the constraints is z * y - x = 0, it still works as:
+    // x.c0 = x.c1 = p == 0, y.c0 = y.c1 = 0, so whatever z is, z * 0 - 0 = 0
 
     z.save_output();
     builder

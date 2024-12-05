@@ -39,6 +39,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "Fp12Mul",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

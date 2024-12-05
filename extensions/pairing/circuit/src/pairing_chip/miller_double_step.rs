@@ -47,6 +47,7 @@ impl<
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "MillerDoubleStep",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -93,7 +94,7 @@ mod tests {
     };
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
+    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use axvm_ecc_constants::{BLS12381, BN254};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
@@ -120,18 +121,6 @@ mod tests {
             limb_bits: LIMB_BITS,
             num_limbs: NUM_LIMBS,
         };
-        let expr = miller_double_step_expr(
-            config,
-            tester.memory_controller().borrow().range_checker.bus(),
-        );
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            PairingOpcode::default_offset(),
-            vec![PairingOpcode::MILLER_DOUBLE_STEP as usize],
-            vec![],
-            tester.memory_controller().borrow().range_checker.clone(),
-            "MillerDouble",
-        );
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
@@ -142,7 +131,12 @@ mod tests {
             tester.memory_controller(),
             bitwise_chip.clone(),
         );
-        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+        let mut chip = MillerDoubleStepChip::new(
+            adapter,
+            tester.memory_controller(),
+            config,
+            PairingOpcode::default_offset(),
+        );
 
         let mut rng0 = StdRng::seed_from_u64(2);
         let Q = G2Affine::random(&mut rng0);
@@ -151,6 +145,7 @@ mod tests {
         let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
         let (Q_acc_init, l_init) = Bn254::miller_double_step(&Q_ecpoint);
         let result = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
@@ -171,7 +166,7 @@ mod tests {
             &mut tester,
             input_limbs.to_vec(),
             vec![],
-            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
+            chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
         );
 
         tester.execute(&mut chip, instruction);
@@ -193,18 +188,6 @@ mod tests {
             limb_bits: LIMB_BITS,
             num_limbs: NUM_LIMBS,
         };
-        let expr = miller_double_step_expr(
-            config,
-            tester.memory_controller().borrow().range_checker.bus(),
-        );
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            PairingOpcode::default_offset(),
-            vec![PairingOpcode::MILLER_DOUBLE_STEP as usize],
-            vec![],
-            tester.memory_controller().borrow().range_checker.clone(),
-            "MillerDouble",
-        );
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
@@ -215,7 +198,12 @@ mod tests {
             tester.memory_controller(),
             bitwise_chip.clone(),
         );
-        let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+        let mut chip = MillerDoubleStepChip::new(
+            adapter,
+            tester.memory_controller(),
+            config,
+            PairingOpcode::default_offset(),
+        );
 
         let mut rng0 = StdRng::seed_from_u64(12);
         let Q = G2Affine::random(&mut rng0);
@@ -224,6 +212,7 @@ mod tests {
         let Q_ecpoint = AffinePoint { x: Q.x, y: Q.y };
         let (Q_acc_init, l_init) = Bls12_381::miller_double_step(&Q_ecpoint);
         let result = chip
+            .0
             .core
             .expr()
             .execute_with_output(inputs.to_vec(), vec![]);
@@ -244,7 +233,7 @@ mod tests {
             &mut tester,
             input_limbs.to_vec(),
             vec![],
-            chip.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
+            chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
         );
 
         tester.execute(&mut chip, instruction);

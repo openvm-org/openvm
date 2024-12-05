@@ -601,7 +601,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    let modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
+                    let two_modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::two_modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
@@ -613,7 +613,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                             + #complex_idx
                                 * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
+                        two_modulus_bytes.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     axvm_platform::custom_insn_r!(
@@ -623,7 +623,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                             + #complex_idx
                                 * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
+                        two_modulus_bytes.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                 }

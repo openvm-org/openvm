@@ -48,6 +48,7 @@ impl<
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "MillerDoubleAndAddStep",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
