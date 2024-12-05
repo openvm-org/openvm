@@ -21,10 +21,10 @@ mod tests;
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
     pub static ref BN254_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
-        "2523648240000001BA344D80000000086121000000000013A700000000000013"
+        "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47"
     ));
     pub static ref BN254_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
-        "2523648240000001BA344D8000000007FF9F800000000010A10000000000000D"
+        "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
     ));
 }
 
