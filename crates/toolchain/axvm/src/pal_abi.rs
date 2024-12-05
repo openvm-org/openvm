@@ -99,7 +99,7 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
 pub extern "C" fn sys_cycle_count() -> u64 {
     crate::io::print("TODO");
     terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    0u64
 }
 
 /// Reads the given number of bytes into the given buffer, posix-style.  Returns
@@ -118,7 +118,7 @@ pub extern "C" fn sys_cycle_count() -> u64 {
 pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -> usize {
     crate::io::print("sys_read is todo");
     terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    0
 }
 
 /// Reads up to the given number of words into the buffer [recv_buf,
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -
 pub unsafe extern "C" fn sys_read_words(_fd: u32, _recv_ptr: *mut u32, _nwords: usize) -> usize {
     crate::io::print("sys_read_words is todo");
     terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    0
 }
 
 /// # Safety
