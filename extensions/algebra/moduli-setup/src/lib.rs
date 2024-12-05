@@ -721,8 +721,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             .collect::<Vec<_>>();
 
         // We need two copies of modular limbs for Fp2 setup.
-        two_modular_limbs_flattened_list.extend(modulus_bytes.iter());
-        two_modular_limbs_flattened_list.extend(modulus_bytes.iter());
+        let doubled_modulus = [modulus_bytes.clone(), modulus_bytes.clone()].concat();
+        two_modular_limbs_flattened_list.extend(doubled_modulus);
         limb_list_borders.push(two_modular_limbs_flattened_list.len());
 
         let modulus_hex = modulus_bytes
