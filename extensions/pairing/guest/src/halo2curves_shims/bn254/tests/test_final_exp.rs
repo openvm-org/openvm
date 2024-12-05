@@ -50,7 +50,7 @@ fn test_bn254_assert_final_exp_is_one_scalar1() {
 #[allow(non_snake_case)]
 fn assert_final_exp_one<const N: usize>(a: &[i32; N], b: &[i32; N]) {
     let (_P_vec, _Q_vec, P_ecpoints, Q_ecpoints) = generate_test_points_generator_scalar::<N>(a, b);
-    let f = Bn254::multi_miller_loop(&P_ecpoints.as_slice(), &Q_ecpoints.as_slice());
+    let f = Bn254::multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
     Bn254::assert_final_exp_is_one(&f, &P_ecpoints, &Q_ecpoints);
 }
 

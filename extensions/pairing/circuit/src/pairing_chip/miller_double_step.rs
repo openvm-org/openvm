@@ -93,7 +93,7 @@ mod tests {
     };
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
+    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use axvm_ecc_guest::AffinePoint;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
     use axvm_pairing_guest::{
