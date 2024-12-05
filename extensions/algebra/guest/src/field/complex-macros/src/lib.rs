@@ -9,7 +9,14 @@ use syn::{
     parse_macro_input, Expr, ExprPath, Path, Token,
 };
 
-/// TODO: Add documentation
+/// This macro is used to declare the complex extension fields.
+/// Usage:
+/// ```rust
+/// complex_declare! {
+///     Complex1 { mod_type = Mod1 },
+///     Complex2 { mod_type = Mod2 },
+/// }
+/// ```
 #[proc_macro]
 pub fn complex_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -505,6 +512,17 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
     TokenStream::from_iter(output)
 }
 
+/// This macro is used to initialize the complex extension fields.
+/// It must be called after `moduli_init!` is called.
+///
+/// Usage:
+/// ```rust
+/// moduli_init!("998244353", "1000000007");
+///
+/// complex_init!(Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 });
+/// ```
+/// In particular, the order of complex types in the macro doesn't have to match the order of moduli in `moduli_init!`,
+/// but they should be accompanied by the `mod_idx` corresponding to the order in the `moduli_init!` macro (not `moduli_declare!`).
 #[proc_macro]
 pub fn complex_init(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
