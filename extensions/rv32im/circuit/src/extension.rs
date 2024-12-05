@@ -563,7 +563,7 @@ mod phantom {
                 })
                 .collect::<eyre::Result<Vec<u8>>>()?;
             let peeked_str = String::from_utf8(bytes)?;
-            println!("{peeked_str}");
+            print!("{peeked_str}");
             Ok(())
         }
     }
