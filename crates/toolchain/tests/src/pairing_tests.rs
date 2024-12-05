@@ -4,7 +4,6 @@ use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
 use axvm_ecc_circuit::WeierstrassExtension;
-use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
@@ -24,7 +23,8 @@ mod bn254 {
         ff::Field,
     };
     use axvm_pairing_guest::{
-        affine_point::AffineCoords, halo2curves_shims::bn254::Bn254, pairing::MillerStep,
+        affine_point::AffineCoords, bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254,
+        pairing::MillerStep,
     };
     use axvm_pairing_transpiler::PairingTranspilerExtension;
     use axvm_rv32im_transpiler::{
@@ -36,7 +36,7 @@ mod bn254 {
     use crate::utils::build_example_program_with_features;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
-        let primes = [BN254.MODULUS.clone()];
+        let primes = [BN254_MODULUS.clone()];
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -288,6 +288,7 @@ mod bls12_381 {
         AffinePoint,
     };
     use axvm_pairing_guest::{
+        bls12_381::BLS12_381_MODULUS,
         halo2curves_shims::bls12_381::Bls12_381,
         pairing::{LineMulMType, MillerStep},
     };
@@ -301,7 +302,7 @@ mod bls12_381 {
     use crate::utils::build_example_program_with_features;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
-        let primes = [BLS12381.MODULUS.clone()];
+        let primes = [BLS12_381_MODULUS.clone()];
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),

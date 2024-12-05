@@ -379,7 +379,6 @@ dependencies = [
  "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
- "axvm-ecc-constants",
  "axvm-instructions",
  "axvm-pairing-guest",
  "halo2curves-axiom 0.7.0",
@@ -530,8 +529,8 @@ dependencies = [
  "axvm-algebra-transpiler",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc-constants",
  "axvm-instructions",
+ "axvm-pairing-guest",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
@@ -714,7 +713,6 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
  "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-keccak256-circuit",
@@ -786,29 +784,20 @@ dependencies = [
  "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",
- "axvm-ecc-constants",
+ "axvm-ecc-guest",
  "axvm-ecc-transpiler",
  "axvm-instructions",
  "axvm-rv32-adapters",
  "axvm-rv32im-circuit",
  "derive-new",
  "derive_more 1.0.0",
+ "lazy_static",
  "num-bigint-dig",
  "num-traits",
  "once_cell",
  "p3-baby-bear",
  "p3-field",
  "strum",
-]
-
-[[package]]
-name = "axvm-ecc-constants"
-version = "0.1.0"
-dependencies = [
- "hex-literal",
- "lazy_static",
- "num-bigint-dig",
- "num-traits",
 ]
 
 [[package]]
@@ -827,6 +816,7 @@ dependencies = [
  "hex-literal",
  "itertools 0.13.0",
  "k256",
+ "lazy_static",
  "num-bigint 0.4.6",
  "num-bigint-dig",
  "num-traits",
@@ -1077,7 +1067,6 @@ dependencies = [
  "axvm-circuit",
  "axvm-circuit-derive",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
  "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-pairing-guest",
@@ -1254,7 +1243,6 @@ dependencies = [
  "axvm-build",
  "axvm-circuit",
  "axvm-ecc-circuit",
- "axvm-ecc-constants",
  "axvm-ecc-guest",
  "axvm-ecc-transpiler",
  "axvm-instructions",

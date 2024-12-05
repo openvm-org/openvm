@@ -9,7 +9,6 @@ ax-circuit-derive = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
-axvm-ecc-constants = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-backend = { workspace = true }
@@ -30,3 +29,7 @@ once_cell = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+lazy_static = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+axvm-ecc-guest = { workspace = true }

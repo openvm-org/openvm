@@ -15,8 +15,8 @@ use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use axvm_circuit::arch::{
     instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
 };
-use axvm_ecc_constants::BLS12381;
 use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
+use axvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use axvm_rv32_adapters::{
     rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
 };
@@ -376,5 +376,5 @@ fn test_modular_is_equal_1x32() {
 
 #[test]
 fn test_modular_is_equal_3x16() {
-    test_is_equal::<3, 16, 48>(17, BLS12381.MODULUS.clone(), 100);
+    test_is_equal::<3, 16, 48>(17, BLS12_381_MODULUS.clone(), 100);
 }

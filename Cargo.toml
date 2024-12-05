@@ -46,7 +46,6 @@ members = [
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
-    "extensions/ecc/constants",
     "extensions/ecc/sw-setup",
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
@@ -121,7 +120,6 @@ axvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false
 axvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 axvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 axvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
-axvm-ecc-constants = { path = "extensions/ecc/constants", default-features = false }
 axvm-ecc-sw-setup = { path = "extensions/ecc/sw-setup", default-features = false }
 axvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 axvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }

@@ -3,14 +3,25 @@ use core::ops::{Add, AddAssign, Neg};
 
 use axvm_algebra_guest::IntMod;
 use hex_literal::hex;
+use lazy_static::lazy_static;
+use num_bigint_dig::BigUint;
 
 use super::group::{CyclicGroup, Group};
 use crate::sw::IntrinsicCurve;
 
-pub const SECP256K1_COORD_MODULUS: [u8; 32] =
-    hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F");
-pub const SECP256K1_SCALAR_MODULUS: [u8; 32] =
-    hex!("FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141");
+#[cfg(not(target_os = "zkvm"))]
+lazy_static! {
+    pub static ref SECP256K1_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    ));
+    pub static ref SECP256K1_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    ));
+}
+
+pub const SECP256K1_NUM_LIMBS: usize = 32;
+pub const SECP256K1_LIMB_BITS: usize = 8;
+pub const SECP256K1_BLOCK_SIZE: usize = 32;
 
 axvm_algebra_moduli_setup::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },

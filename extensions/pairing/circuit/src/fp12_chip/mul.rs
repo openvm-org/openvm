@@ -76,9 +76,9 @@ mod tests {
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
     use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-    use axvm_ecc_constants::BN254;
     use axvm_ecc_guest::algebra::field::FieldExtension;
     use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use axvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI};
     use axvm_rv32_adapters::rv32_write_heap_default_with_increment;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
@@ -96,7 +96,7 @@ mod tests {
 
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
+            modulus: BN254_MODULUS.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
@@ -115,7 +115,7 @@ mod tests {
             adapter,
             tester.memory_controller(),
             config,
-            BN254.XI,
+            BN254_XI,
             Fp12Opcode::default_offset(),
         );
 

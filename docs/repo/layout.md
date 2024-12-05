@@ -107,12 +107,11 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 
 - [`axvm-ecc-circuit`](../../extensions/ecc/circuit): VM circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`axvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`axvm-ecc-guest`](../../extensions/ecc/guest): Guest library with elliptic curve functions using custom intrinsics, including ECDSA.
-- [`axvm-ecc-constants`](../../extensions/ecc/constants): Constants for elliptic curves, including BN254, BLS12-381, and Secp256k1.
+- [`axvm-ecc-guest`](../../extensions/ecc/guest): Guest library with elliptic curve constants for Secp256k1 and functions using custom intrinsics, including ECDSA.
 - [`axvm-ecc-sw-setup`](../../extensions/ecc/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 
 #### Pairing
 
 - [`axvm-pairing-circuit`](../../extensions/pairing/circuit): VM circuit extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
 - [`axvm-pairing-transpiler`](../../extensions/pairing/transpiler): Transpiler extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
-- [`axvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on elliptic curves, including BN254 and BLS12-381.
+- [`axvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on elliptic curves, including BN254 and BLS12-381 and associated constants. Also includes elliptic curve operations for VM runtime with the `halo2curves` feature gate.

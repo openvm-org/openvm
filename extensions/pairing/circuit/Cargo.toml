@@ -15,7 +15,6 @@ axvm-pairing-guest = { workspace = true, features = [
     "bls12_381",
     "bn254",
 ] }
-axvm-ecc-constants = { workspace = true }
 axvm-instructions = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-backend = { workspace = true }
@@ -34,6 +33,9 @@ once_cell = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 eyre = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+axvm-pairing-guest = { workspace = true }
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }

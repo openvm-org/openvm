@@ -10,7 +10,6 @@ ax-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
-axvm-ecc-constants = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
@@ -39,3 +38,4 @@ halo2curves-axiom = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

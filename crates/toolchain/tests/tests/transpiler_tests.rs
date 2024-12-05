@@ -18,7 +18,7 @@ use axvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
-use axvm_ecc_constants::SECP256K1;
+use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use axvm_instructions::exe::AxVmExe;
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::{
@@ -128,8 +128,8 @@ impl Rv32ModularFp2Int256Config {
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
-        vec![SECP256K1.MODULUS.clone(), SECP256K1.ORDER.clone()],
-        vec![SECP256K1.MODULUS.clone()],
+        vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
+        vec![SECP256K1_MODULUS.clone()],
     );
     let elf = get_elf(elf_path)?;
     let axvm_exe = AxVmExe::from_elf(

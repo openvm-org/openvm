@@ -12,8 +12,11 @@ use ax_mod_circuit_builder::{
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
-use axvm_ecc_constants::{BLS12381, BN254};
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use axvm_pairing_guest::{
+    bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI},
+    bn254::{BN254_MODULUS, BN254_XI},
+};
 use axvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
@@ -92,7 +95,7 @@ fn test_fp12_fn<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 fn test_fp12_add_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BN254.MODULUS.clone(),
+        modulus: BN254_MODULUS.clone(),
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
@@ -120,7 +123,7 @@ fn test_fp12_add_bn254() {
 fn test_fp12_sub_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BN254.MODULUS.clone(),
+        modulus: BN254_MODULUS.clone(),
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
@@ -148,11 +151,11 @@ fn test_fp12_sub_bn254() {
 fn test_fp12_mul_bn254() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BN254.MODULUS.clone(),
+        modulus: BN254_MODULUS.clone(),
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
-    let xi = BN254.XI;
+    let xi = BN254_XI;
     let expr = fp12_mul_expr(
         config,
         tester.memory_controller().borrow().range_checker.bus(),
@@ -178,9 +181,9 @@ fn test_fp12_mul_bn254() {
 fn test_fp12_add_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BLS12381.MODULUS.clone(),
-        num_limbs: BLS12381_NUM_LIMBS,
-        limb_bits: BLS12381_LIMB_BITS,
+        modulus: BLS12_381_MODULUS.clone(),
+        num_limbs: BLS12_381_NUM_LIMBS,
+        limb_bits: BLS12_381_LIMB_BITS,
     };
     let expr = fp12_add_expr(
         config,
@@ -206,9 +209,9 @@ fn test_fp12_add_bls12381() {
 fn test_fp12_sub_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BLS12381.MODULUS.clone(),
-        num_limbs: BLS12381_NUM_LIMBS,
-        limb_bits: BLS12381_LIMB_BITS,
+        modulus: BLS12_381_MODULUS.clone(),
+        num_limbs: BLS12_381_NUM_LIMBS,
+        limb_bits: BLS12_381_LIMB_BITS,
     };
     let expr = fp12_sub_expr(
         config,
@@ -236,11 +239,11 @@ fn test_fp12_sub_bls12381() {
 fn test_fp12_mul_bls12381() {
     let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: BLS12381.MODULUS.clone(),
-        num_limbs: BLS12381_NUM_LIMBS,
-        limb_bits: BLS12381_LIMB_BITS,
+        modulus: BLS12_381_MODULUS.clone(),
+        num_limbs: BLS12_381_NUM_LIMBS,
+        limb_bits: BLS12_381_LIMB_BITS,
     };
-    let xi = BLS12381.XI;
+    let xi = BLS12_381_XI;
     let expr = fp12_mul_expr(
         config,
         tester.memory_controller().borrow().range_checker.bus(),

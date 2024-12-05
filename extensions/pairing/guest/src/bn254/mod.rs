@@ -8,11 +8,30 @@ pub mod pairing;
 pub use fp12::*;
 pub use fp2::*;
 use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
+use lazy_static::lazy_static;
+#[cfg(not(target_os = "zkvm"))]
+use num_bigint_dig::BigUint;
 
 use crate::pairing::PairingIntrinsics;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
+
+#[cfg(not(target_os = "zkvm"))]
+lazy_static! {
+    pub static ref BN254_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "2523648240000001BA344D80000000086121000000000013A700000000000013"
+    ));
+    pub static ref BN254_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "2523648240000001BA344D8000000007FF9F800000000010A10000000000000D"
+    ));
+}
+
+pub const BN254_XI: [isize; 2] = [9, 1];
+pub const BN254_NUM_LIMBS: usize = 32;
+pub const BN254_LIMB_BITS: usize = 8;
+pub const BN254_BLOCK_SIZE: usize = 32;
 
 pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
 pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [

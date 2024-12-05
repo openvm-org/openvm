@@ -8,6 +8,10 @@ mod pairing;
 pub use fp12::*;
 pub use fp2::*;
 use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
+use lazy_static::lazy_static;
+#[cfg(not(target_os = "zkvm"))]
+use num_bigint_dig::BigUint;
 
 use crate::pairing::PairingIntrinsics;
 
@@ -15,6 +19,21 @@ pub struct Bls12_381;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
+
+#[cfg(not(target_os = "zkvm"))]
+lazy_static! {
+    pub static ref BLS12_381_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+    ));
+    pub static ref BLS12_381_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    ));
+}
+
+pub const BLS12_381_XI: [isize; 2] = [1, 1];
+pub const BLS12_381_NUM_LIMBS: usize = 48;
+pub const BLS12_381_LIMB_BITS: usize = 8;
+pub const BLS12_381_BLOCK_SIZE: usize = 16;
 
 pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
 pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [

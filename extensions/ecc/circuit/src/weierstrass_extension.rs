@@ -10,7 +10,7 @@ use axvm_circuit::{
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_ecc_constants::SECP256K1;
+use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_instructions::UsizeOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
@@ -34,8 +34,8 @@ pub struct CurveConfig {
 }
 
 pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    modulus: SECP256K1.MODULUS.clone(),
-    scalar: SECP256K1.ORDER.clone(),
+    modulus: SECP256K1_MODULUS.clone(),
+    scalar: SECP256K1_ORDER.clone(),
     a: BigUint::zero(),
 });
 
