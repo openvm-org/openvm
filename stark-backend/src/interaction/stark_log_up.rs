@@ -226,7 +226,7 @@ where
     ) -> Vec<Option<RowMajorMatrix<Challenge>>> {
         parizip!(constraints_per_air, trace_view_per_air, params_per_air)
             .map(|(constraints, trace_view, params)| {
-                Self::genererate_after_challenge_trace(
+                Self::generate_after_challenge_trace(
                     &constraints.interactions,
                     trace_view,
                     challenges,
@@ -263,7 +263,7 @@ where
     ///
     /// ## Panics
     /// - If `partitioned_main` is empty.
-    pub fn genererate_after_challenge_trace(
+    pub fn generate_after_challenge_trace(
         all_interactions: &[Interaction<SymbolicExpression<F>>],
         trace_view: &PairTraceView<'_, F>,
         permutation_randomness: &[Challenge; STARK_LU_NUM_CHALLENGES],
