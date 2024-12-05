@@ -135,6 +135,8 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
     fn air(&self) -> &Self::Air;
 
     /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the constraints.
+    /// This is done **after** records are consumed and the trace matrix is generated.
+    /// Most implementations should just leave the default implementation if padding with rows of all 0s satisfies the constraints.
     fn finalize(&self, _trace: &mut RowMajorMatrix<F>, _num_records: usize) {
         // do nothing by default
     }
