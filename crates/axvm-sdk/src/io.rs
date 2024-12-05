@@ -77,11 +77,11 @@ impl From<StdIn> for Streams<F> {
     }
 }
 
-impl<T: Serialize> From<Vec<Vec<T>>> for StdIn {
-    fn from(inputs: Vec<Vec<T>>) -> Self {
+impl From<Vec<Vec<F>>> for StdIn {
+    fn from(inputs: Vec<Vec<F>>) -> Self {
         let mut ret = StdIn::default();
         for input in inputs {
-            ret.write(&input);
+            ret.write_field(&input);
         }
         ret
     }
