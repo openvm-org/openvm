@@ -280,11 +280,10 @@ where
     }
 
     fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
-        if !self.should_finalize {
+        if !self.should_finalize || num_records == 0 {
             return;
         }
         // We will copy over the core part of last row to padded rows (all rows after num_records).
-        assert!(num_records > 0);
         let adapter_width = trace.width() - <Self::Air as BaseAir<F>>::width(&self.air);
         let last_row = trace
             .rows()

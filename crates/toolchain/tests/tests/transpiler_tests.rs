@@ -158,6 +158,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     );
-    new_air_test_with_min_segments(config, axvm_exe, vec![], 1);
+    new_air_test_with_min_segments(config, axvm_exe, vec![], 1, true);
     Ok(())
 }

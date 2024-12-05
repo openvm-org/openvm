@@ -60,6 +60,7 @@ pub fn new_air_test_with_min_segments<VC>(
     exe: impl Into<AxVmExe<BabyBear>>,
     input: Vec<Vec<BabyBear>>,
     min_segments: usize,
+    always_prove: bool,
 ) -> Option<VmMemoryState<BabyBear>>
 where
     VC: VmConfig<BabyBear>,
@@ -72,11 +73,13 @@ where
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
     let final_memory = result.final_memory.take();
-    let proofs = vm.prove(&pk, result);
+    if std::env::var("RUN_AIR_TEST_PROVING").is_ok() || always_prove {
+        let proofs = vm.prove(&pk, result);
 
-    assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs)
-        .expect("segment proofs should verify");
+        assert!(proofs.len() >= min_segments);
+        vm.verify(&pk.get_vk(), proofs)
+            .expect("segment proofs should verify");
+    }
     final_memory
 }
 

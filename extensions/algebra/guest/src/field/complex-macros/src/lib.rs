@@ -610,7 +610,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         ::axvm_algebra_guest::OPCODE,
                         ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #complex_idx
+                            + #mod_idx
                                 * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         two_modulus_bytes.as_ptr(),
@@ -620,7 +620,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         ::axvm_algebra_guest::OPCODE,
                         ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #complex_idx
+                            + #mod_idx
                                 * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         two_modulus_bytes.as_ptr(),

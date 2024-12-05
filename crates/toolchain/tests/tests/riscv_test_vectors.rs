@@ -80,7 +80,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             );
 
             let result = std::panic::catch_unwind(|| {
-                new_air_test_with_min_segments(config.clone(), exe, vec![], 1);
+                new_air_test_with_min_segments(config.clone(), exe, vec![], 1, true);
             });
 
             match result {

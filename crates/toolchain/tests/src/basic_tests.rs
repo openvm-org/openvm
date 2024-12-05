@@ -34,7 +34,7 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     );
     let config = Rv32IConfig::default();
-    new_air_test_with_min_segments(config, exe, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
     Ok(())
 }
 
@@ -49,7 +49,7 @@ fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
             .with_extension(Rv32MTranspilerExtension),
     );
     let config = Rv32ImConfig::default();
-    new_air_test_with_min_segments(config, exe, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
     Ok(())
 }
 
@@ -65,7 +65,7 @@ fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> 
             .with_extension(Rv32MTranspilerExtension),
     );
     let config = Rv32ImConfig::default();
-    new_air_test_with_min_segments(config, exe, vec![], min_segments);
+    new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
     Ok(())
 }
 

@@ -6,7 +6,7 @@ use ax_ecc_execution::axvm_ecc_guest::{
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor},
+    arch::{instructions::exe::AxVmExe, SystemConfig},
     utils::new_air_test_with_min_segments,
 };
 use axvm_ecc_circuit::WeierstrassExtension;
@@ -68,7 +68,6 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -82,7 +81,7 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io], 1, false);
         Ok(())
     }
 
@@ -99,7 +98,6 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -135,7 +133,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -152,7 +150,7 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        // let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -179,7 +177,8 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        // executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -197,7 +196,7 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         );
 
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        // let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -228,7 +227,8 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        // executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -279,7 +279,8 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1);
+        // Always run proving for just pairing check
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 }
@@ -331,7 +332,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -345,7 +345,7 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io], 1, false);
         Ok(())
     }
 
@@ -362,7 +362,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -399,7 +398,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -416,7 +415,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -443,7 +441,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -460,8 +458,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -498,7 +494,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
@@ -549,7 +545,8 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1);
+        // Always run proving for just pairing check
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 
@@ -566,7 +563,6 @@ mod bls12_381 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -593,10 +589,13 @@ mod bls12_381 {
         let [c, s] = [c, s].map(|x| axvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
         let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
-        executor.execute(
+        new_air_test_with_min_segments(
+            get_testing_config(),
             axvm_exe,
             vec![io.into_iter().map(F::from_canonical_u8).collect()],
-        )?;
+            1,
+            false,
+        );
         Ok(())
     }
 }
