@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use ax_stark_backend::{
@@ -11,7 +11,8 @@ use p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, VmComplexTraceHeights, VmConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, Streams, VmComplexTraceHeights,
+        VmConfig,
     },
     prover::{
         types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
@@ -67,7 +68,7 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> ContinuationVmProof<SC> {
+    fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
         assert!(self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
         let vm = VirtualMachine::new_with_overridden_trace_heights(
@@ -103,7 +104,7 @@ where
 {
     async fn prove(
         &self,
-        input: impl Into<VecDeque<Vec<Val<SC>>>> + Send + Sync,
+        input: impl Into<Streams<Val<SC>>> + Send + Sync,
     ) -> ContinuationVmProof<SC> {
         ContinuationVmProver::prove(self, input)
     }
@@ -116,7 +117,7 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> Proof<SC> {
+    fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> Proof<SC> {
         assert!(!self.pk.vm_config.system().continuation_enabled);
         let e = E::new(self.pk.fri_params);
         let vm = VirtualMachine::new(e, self.pk.vm_config.clone());
@@ -137,7 +138,7 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    async fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>> + Send + Sync) -> Proof<SC> {
+    async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
         SingleSegmentVmProver::prove(self, input)
     }
 }

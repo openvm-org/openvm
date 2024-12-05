@@ -47,7 +47,7 @@ fn main() -> Result<()> {
             let engine = BabyBearPoseidon2Engine::new(
                 FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
             );
-            bench_from_exe(engine, config.clone(), program, input_stream)
+            bench_from_exe(engine, config.clone(), program, input_stream.into())
         })
     })?;
     Ok(())

@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use async_trait::async_trait;
 use ax_stark_sdk::{
     ax_stark_backend::prover::types::Proof,
@@ -7,7 +5,7 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::{
-    arch::SingleSegmentVmExecutor,
+    arch::{SingleSegmentVmExecutor, Streams},
     prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
 };
 use axvm_native_circuit::NativeConfig;
@@ -45,14 +43,11 @@ impl RootVerifierLocalProver {
 }
 
 impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
-    fn prove(&self, input: impl Into<VecDeque<Vec<F>>>) -> Proof<OuterSC> {
+    fn prove(&self, input: impl Into<Streams<F>>) -> Proof<OuterSC> {
         let input = input.into();
         let vm = SingleSegmentVmExecutor::new(self.root_verifier_pk.vm_pk.vm_config.clone());
         let mut proof_input = vm
-            .execute_and_generate(
-                self.root_verifier_pk.root_committed_exe.clone(),
-                input.into(),
-            )
+            .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
             .unwrap();
         assert_eq!(
             proof_input.per_air.len(),
@@ -80,7 +75,7 @@ impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
 
 #[async_trait]
 impl AsyncSingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
-    async fn prove(&self, input: impl Into<VecDeque<Vec<F>>> + Send + Sync) -> Proof<OuterSC> {
+    async fn prove(&self, input: impl Into<Streams<F>> + Send + Sync) -> Proof<OuterSC> {
         SingleSegmentVmProver::prove(self, input)
     }
 }

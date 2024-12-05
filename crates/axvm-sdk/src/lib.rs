@@ -16,6 +16,7 @@ use ax_stark_sdk::{
 use axvm_build::GuestOptions;
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
+    prover::ContinuationVmProof,
     system::program::trace::AxVmCommittedExe,
 };
 #[cfg(feature = "static-verifier")]
@@ -27,7 +28,7 @@ use config::{AggConfig, AppConfig};
 use eyre::Result;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
-use prover::generate_leaf_committed_exe;
+use prover::{generate_leaf_committed_exe, StarkProver};
 
 pub mod commit;
 pub mod config;
@@ -95,15 +96,17 @@ impl Sdk {
 
     pub fn generate_app_proof<VC: VmConfig<F>>(
         &self,
-        _app_pk: AppProvingKey<VC>,
-        _app_exe: Arc<AxVmCommittedExe<SC>>,
-        _inputs: StdIn,
-    ) -> Result<Vec<Proof<SC>>>
+        app_pk: AppProvingKey<VC>,
+        app_exe: Arc<AxVmCommittedExe<SC>>,
+        inputs: StdIn,
+    ) -> Result<ContinuationVmProof<SC>>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        todo!()
+        let prover = StarkProver::new(app_pk, app_exe);
+        let proof = prover.generate_app_proof(inputs);
+        Ok(proof)
     }
 
     pub fn verify_app_proof(

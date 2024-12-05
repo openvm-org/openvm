@@ -28,7 +28,7 @@ use axvm_sdk::{
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
         root::types::RootVmVerifierPvs,
     },
-    Sdk,
+    Sdk, StdIn,
 };
 use p3_baby_bear::BabyBear;
 use utils::{assert_agg_config_eq, assert_agg_pk_eq};
@@ -242,7 +242,7 @@ fn test_e2e_proof_generation() {
     let air_id_perm = e2e_prover.agg_pk().root_verifier_pk.air_id_permutation();
     let special_air_ids = air_id_perm.get_special_air_ids();
 
-    let root_proof = e2e_prover.generate_e2e_proof(vec![]);
+    let root_proof = e2e_prover.generate_e2e_proof(StdIn::default());
     let root_pvs = RootVmVerifierPvs::from_flatten(
         root_proof.per_air[special_air_ids.public_values_air_id]
             .public_values
@@ -276,7 +276,7 @@ fn test_e2e_app_log_blowup_1() {
     #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
     #[allow(unused_variables)]
-    let root_proof = e2e_prover.generate_e2e_proof(vec![]);
+    let root_proof = e2e_prover.generate_e2e_proof(StdIn::default());
 
     #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(

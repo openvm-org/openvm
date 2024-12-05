@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use async_trait::async_trait;
 use ax_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
@@ -8,7 +6,10 @@ use ax_stark_backend::{
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
-use crate::system::memory::{tree::public_values::UserPublicValuesProof, CHUNK};
+use crate::{
+    arch::Streams,
+    system::memory::{tree::public_values::UserPublicValuesProof, CHUNK},
+};
 
 pub mod local;
 pub mod types;
@@ -22,7 +23,7 @@ pub struct ContinuationVmProof<SC: StarkGenericConfig> {
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
 pub trait ContinuationVmProver<SC: StarkGenericConfig> {
-    fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> ContinuationVmProof<SC>;
+    fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC>;
 }
 
 /// Async prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -30,17 +31,17 @@ pub trait ContinuationVmProver<SC: StarkGenericConfig> {
 pub trait AsyncContinuationVmProver<SC: StarkGenericConfig> {
     async fn prove(
         &self,
-        input: impl Into<VecDeque<Vec<Val<SC>>>> + Send + Sync,
+        input: impl Into<Streams<Val<SC>>> + Send + Sync,
     ) -> ContinuationVmProof<SC>;
 }
 
 /// Prover for a specific exe in a specific single-segment VM using a specific Stark config.
 pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
-    fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>>) -> Proof<SC>;
+    fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> Proof<SC>;
 }
 
 /// Async prover for a specific exe in a specific single-segment VM using a specific Stark config.
 #[async_trait]
 pub trait AsyncSingleSegmentVmProver<SC: StarkGenericConfig> {
-    async fn prove(&self, input: impl Into<VecDeque<Vec<Val<SC>>>> + Send + Sync) -> Proof<SC>;
+    async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC>;
 }

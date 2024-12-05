@@ -16,7 +16,7 @@ use p3_field::PrimeField32;
 
 use crate::arch::{
     vm::{VirtualMachine, VmExecutor},
-    VmConfig, VmMemoryState,
+    Streams, VmConfig, VmMemoryState,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<AxVmExe<BabyBear>>)
@@ -25,14 +25,14 @@ where
     VC::Executor: Chip<BabyBearPoseidon2Config>,
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
-    air_test_with_min_segments(config, exe, vec![], 1);
+    air_test_with_min_segments(config, exe, Streams::default(), 1);
 }
 
 /// Executes the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VC>(
     config: VC,
     exe: impl Into<AxVmExe<BabyBear>>,
-    input: Vec<Vec<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
 where
@@ -58,7 +58,7 @@ where
 pub fn new_air_test_with_min_segments<VC>(
     config: VC,
     exe: impl Into<AxVmExe<BabyBear>>,
-    input: Vec<Vec<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
 where
@@ -87,7 +87,7 @@ where
 /// The output AIRs and traces are sorted by height in descending order.
 pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig, VC>(
     program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
+    input_stream: impl Into<Streams<Val<SC>>> + Clone,
     #[allow(unused_mut)] mut config: VC,
 ) -> ProofInputForTest<SC>
 where
@@ -137,7 +137,7 @@ type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, Verif
 /// Executes program and runs simple STARK prover test (keygen, prove, verify).
 pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VC>(
     program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
+    input_stream: impl Into<Streams<Val<SC>>> + Clone,
     config: VC,
     engine: &E,
 ) -> ExecuteAndProveResult<SC>

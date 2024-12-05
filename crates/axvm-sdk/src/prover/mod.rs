@@ -8,7 +8,7 @@ use ax_stark_sdk::{
 #[cfg(feature = "bench-metrics")]
 use axvm_circuit::arch::{SingleSegmentVmExecutor, VmExecutor};
 use axvm_circuit::{
-    arch::VmConfig,
+    arch::{Streams, VmConfig},
     prover::{
         local::VmLocalProver, ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
@@ -21,6 +21,7 @@ use tracing::info_span;
 
 use crate::{
     config::AggConfig,
+    io::StdIn,
     keygen::{AggProvingKey, AppProvingKey},
     verifier::{
         internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
@@ -138,7 +139,7 @@ where
         self.leaf_committed_exe.as_ref().unwrap()
     }
 
-    pub fn generate_e2e_proof(&self, input: Vec<Vec<F>>) -> Proof<OuterSC> {
+    pub fn generate_e2e_proof(&self, input: StdIn) -> Proof<OuterSC> {
         assert!(self.agg_pk.is_some(), "Aggregation has not been configured");
         let app_proofs = self.generate_app_proof(input);
         let leaf_proofs = self.generate_leaf_proof_impl(&app_proofs);
@@ -150,7 +151,7 @@ where
         })
     }
 
-    pub fn generate_app_proof(&self, input: Vec<Vec<F>>) -> ContinuationVmProof<SC> {
+    pub fn generate_app_proof(&self, input: StdIn) -> ContinuationVmProof<SC> {
         #[cfg(feature = "bench-metrics")]
         {
             execute_app_exe_for_metrics_collection(
@@ -164,7 +165,7 @@ where
 
     pub fn generate_e2e_proof_with_metric_spans(
         &self,
-        input: Vec<Vec<F>>,
+        input: StdIn,
         program_name: &str,
     ) -> Proof<OuterSC> {
         assert!(self.agg_pk.is_some(), "Aggregation has not been configured");
@@ -188,7 +189,7 @@ where
 
     pub fn generate_app_proof_with_metric_spans(
         &self,
-        input: Vec<Vec<F>>,
+        input: StdIn,
         program_name: &str,
     ) -> ContinuationVmProof<SC> {
         let group_name = program_name.replace(" ", "_").to_lowercase();
@@ -297,7 +298,7 @@ where
 
 fn single_segment_prove<E: StarkFriEngine<SC>>(
     prover: &VmLocalProver<SC, NativeConfig, E>,
-    input: Vec<Vec<F>>,
+    input: impl Into<Streams<F>> + Clone,
 ) -> Proof<SC> {
     #[cfg(feature = "bench-metrics")]
     {
@@ -314,7 +315,7 @@ fn single_segment_prove<E: StarkFriEngine<SC>>(
 fn execute_app_exe_for_metrics_collection<VC: VmConfig<F>>(
     app_pk: &AppProvingKey<VC>,
     app_committed_exe: &Arc<AxVmCommittedExe<SC>>,
-    input: Vec<Vec<F>>,
+    input: StdIn,
 ) where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,

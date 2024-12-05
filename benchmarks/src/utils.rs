@@ -11,6 +11,7 @@ use axvm_sdk::{
     config::AppConfig,
     keygen::AppProvingKey,
     prover::{commit_app_exe, StarkProver},
+    StdIn,
 };
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
@@ -73,7 +74,7 @@ pub fn bench_from_exe<E, VC>(
     engine: E,
     config: VC,
     exe: impl Into<AxVmExe<F>>,
-    input_stream: Vec<Vec<F>>,
+    input_stream: StdIn,
 ) -> Result<Vec<VerificationDataWithFriParams<SC>>>
 where
     E: StarkFriEngine<SC>,

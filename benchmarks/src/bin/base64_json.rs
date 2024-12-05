@@ -17,6 +17,7 @@ use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use axvm_sdk::StdIn;
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
@@ -47,13 +48,13 @@ fn main() -> Result<()> {
 
                 let data = include_str!("../../programs/base64_json/json_payload_encoded.txt");
 
-                let fe_bytes = data
-                    .to_owned()
-                    .into_bytes()
-                    .into_iter()
-                    .map(AbstractField::from_canonical_u8)
-                    .collect::<Vec<BabyBear>>();
-                bench_from_exe(engine, Keccak256Rv32Config::default(), exe, vec![fe_bytes])
+                let fe_bytes = data.to_owned().into_bytes();
+                bench_from_exe(
+                    engine,
+                    Keccak256Rv32Config::default(),
+                    exe,
+                    StdIn::from_bytes(&fe_bytes),
+                )
             })?;
 
         #[cfg(feature = "aggregation")]
@@ -79,9 +80,10 @@ fn main() -> Result<()> {
                     let engine = BabyBearPoseidon2Engine::new(
                         FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),
                     );
-                    bench_from_exe(engine, config.clone(), program, input_stream).unwrap_or_else(
-                        |e| panic!("Leaf aggregation failed for segment {}: {e}", seg_idx),
-                    )
+                    bench_from_exe(engine, config.clone(), program, input_stream.into())
+                        .unwrap_or_else(|e| {
+                            panic!("Leaf aggregation failed for segment {}: {e}", seg_idx)
+                        })
                 });
             }
         }

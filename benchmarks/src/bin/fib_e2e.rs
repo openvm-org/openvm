@@ -1,7 +1,6 @@
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
@@ -18,15 +17,14 @@ use axvm_sdk::{
     config::{AggConfig, AppConfig},
     keygen::{AggProvingKey, AppProvingKey},
     prover::{commit_app_exe, generate_leaf_committed_exe, StarkProver},
+    StdIn,
 };
 use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use p3_field::AbstractField;
 #[cfg(feature = "static-verifier")]
 use tracing::info_span;
 
-type F = BabyBear;
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
 
 #[tokio::main]
@@ -77,14 +75,11 @@ async fn main() -> Result<()> {
         .with_agg_pk_and_leaf_committed_exe(agg_pk, leaf_committed_exe);
 
     let n = 800_000u64;
-    let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?
-        .into_iter()
-        .map(F::from_canonical_u8)
-        .collect();
+    let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
     run_with_metric_collection("OUTPUT_PATH", || {
         #[allow(unused_variables)]
         let root_proof = prover.generate_e2e_proof_with_metric_spans(
-            vec![app_input],
+            StdIn::from_bytes(&app_input),
             "Fibonacci Continuation Program",
         );
         #[cfg(feature = "static-verifier")]

@@ -41,6 +41,18 @@ impl<F> Streams<F> {
     }
 }
 
+impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
+    fn from(value: VecDeque<Vec<F>>) -> Self {
+        Streams::new(value)
+    }
+}
+
+impl<F> From<Vec<Vec<F>>> for Streams<F> {
+    fn from(value: Vec<Vec<F>>) -> Self {
+        Streams::new(value)
+    }
+}
+
 pub struct VmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
@@ -94,13 +106,13 @@ where
     pub fn execute_segments(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
 
         let exe = exe.into();
-        let streams = Streams::new(input);
+        let streams = input.into();
         let mut segments = vec![];
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -165,7 +177,7 @@ where
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let mut results = self.execute_segments(exe, input)?;
         let last = results.last_mut().unwrap();
@@ -185,19 +197,20 @@ where
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        self.execute_and_generate_impl(exe.into(), None, input.into())
+        self.execute_and_generate_impl(exe.into(), None, input)
     }
+
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -207,14 +220,14 @@ where
         self.execute_and_generate_impl(
             commited_exe.exe.clone(),
             Some(commited_exe.committed_program.clone()),
-            input.into(),
+            input,
         )
     }
     fn execute_and_generate_impl<SC: StarkGenericConfig>(
         &self,
         exe: AxVmExe<F>,
         committed_program: Option<CommittedTraceData<SC>>,
-        input: VecDeque<Vec<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -293,9 +306,9 @@ where
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = self.execute_impl(exe.into(), input.into())?;
+        let segment = self.execute_impl(exe.into(), input)?;
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
@@ -314,27 +327,27 @@ where
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: Vec<Vec<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
+        let segment = self.execute_impl(commited_exe.exe.clone(), input)?;
         Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
     }
 
     fn execute_impl(
         &self,
         exe: AxVmExe<F>,
-        input: VecDeque<Vec<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
             exe.program.clone(),
-            Streams::new(input),
+            input.into(),
             None,
             exe.fn_bounds,
         );
@@ -431,7 +444,7 @@ where
     pub fn execute(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         self.executor.execute(exe, input)
     }
@@ -439,7 +452,7 @@ where
     pub fn execute_and_generate(
         &self,
         exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError> {
         self.executor.execute_and_generate(exe, input)
     }
@@ -447,7 +460,7 @@ where
     pub fn execute_and_generate_with_cached_program(
         &self,
         committed_exe: Arc<AxVmCommittedExe<SC>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
