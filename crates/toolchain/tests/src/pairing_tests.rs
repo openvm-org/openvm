@@ -150,7 +150,6 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-        // let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -177,7 +176,6 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // executor.execute(axvm_exe, vec![io_all])?;
         new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
@@ -195,8 +193,6 @@ mod bn254 {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
         );
-
-        // let executor = VmExecutor::<F, _>::new(get_testing_config());
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -227,7 +223,6 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // executor.execute(axvm_exe, vec![io_all])?;
         new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
