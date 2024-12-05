@@ -23,7 +23,7 @@ mod bn254 {
     );
 
     axvm_algebra_complex_macros::complex_init! {
-        Fp2,
+        Fp2 { mod_idx = 0 },
     }
 
     pub fn test_miller_loop(io: &[u8]) {
@@ -64,7 +64,7 @@ mod bls12_381 {
     axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
 
     axvm_algebra_complex_macros::complex_init! {
-        Fp2,
+        Fp2 { mod_idx = 0 },
     }
 
     pub fn test_miller_loop(io: &[u8]) {

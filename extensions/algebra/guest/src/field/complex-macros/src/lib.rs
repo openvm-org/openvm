@@ -505,31 +505,9 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
     TokenStream::from_iter(output)
 }
 
-struct ComplexDefine {
-    items: Vec<Path>,
-}
-
-impl Parse for ComplexDefine {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
-        Ok(Self {
-            items: items
-                .into_iter()
-                .map(|e| {
-                    if let Expr::Path(p) = e {
-                        p.path
-                    } else {
-                        panic!("expected path");
-                    }
-                })
-                .collect(),
-        })
-    }
-}
-
 #[proc_macro]
 pub fn complex_init(input: TokenStream) -> TokenStream {
-    let ComplexDefine { items } = parse_macro_input!(input as ComplexDefine);
+    let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
@@ -538,18 +516,39 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     let span = proc_macro::Span::call_site();
 
     for (complex_idx, item) in items.into_iter().enumerate() {
-        let str_path = item
-            .segments
-            .iter()
-            .map(|x| x.ident.to_string())
-            .collect::<Vec<_>>()
-            .join("_");
+        let struct_name = item.name.to_string();
+        let struct_name = syn::Ident::new(&struct_name, span.into());
+        let mut intmod_idx: Option<usize> = None;
+        for param in item.params {
+            match param.name.to_string().as_str() {
+                "mod_idx" => {
+                    if let syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Int(int),
+                        ..
+                    }) = param.value
+                    {
+                        intmod_idx = Some(int.base10_parse::<usize>().unwrap());
+                    } else {
+                        return syn::Error::new_spanned(param.value, "Expected usize")
+                            .to_compile_error()
+                            .into();
+                    }
+                }
+                _ => {
+                    panic!("Unknown parameter {}", param.name);
+                }
+            }
+        }
+        let mod_idx = intmod_idx.expect("mod_idx is required");
 
-        println!("[init] complex #{} = {}", complex_idx, str_path);
+        println!(
+            "[init] complex #{} = {} (mod_idx = {})",
+            complex_idx, struct_name, mod_idx
+        );
 
         for op_type in ["add", "sub", "mul", "div"] {
             let func_name = syn::Ident::new(
-                &format!("complex_{}_extern_func_{}", op_type, str_path),
+                &format!("complex_{}_extern_func_{}", op_type, struct_name),
                 span.into(),
             );
             let mut chars = op_type.chars().collect::<Vec<_>>();
@@ -562,7 +561,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                         axvm_algebra_guest::OPCODE,
                         axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
                         axvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
-                            + #complex_idx * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                            + #mod_idx * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd,
                         rs1,
                         rs2
@@ -584,11 +583,11 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    let modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx + 1]];
+                    let modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx + 1] - axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#complex_idx]]> = core::mem::MaybeUninit::uninit();
+                    let mut uninit: core::mem::MaybeUninit<[u8; axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
                     axvm_platform::custom_insn_r!(
                         ::axvm_algebra_guest::OPCODE,
                         ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
@@ -627,9 +626,31 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     })
 }
 
+struct ComplexSimpleItem {
+    items: Vec<Path>,
+}
+
+impl Parse for ComplexSimpleItem {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
+        Ok(Self {
+            items: items
+                .into_iter()
+                .map(|e| {
+                    if let Expr::Path(p) = e {
+                        p.path
+                    } else {
+                        panic!("expected path");
+                    }
+                })
+                .collect(),
+        })
+    }
+}
+
 #[proc_macro]
 pub fn complex_impl_field(input: TokenStream) -> TokenStream {
-    let ComplexDefine { items } = parse_macro_input!(input as ComplexDefine);
+    let ComplexSimpleItem { items } = parse_macro_input!(input as ComplexSimpleItem);
 
     let mut output = Vec::new();
 

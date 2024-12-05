@@ -17,7 +17,7 @@ axvm_algebra_complex_macros::complex_declare! {
 }
 
 axvm_algebra_complex_macros::complex_init! {
-    Complex,
+    Complex { mod_idx = 0},
 }
 
 pub fn main() {
