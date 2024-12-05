@@ -28,7 +28,7 @@ lazy_static! {
     ));
 }
 
-pub const BN254_XI_ISIZE: [isize; 2] = [9, 1];
+pub const BN254_XI: [isize; 2] = [9, 1];
 pub const BN254_NUM_LIMBS: usize = 32;
 pub const BN254_LIMB_BITS: usize = 8;
 pub const BN254_BLOCK_SIZE: usize = 32;

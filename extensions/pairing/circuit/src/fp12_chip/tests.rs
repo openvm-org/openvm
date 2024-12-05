@@ -16,9 +16,9 @@ use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_pairing_guest::{
     bls12_381::{
         BLS12_381_BLOCK_SIZE, BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS,
-        BLS12_381_XI_ISIZE,
+        BLS12_381_XI,
     },
-    bn254::{BN254_BLOCK_SIZE, BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
+    bn254::{BN254_BLOCK_SIZE, BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI},
 };
 use axvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
@@ -158,7 +158,7 @@ fn test_fp12_mul_bn254() {
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
-    let xi = BN254_XI_ISIZE;
+    let xi = BN254_XI;
     let expr = fp12_mul_expr(
         config,
         tester.memory_controller().borrow().range_checker.bus(),
@@ -246,7 +246,7 @@ fn test_fp12_mul_bls12381() {
         num_limbs: BLS12_381_NUM_LIMBS,
         limb_bits: BLS12_381_LIMB_BITS,
     };
-    let xi = BLS12_381_XI_ISIZE;
+    let xi = BLS12_381_XI;
     let expr = fp12_mul_expr(
         config,
         tester.memory_controller().borrow().range_checker.bus(),

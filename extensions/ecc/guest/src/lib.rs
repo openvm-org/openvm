@@ -40,5 +40,5 @@ pub use ecdsa::*;
 pub mod sw;
 
 /// Types for Secp256k1 curve with intrinsic functions. Implements traits necessary for ECDSA.
-#[cfg(any(feature = "halo2curves", feature = "k256"))]
+#[cfg(feature = "k256")]
 pub mod k256;
