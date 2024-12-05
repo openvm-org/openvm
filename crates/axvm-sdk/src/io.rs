@@ -15,55 +15,34 @@ pub struct EvmProof {
     pub proof: Vec<u8>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-enum InputType {
-    Bytes = 0,
-    Field,
-}
-
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct StdIn {
-    pub buffer: VecDeque<Vec<u8>>,
-    pub field_buffer: VecDeque<Vec<F>>,
-    next: VecDeque<InputType>,
+    pub buffer: VecDeque<Vec<F>>,
 }
 
 impl StdIn {
     pub fn from_bytes(data: &[u8]) -> Self {
-        Self {
-            buffer: VecDeque::from(vec![data.to_vec()]),
-            field_buffer: VecDeque::new(),
-            next: VecDeque::from(vec![InputType::Bytes]),
-        }
+        let mut ret = Self::default();
+        ret.write_bytes(data);
+        ret
     }
 
     pub fn read(&mut self) -> Option<Vec<F>> {
-        if let Some(input_type) = self.next.pop_front() {
-            if input_type == InputType::Bytes {
-                let bytes = self.buffer.pop_front().unwrap();
-                Some(bytes.iter().map(|b| F::from_canonical_u8(*b)).collect())
-            } else {
-                self.field_buffer.pop_front()
-            }
-        } else {
-            None
-        }
+        self.buffer.pop_front()
     }
 
     pub fn write<T: Serialize>(&mut self, data: &T) {
         let bytes = bincode::serialize(data).unwrap();
-        self.buffer.push_back(bytes);
-        self.next.push_back(InputType::Bytes);
+        self.write_bytes(&bytes);
     }
 
     pub fn write_bytes(&mut self, data: &[u8]) {
-        self.buffer.push_back(data.to_vec());
-        self.next.push_back(InputType::Bytes);
+        let field_data = data.iter().map(|b| F::from_canonical_u8(*b)).collect();
+        self.buffer.push_back(field_data);
     }
 
     pub fn write_field(&mut self, data: &[F]) {
-        self.field_buffer.push_back(data.to_vec());
-        self.next.push_back(InputType::Field);
+        self.buffer.push_back(data.to_vec());
     }
 }
 
