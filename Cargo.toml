@@ -163,7 +163,7 @@ p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4"
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking
 p3-bn254-fr = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "chore/ruint-pin", default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", branch = "zkvm-v0.1", default-features = false, features = [
     "loader_halo2",
     "halo2-axiom",
     "display",
