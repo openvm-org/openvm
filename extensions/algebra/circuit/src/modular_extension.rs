@@ -8,11 +8,11 @@ use ax_mod_circuit_builder::ExprBuilderConfig;
 use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use axvm_circuit::{
     self,
-    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::UsizeOpcode;
+use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
@@ -57,9 +57,11 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -121,7 +123,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
-                    addsub_opcodes.clone().map(|x| x + class_offset),
+                    addsub_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_32.clone(),
@@ -134,7 +138,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
-                    muldiv_opcodes.clone().map(|x| x + class_offset),
+                    muldiv_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
                     Rv32IsEqualModAdapterChip::new(
@@ -152,7 +158,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv32_32(isequal_chip),
-                    iseq_opcodes.clone().map(|x| x + class_offset),
+                    iseq_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = ModularAddSubChip::new(
@@ -166,7 +174,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
-                    addsub_opcodes.clone().map(|x| x + class_offset),
+                    addsub_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let muldiv_chip = ModularMulDivChip::new(
                     adapter_chip_48.clone(),
@@ -179,7 +189,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
-                    muldiv_opcodes.clone().map(|x| x + class_offset),
+                    muldiv_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
                 let isequal_chip = ModularIsEqualChip::new(
                     Rv32IsEqualModAdapterChip::new(
@@ -197,7 +209,9 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv32_48(isequal_chip),
-                    iseq_opcodes.clone().map(|x| x + class_offset),
+                    iseq_opcodes
+                        .clone()
+                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

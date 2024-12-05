@@ -74,6 +74,7 @@ impl<
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "MulBy02345",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

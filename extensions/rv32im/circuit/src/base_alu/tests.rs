@@ -22,7 +22,7 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_rv32im_transpiler::BaseAluOpcode;
 use rand::Rng;
 
@@ -147,7 +147,7 @@ fn run_rv32_alu_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(AxVmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let trace_width = chip.trace_width();

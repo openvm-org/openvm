@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use axvm_instructions::{
     exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
-    utils::isize_to_field, SystemOpcode, UsizeOpcode,
+    utils::isize_to_field, AxVmOpcode, SystemOpcode,
 };
 use p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
@@ -21,7 +21,7 @@ pub fn from_r_type<F: PrimeField32>(
         return nop();
     }
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
@@ -38,7 +38,7 @@ pub fn from_i_type<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruct
         return nop();
     }
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_u32(i12_to_u24(dec_insn.imm)),
@@ -55,7 +55,7 @@ pub fn from_load<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instructio
         return nop();
     }
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
@@ -73,7 +73,7 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
         return nop();
     }
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_u32(dec_insn.shamt),
@@ -87,7 +87,7 @@ pub fn from_i_type_shamt<F: PrimeField32>(opcode: usize, dec_insn: &ITypeShamt) 
 /// Create a new [`Instruction`] from an S-type instruction.
 pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruction<F> {
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
@@ -103,7 +103,7 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
 /// Create a new [`Instruction`] from a B-type instruction.
 pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
         isize_to_field(dec_insn.imm as isize),
@@ -117,7 +117,7 @@ pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruct
 /// Create a new [`Instruction`] from a J-type instruction.
 pub fn from_j_type<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruction<F> {
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::ZERO,
         isize_to_field(dec_insn.imm as isize),
@@ -134,7 +134,7 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
         return nop();
     }
     Instruction::new(
-        opcode,
+        AxVmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::ZERO,
         F::from_canonical_u32((dec_insn.imm as u32 >> 12) & 0xfffff),
@@ -148,7 +148,7 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
 /// Create a new [`Instruction`] that exits with code 2. This is equivalent to program panic but with a special exit code for debugging.
 pub fn unimp<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: SystemOpcode::TERMINATE.with_default_offset(),
+        opcode: AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE),
         c: F::TWO,
         ..Default::default()
     }
@@ -156,7 +156,7 @@ pub fn unimp<F: PrimeField32>() -> Instruction<F> {
 
 pub fn nop<F: PrimeField32>() -> Instruction<F> {
     Instruction {
-        opcode: SystemOpcode::PHANTOM.with_default_offset(),
+        opcode: AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM),
         ..Default::default()
     }
 }

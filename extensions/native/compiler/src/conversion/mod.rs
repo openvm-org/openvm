@@ -2,7 +2,8 @@ use axvm_circuit::arch::instructions::program::Program;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
+    AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode,
+    UsizeOpcode,
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode;
 use p3_field::{ExtensionField, PrimeField32, PrimeField64};
@@ -37,13 +38,13 @@ impl Default for CompilerOptions {
 }
 
 impl CompilerOptions {
-    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
+    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> AxVmOpcode {
         let offset = Opcode::default_offset();
-        offset + opcode.as_usize()
+        AxVmOpcode::from_usize(offset + opcode.as_usize())
     }
 }
 
-fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
+fn inst<F: PrimeField64>(opcode: AxVmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
     Instruction {
         opcode,
         a,
@@ -58,7 +59,7 @@ fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instr
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: usize,
+    opcode: AxVmOpcode,
     a: F,
     b: F,
     c: F,
@@ -80,7 +81,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: usize,
+    opcode: AxVmOpcode,
     a: F,
     b: F,
     c: F,

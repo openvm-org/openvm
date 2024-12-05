@@ -15,7 +15,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, UsizeOpcode,
+    instruction::Instruction, program::Program, AxVmOpcode, SystemOpcode::TERMINATE,
 };
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
@@ -76,7 +76,7 @@ fn test_impl(
 
     {
         let instructions = vec![Instruction::from_isize(
-            TERMINATE.with_default_offset(),
+            AxVmOpcode::with_default_offset(TERMINATE),
             0,
             0,
             exit_code as isize,

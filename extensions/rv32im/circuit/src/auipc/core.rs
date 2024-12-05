@@ -167,9 +167,10 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32AuipcOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
         let imm = instruction.c.as_canonical_u32();
-        let rd_data = run_auipc(local_opcode_index, from_pc, imm);
+        let rd_data = run_auipc(local_opcode, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext::without_pc([rd_data_field]);

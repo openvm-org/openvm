@@ -1,5 +1,7 @@
 use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
-use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode};
+use axvm_instructions::{
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, UsizeOpcode,
+};
 use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
 use p3_field::PrimeField32;
@@ -54,7 +56,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                     _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
                 };
                 Some(Instruction::new(
-                    local_opcode.with_default_offset() + curve_idx_shift,
+                    AxVmOpcode::from_usize(local_opcode.with_default_offset() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),

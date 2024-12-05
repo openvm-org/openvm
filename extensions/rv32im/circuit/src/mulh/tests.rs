@@ -24,7 +24,7 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_rv32im_transpiler::MulHOpcode;
 use rand::rngs::StdRng;
 
@@ -62,7 +62,10 @@ fn run_rv32_mulh_rand_write_execute<E: InstructionExecutor<F>>(
     let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     tester.execute(
         chip,
-        Instruction::from_usize(opcode as usize, [rd, rs1, rs2, 1, 0]),
+        Instruction::from_usize(
+            AxVmOpcode::from_usize(opcode as usize),
+            [rd, rs1, rs2, 1, 0],
+        ),
     );
 
     assert_eq!(
@@ -175,7 +178,7 @@ fn run_rv32_mulh_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 0]),
+        Instruction::from_usize(AxVmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 0]),
     );
 
     let trace_width = chip.trace_width();

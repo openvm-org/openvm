@@ -209,7 +209,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
-        let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode = Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
@@ -218,7 +218,7 @@ where
         let rs1 = reads.into()[0];
         let rs1_val = compose(rs1);
 
-        let (to_pc, rd_data) = run_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
+        let (to_pc, rd_data) = run_jalr(local_opcode, from_pc, imm_extended, rs1_val);
 
         self.bitwise_lookup_chip
             .request_range(rd_data[0], rd_data[1]);

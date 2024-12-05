@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use p3_baby_bear::BabyBear;
 use p3_field::{AbstractField, PrimeField64};
 use rand::Rng;
@@ -32,9 +32,9 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
-                    PERM_POS2 as usize
+                    AxVmOpcode::from_usize(PERM_POS2 as usize)
                 } else {
-                    COMP_POS2 as usize
+                    AxVmOpcode::from_usize(COMP_POS2 as usize)
                 },
                 a,
                 b,
@@ -65,7 +65,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let mut rng = create_seeded_rng();
 
     for instruction in random_instructions(num_ops) {
-        let opcode = Poseidon2Opcode::from_usize(instruction.opcode);
+        let opcode = Poseidon2Opcode::from_usize(instruction.opcode.as_usize());
         let [a, b, c, d, e] = [
             instruction.a,
             instruction.b,

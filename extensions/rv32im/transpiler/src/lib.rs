@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
-    UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
+    SystemOpcode,
 };
 use axvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
@@ -62,7 +62,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
             (SYSTEM_OPCODE, TERMINATE_FUNCT3) => {
                 let dec_insn = IType::new(instruction_u32);
                 Some(Instruction {
-                    opcode: SystemOpcode::TERMINATE.with_default_offset(),
+                    opcode: AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE),
                     c: F::from_canonical_u8(
                         dec_insn.imm.try_into().expect("exit code must be byte"),
                     ),
@@ -151,7 +151,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                 let dec_insn = IType::new(instruction_u32);
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 Some(Instruction::from_isize(
-                    Rv32HintStoreOpcode::HINT_STOREW.with_default_offset(),
+                    AxVmOpcode::with_default_offset(Rv32HintStoreOpcode::HINT_STOREW),
                     0,
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,
@@ -164,7 +164,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                 let imm_u16 = (dec_insn.imm as u32) & 0xffff;
                 // REVEAL_RV32 is a pseudo-instruction for STOREW_RV32 a,b,c,1,3
                 Some(Instruction::from_isize(
-                    Rv32LoadStoreOpcode::STOREW.with_default_offset(),
+                    AxVmOpcode::with_default_offset(Rv32LoadStoreOpcode::STOREW),
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                     (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
                     imm_u16 as isize,

@@ -281,7 +281,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             g,
             ..
         } = *instruction;
-        let local_opcode_index = NativeLoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let read1_as = d;
         let read1_ptr = c;
@@ -289,19 +289,19 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         let read2_ptr = f;
 
         let read1_cell = memory.read_cell(read1_as, read1_ptr);
-        let read2_cell = match local_opcode_index {
+        let read2_cell = match local_opcode {
             LOADW2 | STOREW2 => Some(memory.read_cell(read2_as, read2_ptr)),
             _ => None,
         };
 
         let (data_read_as, data_write_as) = {
-            match local_opcode_index {
+            match local_opcode {
                 LOADW | LOADW2 => (e, d),
                 STOREW | STOREW2 | SHINTW => (d, e),
             }
         };
         let (data_read_ptr, data_write_ptr) = {
-            match local_opcode_index {
+            match local_opcode {
                 LOADW => (read1_cell.data[0] + b, a),
                 LOADW2 => (read1_cell.data[0] + b + read2_cell.unwrap().data[0] * g, a),
                 STOREW => (a, read1_cell.data[0] + b),
@@ -311,7 +311,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
 
         // TODO[yi]: Fix when vectorizing
-        let data_read = match local_opcode_index {
+        let data_read = match local_opcode {
             SHINTW => None,
             _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
         };

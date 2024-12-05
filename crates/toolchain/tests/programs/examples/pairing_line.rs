@@ -116,13 +116,11 @@ pub fn main() {
     cfg_match! {
         cfg(feature = "bn254") => {
             bn254::setup_all_moduli();
-            bn254::setup_all_complex_extensions();
             bn254::test_mul_013_by_013(&io[..32 * 18]);
             bn254::test_mul_by_01234(&io[32 * 18..32 * 52]);
         }
         cfg(feature = "bls12_381") => {
             bls12_381::setup_all_moduli();
-            bls12_381::setup_all_complex_extensions();
             bls12_381::test_mul_023_by_023(&io[..48 * 18]);
             bls12_381::test_mul_by_02345(&io[48 * 18..48 * 52]);
         }

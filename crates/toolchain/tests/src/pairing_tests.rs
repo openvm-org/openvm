@@ -2,7 +2,10 @@
 
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
+use axvm_circuit::{
+    arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor},
+    utils::new_air_test_with_min_segments,
+};
 use axvm_ecc_circuit::WeierstrassExtension;
 use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
 use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
@@ -240,8 +243,6 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         );
 
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
-
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
@@ -275,7 +276,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1);
         Ok(())
     }
 }
@@ -513,8 +514,6 @@ mod bls12_381 {
                 .with_extension(Fp2TranspilerExtension),
         );
 
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
-
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
 
@@ -548,7 +547,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1);
         Ok(())
     }
 

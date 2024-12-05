@@ -1,0 +1,10 @@
+# # Uncomment to build for axvm
+# [build]
+# target = "riscv32im-risc0-zkvm-elf"
+
+# [target.riscv32im-risc0-zkvm-elf]
+# rustflags = ["-C", "passes=lower-atomic", "-C", "link-arg=-Ttext=0x002008000"]
+
+# [unstable]
+# build-std = ["core", "alloc", "proc_macro", "panic_abort", "std"]
+# build-std-features = ["compiler-builtins-mem"]

@@ -170,10 +170,11 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode_index = Rv32JalLuiOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32JalLuiOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
         let imm = instruction.c;
 
-        let signed_imm = match local_opcode_index {
+        let signed_imm = match local_opcode {
             JAL => {
                 // Note: signed_imm is a signed integer and imm is a field element
                 (imm + F::from_canonical_u32(1 << (RV_J_TYPE_IMM_BITS - 1))).as_canonical_u32()
@@ -182,14 +183,14 @@ where
             }
             LUI => imm.as_canonical_u32() as i32,
         };
-        let (to_pc, rd_data) = run_jal_lui(local_opcode_index, from_pc, signed_imm);
+        let (to_pc, rd_data) = run_jal_lui(local_opcode, from_pc, signed_imm);
 
         for i in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
             self.bitwise_lookup_chip
                 .request_range(rd_data[i * 2], rd_data[i * 2 + 1]);
         }
 
-        if local_opcode_index == JAL {
+        if local_opcode == JAL {
             let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
             let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
             self.bitwise_lookup_chip
@@ -208,8 +209,8 @@ where
             Rv32JalLuiCoreRecord {
                 rd_data,
                 imm,
-                is_jal: local_opcode_index == JAL,
-                is_lui: local_opcode_index == LUI,
+                is_jal: local_opcode == JAL,
+                is_lui: local_opcode == LUI,
             },
         ))
     }

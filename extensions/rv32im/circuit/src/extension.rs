@@ -8,13 +8,13 @@ use ax_circuit_primitives::{
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
+        VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode};
+use axvm_instructions::{program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant, UsizeOpcode};
 use axvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
@@ -209,9 +209,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Rv32IExecutor<F>, Rv32IPeriphery<F>>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -232,7 +234,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             base_alu_chip,
-            BaseAluOpcode::iter().map(|x| x.with_default_offset()),
+            BaseAluOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let lt_chip = Rv32LessThanChip::new(
@@ -242,7 +244,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             lt_chip,
-            LessThanOpcode::iter().map(|x| x.with_default_offset()),
+            LessThanOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let shift_chip = Rv32ShiftChip::new(
@@ -256,7 +258,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             shift_chip,
-            ShiftOpcode::iter().map(|x| x.with_default_offset()),
+            ShiftOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let load_store_chip = Rv32LoadStoreChip::new(
@@ -274,7 +276,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             load_store_chip,
             Rv32LoadStoreOpcode::iter()
                 .take(Rv32LoadStoreOpcode::STOREB as usize + 1)
-                .map(|x| x.with_default_offset()),
+                .map(AxVmOpcode::with_default_offset),
         )?;
 
         let load_sign_extend_chip = Rv32LoadSignExtendChip::new(
@@ -294,7 +296,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         inventory.add_executor(
             load_sign_extend_chip,
             [Rv32LoadStoreOpcode::LOADB, Rv32LoadStoreOpcode::LOADH]
-                .map(|x| x.with_default_offset()),
+                .map(AxVmOpcode::with_default_offset),
         )?;
 
         let beq_chip = Rv32BranchEqualChip::new(
@@ -304,7 +306,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             beq_chip,
-            BranchEqualOpcode::iter().map(|x| x.with_default_offset()),
+            BranchEqualOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let blt_chip = Rv32BranchLessThanChip::new(
@@ -317,7 +319,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             blt_chip,
-            BranchLessThanOpcode::iter().map(|x| x.with_default_offset()),
+            BranchLessThanOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let jal_lui_chip = Rv32JalLuiChip::new(
@@ -327,7 +329,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             jal_lui_chip,
-            Rv32JalLuiOpcode::iter().map(|x| x.with_default_offset()),
+            Rv32JalLuiOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let jalr_chip = Rv32JalrChip::new(
@@ -341,7 +343,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             jalr_chip,
-            Rv32JalrOpcode::iter().map(|x| x.with_default_offset()),
+            Rv32JalrOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let auipc_chip = Rv32AuipcChip::new(
@@ -351,7 +353,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(
             auipc_chip,
-            Rv32AuipcOpcode::iter().map(|x| x.with_default_offset()),
+            Rv32AuipcOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
@@ -377,9 +379,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Rv32MExecutor<F>, Rv32MPeriphery<F>>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
 
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -414,7 +418,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::default_offset()),
             memory_controller.clone(),
         );
-        inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.with_default_offset()))?;
+        inventory.add_executor(
+            mul_chip,
+            MulOpcode::iter().map(AxVmOpcode::with_default_offset),
+        )?;
 
         let mul_h_chip = Rv32MulHChip::new(
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
@@ -427,7 +434,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         );
         inventory.add_executor(
             mul_h_chip,
-            MulHOpcode::iter().map(|x| x.with_default_offset()),
+            MulHOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         let div_rem_chip = Rv32DivRemChip::new(
@@ -441,7 +448,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         );
         inventory.add_executor(
             div_rem_chip,
-            DivRemOpcode::iter().map(|x| x.with_default_offset()),
+            DivRemOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         Ok(inventory)
@@ -457,9 +464,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -490,7 +499,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 
         inventory.add_executor(
             hintstore_chip,
-            Rv32HintStoreOpcode::iter().map(|x| x.with_default_offset()),
+            Rv32HintStoreOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
         Ok(inventory)
@@ -563,7 +572,7 @@ mod phantom {
                 })
                 .collect::<eyre::Result<Vec<u8>>>()?;
             let peeked_str = String::from_utf8(bytes)?;
-            println!("{peeked_str}");
+            print!("{peeked_str}");
             Ok(())
         }
     }

@@ -12,6 +12,7 @@ use ax_stark_sdk::{
 use axvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
+    AxVmOpcode,
 };
 use axvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
@@ -24,10 +25,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
 
 use crate::{
-    arch::{
-        instructions::{SystemOpcode::*, UsizeOpcode},
-        READ_INSTRUCTION_BUS,
-    },
+    arch::{instructions::SystemOpcode::*, READ_INSTRUCTION_BUS},
     system::program::{trace::AxVmCommittedExe, ProgramBus, ProgramChip},
 };
 
@@ -51,7 +49,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         program_cells.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc_idx]), // hacky: we should switch execution_frequencies into hashmap
             BabyBear::from_canonical_usize(pc_idx * (DEFAULT_PC_STEP as usize)),
-            BabyBear::from_canonical_usize(instruction.opcode),
+            instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
             instruction.c,
@@ -86,12 +84,12 @@ fn test_program_1() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(STOREW.with_default_offset(), n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(AxVmOpcode::with_default_offset(STOREW), n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::large_from_isize(STOREW.with_default_offset(), 1, 1, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(AxVmOpcode::with_default_offset(STOREW), 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            AxVmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
             0,
             0,
             3 * DEFAULT_PC_STEP as isize,
@@ -99,10 +97,10 @@ fn test_program_1() {
             0,
         ),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(SUB.with_default_offset(), 0, 0, 1, 1, 1),
+        Instruction::from_isize(AxVmOpcode::with_default_offset(SUB), 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
         Instruction::from_isize(
-            JAL.with_default_offset(),
+            AxVmOpcode::with_default_offset(JAL),
             2,
             -2 * (DEFAULT_PC_STEP as isize),
             0,
@@ -110,7 +108,7 @@ fn test_program_1() {
             0,
         ),
         // terminate
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::from_isize(AxVmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -123,10 +121,10 @@ fn test_program_without_field_arithmetic() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(STOREW.with_default_offset(), 5, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(AxVmOpcode::with_default_offset(STOREW), 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BNE).with_default_offset(),
+            AxVmOpcode::with_default_offset(NativeBranchEqualOpcode(BNE)),
             0,
             4,
             3 * DEFAULT_PC_STEP as isize,
@@ -135,7 +133,7 @@ fn test_program_without_field_arithmetic() {
         ),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
         Instruction::from_isize(
-            JAL.with_default_offset(),
+            AxVmOpcode::with_default_offset(JAL),
             2,
             -2 * DEFAULT_PC_STEP as isize,
             0,
@@ -143,10 +141,10 @@ fn test_program_without_field_arithmetic() {
             0,
         ),
         // terminate
-        Instruction::from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0),
+        Instruction::from_isize(AxVmOpcode::with_default_offset(TERMINATE), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).with_default_offset(),
+            AxVmOpcode::with_default_offset(NativeBranchEqualOpcode(BEQ)),
             0,
             5,
             -(DEFAULT_PC_STEP as isize),
@@ -164,9 +162,27 @@ fn test_program_without_field_arithmetic() {
 #[should_panic(expected = "assertion `left == right` failed")]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::large_from_isize(STOREW.with_default_offset(), -1, 0, 0, 0, 1, 0, 1),
-        Instruction::large_from_isize(LOADW.with_default_offset(), -1, 0, 0, 1, 1, 0, 1),
-        Instruction::large_from_isize(TERMINATE.with_default_offset(), 0, 0, 0, 0, 0, 0, 0),
+        Instruction::large_from_isize(
+            AxVmOpcode::with_default_offset(STOREW),
+            -1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+        ),
+        Instruction::large_from_isize(AxVmOpcode::with_default_offset(LOADW), -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(
+            AxVmOpcode::with_default_offset(TERMINATE),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ),
     ];
     let bus = ProgramBus(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
@@ -185,7 +201,7 @@ fn test_program_negative() {
         program_rows.extend(vec![
             BabyBear::from_canonical_usize(execution_frequencies[pc_idx]),
             BabyBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
-            BabyBear::from_canonical_usize(instruction.opcode),
+            instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
             instruction.c,

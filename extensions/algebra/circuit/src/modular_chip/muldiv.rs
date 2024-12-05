@@ -46,6 +46,7 @@ impl ModularMulDivCoreAir {
         // constraint is x * y = z, or z * y = x
         let lvar = FieldVariable::select(is_mul_flag, &x, &z);
         let rvar = FieldVariable::select(is_mul_flag, &z, &x);
+        // When it's SETUP op, x = p == 0, y = 0, both flags are false, and it still works: z * 0 - x = 0, whatever z is.
         let constraint = lvar * y.clone() - rvar;
         builder.borrow_mut().set_constraint(z_idx, constraint.expr);
         let compute = SymbolicExpr::Select(
@@ -167,7 +168,7 @@ where
         let num_limbs = self.air.expr.canonical_num_limbs();
         let limb_bits = self.air.expr.canonical_limb_bits();
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_idx = opcode - self.air.offset;
+        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let data: DynArray<_> = reads.into();
         let data = data.0;
         assert_eq!(data.len(), 2 * num_limbs);
@@ -185,7 +186,6 @@ where
 
         let local_opcode = Rv32ModularArithmeticOpcode::from_usize(local_opcode_idx);
         let is_mul_flag = match local_opcode {
-            // for SETUP_MULDIV, we want to fictiously multiply by zero and not divide
             Rv32ModularArithmeticOpcode::MUL => true,
             Rv32ModularArithmeticOpcode::DIV | Rv32ModularArithmeticOpcode::SETUP_MULDIV => false,
             _ => panic!("Unsupported opcode: {:?}", local_opcode),

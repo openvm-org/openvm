@@ -22,6 +22,10 @@ mod bn254 {
         "21888242871839275222246405745257275088696311157297823662689037894645226208583"
     );
 
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_miller_loop(io: &[u8]) {
         setup_all_moduli();
         setup_all_complex_extensions();
@@ -58,6 +62,10 @@ mod bls12_381 {
     use super::*;
 
     axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
 
     pub fn test_miller_loop(io: &[u8]) {
         setup_all_moduli();

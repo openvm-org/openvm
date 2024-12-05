@@ -145,7 +145,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 vec![]
             };
 
-            if opcode == SystemOpcode::TERMINATE.with_default_offset() {
+            if opcode == AxVmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
                 did_terminate = true;
                 self.chip_complex.connector_chip_mut().end(
                     ExecutionState::new(pc, timestamp),
@@ -155,7 +155,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             }
 
             // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-            if opcode == SystemOpcode::PHANTOM as usize {
+            if opcode == AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
                 let phantom = SysPhantom::from_repr(discriminant);
@@ -215,7 +215,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 assert!(next_state.timestamp > timestamp);
                 #[cfg(feature = "bench-metrics")]
                 if collect_metrics {
-                    opcode_name = Some(executor.get_opcode_name(opcode));
+                    opcode_name = Some(executor.get_opcode_name(opcode.as_usize()));
                 }
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;

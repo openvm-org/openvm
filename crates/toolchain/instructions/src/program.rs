@@ -1,7 +1,7 @@
 use std::{fmt, fmt::Display};
 
+use ax_stark_backend::p3_field::Field;
 use itertools::Itertools;
-use p3_field::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::instruction::{DebugInfo, Instruction};

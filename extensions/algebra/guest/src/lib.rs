@@ -127,9 +127,6 @@ pub trait IntMod:
     where
         Self: 'a;
 
-    /// Index of IntMod::MODULUS.
-    const MOD_IDX: usize;
-
     /// Modulus as a Repr.
     const MODULUS: Self::Repr;
 

@@ -23,8 +23,11 @@ mod bn254 {
         "21888242871839275222246405745257275088696311157297823662689037894645226208583"
     );
 
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_pairing_check(io: &[u8]) {
-        axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
         setup_all_moduli();
         setup_all_complex_extensions();
         let s0 = &io[0..32 * 2];
@@ -57,10 +60,13 @@ mod bls12_381 {
 
     axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
 
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_pairing_check(io: &[u8]) {
         setup_all_moduli();
         setup_all_complex_extensions();
-        axvm::io::print(format!("mod_idx = {}", <Fp as IntMod>::MOD_IDX));
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];

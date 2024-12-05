@@ -19,7 +19,6 @@ mod bn254 {
 
     pub fn test_fp12_mul(io: &[u8]) {
         setup_all_moduli();
-        setup_all_complex_extensions();
         assert_eq!(io.len(), 32 * 36);
 
         let f0 = &io[0..32 * 12];
@@ -51,7 +50,6 @@ mod bls12_381 {
 
     pub fn test_fp12_mul(io: &[u8]) {
         setup_all_moduli();
-        setup_all_complex_extensions();
         assert_eq!(io.len(), 48 * 36);
 
         let f0 = &io[0..48 * 12];

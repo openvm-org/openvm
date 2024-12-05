@@ -20,6 +20,10 @@ mod bn254 {
         "21888242871839275222246405745257275088696311157297823662689037894645226208583"
     );
 
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
+
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 32 * 12);
         let s = &io[..32 * 4];
@@ -90,6 +94,10 @@ mod bls12_381 {
     use super::*;
 
     axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+
+    axvm_algebra_complex_macros::complex_init! {
+        Fp2 { mod_idx = 0 },
+    }
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 48 * 12);

@@ -1,6 +1,7 @@
 use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, AxVmOpcode,
+    UsizeOpcode,
 };
 use axvm_instructions_derive::UsizeOpcode;
 use axvm_rv32im_transpiler::{
@@ -138,7 +139,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
             BEQ256_FUNCT3 => {
                 let dec_insn = BType::new(instruction_u32);
                 Some(Instruction::new(
-                    BranchEqualOpcode::BEQ as usize + Rv32BranchEqual256Opcode::default_offset(),
+                    AxVmOpcode::from_usize(
+                        BranchEqualOpcode::BEQ as usize
+                            + Rv32BranchEqual256Opcode::default_offset(),
+                    ),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     isize_to_field(dec_insn.imm as isize),

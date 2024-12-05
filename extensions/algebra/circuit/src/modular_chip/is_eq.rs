@@ -293,7 +293,7 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.air.modulus_limbs);
         let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.air.modulus_limbs);
-        let is_setup = instruction.opcode - self.air.offset
+        let is_setup = instruction.opcode.local_opcode_idx(self.air.offset)
             == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
         if !is_setup {

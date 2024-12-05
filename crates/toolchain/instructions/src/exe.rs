@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use p3_field::Field;
+use ax_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::program::Program;

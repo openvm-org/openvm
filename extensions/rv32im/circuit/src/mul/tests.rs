@@ -20,7 +20,7 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_rv32im_transpiler::MulOpcode;
 
 use super::core::run_mul;
@@ -138,7 +138,10 @@ fn run_rv32_mul_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(MulOpcode::MUL as usize, [0, 0, 0, 1, 0]),
+        Instruction::from_usize(
+            AxVmOpcode::from_usize(MulOpcode::MUL as usize),
+            [0, 0, 0, 1, 0],
+        ),
     );
 
     let trace_width = chip.trace_width();

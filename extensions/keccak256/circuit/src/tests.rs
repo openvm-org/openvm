@@ -14,7 +14,7 @@ use axvm_circuit::arch::{
     testing::{VmChipTestBuilder, VmChipTester},
     BITWISE_OP_LOOKUP_BUS,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_keccak256_transpiler::Rv32KeccakOpcode;
 use hex::FromHex;
 use p3_keccak_air::NUM_ROUNDS;
@@ -63,7 +63,7 @@ fn build_keccak256_test(
         tester.execute(
             &mut chip,
             Instruction::from_isize(
-                Rv32KeccakOpcode::KECCAK256 as usize,
+                AxVmOpcode::from_usize(Rv32KeccakOpcode::KECCAK256 as usize),
                 a as isize,
                 b as isize,
                 c as isize,

@@ -51,6 +51,7 @@ fn test_fp12_fn<
         vec![],
         tester.memory_controller().borrow().range_checker.clone(),
         name,
+        false,
     );
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(

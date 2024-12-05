@@ -10,7 +10,7 @@
 use std::array;
 
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode};
 use columns::*;
 use p3_field::PrimeField32;
 
@@ -175,7 +175,9 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                         c: instruction.c,
                         d: instruction.d,
                         e: instruction.e,
-                        is_compress_opcode: F::from_bool(instruction.opcode == COMP_POS2 as usize),
+                        is_compress_opcode: F::from_bool(
+                            instruction.opcode == AxVmOpcode::from_usize(COMP_POS2 as usize),
+                        ),
                     },
                     aux: Poseidon2VmAuxCols {
                         dst_ptr,
@@ -259,11 +261,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode_index = opcode - self.offset;
+        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
 
-        let local_opcode_index = Poseidon2Opcode::from_usize(local_opcode_index);
+        let local_opcode = Poseidon2Opcode::from_usize(local_opcode_idx);
 
-        assert!(matches!(local_opcode_index, COMP_POS2 | PERM_POS2));
+        assert!(matches!(local_opcode, COMP_POS2 | PERM_POS2));
         debug_assert_eq!(WIDTH, CHUNK * 2);
 
         let chunk_f = F::from_canonical_usize(CHUNK);
@@ -274,7 +276,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let lhs_ptr_read = memory_controller.read_cell(d, b);
         let lhs_ptr = lhs_ptr_read.value();
 
-        let (rhs_ptr, rhs_ptr_read) = match local_opcode_index {
+        let (rhs_ptr, rhs_ptr_read) = match local_opcode {
             COMP_POS2 => {
                 let rhs_ptr_read = memory_controller.read_cell(d, c);
                 (rhs_ptr_read.value(), Some(rhs_ptr_read))
@@ -302,7 +304,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
         let output2: [F; CHUNK] = array::from_fn(|i| output[CHUNK + i]);
 
         let output1_write = memory_controller.write(e, dst_ptr, output1);
-        let output2_write = match local_opcode_index {
+        let output2_write = match local_opcode {
             COMP_POS2 => {
                 memory_controller.increment_timestamp();
                 None
@@ -312,7 +314,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         self.records.push(Poseidon2Record::FromInstruction {
             instruction: Instruction {
-                opcode: local_opcode_index as usize,
+                opcode: AxVmOpcode::from_usize(local_opcode as usize),
                 ..instruction
             },
             from_state,
@@ -334,8 +336,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
-        let local_opcode_index = Poseidon2Opcode::from_usize(opcode - self.offset);
-        format!("{local_opcode_index:?}")
+        let local_opcode = Poseidon2Opcode::from_usize(opcode - self.offset);
+        format!("{local_opcode:?}")
     }
 }
 impl<F: PrimeField32> Hasher<CHUNK, F> for Poseidon2Chip<F> {

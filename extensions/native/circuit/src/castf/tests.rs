@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_native_compiler::CastfOpcode;
 use rand::{rngs::StdRng, Rng};
 
@@ -45,7 +45,7 @@ fn prepare_castf_rand_write_execute(
     tester.execute(
         chip,
         Instruction::from_usize(
-            CastfOpcode::CASTF as usize,
+            AxVmOpcode::from_usize(CastfOpcode::CASTF as usize),
             [address_x, address_y, 0, as_x, as_y],
         ),
     );

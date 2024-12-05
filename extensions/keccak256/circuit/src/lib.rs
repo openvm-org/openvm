@@ -138,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode = Rv32KeccakOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
         let mut memory = self.memory_controller.borrow_mut();

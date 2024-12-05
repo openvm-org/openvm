@@ -1,8 +1,8 @@
+use ax_stark_backend::p3_field::Field;
 use backtrace::Backtrace;
-use p3_field::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::isize_to_field, PhantomDiscriminant, SystemOpcode, UsizeOpcode};
+use crate::{utils::isize_to_field, AxVmOpcode, PhantomDiscriminant, SystemOpcode, UsizeOpcode};
 
 /// Number of operands of an instruction.
 pub const NUM_OPERANDS: usize = 7;
@@ -10,7 +10,7 @@ pub const NUM_OPERANDS: usize = 7;
 #[allow(clippy::too_many_arguments)]
 #[derive(Clone, Debug, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
 pub struct Instruction<F> {
-    pub opcode: usize,
+    pub opcode: AxVmOpcode,
     pub a: F,
     pub b: F,
     pub c: F,
@@ -22,7 +22,14 @@ pub struct Instruction<F> {
 
 impl<F: Field> Instruction<F> {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_isize(opcode: usize, a: isize, b: isize, c: isize, d: isize, e: isize) -> Self {
+    pub fn from_isize(
+        opcode: AxVmOpcode,
+        a: isize,
+        b: isize,
+        c: isize,
+        d: isize,
+        e: isize,
+    ) -> Self {
         Self {
             opcode,
             a: isize_to_field::<F>(a),
@@ -35,7 +42,7 @@ impl<F: Field> Instruction<F> {
         }
     }
 
-    pub fn from_usize<const N: usize>(opcode: usize, operands: [usize; N]) -> Self {
+    pub fn from_usize<const N: usize>(opcode: AxVmOpcode, operands: [usize; N]) -> Self {
         let mut operands = operands.map(F::from_canonical_usize).to_vec();
         operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
@@ -52,7 +59,7 @@ impl<F: Field> Instruction<F> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn large_from_isize(
-        opcode: usize,
+        opcode: AxVmOpcode,
         a: isize,
         b: isize,
         c: isize,
@@ -75,7 +82,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn phantom(discriminant: PhantomDiscriminant, a: F, b: F, c_upper: u16) -> Self {
         Self {
-            opcode: SystemOpcode::PHANTOM.with_default_offset(),
+            opcode: AxVmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
             a,
             b,
             c: F::from_canonical_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
@@ -85,7 +92,7 @@ impl<F: Field> Instruction<F> {
 
     pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
-            opcode: SystemOpcode::PHANTOM.with_default_offset(),
+            opcode: AxVmOpcode(SystemOpcode::PHANTOM.with_default_offset()),
             c: F::from_canonical_u32(discriminant.0 as u32),
             ..Default::default()
         }
@@ -95,7 +102,7 @@ impl<F: Field> Instruction<F> {
 impl<T: Default> Default for Instruction<T> {
     fn default() -> Self {
         Self {
-            opcode: 0, // there is no real default opcode, this field must always be set
+            opcode: AxVmOpcode::from_usize(0), // there is no real default opcode, this field must always be set
             a: T::default(),
             b: T::default(),
             c: T::default(),

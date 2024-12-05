@@ -24,7 +24,7 @@ use axvm_circuit::{
     },
     utils::generate_long_number,
 };
-use axvm_instructions::instruction::Instruction;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode};
 use axvm_rv32im_transpiler::DivRemOpcode;
 use rand::{rngs::StdRng, Rng};
 
@@ -78,7 +78,10 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
         chip,
-        Instruction::from_usize(opcode as usize, [rd, rs1, rs2, 1, 0]),
+        Instruction::from_usize(
+            AxVmOpcode::from_usize(opcode as usize),
+            [rd, rs1, rs2, 1, 0],
+        ),
     );
 
     assert_eq!(
@@ -263,11 +266,11 @@ fn run_rv32_divrem_negative_test(
     };
     tester.execute(
         &mut chip,
-        Instruction::from_usize(div_opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(AxVmOpcode::from_usize(div_opcode as usize), [0, 0, 0, 1, 1]),
     );
     tester.execute(
         &mut chip,
-        Instruction::from_usize(rem_opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(AxVmOpcode::from_usize(rem_opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let (q, r, b_sign, c_sign, q_sign, case) =

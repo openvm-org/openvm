@@ -95,6 +95,27 @@ fn test_complex_runtime() -> Result<()> {
 }
 
 #[test]
+fn test_complex_two_moduli_runtime() -> Result<()> {
+    let elf = build_example_program("complex-two-modulos")?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Fp2TranspilerExtension)
+            .with_extension(ModularTranspilerExtension),
+    );
+    let config = Rv32ModularWithFp2Config::new(vec![
+        BigUint::from_str("998244353").unwrap(),
+        BigUint::from_str("1000000007").unwrap(),
+    ]);
+    let executor = VmExecutor::<F, _>::new(config);
+    executor.execute(axvm_exe, vec![])?;
+    Ok(())
+}
+
+#[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ec", ["k256"])?;
     let axvm_exe = AxVmExe::from_elf(

@@ -5,7 +5,7 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, UsizeOpcode};
 use axvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
 use itertools::Itertools;
 use rand::Rng;
@@ -111,7 +111,7 @@ fn fri_mat_opening_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                (FRI_REDUCED_OPENING as usize) + offset,
+                AxVmOpcode::from_usize(FRI_REDUCED_OPENING as usize + offset),
                 [
                     a_pointer_pointer,
                     b_pointer_pointer,

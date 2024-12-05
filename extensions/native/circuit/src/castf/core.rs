@@ -136,7 +136,10 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction.clone();
 
-        assert_eq!(opcode - self.air.offset, CastfOpcode::CASTF as usize);
+        assert_eq!(
+            opcode.local_opcode_idx(self.air.offset),
+            CastfOpcode::CASTF as usize
+        );
 
         let y = reads.into()[0][0];
 

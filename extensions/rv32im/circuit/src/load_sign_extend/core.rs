@@ -203,20 +203,20 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode_index =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
 
         let (data, shift_amount) = reads.into();
         let shift_amount = shift_amount.as_canonical_u32();
         let write_data: [F; NUM_CELLS] = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
-            local_opcode_index,
+            local_opcode,
             data[1],
             data[0],
             shift_amount,
         );
         let output = AdapterRuntimeContext::without_pc([write_data]);
 
-        let most_sig_limb = match local_opcode_index {
+        let most_sig_limb = match local_opcode {
             LOADB => write_data[0],
             LOADH => write_data[NUM_CELLS / 2 - 1],
             _ => unreachable!(),
@@ -232,7 +232,7 @@ where
         Ok((
             output,
             LoadSignExtendCoreRecord {
-                opcode: local_opcode_index,
+                opcode: local_opcode,
                 most_sig_bit: most_sig_bit != 0,
                 prev_data: data[0],
                 shifted_read_data: array::from_fn(|i| {

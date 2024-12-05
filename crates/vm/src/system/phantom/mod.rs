@@ -13,8 +13,8 @@ use ax_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, UsizeOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant,
+    SysPhantom, SystemOpcode, UsizeOpcode,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{AbstractField, Field, PrimeField32};
@@ -42,7 +42,7 @@ const NUM_PHANTOM_OPERANDS: usize = 3;
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
     /// Global opcode for PhantomOpcode
-    pub phantom_opcode: usize,
+    pub phantom_opcode: AxVmOpcode,
 }
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -74,7 +74,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 
         self.execution_bridge
             .execute_and_increment_or_set_pc(
-                AB::Expr::from_canonical_usize(self.phantom_opcode),
+                self.phantom_opcode.to_field::<AB::F>(),
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::ONE,
@@ -102,7 +102,7 @@ impl<F> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: offset + SystemOpcode::PHANTOM.as_usize(),
+                phantom_opcode: AxVmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
             },
             rows: vec![],
             memory: memory_controller,

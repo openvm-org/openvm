@@ -14,7 +14,7 @@ use axvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, UsizeOpcode};
 use axvm_native_compiler::FieldExtensionOpcode;
 use rand::Rng;
 use strum::EnumCount;
@@ -66,7 +66,7 @@ fn new_field_extension_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                opcode as usize,
+                AxVmOpcode::from_usize(opcode as usize),
                 [result_address, address1, address2, as_d, as_e],
             ),
         );

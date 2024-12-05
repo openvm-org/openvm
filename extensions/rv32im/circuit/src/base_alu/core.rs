@@ -205,19 +205,19 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = BaseAluOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let b = data[0].map(|x| x.as_canonical_u32());
         let c = data[1].map(|y| y.as_canonical_u32());
-        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode_index, &b, &c);
+        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
 
         let output = AdapterRuntimeContext {
             to_pc: None,
             writes: [a.map(F::from_canonical_u32)].into(),
         };
 
-        if local_opcode_index == BaseAluOpcode::ADD || local_opcode_index == BaseAluOpcode::SUB {
+        if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
             for a_val in a {
                 self.bitwise_lookup_chip.request_xor(a_val, a_val);
             }
@@ -228,7 +228,7 @@ where
         }
 
         let record = Self::Record {
-            opcode: local_opcode_index,
+            opcode: local_opcode,
             a: a.map(F::from_canonical_u32),
             b: data[0],
             c: data[1],

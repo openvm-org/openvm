@@ -15,8 +15,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
-    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode,
+    program::Program, AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode,
+    SystemOpcode, UsizeOpcode,
 };
 use derive_more::derive::From;
 use getset::Getters;
@@ -85,6 +85,14 @@ pub trait VmExtension<F: PrimeField32> {
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
+/// SystemPort combines system resources needed by most extensions
+#[derive(Clone)]
+pub struct SystemPort<F> {
+    pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
+    pub memory_controller: MemoryControllerRef<F>,
+}
+
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
@@ -124,6 +132,14 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 
     pub fn system_base(&self) -> &SystemBase<F> {
         self.system
+    }
+
+    pub fn system_port(&self) -> SystemPort<F> {
+        SystemPort {
+            execution_bus: self.system_base().execution_bus(),
+            program_bus: self.system_base().program_bus(),
+            memory_controller: self.memory_controller().clone(),
+        }
     }
 
     pub fn new_bus_idx(&mut self) -> usize {
@@ -192,8 +208,6 @@ pub struct VmComplexTraceHeights {
 }
 
 type ExecutorId = usize;
-/// TODO: create newtype
-type AxVmOpcode = usize;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChipId {
@@ -523,7 +537,10 @@ impl<F: PrimeField32> SystemComplex<F> {
                 memory_controller.clone(),
             );
             inventory
-                .add_executor(chip, [PublishOpcode::default_offset()])
+                .add_executor(
+                    chip,
+                    [AxVmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
+                )
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -550,7 +567,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
+        let phantom_opcode = AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM);
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
             PROGRAM_BUS,

@@ -80,7 +80,7 @@ where
     }
 
     pub fn with_agg_config(self, agg_config: AggConfig) -> Self {
-        let leaf_committed_exe = generate_leaf_committed_exe(agg_config, &self.app_pk);
+        let leaf_committed_exe = generate_leaf_committed_exe(&agg_config, &self.app_pk);
         let agg_pk = AggProvingKey::keygen(agg_config);
         self.with_agg_pk_and_leaf_committed_exe(agg_pk, leaf_committed_exe)
     }
