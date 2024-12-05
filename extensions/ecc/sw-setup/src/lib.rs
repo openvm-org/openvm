@@ -16,14 +16,14 @@ static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
 /// ```
-/// sw_setup! {
+/// sw_declare! {
 ///     [TODO]
 /// }
 /// ```
 ///
 /// For this macro to work, you must import the `elliptic_curve` crate and the `axvm_ecc_guest` crate..
 #[proc_macro]
-pub fn sw_setup(input: TokenStream) -> TokenStream {
+pub fn sw_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
 
     let mut output = Vec::new();

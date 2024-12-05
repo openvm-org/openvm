@@ -17,7 +17,7 @@ axvm_algebra_moduli_setup::moduli_declare! {
     Secp256k1Scalar { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141" },
 }
 
-axvm_ecc_sw_setup::sw_setup! {
+axvm_ecc_sw_setup::sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord },
 }
 
