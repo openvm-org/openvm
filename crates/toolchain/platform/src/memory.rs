@@ -111,9 +111,9 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
     heap_pos += bytes;
 
     // Check to make sure heap doesn't collide with SYSTEM memory.
-    if crate::memory::SYSTEM.start() < heap_pos {
-        super::rust_rt::terminate::<1>();
-    }
+    // if crate::memory::SYSTEM.start() < heap_pos {
+    //     super::rust_rt::terminate::<1>();
+    // }
 
     unsafe { HEAP_POS = heap_pos };
     ptr

@@ -4,7 +4,7 @@
 /// This will be removed once a dedicated rust toolchain is used because axVM does not handle system
 /// operations in the same way: there is no operating system and even the standard library should be
 /// directly handled with intrinsics.
-use axvm_platform::{memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
+use axvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
 use axvm_rv32im_guest::raw_print_str_from_bytes;
 
 const DIGEST_WORDS: usize = 8;
@@ -12,10 +12,12 @@ const DIGEST_WORDS: usize = 8;
 pub mod exit_code {
     pub const SUCCESS: u8 = 0;
     pub const PANIC: u8 = 1;
+    pub const UNIMP: u8 = 2;
     // Temporarily use 4 to detect if halt is called.
     pub const HALT: u8 = 4;
     pub const PAUSE: u8 = 5;
 }
+
 /// # Safety
 ///
 /// `out_state` must be aligned and dereferenceable.
@@ -33,7 +35,7 @@ pub extern "C" fn sys_halt(_user_exit: u8, _out_state: *const [u32; DIGEST_WORDS
 /// Not used
 #[no_mangle]
 pub extern "C" fn sys_output(_output_id: u32, _output_value: u32) {
-    unimplemented!()
+    terminate::<{ exit_code::UNIMP }>();
 }
 
 /// # Safety
@@ -70,7 +72,8 @@ pub unsafe extern "C" fn sys_sha_buffer(
 /// `recv_buf` must be aligned and dereferenceable.
 #[no_mangle]
 pub unsafe extern "C" fn sys_rand(_recv_buf: *mut u32, _words: usize) {
-    unimplemented!()
+    crate::io::print("sys_rand is unimplemented");
+    terminate::<{ exit_code::UNIMP }>();
 }
 
 /// # Safety
@@ -94,7 +97,9 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
 /// Cycle count
 #[no_mangle]
 pub extern "C" fn sys_cycle_count() -> u64 {
-    todo!()
+    crate::io::print("TODO");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// Reads the given number of bytes into the given buffer, posix-style.  Returns
@@ -111,7 +116,9 @@ pub extern "C" fn sys_cycle_count() -> u64 {
 /// `recv_ptr` must be aligned and dereferenceable.
 #[no_mangle]
 pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -> usize {
-    todo!()
+    crate::io::print("sys_read is todo");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// Reads up to the given number of words into the buffer [recv_buf,
@@ -134,15 +141,23 @@ pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -
 /// `nwords' size.
 #[no_mangle]
 pub unsafe extern "C" fn sys_read_words(_fd: u32, _recv_ptr: *mut u32, _nwords: usize) -> usize {
-    todo!()
+    crate::io::print("sys_read_words is todo");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// # Safety
 ///
 /// `write_ptr` must be aligned and dereferenceable.
 #[no_mangle]
-pub unsafe extern "C" fn sys_write(_fd: u32, _write_ptr: *const u8, _nbytes: usize) {
-    todo!()
+pub unsafe extern "C" fn sys_write(fd: u32, write_ptr: *const u8, nbytes: usize) {
+    if fd == STDOUT || fd == STDERR {
+        // We always print to host stdout using UTF-8 encoding.
+        raw_print_str_from_bytes(write_ptr, nbytes);
+    } else {
+        crate::io::print(alloc::format!("sys_write to fd={fd} not supported"));
+        terminate::<{ exit_code::UNIMP }>();
+    }
 }
 
 /// Retrieves the value of an environment variable, and stores as much
@@ -169,7 +184,9 @@ pub unsafe extern "C" fn sys_getenv(
     _varname: *const u8,
     _varname_len: usize,
 ) -> usize {
-    todo!()
+    crate::io::print("sys_getenv is todo");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// Retrieves the count of arguments provided to program execution.
@@ -178,7 +195,9 @@ pub unsafe extern "C" fn sys_getenv(
 /// data being returned. Returned data is entirely in the control of the host.
 #[no_mangle]
 pub extern "C" fn sys_argc() -> usize {
-    todo!()
+    crate::io::print("sys_argc is todo");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// Retrieves the argument with arg_index, and stores as much
@@ -204,7 +223,9 @@ pub unsafe extern "C" fn sys_argv(
     _out_nwords: usize,
     _arg_index: usize,
 ) -> usize {
-    todo!()
+    crate::io::print("sys_argv is todo");
+    terminate::<{ exit_code::UNIMP }>();
+    unreachable!()
 }
 
 /// Deprecated, use `sys_alloc_aligned` instead.
