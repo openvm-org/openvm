@@ -87,6 +87,7 @@ moduli_declare! {
 
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
+
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
     const ZERO: Self = <Self as IntMod>::ZERO;
