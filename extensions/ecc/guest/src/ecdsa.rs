@@ -45,17 +45,17 @@ where
             bits2field::<C>(prehash).unwrap().as_ref(),
         );
 
-        let mut r_bytes = r.clone();
-        if recovery_id.is_x_reduced() {
+        let r_bytes = if recovery_id.is_x_reduced() {
             // TODO: maybe need to optimize this.
-            match Option::<C::Uint>::from(
-                C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
-            ) {
-                Some(restored) => r_bytes = restored.encode_field_bytes(),
+            match Option::<C::Uint>::from(C::Uint::decode_field_bytes(&r).checked_add(&C::ORDER)) {
+                Some(restored) => &restored.encode_field_bytes(),
                 // No reduction should happen here if r was reduced
                 None => return Err(Error::new()),
-            };
-        }
+            }
+        } else {
+            &r
+        };
+
         let R = AffinePoint::<C>::decompress(&r_bytes, u8::from(recovery_id.is_y_odd()).into());
 
         if R.is_none().into() {
