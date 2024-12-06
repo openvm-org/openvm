@@ -133,7 +133,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         let data_as = 2;
         let address1 = 0u32;
         let address2 = 128u32;
-        let address3 = 256u32;
+        let address3 = (1 << 28) + 1234; // a large memory address to test heap adapter
 
         write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
         write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
