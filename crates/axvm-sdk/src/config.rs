@@ -3,7 +3,9 @@ use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
 };
+use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
@@ -14,14 +16,21 @@ use axvm_circuit::{
 use axvm_ecc_circuit::{
     WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
 };
+use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::{Native, NativeExecutor, NativePeriphery};
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery};
+use axvm_pairing_transpiler::PairingTranspilerExtension;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
+use axvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use axvm_transpiler::transpiler::Transpiler;
 use bon::Builder;
 use derive_more::derive::From;
 use p3_field::PrimeField32;
@@ -80,9 +89,9 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Ecc(WeierstrassExtensionExecutor<F>),
     #[any_enum]
-    Native(NativeExecutor<F>),
-    #[any_enum]
     Keccak(Keccak256Executor<F>),
+    #[any_enum]
+    Native(NativeExecutor<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -106,9 +115,43 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Ecc(WeierstrassExtensionPeriphery<F>),
     #[any_enum]
-    Native(NativePeriphery<F>),
-    #[any_enum]
     Keccak(Keccak256Periphery<F>),
+    #[any_enum]
+    Native(NativePeriphery<F>),
+}
+
+impl SdkVmConfig {
+    pub fn transpiler(&self) -> Transpiler<F> {
+        let mut transpiler = Transpiler::default();
+        if self.rv32i.is_some() {
+            transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
+        }
+        if self.rv32m.is_some() {
+            transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
+        }
+        if self.io.is_some() {
+            transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
+        }
+        if self.bigint.is_some() {
+            transpiler = transpiler.with_extension(Int256TranspilerExtension);
+        }
+        if self.modular.is_some() {
+            transpiler = transpiler.with_extension(ModularTranspilerExtension);
+        }
+        if self.fp2.is_some() {
+            transpiler = transpiler.with_extension(Fp2TranspilerExtension);
+        }
+        if self.pairing.is_some() {
+            transpiler = transpiler.with_extension(PairingTranspilerExtension);
+        }
+        if self.ecc.is_some() {
+            transpiler = transpiler.with_extension(EccTranspilerExtension);
+        }
+        if self.keccak.is_some() {
+            transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
+        }
+        transpiler
+    }
 }
 
 impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
@@ -152,11 +195,11 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if let Some(ref ecc) = self.ecc {
             complex = complex.extend(ecc)?;
         }
-        if let Some(ref native) = self.native {
-            complex = complex.extend(native)?;
-        }
         if let Some(ref keccak) = self.keccak {
             complex = complex.extend(keccak)?;
+        }
+        if let Some(ref native) = self.native {
+            complex = complex.extend(native)?;
         }
 
         Ok(complex)
