@@ -302,7 +302,9 @@ fn test_sdk_guest_build() {
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("example");
-    sdk.build(guest_opts, pkg_dir).unwrap();
+    let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    assert_eq!(one.instructions, two.instructions);
 }
 
 #[test]
