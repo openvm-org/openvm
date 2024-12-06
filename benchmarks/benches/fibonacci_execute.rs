@@ -17,7 +17,8 @@ fn benchmark_function(c: &mut Criterion) {
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
-    );
+    )
+    .unwrap();
 
     let mut group = c.benchmark_group("fibonacci");
     let config = Rv32ImConfig::default();

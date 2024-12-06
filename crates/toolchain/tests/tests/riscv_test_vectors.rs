@@ -38,7 +38,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32ITranspilerExtension)
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
-                );
+                )?;
                 let executor = VmExecutor::<F, _>::new(config.clone());
                 let res = executor.execute(exe, vec![])?;
                 Ok(res)
@@ -77,7 +77,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
                     .with_extension(Rv32ITranspilerExtension)
                     .with_extension(Rv32MTranspilerExtension)
                     .with_extension(Rv32IoTranspilerExtension),
-            );
+            )?;
 
             let result = std::panic::catch_unwind(|| {
                 new_air_test_with_min_segments(config.clone(), exe, vec![], 1, true);

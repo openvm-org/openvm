@@ -49,7 +49,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
 
     let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
         .map(|s| num_bigint_dig::BigUint::from_str(s).unwrap());
@@ -68,7 +68,7 @@ fn test_modular_runtime() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, false);
     Ok(())
@@ -85,7 +85,7 @@ fn test_complex_runtime() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Fp2TranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
     // Always run prove, as this caught a bug before.
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, true);
@@ -103,7 +103,7 @@ fn test_complex_two_moduli_runtime() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Fp2TranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     let config = Rv32ModularWithFp2Config::new(vec![
         BigUint::from_str("998244353").unwrap(),
         BigUint::from_str("1000000007").unwrap(),
@@ -123,7 +123,7 @@ fn test_ec_runtime() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, false);
     Ok(())
@@ -179,7 +179,7 @@ fn test_ecdsa_runtime() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension)
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, false);
     Ok(())
 }

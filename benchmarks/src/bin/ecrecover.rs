@@ -118,7 +118,7 @@ fn main() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension)
             .with_extension(ModularTranspilerExtension)
             .with_extension(EccTranspilerExtension),
-    );
+    )?;
     // TODO: update sw_setup macros and read it from elf.
     let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
 

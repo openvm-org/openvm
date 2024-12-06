@@ -37,7 +37,7 @@ fn main() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Keccak256TranspilerExtension),
-    );
+    )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {
             let engine = BabyBearPoseidon2Engine::new(

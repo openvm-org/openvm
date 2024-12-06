@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use axvm_instructions::instruction::Instruction;
+use eyre::{eyre, Result};
 use p3_field::PrimeField32;
 
 use crate::TranspilerExtension;
@@ -38,7 +39,7 @@ impl<F: PrimeField32> Transpiler<F> {
     /// If so, it advances the iterator by the amount specified by the processor.
     /// The transpiler will panic if two different processors claim to know how to transpile the same instruction
     /// to avoid ambiguity.
-    pub fn transpile(&self, instructions_u32: &[u32]) -> Vec<Instruction<F>> {
+    pub fn transpile(&self, instructions_u32: &[u32]) -> Result<Vec<Instruction<F>>> {
         let mut instructions = Vec::new();
         let mut ptr = 0;
         while ptr < instructions_u32.len() {
@@ -48,16 +49,19 @@ impl<F: PrimeField32> Transpiler<F> {
                 .map(|proc| proc.process_custom(&instructions_u32[ptr..]))
                 .filter(|opt| opt.is_some())
                 .collect::<Vec<_>>();
-            assert!(
-                !options.is_empty(),
-                "couldn't parse the next instruction: {:032b}",
-                instructions_u32[ptr]
-            );
-            assert!(options.len() < 2, "ambiguous next instruction");
+            if options.is_empty() {
+                return Err(eyre!(
+                    "couldn't parse the next instruction: {:032b}",
+                    instructions_u32[ptr]
+                ));
+            }
+            if options.len() > 1 {
+                return Err(eyre!("ambiguous next instruction"));
+            }
             let (instruction, advance) = options.pop().unwrap().unwrap();
             instructions.push(instruction);
             ptr += advance;
         }
-        instructions
+        Ok(instructions)
     }
 }

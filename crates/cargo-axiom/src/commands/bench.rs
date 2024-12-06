@@ -104,7 +104,7 @@ impl BenchCmd {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Keccak256TranspilerExtension),
-        );
+        )?;
         // TODO: read from axiom.toml
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(

@@ -80,7 +80,7 @@ impl Sdk {
     }
 
     pub fn transpile(&self, elf: Elf, transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {
-        Ok(AxVmExe::from_elf(elf, transpiler))
+        AxVmExe::from_elf(elf, transpiler)
     }
 
     pub fn execute(&self, _exe: AxVmExe<F>, _inputs: StdIn) -> Result<(), ExecutionError> {

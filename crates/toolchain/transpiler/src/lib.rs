@@ -6,6 +6,7 @@ use axvm_instructions::{
 };
 pub use axvm_platform;
 use elf::Elf;
+use eyre::Result;
 use p3_field::PrimeField32;
 use transpiler::Transpiler;
 
@@ -20,25 +21,28 @@ pub use extension::TranspilerExtension;
 
 pub trait FromElf {
     type ElfContext;
-    fn from_elf(elf: Elf, ctx: Self::ElfContext) -> Self;
+    fn from_elf(elf: Elf, ctx: Self::ElfContext) -> eyre::Result<Self>
+    where
+        Self: Sized;
 }
 
 impl<F: PrimeField32> FromElf for AxVmExe<F> {
     type ElfContext = Transpiler<F>;
-    fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Self {
+    fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Result<Self> {
+        let instructions = transpiler.transpile(&elf.instructions)?;
         let program = Program::new_without_debug_infos(
-            &transpiler.transpile(&elf.instructions),
+            &instructions,
             DEFAULT_PC_STEP,
             elf.pc_base,
             elf.max_num_public_values,
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
 
-        AxVmExe {
+        Ok(AxVmExe {
             program,
             pc_start: elf.pc_start,
             init_memory,
             fn_bounds: elf.fn_bounds,
-        }
+        })
     }
 }

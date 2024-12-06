@@ -35,7 +35,7 @@ fn main() -> Result<()> {
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
-    );
+    )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata =
             info_span!("Fibonacci Program", group = "fibonacci_program").in_scope(|| {
