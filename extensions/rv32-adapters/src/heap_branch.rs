@@ -294,10 +294,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
             .chain(once(0)) // in case NUM_READS is odd
             .collect();
         debug_assert!(self.air.address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits;
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip
-                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
         }
     }
 

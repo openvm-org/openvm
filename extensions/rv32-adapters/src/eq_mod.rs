@@ -413,10 +413,10 @@ impl<
                 0
             }
         });
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits;
         self.bitwise_lookup_chip.request_range(
-            need_range_check[0] * limb_shift,
-            need_range_check[1] * limb_shift,
+            need_range_check[0] << limb_shift_bits,
+            need_range_check[1] << limb_shift_bits,
         );
     }
 

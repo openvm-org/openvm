@@ -551,8 +551,8 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     ]
     .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32());
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-    let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits) as u32;
+    let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
     for pair in need_range_check.chunks_exact(2) {
-        bitwise_lookup_chip.request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+        bitwise_lookup_chip.request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
     }
 }
