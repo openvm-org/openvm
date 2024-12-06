@@ -20,7 +20,7 @@ use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_native_recursion::types::InnerConfig;
 use axvm_sdk::{
     commit::AppExecutionCommit,
-    config::{AggConfig, AppConfig},
+    config::{AggConfig, AppConfig, SdkVmConfig},
     keygen::{AggProvingKey, AppProvingKey},
     prover::{commit_app_exe, generate_leaf_committed_exe, StarkProver},
     verifier::{
@@ -307,6 +307,36 @@ fn test_agg_keygen_store_and_load() {
     let (file_config, file_pk) = sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
     assert_agg_config_eq(&agg_config, &file_config);
     assert_agg_pk_eq(&agg_pk, &file_pk);
+}
+
+#[test]
+fn test_sdk_vm_config_builder() {
+    let sdk_vm_config = SdkVmConfig::builder()
+        .system(
+            SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(16),
+        )
+        .native(Default::default())
+        .rv32i(Default::default())
+        .build();
+    let app_config = AppConfig {
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(2),
+        app_vm_config: sdk_vm_config,
+    };
+
+    #[allow(unused_variables)]
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
+    #[allow(unused_variables)]
+    let root_proof = e2e_prover.generate_e2e_proof(StdIn::default());
+
+    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &e2e_prover.agg_pk().root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
 }
 
 #[cfg(feature = "static-verifier")]
