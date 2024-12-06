@@ -31,6 +31,7 @@ use axvm_sdk::{
     },
     Sdk, StdIn,
 };
+use axvm_transpiler::transpiler::Transpiler;
 use p3_baby_bear::BabyBear;
 use utils::{assert_agg_config_eq, assert_agg_pk_eq};
 
@@ -306,7 +307,7 @@ fn test_agg_keygen_store_and_load() {
 }
 
 #[test]
-fn test_sdk_guest_build() {
+fn test_sdk_guest_build_and_transpile() {
     let sdk = Sdk;
     let guest_opts = GuestOptions::default()
         // .with_features(vec!["zkvm"])
@@ -317,6 +318,8 @@ fn test_sdk_guest_build() {
     let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
     let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
     assert_eq!(one.instructions, two.instructions);
+    let transpiler = Transpiler::<F>::default();
+    let _exe = sdk.transpile(one, transpiler).unwrap();
 }
 
 #[test]

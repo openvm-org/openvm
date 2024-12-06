@@ -23,7 +23,7 @@ use axvm_native_recursion::{
     halo2::{verifier::Halo2VerifierProvingKey, EvmProof},
     types::InnerConfig,
 };
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler, FromElf};
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::Result;
@@ -79,8 +79,8 @@ impl Sdk {
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
-    pub fn transpile(&self, _elf: Elf, _transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {
-        todo!()
+    pub fn transpile(&self, elf: Elf, transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {
+        Ok(AxVmExe::from_elf(elf, transpiler))
     }
 
     pub fn execute(&self, _exe: AxVmExe<F>, _inputs: StdIn) -> Result<(), ExecutionError> {
