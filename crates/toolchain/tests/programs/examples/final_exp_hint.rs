@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use axvm::io::read;
 use axvm_ecc_guest::AffinePoint;
 use axvm_pairing_guest::{
-    bls12_381::{Bls12_381, Fp, Fp12, Fp2, Scalar},
+    bls12_381::{Bls12_381, Fp, Fp12, Fp2},
     pairing::PairingCheck,
 };
 
