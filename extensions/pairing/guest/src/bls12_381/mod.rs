@@ -43,9 +43,11 @@ pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
 
 moduli_declare! {
     Bls12_381Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
+    Bls12_381Scalar { modulus = "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001" },
 }
 
 pub type Fp = Bls12_381Fp;
+pub type Scalar = Bls12_381Scalar;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
