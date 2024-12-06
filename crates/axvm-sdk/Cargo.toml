@@ -35,6 +35,8 @@ async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 
+axvm-sdk-example-test = { path = "example" }
+
 [features]
 default = ["parallel"]
 bench-metrics = ["axvm-native-recursion/bench-metrics"]

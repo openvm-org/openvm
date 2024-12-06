@@ -55,17 +55,25 @@ impl Sdk {
             todo!("docker build is not supported yet");
         }
         let pkg = get_package(pkg_dir.as_ref());
-        let target_dir = get_target_dir(pkg_dir.as_ref());
+        let target_dir = get_target_dir(&pkg.manifest_path);
         if let Err(Some(code)) =
             build_guest_package(&pkg, target_dir.clone(), &guest_opts.into(), None)
         {
             return Err(eyre::eyre!("Failed to build guest: code = {}", code));
         }
+        eprintln!("target_dir: {:?}", target_dir);
+        eprintln!("targets: {:?}", pkg.targets);
+
         let elf_path = pkg
             .targets
             .iter()
             .find(|target| target.kind.iter().any(|kind| kind == "bin"))
-            .map(|target| target_dir.join(&target.name).to_path_buf())
+            .map(|target| {
+                target_dir
+                    .join("riscv32im-risc0-zkvm-elf")
+                    .join("release")
+                    .join(&target.name)
+            })
             .expect("Could not find target binary");
         let data = read(elf_path)?;
         Elf::decode(&data, MEM_SIZE as u32)

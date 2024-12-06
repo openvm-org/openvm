@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, path::PathBuf};
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, prover::types::Proof, Chip},
@@ -8,6 +8,7 @@ use ax_stark_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
+use axvm_build::GuestOptions;
 use axvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
@@ -290,6 +291,18 @@ fn test_agg_keygen_store_and_load() {
     let (file_config, file_pk) = sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
     assert_agg_config_eq(&agg_config, &file_config);
     assert_agg_pk_eq(&agg_pk, &file_pk);
+}
+
+#[test]
+fn test_sdk_guest_build() {
+    let sdk = Sdk;
+    let guest_opts = GuestOptions::default()
+        // .with_features(vec!["zkvm"])
+        // .with_options(vec!["--release"]);
+        ;
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("example");
+    sdk.build(guest_opts, pkg_dir).unwrap();
 }
 
 #[test]

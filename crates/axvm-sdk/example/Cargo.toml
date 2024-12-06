@@ -1,0 +1,7 @@
+[package]
+name = "axvm-sdk-example-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axvm = { path = "../../toolchain/axvm" }

@@ -1270,6 +1270,7 @@ dependencies = [
  "axvm-native-recursion",
  "axvm-pairing-circuit",
  "axvm-rv32im-circuit",
+ "axvm-sdk-example-test",
  "axvm-transpiler",
  "bincode 1.3.3",
  "bon",
@@ -1282,6 +1283,13 @@ dependencies = [
  "serde",
  "static_assertions",
  "tracing",
+]
+
+[[package]]
+name = "axvm-sdk-example-test"
+version = "0.1.0"
+dependencies = [
+ "axvm",
 ]
 
 [[package]]
