@@ -55,7 +55,9 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default().into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_opts, None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
     let data = read(elf_path)?;

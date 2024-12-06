@@ -13,7 +13,7 @@ use ax_stark_sdk::{
         baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     },
 };
-use axvm_build::GuestOptions;
+use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     prover::ContinuationVmProof,
@@ -22,7 +22,7 @@ use axvm_circuit::{
 #[cfg(feature = "static-verifier")]
 use axvm_native_recursion::halo2::verifier::Halo2VerifierCircuit;
 use axvm_native_recursion::types::InnerConfig;
-use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::Result;
@@ -50,8 +50,25 @@ pub(crate) type OuterSC = BabyBearPoseidon2OuterConfig;
 pub struct Sdk;
 
 impl Sdk {
-    pub fn build<P: AsRef<Path>>(&self, _guest_opts: GuestOptions, _pkg_dir: P) -> Result<Elf> {
-        todo!()
+    pub fn build<P: AsRef<Path>>(&self, guest_opts: GuestOptions, pkg_dir: P) -> Result<Elf> {
+        if guest_opts.use_docker.is_some() {
+            todo!("docker build is not supported yet");
+        }
+        let pkg = get_package(pkg_dir.as_ref());
+        let target_dir = get_target_dir(pkg_dir.as_ref());
+        if let Err(Some(code)) =
+            build_guest_package(&pkg, target_dir.clone(), &guest_opts.into(), None)
+        {
+            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+        }
+        let elf_path = pkg
+            .targets
+            .iter()
+            .find(|target| target.kind.iter().any(|kind| kind == "bin"))
+            .map(|target| target_dir.join(&target.name).to_path_buf())
+            .expect("Could not find target binary");
+        let data = read(elf_path)?;
+        Elf::decode(&data, MEM_SIZE as u32)
     }
 
     pub fn transpile(&self, _elf: Elf, _transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {

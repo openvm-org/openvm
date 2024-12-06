@@ -36,7 +36,9 @@ pub fn build_example_program_with_features<S: AsRef<str>>(
         .with_options(["--example", example_name])
         .with_features(features)
         .into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_opts, None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let profile = if is_debug() { "debug" } else { "release" };
     let elf_path = pkg

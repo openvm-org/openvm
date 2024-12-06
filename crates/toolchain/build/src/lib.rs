@@ -235,11 +235,12 @@ pub fn build_guest_package<P>(
     target_dir: P,
     guest_opts: &GuestBuildOptions,
     runtime_lib: Option<&str>,
-) where
+) -> Result<(), Option<i32>>
+where
     P: AsRef<Path>,
 {
     if is_skip_build() {
-        return;
+        return Err(None);
     }
 
     fs::create_dir_all(target_dir.as_ref()).unwrap();
@@ -295,7 +296,9 @@ pub fn build_guest_package<P>(
 
     let res = child.wait().expect("Guest 'cargo build' failed");
     if !res.success() {
-        std::process::exit(res.code().unwrap());
+        Err(res.code())
+    } else {
+        Ok(())
     }
 }
 

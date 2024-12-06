@@ -43,7 +43,9 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Vec<PathBuf>> {
     };
     let target_dir = manifest_dir.join("target");
     let pkg = get_package(&manifest_dir);
-    build_guest_package(&pkg, &target_dir, &guest_options.into(), None);
+    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_options.into(), None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let elf_paths = guest_methods(&pkg, &target_dir, &[]);
     Ok(elf_paths)
