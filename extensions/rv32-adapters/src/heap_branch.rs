@@ -183,12 +183,17 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     ) -> Self {
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
+            "address_bits={address_bits} needs to be large enough for high limb range check"
+        );
         Self {
             air: Rv32HeapBranchAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge: memory_controller.memory_bridge(),
                 bus: bitwise_lookup_chip.bus(),
-                address_bits: memory_controller.mem_config().pointer_max_bits,
+                address_bits,
             },
             bitwise_lookup_chip,
             _marker: PhantomData,
