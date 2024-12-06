@@ -20,12 +20,15 @@ use axvm_circuit::{
 };
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
+use axvm_native_recursion::halo2::{
+    verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
+};
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{AggConfig, AppConfig},
+    config::{AggConfig, AppConfig, FullAggConfig},
     keygen::perm::AirIdPermutation,
     verifier::{internal::InternalVmVerifierConfig, root::RootVmVerifierConfig},
     OuterSC, F, SC,
@@ -34,11 +37,34 @@ use crate::{
 pub(crate) mod dummy;
 pub mod perm;
 
+#[derive(Serialize, Deserialize)]
+pub struct FullAggProvingKey {
+    pub agg_vm_pk: AggProvingKey,
+    pub halo2_pk: Halo2ProvingKey,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {
     pub app_vm_pk: VmProvingKey<SC, VC>,
 }
 pub type AppVerifyingKey = MultiStarkVerifyingKey<SC>;
+
+#[derive(Serialize, Deserialize)]
+pub struct AggProvingKey {
+    pub leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
+    pub internal_vm_pk: VmProvingKey<SC, NativeConfig>,
+    pub internal_committed_exe: Arc<AxVmCommittedExe<SC>>,
+    pub root_verifier_pk: RootVerifierProvingKey,
+}
+
+/// Attention: the size of this struct is VERY large, usually >10GB.
+#[derive(Serialize, Deserialize)]
+pub struct Halo2ProvingKey {
+    /// Static verifier to verify a stark proof of the root verifier.
+    pub verifier: Halo2VerifierProvingKey,
+    /// Wrapper circuit to verify static verifier and reduce the verification costs in the final proof.
+    pub wrapper: Halo2WrapperProvingKey,
+}
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
@@ -68,14 +94,6 @@ where
     pub fn get_vk(&self) -> AppVerifyingKey {
         self.app_vm_pk.vm_pk.get_vk()
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AggProvingKey {
-    pub leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    pub internal_vm_pk: VmProvingKey<SC, NativeConfig>,
-    pub internal_committed_exe: Arc<AxVmCommittedExe<SC>>,
-    pub root_verifier_pk: RootVerifierProvingKey,
 }
 
 impl AggProvingKey {
@@ -221,5 +239,34 @@ pub struct RootVerifierProvingKey {
 impl RootVerifierProvingKey {
     pub fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)
+    }
+}
+
+impl FullAggProvingKey {
+    /// Attention:
+    /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
+    /// - Please make sure SRS(KZG parameters) is already downloaded.
+    pub fn keygen(config: FullAggConfig) -> Self {
+        let FullAggConfig {
+            agg_config,
+            halo2_config,
+        } = config;
+        let (agg_vm_pk, dummy_internal_proof) = AggProvingKey::dummy_proof_and_keygen(agg_config);
+        let dummy_root_proof = agg_vm_pk
+            .root_verifier_pk
+            .generate_dummy_root_proof(dummy_internal_proof);
+        let verifier = agg_vm_pk
+            .root_verifier_pk
+            .keygen_static_verifier(halo2_config.verifier_k, dummy_root_proof);
+        let dummy_snark = verifier.generate_dummy_snark();
+        let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
+            Halo2WrapperProvingKey::keygen(wrapper_k, dummy_snark)
+        } else {
+            Halo2WrapperProvingKey::keygen_auto_tune(dummy_snark)
+        };
+        Self {
+            agg_vm_pk,
+            halo2_pk: Halo2ProvingKey { verifier, wrapper },
+        }
     }
 }

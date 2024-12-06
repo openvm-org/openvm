@@ -1,19 +1,10 @@
 use std::collections::VecDeque;
 
-use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 use axvm_circuit::arch::Streams;
 use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use crate::F;
-
-pub(crate) type Fr = Bn254Fr;
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct EvmProof {
-    pub instances: Vec<Vec<Fr>>,
-    pub proof: Vec<u8>,
-}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct StdIn {

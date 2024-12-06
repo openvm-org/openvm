@@ -32,7 +32,9 @@ use crate::{
 
 mod exe;
 pub use exe::*;
+pub mod halo2;
 mod root;
+
 pub use root::*;
 
 const DEFAULT_NUM_CHILDREN_LEAF: usize = 2;

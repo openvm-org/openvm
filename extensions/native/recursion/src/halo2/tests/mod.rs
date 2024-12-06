@@ -20,7 +20,7 @@ use snark_verifier_sdk::{
 use crate::{
     config::outer::OuterConfig,
     halo2::{
-        utils::gen_kzg_params, wrapper::Halo2WrapperCircuit, CircuitBuilderStage::Prover,
+        utils::gen_kzg_params, wrapper::Halo2WrapperProvingKey, CircuitBuilderStage::Prover,
         DslOperations, Halo2Prover, Halo2ProvingMetadata, Halo2ProvingPinning,
     },
     utils::{reduce_32, split_32},
@@ -163,7 +163,7 @@ fn test_split_32() {
 #[test]
 fn test_wrapper_select_k() {
     let (dummy_snark, _, _) = snarks_dummy_circuit();
-    let wrapper_k = Halo2WrapperCircuit::select_k(dummy_snark);
+    let wrapper_k = Halo2WrapperProvingKey::select_k(dummy_snark);
     assert_eq!(wrapper_k, 22);
 }
 

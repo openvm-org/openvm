@@ -24,9 +24,11 @@ use snark_verifier_sdk::{
     NativeLoader, PlonkVerifier, Snark, SHPLONK,
 };
 
-static TESTING_KZG_PARAMS_23: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| gen_kzg_params(23));
+use crate::halo2::Halo2Params;
 
-pub(crate) fn gen_kzg_params(k: u32) -> ParamsKZG<Bn256> {
+static TESTING_KZG_PARAMS_23: Lazy<Halo2Params> = Lazy::new(|| gen_kzg_params(23));
+
+pub(crate) fn gen_kzg_params(k: u32) -> Halo2Params {
     let mut rng = StdRng::seed_from_u64(42);
     ParamsKZG::setup(k, &mut rng)
 }
@@ -51,10 +53,10 @@ lazy_static! {
           }
        "#).unwrap();
     /// Hacking because of bad interface. This is to construct a fake KZG params to pass Svk(which only requires ParamsKZG.g[0]) to AggregationCircuit.
-    static ref FAKE_KZG_PARAMS: ParamsKZG<Bn256> = KZGCommitmentScheme::new_params(1);
+    static ref FAKE_KZG_PARAMS: Halo2Params = KZGCommitmentScheme::new_params(1);
 }
 
-pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+pub static KZG_PARAMS_FOR_SVK: Lazy<Halo2Params> = Lazy::new(|| {
     if std::env::var("RANDOM_SRS").is_ok() {
         read_params(1).as_ref().clone()
     } else {
@@ -62,7 +64,7 @@ pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
     }
 });
 
-fn build_kzg_params_for_svk(g: G1Affine) -> ParamsKZG<Bn256> {
+fn build_kzg_params_for_svk(g: G1Affine) -> Halo2Params {
     FAKE_KZG_PARAMS.from_parts(
         1,
         vec![g],
@@ -85,7 +87,7 @@ pub(crate) fn verify_snark(dk: &KzgDecidingKey<Bn256>, snark: &Snark) {
 
 /// When `RANDOM_SRS` is set, this function will return a random params which should only be used
 /// for testing purpose.
-pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
+pub fn read_params(k: u32) -> Arc<Halo2Params> {
     if std::env::var("RANDOM_SRS").is_ok() {
         let mut ret = TESTING_KZG_PARAMS_23.clone();
         ret.downsize(k);

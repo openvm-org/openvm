@@ -30,8 +30,9 @@ use snark_verifier_sdk::{
         },
         halo2_proofs::{
             dev::MockProver,
-            halo2curves::bn256::{Fr, G1Affine},
+            halo2curves::bn256::{Bn256, Fr, G1Affine},
             plonk::{keygen_pk2, ProvingKey},
+            poly::kzg::commitment::ParamsKZG,
             SerdeFormat,
         },
     },
@@ -40,9 +41,17 @@ use snark_verifier_sdk::{
 
 use crate::halo2::utils::read_params;
 
+pub type Halo2Params = ParamsKZG<Bn256>;
+
 /// A prover that can generate proofs with the Halo2
 #[derive(Debug, Clone)]
 pub struct Halo2Prover;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct EvmProof {
+    pub instances: Vec<Vec<Fr>>,
+    pub proof: Vec<u8>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DslOperations<C: Config> {
@@ -198,6 +207,27 @@ impl Halo2Prover {
     ) -> Snark {
         let k = config_params.k;
         let params = read_params(k as u32);
+        Self::prove_with_loaded_params(
+            &params,
+            config_params,
+            break_points,
+            pk,
+            dsl_operations,
+            witness,
+        )
+    }
+
+    pub fn prove_with_loaded_params<
+        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
+    >(
+        params: &Halo2Params,
+        config_params: BaseCircuitParams,
+        break_points: MultiPhaseThreadBreakPoints,
+        pk: &ProvingKey<G1Affine>,
+        dsl_operations: DslOperations<C>,
+        witness: Witness<C>,
+    ) -> Snark {
+        let k = config_params.k;
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
@@ -212,7 +242,7 @@ impl Halo2Prover {
             let total_cell = total_advices + total_lookups + stats.gate.total_fixed;
             metrics::gauge!("halo2_total_cells").set(total_cell as f64);
         }
-        let snark = gen_snark_shplonk(&params, pk, builder, None::<&str>);
+        let snark = gen_snark_shplonk(params, pk, builder, None::<&str>);
 
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);

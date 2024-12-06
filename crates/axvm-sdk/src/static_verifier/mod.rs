@@ -14,7 +14,7 @@ use axvm_native_recursion::{
     config::outer::{new_from_outer_multi_vk, OuterConfig},
     digest::DigestVariable,
     fri::TwoAdicFriPcsVariable,
-    halo2::{verifier::Halo2VerifierCircuit, DslOperations, Halo2Prover},
+    halo2::{verifier::Halo2VerifierProvingKey, DslOperations, Halo2Prover},
     hints::Hintable,
     stark::StarkVerifier,
     utils::const_fri_config,
@@ -38,11 +38,11 @@ impl RootVerifierProvingKey {
         &self,
         halo2_k: usize,
         root_proof: Proof<OuterSC>,
-    ) -> Halo2VerifierCircuit {
+    ) -> Halo2VerifierProvingKey {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let dsl_operations = build_static_verifier_operations(self, &root_proof);
-        Halo2VerifierCircuit {
+        Halo2VerifierProvingKey {
             pinning: Halo2Prover::keygen(halo2_k, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
         }
