@@ -12,24 +12,24 @@ use snark_verifier_sdk::{
             CircuitBuilderStage,
             CircuitBuilderStage::{Keygen, Prover},
         },
-        halo2_proofs::{halo2curves::bn256::Fr, plonk::keygen_pk2},
+        halo2_proofs::plonk::keygen_pk2,
     },
     CircuitExt, Snark, SHPLONK,
 };
 
 use crate::halo2::{
     utils::{read_params, KZG_PARAMS_FOR_SVK},
-    Halo2ProvingMetadata, Halo2ProvingPinning,
+    EvmProof, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Halo2WrapperCircuit {
+pub struct Halo2WrapperProvingKey {
     pub pinning: Halo2ProvingPinning,
 }
 
 const MIN_ROWS: usize = 20;
 
-impl Halo2WrapperCircuit {
+impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
     pub fn keygen_auto_tune(dummy_snark: Snark) -> Self {
         let k = Self::select_k(dummy_snark.clone());
@@ -66,12 +66,12 @@ impl Halo2WrapperCircuit {
     }
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
     // FIXME: the signature is not ideal. It should return an Error instead of panicking when the verification fails.
-    pub fn evm_verify(
-        evm_verifier_deployment_codes: Vec<u8>,
-        evm_proof: Vec<u8>,
-        pvs: Vec<Vec<Fr>>,
-    ) {
-        evm_verify(evm_verifier_deployment_codes, pvs, evm_proof);
+    pub fn evm_verify(evm_verifier_deployment_codes: Vec<u8>, evm_proof: EvmProof) {
+        evm_verify(
+            evm_verifier_deployment_codes,
+            evm_proof.instances,
+            evm_proof.proof,
+        );
     }
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
     pub fn generate_evm_verifier(&self) -> Vec<u8> {
@@ -83,19 +83,29 @@ impl Halo2WrapperCircuit {
             None,
         )
     }
-    /// Return (EVM proof, public values)
-    pub fn prove_for_evm(&self, snark_to_verify: Snark) -> (Vec<u8>, Vec<Vec<Fr>>) {
+    pub fn prove_for_evm(&self, snark_to_verify: Snark) -> EvmProof {
         let k = self.pinning.metadata.config_params.k;
         let params = read_params(k as u32);
+        self.prove_for_evm_with_loaded_params(&params, snark_to_verify)
+    }
+    pub fn prove_for_evm_with_loaded_params(
+        &self,
+        params: &Halo2Params,
+        snark_to_verify: Snark,
+    ) -> EvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
+        let k = self.pinning.metadata.config_params.k;
         let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
         let pvs = prover_circuit.instances();
-        let proof = gen_evm_proof_shplonk(&params, &self.pinning.pk, prover_circuit, pvs.clone());
+        let proof = gen_evm_proof_shplonk(params, &self.pinning.pk, prover_circuit, pvs.clone());
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
-        (proof, pvs)
+        EvmProof {
+            instances: pvs,
+            proof,
+        }
     }
     pub fn prove(&self, snark_to_verify: Snark) -> Snark {
         let k = self.pinning.metadata.config_params.k;

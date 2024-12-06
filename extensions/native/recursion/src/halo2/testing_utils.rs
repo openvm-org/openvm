@@ -12,7 +12,7 @@ use crate::{
     config::outer::new_from_outer_multi_vk,
     halo2::{
         utils::sort_chips,
-        verifier::{generate_halo2_verifier_circuit, Halo2VerifierCircuit},
+        verifier::{generate_halo2_verifier_proving_key, Halo2VerifierProvingKey},
     },
     witness::Witnessable,
 };
@@ -20,7 +20,7 @@ use crate::{
 pub fn run_static_verifier_test(
     test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>,
     fri_params: FriParameters,
-) -> (Halo2VerifierCircuit, Snark) {
+) -> (Halo2VerifierProvingKey, Snark) {
     let test_proof_input = ProofInputForTest {
         per_air: sort_chips(test_proof_input.per_air),
     };
@@ -40,7 +40,7 @@ pub fn run_static_verifier_test(
     )
     .entered();
     let stark_verifier_circuit =
-        generate_halo2_verifier_circuit(21, advice, &vparams.fri_params, &vparams.data.proof);
+        generate_halo2_verifier_proving_key(21, advice, &vparams.fri_params, &vparams.data.proof);
     info_span.exit();
 
     let info_span = tracing::info_span!(

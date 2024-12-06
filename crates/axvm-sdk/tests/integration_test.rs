@@ -236,7 +236,6 @@ fn test_public_values_and_leaf_verification() {
 #[test]
 fn test_e2e_proof_generation() {
     let app_config = small_test_app_config(3);
-    #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
 
     let air_id_perm = e2e_prover.agg_pk().root_verifier_pk.air_id_permutation();
@@ -261,7 +260,20 @@ fn test_e2e_proof_generation() {
         app_exe_commit.leaf_vm_verifier_commit
     );
 
-    #[cfg(feature = "static-verifier")]
+    static_verifier::test_static_verifier(
+        &e2e_prover.agg_pk().root_verifier_pk,
+        dummy_internal_proof,
+        &root_proof,
+    );
+}
+
+#[test]
+fn test_e2e_app_log_blowup_1() {
+    let app_config = small_test_app_config(1);
+
+    let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
+    let root_proof = e2e_prover.generate_e2e_proof(StdIn::default());
+
     static_verifier::test_static_verifier(
         &e2e_prover.agg_pk().root_verifier_pk,
         dummy_internal_proof,
@@ -309,12 +321,9 @@ fn test_sdk_vm_config_builder() {
         app_vm_config: sdk_vm_config,
     };
 
-    #[allow(unused_variables)]
     let (e2e_prover, dummy_internal_proof) = load_agg_pk_into_e2e_prover(app_config);
-    #[allow(unused_variables)]
     let root_proof = e2e_prover.generate_e2e_proof(StdIn::default());
 
-    #[cfg(feature = "static-verifier")]
     static_verifier::test_static_verifier(
         &e2e_prover.agg_pk().root_verifier_pk,
         dummy_internal_proof,
@@ -322,14 +331,13 @@ fn test_sdk_vm_config_builder() {
     );
 }
 
-#[cfg(feature = "static-verifier")]
 mod static_verifier {
     use ax_stark_sdk::{
         ax_stark_backend::prover::types::Proof,
         config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     };
     use axvm_native_compiler::prelude::Witness;
-    use axvm_native_recursion::{halo2::wrapper::Halo2WrapperCircuit, witness::Witnessable};
+    use axvm_native_recursion::{halo2::wrapper::Halo2WrapperProvingKey, witness::Witnessable};
     use axvm_sdk::keygen::RootVerifierProvingKey;
 
     use crate::SC;
@@ -349,7 +357,7 @@ mod static_verifier {
         // FIXME: explicitly verify the proof.
         let static_verifier_proof = static_verifier.prove(witness);
         let verifier_wrapper =
-            Halo2WrapperCircuit::keygen_auto_tune(static_verifier.generate_dummy_snark());
+            Halo2WrapperProvingKey::keygen_auto_tune(static_verifier.generate_dummy_snark());
         assert_eq!(
             verifier_wrapper
                 .pinning
@@ -359,7 +367,7 @@ mod static_verifier {
             vec![1]
         );
         let evm_verifier = verifier_wrapper.generate_evm_verifier();
-        let (evm_proof, pvs) = verifier_wrapper.prove_for_evm(static_verifier_proof);
-        Halo2WrapperCircuit::evm_verify(evm_verifier, evm_proof, pvs);
+        let evm_proof = verifier_wrapper.prove_for_evm(static_verifier_proof);
+        Halo2WrapperProvingKey::evm_verify(evm_verifier, evm_proof);
     }
 }

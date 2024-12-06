@@ -53,6 +53,22 @@ pub struct AggConfig {
     pub compiler_options: CompilerOptions,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Halo2Config {
+    /// Log degree for the outer recursion verifier circuit.
+    pub verifier_k: usize,
+    /// If not specified, keygen will tune wrapper_k automatically.
+    pub wrapper_k: Option<usize>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FullAggConfig {
+    /// STARK aggregation config
+    pub agg_config: AggConfig,
+    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
+    pub halo2_config: Halo2Config,
+}
+
 #[derive(Builder, Clone, Debug)]
 pub struct SdkVmConfig {
     pub system: SystemConfig,

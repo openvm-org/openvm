@@ -20,7 +20,7 @@ axvm-pairing-circuit = { workspace = true }
 axvm-pairing-transpiler = { workspace = true }
 axvm-native-circuit = { workspace = true }
 axvm-native-compiler = { workspace = true }
-axvm-native-recursion = { workspace = true }
+axvm-native-recursion = { workspace = true, features = ["static-verifier"] }
 axvm-rv32im-circuit = { workspace = true }
 axvm-rv32im-transpiler = { workspace = true }
 axvm-transpiler = { workspace = true }
@@ -44,6 +44,5 @@ tracing.workspace = true
 [features]
 default = ["parallel"]
 bench-metrics = ["axvm-native-recursion/bench-metrics"]
-static-verifier = ["axvm-native-recursion/static-verifier"]
 parallel = ["axvm-circuit/parallel"]
 test-utils = ["axvm-circuit/test-utils"]
