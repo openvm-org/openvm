@@ -67,4 +67,7 @@ jobs:
           cache-on-failure: true
       - name: Checkout Reth
         run: |
-          git clone https://github.com/axiom-crypto/rsp
+          git clone git@github.com:axiom-crypto/rsp.git
+      - name: test
+        run: |
+          ls -l
