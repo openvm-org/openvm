@@ -71,5 +71,6 @@ jobs:
       - name: Run axvm-sdk crate tests
         working-directory: crates/axvm-sdk
         run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel
