@@ -25,6 +25,8 @@ strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
 once_cell = { workspace = true }
+eyre = { workspace = true }
+num-integer = { workspace = true }
 [dev-dependencies]
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }

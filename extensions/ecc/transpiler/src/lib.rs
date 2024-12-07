@@ -21,6 +21,12 @@ pub enum Rv32WeierstrassOpcode {
     SETUP_EC_DOUBLE,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum EccPhantom {
+    HintDecompress = 0x40,
+}
+
 #[derive(Default)]
 pub struct EccTranspilerExtension;
 
