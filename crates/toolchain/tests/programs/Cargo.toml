@@ -45,7 +45,7 @@ k256 = ["axvm-ecc-guest/k256", "dep:k256"]
 
 [profile.release]
 panic = "abort"
-lto = "fat"     # decrease binary size
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
 # strip = "symbols"
 
 [[example]]
