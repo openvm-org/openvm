@@ -20,7 +20,6 @@ axvm_algebra_moduli_setup::moduli_init! {
 }
 
 pub fn main() {
-    setup_0();
     let (p, q, expected): (Vec<AffinePoint<Fp>>, Vec<AffinePoint<Fp2>>, (Fp12, Fp12)) = read();
     let actual = Bls12_381::pairing_check_hint(&p, &q);
     assert_eq!(actual, expected);
