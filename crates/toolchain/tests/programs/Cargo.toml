@@ -42,6 +42,7 @@ std = [
 bn254 = ["axvm-pairing-guest/bn254"]
 bls12_381 = ["axvm-pairing-guest/bls12_381"]
 k256 = ["axvm-ecc-guest/k256", "dep:k256"]
+heap-embedded-alloc = ["axvm/heap-embedded-alloc"]
 
 [profile.release]
 panic = "abort"
