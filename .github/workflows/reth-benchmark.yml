@@ -1,0 +1,70 @@
+name: "Reth Benchmark"
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_type:
+        type: string
+        required: false
+        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
+        default: 64cpu-linux-arm64
+      memory_allocator:
+        type: string
+        required: false
+        description: Memory allocator to use (mimalloc or jemalloc)
+        default: mimalloc
+      app_log_blowup:
+        type: number
+        required: false
+        description: Application level log blowup
+        default: 2
+      agg_log_blowup:
+        type: number
+        required: false
+        description: Aggregation (leaf) level log blowup
+        default: 2
+      root_log_blowup:
+        type: number
+        required: false
+        description: Root level log blowup (only for e2e)
+        default: 2
+      internal_log_blowup:
+        type: number
+        required: false
+        description: Internal level log blowup (only for e2e)
+        default: 2
+
+env:
+  S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
+  S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
+  PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
+  CMD_ARGS: ""
+  INPUT_ARGS: ""
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+jobs:
+  run-reth:
+    name: Run Reth benchmark
+    runs-on:
+      - runs-on
+      - runner=${{ inputs.instance_type }}
+      - run-id=${{ github.run_id }}
+      - family=m7
+      - tag=bench-reth-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+      - name: Give GitHub Actions access to axiom-crypto github org
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Checkout Reth
+        run: |
+          git clone https://github.com/axiom-crypto/rsp
