@@ -219,7 +219,7 @@ The transpilation will only be valid for programs where:
 | mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
 | iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`         |
-| setup\<N\>     | SETUP\_(ADDSUB                                                | MULDIV | ISEQ)\_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
+| setup\<N\>     | SETUP_(ADDSUB | MULDIV | ISEQ)_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
 | sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`       |
 | sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`              |
 | hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`          |
