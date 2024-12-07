@@ -72,7 +72,7 @@ pub unsafe extern "C" fn sys_sha_buffer(
 /// `recv_buf` must be aligned and dereferenceable.
 #[no_mangle]
 pub unsafe extern "C" fn sys_rand(_recv_buf: *mut u32, _words: usize) {
-    crate::io::print("sys_rand is unimplemented");
+    crate::io::println("sys_rand is unimplemented");
     terminate::<{ exit_code::UNIMP }>();
 }
 
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
 /// Cycle count
 #[no_mangle]
 pub extern "C" fn sys_cycle_count() -> u64 {
-    crate::io::print("TODO");
+    crate::io::println("TODO");
     terminate::<{ exit_code::UNIMP }>();
     0u64
 }
@@ -116,7 +116,7 @@ pub extern "C" fn sys_cycle_count() -> u64 {
 /// `recv_ptr` must be aligned and dereferenceable.
 #[no_mangle]
 pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -> usize {
-    crate::io::print("sys_read is todo");
+    crate::io::println("sys_read is todo");
     terminate::<{ exit_code::UNIMP }>();
     0
 }
@@ -141,7 +141,7 @@ pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize) -
 /// `nwords' size.
 #[no_mangle]
 pub unsafe extern "C" fn sys_read_words(_fd: u32, _recv_ptr: *mut u32, _nwords: usize) -> usize {
-    crate::io::print("sys_read_words is todo");
+    crate::io::println("sys_read_words is todo");
     terminate::<{ exit_code::UNIMP }>();
     0
 }
@@ -155,7 +155,9 @@ pub unsafe extern "C" fn sys_write(fd: u32, write_ptr: *const u8, nbytes: usize)
         // We always print to host stdout using UTF-8 encoding.
         raw_print_str_from_bytes(write_ptr, nbytes);
     } else {
-        crate::io::print(alloc::format!("sys_write to fd={fd} not supported"));
+        use core::fmt::Write;
+        let mut writer = crate::io::Writer;
+        let _ = write!(writer, "sys_write to fd={fd} not supported.\n");
         terminate::<{ exit_code::UNIMP }>();
     }
 }
@@ -184,7 +186,7 @@ pub unsafe extern "C" fn sys_getenv(
     _varname: *const u8,
     _varname_len: usize,
 ) -> usize {
-    crate::io::print("sys_getenv is todo; returning 0");
+    crate::io::println("sys_getenv is todo; returning 0");
     0
 }
 
@@ -194,7 +196,7 @@ pub unsafe extern "C" fn sys_getenv(
 /// data being returned. Returned data is entirely in the control of the host.
 #[no_mangle]
 pub extern "C" fn sys_argc() -> usize {
-    crate::io::print("sys_argc is todo; returning 0");
+    crate::io::println("sys_argc is todo; returning 0");
     0
 }
 
@@ -221,7 +223,7 @@ pub unsafe extern "C" fn sys_argv(
     _out_nwords: usize,
     _arg_index: usize,
 ) -> usize {
-    crate::io::print("sys_argv is todo; returning 0");
+    crate::io::println("sys_argv is todo; returning 0");
     0
 }
 

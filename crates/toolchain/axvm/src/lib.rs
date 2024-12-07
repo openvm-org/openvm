@@ -155,7 +155,9 @@ pub fn memory_barrier<T>(ptr: *const T) {
 #[cfg(all(target_os = "zkvm", not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
-    crate::io::print(alloc::format!("{}", panic_info));
+    use core::fmt::Write;
+    let mut writer = crate::io::Writer;
+    let _ = write!(writer, "{}\n", panic_info);
     axvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }

@@ -3,6 +3,7 @@
 use alloc::vec::Vec;
 #[cfg(target_os = "zkvm")]
 use core::alloc::Layout;
+use core::fmt::Write;
 
 use axvm_platform::bincode;
 #[cfg(target_os = "zkvm")]
@@ -94,4 +95,14 @@ pub fn print<S: AsRef<str>>(s: S) {
 pub fn println<S: AsRef<str>>(s: S) {
     print(s);
     print("\n");
+}
+
+/// A no-alloc writer to print to stdout on host machine for debugging purposes.
+pub struct Writer;
+
+impl Write for Writer {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        print(s);
+        Ok(())
+    }
 }

@@ -16,9 +16,10 @@ mod bn254 {
 
     use super::*;
 
-    axvm_algebra_moduli_setup::moduli_init!(
-        "21888242871839275222246405745257275088696311157297823662689037894645226208583"
-    );
+    axvm_algebra_moduli_setup::moduli_init! {
+        "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
+        "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+    }
 
     axvm_algebra_complex_macros::complex_init! {
         Fp2 { mod_idx = 0 },
@@ -93,7 +94,10 @@ mod bls12_381 {
 
     use super::*;
 
-    axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+    axvm_algebra_moduli_setup::moduli_init! {
+        "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+        "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    }
 
     axvm_algebra_complex_macros::complex_init! {
         Fp2 { mod_idx = 0 },
@@ -164,13 +168,13 @@ pub fn main() {
 
     cfg_match! {
         cfg(feature = "bn254") => {
-            bn254::setup_all_moduli();
+            bn254::setup_0();
             bn254::setup_all_complex_extensions();
             bn254::test_miller_step(&io[..32 * 12]);
             bn254::test_miller_double_and_add_step(&io[32 * 12..]);
         }
         cfg(feature = "bls12_381") => {
-            bls12_381::setup_all_moduli();
+            bls12_381::setup_0();
             bls12_381::setup_all_complex_extensions();
             bls12_381::test_miller_step(&io[..48 * 12]);
             bls12_381::test_miller_double_and_add_step(&io[48 * 12..]);
