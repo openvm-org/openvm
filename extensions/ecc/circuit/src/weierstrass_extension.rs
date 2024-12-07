@@ -107,6 +107,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 num_limbs: 48,
                 limb_bits: 8,
             };
+            // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are supported.
             if bytes <= 32 {
                 let add_ne_chip = EcAddNeChip::new(
                     Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
@@ -193,6 +194,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 }
 
 pub(crate) mod phantom {
+    use std::iter::repeat;
+
     use ax_stark_backend::p3_field::PrimeField32;
     use axvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -206,6 +209,7 @@ pub(crate) mod phantom {
     use num_traits::One;
 
     use super::CurveConfig;
+
     #[derive(derive_new::new)]
     pub struct DecompressHintSubEx {
         pub supported_curves: Vec<CurveConfig>,
@@ -222,16 +226,29 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;
-            assert!(c_idx < self.supported_curves.len());
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
             let curve = &self.supported_curves[c_idx];
             let modulus_mod_4 = BigUint::from(3u8) & curve.modulus.clone();
             if modulus_mod_4 != BigUint::from(3u8) {
-                bail!("Only supporting curves with modulus congruent to 3 mod 4");
+                bail!("Currently only supporting curves with modulus congruent to 3 mod 4.");
+                // TODO: Tonelli-Shanks algorithm
             }
             let rs1 = unsafe_read_rv32_register(memory, a);
-            let bytes = curve.modulus.bits().div_ceil(8);
+            // TODO: Better support for different limb sizes
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
             let mut x_limbs: Vec<u8> = vec![];
-            for i in 0..bytes {
+            for i in 0..num_limbs {
                 let limb = memory.unsafe_read_cell(
                     F::from_canonical_u32(RV32_MEMORY_AS),
                     F::from_canonical_u32(rs1 + i as u32),
@@ -248,12 +265,15 @@ pub(crate) mod phantom {
             let y_bytes = y
                 .to_bytes_le()
                 .into_iter()
-                .map(|x| F::from_canonical_u8(x))
+                .map(F::from_canonical_u8)
+                .chain(repeat(F::ZERO))
+                .take(num_limbs)
                 .collect();
             streams.hint_stream = y_bytes;
             Ok(())
         }
     }
+
     fn decompress_point(x: BigUint, is_y_odd: bool, curve: &CurveConfig) -> BigUint {
         let alpha = ((&x * &x * &x) + (&x * &x * &curve.a) + &curve.b) % &curve.modulus;
         let beta = mod_sqrt(alpha, &curve.modulus);
