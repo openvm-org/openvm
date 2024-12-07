@@ -19,6 +19,7 @@ use axvm_circuit::{
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_native_recursion::types::InnerConfig;
+use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AppConfig, SdkVmConfig},
@@ -318,7 +319,9 @@ fn test_sdk_guest_build_and_transpile() {
     let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
     let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
     assert_eq!(one.instructions, two.instructions);
-    let transpiler = Transpiler::<F>::default();
+    let transpiler = Transpiler::<F>::default()
+        .with_extension(Rv32ITranspilerExtension)
+        .with_extension(Rv32MTranspilerExtension);
     let _exe = sdk.transpile(one, transpiler).unwrap();
 }
 
