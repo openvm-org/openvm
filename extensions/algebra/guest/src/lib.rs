@@ -83,7 +83,6 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
-// TODO[jpw]: split this into CustomIntrinsic (for MOD_IDX) + IntegralDomain
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
 ///
@@ -116,7 +115,7 @@ pub trait IntMod:
     + for<'a> MulAssign<&'a Self>
     + for<'a> DivAssignUnsafe<&'a Self>
 {
-    /// Underlying representation of IntMod.
+    /// Underlying representation of IntMod. Usually of the form `[u8; NUM_LIMBS]`.
     type Repr;
     /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
@@ -130,8 +129,8 @@ pub trait IntMod:
     /// Modulus as a Repr.
     const MODULUS: Self::Repr;
 
-    /// Number of bytes in the modulus.
-    const NUM_BYTES: usize;
+    /// Number of limbs used to internally represent an element of `Self`.
+    const NUM_LIMBS: usize;
 
     /// The zero element (i.e. the additive identity).
     const ZERO: Self;

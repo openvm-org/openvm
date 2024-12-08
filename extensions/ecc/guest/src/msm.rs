@@ -24,7 +24,7 @@ where
         bases.len().ilog2() as usize
     };
 
-    let field_byte_size = Scalar::NUM_BYTES;
+    let field_byte_size = Scalar::NUM_LIMBS;
 
     // OR all coefficients in order to make a mask to figure out the maximum number of bytes used
     // among all coefficients.

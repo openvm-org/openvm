@@ -73,11 +73,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
+        create_extern_func!(hint_decompress_extern_func);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
+                fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -231,12 +233,38 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     bytes
                 }
 
-                fn x(&self) -> Self::Coordinate {
-                    self.x.clone()
+                fn x(&self) -> &Self::Coordinate {
+                    &self.x
                 }
 
-                fn y(&self) -> Self::Coordinate {
-                    self.y.clone()
+                fn y(&self) -> &Self::Coordinate {
+                    &self.y
+                }
+
+                fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
+                    (self.x, self.y)
+                }
+
+                fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
+                    #[cfg(not(target_os = "zkvm"))]
+                    {
+                        unimplemented!()
+                    }
+                    #[cfg(target_os = "zkvm")]
+                    {
+                        const NUM_LIMBS: usize = <Self::Coordinate as axvm_algebra_guest::IntMod>::NUM_LIMBS;
+                        let y = MaybeUninit::<Self::Coordinate>::uninit();
+                        unsafe {
+                            #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
+                            let mut ptr = y.as_ptr() as *const u8;
+                            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                            for _ in (0..NUM_LIMBS).step_by(4) {
+                                axvm::hint_store_u32!(ptr, 0);
+                                ptr = ptr.add(4);
+                            }
+                            hint.assume_init()
+                        }
+                    }
                 }
             }
 
@@ -426,14 +454,18 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
         let double_extern_func =
             syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
+        let hint_decompress_extern_func = syn::Ident::new(
+            &format!("hint_decompress_extern_func_{}", str_path),
+            span.into(),
+        );
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 axvm_platform::custom_insn_r!(
-                    ::axvm_ecc_guest::OPCODE,
-                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                    ::axvm_ecc_guest::SwBaseFunct7::SwAddNe as usize + #ec_idx
-                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    OPCODE,
+                    SW_FUNCT3 as usize,
+                    SwBaseFunct7::SwAddNe as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     rs2
@@ -443,13 +475,26 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 axvm_platform::custom_insn_r!(
-                    ::axvm_ecc_guest::OPCODE,
-                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                    ::axvm_ecc_guest::SwBaseFunct7::SwDouble as usize + #ec_idx
-                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    OPCODE,
+                    SW_FUNCT3 as usize,
+                    SwBaseFunct7::SwDouble as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     "x0"
+                );
+            }
+
+            #[no_mangle]
+            extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
+                core::arch::asm!(
+                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                    opcode = const OPCODE,
+                    funct3 = const SW_FUNCT3 as usizePAIRING_FUNCT3,
+                    funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    rs1 = in(reg) rs1,
+                    rs2 = in(reg) rs2
                 );
             }
         });
@@ -502,6 +547,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
         mod axvm_intrinsics_ffi_2 {
+            use ::axvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+
             #(#externs)*
         }
         #(#setups)*
