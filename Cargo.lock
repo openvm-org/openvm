@@ -859,6 +859,7 @@ dependencies = [
  "axvm-algebra-moduli-setup",
  "axvm-ecc-sw-setup",
  "axvm-platform",
+ "axvm-rv32im-guest",
  "ecdsa",
  "elliptic-curve",
  "group 0.13.0",

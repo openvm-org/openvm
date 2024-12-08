@@ -247,7 +247,7 @@ pub(crate) mod phantom {
             } else {
                 bail!("Modulus too large")
             };
-            let mut x_limbs: Vec<u8> = vec![];
+            let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
             for i in 0..num_limbs {
                 let limb = memory.unsafe_read_cell(
                     F::from_canonical_u32(RV32_MEMORY_AS),
@@ -255,7 +255,7 @@ pub(crate) mod phantom {
                 );
                 x_limbs.push(limb.as_canonical_u32() as u8);
             }
-            let x = BigUint::from_bytes_be(&x_limbs);
+            let x = BigUint::from_bytes_le(&x_limbs);
             let rs2 = unsafe_read_rv32_register(memory, b);
             let rec_id = memory.unsafe_read_cell(
                 F::from_canonical_u32(RV32_MEMORY_AS),
@@ -275,7 +275,7 @@ pub(crate) mod phantom {
     }
 
     fn decompress_point(x: BigUint, is_y_odd: bool, curve: &CurveConfig) -> BigUint {
-        let alpha = ((&x * &x * &x) + (&x * &x * &curve.a) + &curve.b) % &curve.modulus;
+        let alpha = ((&x * &x * &x) + (&x * &curve.a) + &curve.b) % &curve.modulus;
         let beta = mod_sqrt(alpha, &curve.modulus);
         if is_y_odd == beta.is_odd() {
             beta

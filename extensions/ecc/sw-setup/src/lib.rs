@@ -2,16 +2,12 @@
 
 extern crate proc_macro;
 
-use std::sync::atomic::AtomicUsize;
-
 use axvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Expr, ExprPath, Path, Token,
 };
-
-static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -52,7 +48,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
-        let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         macro_rules! create_extern_func {
             ($name:ident) => {
@@ -90,8 +85,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             impl #struct_name {
-                pub const EC_IDX: usize = #ec_idx;
-
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
@@ -252,17 +245,18 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        const NUM_LIMBS: usize = <Self::Coordinate as axvm_algebra_guest::IntMod>::NUM_LIMBS;
-                        let y = MaybeUninit::<Self::Coordinate>::uninit();
+                        use axvm::platform as axvm_platform; // needed for hint_store_u32!
+
+                        let y = core::mem::MaybeUninit::<Self::Coordinate>::uninit();
                         unsafe {
                             #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
                             let mut ptr = y.as_ptr() as *const u8;
                             // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                            for _ in (0..NUM_LIMBS).step_by(4) {
-                                axvm::hint_store_u32!(ptr, 0);
+                            for _ in (0..<Self::Coordinate as axvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                axvm_rv32im_guest::hint_store_u32!(ptr, 0);
                                 ptr = ptr.add(4);
                             }
-                            hint.assume_init()
+                            y.assume_init()
                         }
                     }
                 }
@@ -487,15 +481,17 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
             #[no_mangle]
             extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                core::arch::asm!(
-                    ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
-                    opcode = const OPCODE,
-                    funct3 = const SW_FUNCT3 as usizePAIRING_FUNCT3,
-                    funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
-                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rs1 = in(reg) rs1,
-                    rs2 = in(reg) rs2
-                );
+                unsafe {
+                    core::arch::asm!(
+                        ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                        opcode = const OPCODE,
+                        funct3 = const SW_FUNCT3 as usize,
+                        funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
+                            * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                        rs1 = in(reg) rs1,
+                        rs2 = in(reg) rs2
+                    );
+                }
             }
         });
 
@@ -508,7 +504,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
                     let modulus_bytes = <#item as axvm_algebra_guest::IntMod>::MODULUS;
-                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_BYTES];
+                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.

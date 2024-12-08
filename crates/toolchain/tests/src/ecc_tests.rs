@@ -33,7 +33,7 @@ use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 
 use crate::utils::{build_example_program, build_example_program_with_features};
 
@@ -126,6 +126,34 @@ fn test_ec_runtime() -> Result<()> {
     );
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, false);
+    Ok(())
+}
+
+#[test]
+fn test_hint_decompress() -> Result<()> {
+    use axvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
+
+    let elf = build_example_program_with_features("hint_decompress", ["k256"])?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(EccTranspilerExtension)
+            .with_extension(ModularTranspilerExtension),
+    );
+    let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+
+    let p = Secp256k1Affine::generator();
+    let p = (p + p + p).to_affine();
+    println!("decompressed: {:?}", p);
+    let coords: Vec<_> = [p.x.to_bytes(), p.y.to_bytes()]
+        .concat()
+        .into_iter()
+        .map(AbstractField::from_canonical_u8)
+        .collect();
+    new_air_test_with_min_segments(config, axvm_exe, vec![coords], 1, false);
     Ok(())
 }
 

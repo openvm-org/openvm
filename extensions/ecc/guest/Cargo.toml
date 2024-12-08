@@ -16,6 +16,7 @@ ecdsa = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true, optional = true }
 hex-literal = { workspace = true }
+axvm-rv32im-guest = { workspace = true }
 axvm-algebra-guest = { workspace = true }
 axvm-ecc-sw-setup = { workspace = true }
 axvm-algebra-moduli-setup = { workspace = true }
