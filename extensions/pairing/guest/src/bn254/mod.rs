@@ -82,11 +82,27 @@ impl Bn254 {
 
 moduli_declare! {
     Bn254Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
+    Bn254Scalar { modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617" },
 }
 
 pub type Fp = Bn254Fp;
+pub type Scalar = Bn254Scalar;
 
 impl Field for Fp {
+    type SelfRef<'a> = &'a Self;
+    const ZERO: Self = <Self as IntMod>::ZERO;
+    const ONE: Self = <Self as IntMod>::ONE;
+
+    fn double_assign(&mut self) {
+        IntMod::double_assign(self);
+    }
+
+    fn square_assign(&mut self) {
+        IntMod::square_assign(self);
+    }
+}
+
+impl Field for Scalar {
     type SelfRef<'a> = &'a Self;
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;

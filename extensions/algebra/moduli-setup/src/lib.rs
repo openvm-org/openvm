@@ -805,8 +805,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
 
         setups.push(quote::quote_spanned! { span.into() =>
-            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
-            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -843,16 +841,20 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                         remaining.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
-                            + #mod_idx
-                                * (::axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
-                    );
+                    unsafe {
+                        // This should not be x0:
+                        let mut tmp = uninit.as_mut_ptr() as usize;
+                        // rs2="x2" will be parsed as 2 and therefore transpiled to SETUP_ISEQ
+                        core::arch::asm!(
+                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, x2",
+                            opcode = const ::axvm_algebra_guest::OPCODE,
+                            funct3 = const ::axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                            funct7 = const ::axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize + #mod_idx * (::axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            rd = inout(reg) tmp,
+                            rs1 = in(reg) remaining.as_ptr(),
+                        );
+                        // rd = inout(reg) is necessary because this instruction will write to `rd` register
+                    }
                 }
             }
         });
