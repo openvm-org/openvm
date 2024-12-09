@@ -19,7 +19,7 @@ use axvm_sdk::StdIn;
 use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::AbstractField;
 use tracing::info_span;
 

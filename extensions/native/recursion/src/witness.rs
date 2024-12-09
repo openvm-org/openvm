@@ -11,7 +11,7 @@ use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfi
 use axvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
 

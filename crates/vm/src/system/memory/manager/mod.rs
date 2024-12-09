@@ -842,7 +842,7 @@ mod tests {
 
     use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use ax_stark_backend::p3_field::AbstractField;
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;

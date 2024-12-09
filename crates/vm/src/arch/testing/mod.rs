@@ -23,7 +23,7 @@ use ax_stark_sdk::{
 };
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

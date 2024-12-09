@@ -1,7 +1,7 @@
 use axvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
 use axvm_native_circuit::{execute_program, Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;

@@ -3,7 +3,7 @@ use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField};
 use rand::{thread_rng, Rng};
 #[test]

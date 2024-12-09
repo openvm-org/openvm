@@ -13,9 +13,9 @@ use ax_stark_sdk::{
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngine,
+    p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters, Poseidon2BabyBear},
     utils::create_seeded_rng,
 };
-use p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters, Poseidon2BabyBear};
 use p3_monty_31::InternalLayerBaseParameters;
 use p3_poseidon2::{ExternalLayerConstants, Poseidon2};
 use p3_symmetric::Permutation;

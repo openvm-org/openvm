@@ -11,7 +11,7 @@ use axvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecuto
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use axvm_native_recursion::testing_utils::inner::run_recursive_test;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;

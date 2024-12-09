@@ -9,7 +9,7 @@ use ax_stark_sdk::{
     utils::create_seeded_rng,
 };
 use axvm_instructions::{instruction::Instruction, AxVmOpcode};
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::{AbstractField, PrimeField64};
 use rand::Rng;
 

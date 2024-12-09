@@ -226,7 +226,7 @@ mod tests {
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::Rng;
 
     use super::DuplexChallengerVariable;

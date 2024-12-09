@@ -6,9 +6,9 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
 use num_bigint_dig::BigUint;
-use p3_baby_bear::BabyBear;
 
 use crate::{test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr};
 

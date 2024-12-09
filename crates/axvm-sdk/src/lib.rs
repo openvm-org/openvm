@@ -28,7 +28,7 @@ use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::Result;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use prover::{generate_leaf_committed_exe, StarkProver};
 
 pub mod commit;

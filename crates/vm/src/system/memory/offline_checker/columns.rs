@@ -286,7 +286,7 @@ impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
 
 #[cfg(test)]
 mod tests {
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
 

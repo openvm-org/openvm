@@ -18,7 +18,7 @@ use axvm_native_compiler::{
     prelude::RVar,
 };
 use itertools::Itertools;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},

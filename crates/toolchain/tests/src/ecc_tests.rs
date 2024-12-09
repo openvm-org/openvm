@@ -32,7 +32,7 @@ use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 use crate::utils::{build_example_program, build_example_program_with_features};

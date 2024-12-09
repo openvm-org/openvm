@@ -12,7 +12,7 @@ use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use rand::SeedableRng;
 
 type F = BabyBear;

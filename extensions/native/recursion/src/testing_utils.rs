@@ -12,7 +12,7 @@ use axvm_circuit::{arch::instructions::program::Program, utils::execute_and_prov
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::hints::InnerVal;
 

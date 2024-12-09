@@ -7,7 +7,7 @@ use ax_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _,
     fields::babybear::FpBabyBear as HorizenBabyBear,

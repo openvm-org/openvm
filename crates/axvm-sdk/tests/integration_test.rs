@@ -30,7 +30,7 @@ use axvm_sdk::{
     },
     Sdk, StdIn,
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use utils::{assert_agg_config_eq, assert_agg_pk_eq};
 
 mod utils;

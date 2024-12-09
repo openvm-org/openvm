@@ -3,7 +3,7 @@ use std::array;
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
 use axvm_native_compiler::prelude::*;
 use axvm_native_recursion::{hints::Hintable, types::InnerConfig};
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 pub(crate) fn assign_array_to_slice<C: Config>(
     builder: &mut Builder<C>,

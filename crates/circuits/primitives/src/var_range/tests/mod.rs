@@ -6,9 +6,8 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    utils::create_seeded_rng,
+    p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
 use rand::Rng;
 
 use crate::var_range::{

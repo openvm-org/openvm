@@ -327,7 +327,7 @@ pub mod tests {
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use itertools::Itertools;
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::rngs::OsRng;
 
     use crate::{

@@ -424,7 +424,7 @@ impl<F: PrimeField32> Memory<F> {
 
 #[cfg(test)]
 mod tests {
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use ax_stark_backend::p3_field::AbstractField;
 
     use super::{Block, Memory};

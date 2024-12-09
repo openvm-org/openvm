@@ -798,6 +798,7 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-mod-circuit-builder",
  "ax-stark-backend",
+ "ax-stark-sdk",
  "axvm-algebra-circuit",
  "axvm-circuit",
  "axvm-circuit-derive",

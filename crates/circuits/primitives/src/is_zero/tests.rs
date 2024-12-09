@@ -12,8 +12,8 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
-use p3_baby_bear::BabyBear;
 use test_case::test_case;
 
 use super::{IsZeroIo, IsZeroSubAir};

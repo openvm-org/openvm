@@ -177,7 +177,7 @@ mod tests {
     use axvm_pairing_guest::bn254::BN254_MODULUS;
     use halo2curves_axiom::bn256::Fq2;
     use num_bigint_dig::BigUint;
-    use p3_baby_bear::BabyBear;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::Fp2;
 

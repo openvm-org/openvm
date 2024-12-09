@@ -28,6 +28,7 @@ eyre = { workspace = true }
 num-integer = { workspace = true }
 
 [dev-dependencies]
+ax-stark-sdk = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }

@@ -12,9 +12,8 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    utils::to_field_vec,
+    p3_baby_bear::BabyBear, utils::to_field_vec,
 };
-use p3_baby_bear::BabyBear;
 
 use crate::{
     arch::VmCoreAir,

@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use rand::Rng;
 use test_log::test;
 
