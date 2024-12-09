@@ -10,10 +10,10 @@ use super::adapters::loadstore_native_adapter::{
     NativeLoadStoreAdapterAir, NativeLoadStoreAdapterChip,
 };
 
-pub type KernelLoadStoreAir<const NUM_CELLS: usize> =
-    VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, KernelLoadStoreCoreAir<NUM_CELLS>>;
-pub type KernelLoadStoreChip<F, const NUM_CELLS: usize> = VmChipWrapper<
+pub type NativeLoadStoreAir<const NUM_CELLS: usize> =
+    VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, NativeLoadStoreCoreAir<NUM_CELLS>>;
+pub type NativeLoadStoreChip<F, const NUM_CELLS: usize> = VmChipWrapper<
     F,
     NativeLoadStoreAdapterChip<F, NUM_CELLS>,
-    KernelLoadStoreCoreChip<F, NUM_CELLS>,
+    NativeLoadStoreCoreChip<F, NUM_CELLS>,
 >;
