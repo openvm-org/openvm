@@ -5,14 +5,15 @@ use axvm_algebra_guest::IntMod;
 
 use super::Group;
 
-// Multi-scalar multiplication
+/// Multi-scalar multiplication via Pippenger's algorithm
 // Reference: https://github.com/privacy-scaling-explorations/halo2curves/blob/8771fe5a5d54fc03e74dbc8915db5dad3ab46a83/src/msm.rs#L335
+// FIXME[jpw]: there are many memcpy in this function
 pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
     for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
 {
     let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes()).collect();
-    let mut acc = EcPoint::identity();
+    let mut acc = EcPoint::IDENTITY;
 
     // c: window size. Will group scalars into c-bit windows
     let c = if bases.len() < 4 {
@@ -41,7 +42,7 @@ where
             .position(|v| *v != 0)
             .unwrap_or(field_byte_size);
     if max_byte_size == 0 {
-        return EcPoint::identity();
+        return EcPoint::IDENTITY;
     }
     let number_of_windows = max_byte_size * 8_usize / c + 1;
 
@@ -108,7 +109,7 @@ where
         // e.g. 3a + 2b + 1c = a +
         //                    (a) + b +
         //                    ((a) + b) + c
-        let mut running_sum = EcPoint::identity();
+        let mut running_sum = EcPoint::IDENTITY;
         for exp in buckets.into_iter().rev() {
             running_sum = exp.add(running_sum);
             acc = acc.add(&running_sum);

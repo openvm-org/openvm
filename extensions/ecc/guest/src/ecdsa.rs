@@ -5,7 +5,6 @@ use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
 use elliptic_curve::PrimeCurve;
 
 use crate::{
-    msm,
     weierstrass::{IntrinsicCurve, WeierstrassPoint},
     CyclicGroup, Group,
 };
@@ -90,7 +89,7 @@ where
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
-        let point = msm(&[neg_u1, u2], &[NEG_G, R]);
+        let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
         let public_key = PublicKey { point };
 
         VerifyingKey { inner: public_key }
@@ -128,7 +127,7 @@ where
         let G = C::Point::GENERATOR;
         // public key
         let Q = self.inner.point;
-        let R = msm(&[u1, u2], &[G, Q]);
+        let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
         if R.is_identity() {
             return Err(Error::new());
         }
