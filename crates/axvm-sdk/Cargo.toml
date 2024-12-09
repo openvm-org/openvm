@@ -41,6 +41,7 @@ async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 
+[dev-dependencies]
 axvm-sdk-example-test = { path = "example" }
 
 [features]

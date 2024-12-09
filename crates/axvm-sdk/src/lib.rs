@@ -23,10 +23,15 @@ use axvm_native_recursion::{
     halo2::{verifier::Halo2VerifierProvingKey, EvmProof},
     types::InnerConfig,
 };
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler, FromElf};
+use axvm_transpiler::{
+    axvm_platform::memory::MEM_SIZE,
+    elf::Elf,
+    transpiler::{Transpiler, TranspilerError},
+    FromElf,
+};
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
-use eyre::Result;
+use eyre::{bail, Result};
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
 use prover::{generate_leaf_committed_exe, StarkProver};
@@ -52,7 +57,7 @@ pub struct Sdk;
 impl Sdk {
     pub fn build<P: AsRef<Path>>(&self, guest_opts: GuestOptions, pkg_dir: P) -> Result<Elf> {
         if guest_opts.use_docker.is_some() {
-            todo!("docker build is not supported yet");
+            bail!("docker build is not supported yet");
         }
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = get_target_dir(&pkg.manifest_path);
@@ -79,7 +84,11 @@ impl Sdk {
         Elf::decode(&data, MEM_SIZE as u32)
     }
 
-    pub fn transpile(&self, elf: Elf, transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {
+    pub fn transpile(
+        &self,
+        elf: Elf,
+        transpiler: Transpiler<F>,
+    ) -> Result<AxVmExe<F>, TranspilerError> {
         AxVmExe::from_elf(elf, transpiler)
     }
 
