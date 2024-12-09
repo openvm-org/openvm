@@ -6,12 +6,7 @@ edition.workspace = true
 description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
 
 [dependencies]
-p3-air = { workspace = true }
 p3-baby-bear = { workspace = true, optional = true }
-p3-field = { workspace = true }
-p3-matrix = { workspace = true }
-p3-maybe-rayon = { workspace = true }
-p3-util = { workspace = true }
 
 ax-stark-backend = { workspace = true }
 ax-circuit-derive = { workspace = true }
@@ -26,7 +21,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 p3-baby-bear = { workspace = true }
-p3-challenger = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
 p3-goldilocks = { workspace = true }

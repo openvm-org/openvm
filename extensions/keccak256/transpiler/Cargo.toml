@@ -9,7 +9,6 @@ description = "Transpiler extension for Keccak256"
 ax-stark-backend = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
-p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 axvm-keccak256-guest = { workspace = true }
 axvm-instructions-derive = { workspace = true }
