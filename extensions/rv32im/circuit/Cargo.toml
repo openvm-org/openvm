@@ -7,6 +7,7 @@ description = "axVM circuit extension for RISC-V 32-bit IM instruction set"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
+ax-stark-sdk = { workspace = true, optional = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 axvm-circuit = { workspace = true }
@@ -36,7 +37,7 @@ axvm-circuit = { workspace = true, features = ["test-utils"] }
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["axvm-circuit/parallel"]
-test-utils = ["axvm-circuit/test-utils"]
+test-utils = ["axvm-circuit/test-utils", "dep:ax-stark-sdk"]
 # performance features:
 mimalloc = ["axvm-circuit/mimalloc"]
 jemalloc = ["axvm-circuit/jemalloc"]
