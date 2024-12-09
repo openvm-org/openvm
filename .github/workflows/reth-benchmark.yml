@@ -48,7 +48,7 @@ on:
       mode:
         type: string
         required: false
-        description: Running mode: execute, prove, or prove-e2e
+        description: Running mode, one of execute, prove, or prove-e2e
         default: prove
       collect_metrics:
         type: boolean
