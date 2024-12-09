@@ -13,9 +13,9 @@ use axvm_native_compiler::{
     ir::{Config, DslIr, TracedVec, Witness},
 };
 use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
-use p3_field::extension::BinomialExtensionField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
+use ax_stark_backend::p3_field::extension::BinomialExtensionField;
 use serde::{
     de,
     de::{MapAccess, Visitor},

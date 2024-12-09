@@ -6,7 +6,7 @@ use axvm_instructions::{
     UsizeOpcode,
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode;
-use p3_field::{ExtensionField, PrimeField32, PrimeField64};
+use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use serde::{Deserialize, Serialize};
 
 use crate::{

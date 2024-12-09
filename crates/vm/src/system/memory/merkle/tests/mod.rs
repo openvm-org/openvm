@@ -4,15 +4,17 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
 };
 
-use ax_stark_backend::interaction::InteractionType;
+use ax_stark_backend::{
+    interaction::InteractionType,
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+};
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use rand::RngCore;
 
 use super::DirectCompressionBus;

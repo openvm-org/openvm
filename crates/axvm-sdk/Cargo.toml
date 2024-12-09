@@ -26,8 +26,6 @@ axvm-rv32im-transpiler = { workspace = true }
 axvm-transpiler = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-field = { workspace = true }
 axvm-circuit = { workspace = true }
 
 bincode = { workspace = true }

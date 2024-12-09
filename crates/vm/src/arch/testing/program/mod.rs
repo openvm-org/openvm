@@ -3,13 +3,13 @@ use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 use air::ProgramDummyAir;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::instruction::Instruction;
-use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     arch::ExecutionState,

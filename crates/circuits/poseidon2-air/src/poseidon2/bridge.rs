@@ -1,5 +1,5 @@
 use ax_stark_backend::interaction::InteractionBuilder;
-use p3_field::Field;
+use ax_stark_backend::p3_field::Field;
 
 use super::columns::Poseidon2IoCols;
 use crate::poseidon2::Poseidon2Air;

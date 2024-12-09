@@ -8,7 +8,7 @@ use axvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, RType};
 use strum::IntoEnumIterator;
 

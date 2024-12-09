@@ -1,4 +1,4 @@
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 
 use super::{Array, Builder, Config, DslIr, Ext, Felt, Usize, Var};
 

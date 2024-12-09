@@ -1,7 +1,7 @@
 use alloc::{collections::BTreeMap, format};
 use core::fmt;
 
-use p3_field::{ExtensionField, PrimeField32};
+use ax_stark_backend::p3_field::{ExtensionField, PrimeField32};
 
 use super::A0;
 

@@ -1,14 +1,11 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::rap::AnyRap;
+use ax_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap};
 use ax_stark_sdk::{
-    config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use list::ListChip;
-use p3_baby_bear::BabyBear;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
 use crate::range::{bus::RangeCheckBus, RangeCheckerChip};

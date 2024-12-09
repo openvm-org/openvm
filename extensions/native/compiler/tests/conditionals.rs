@@ -1,7 +1,7 @@
 use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{asm::AsmBuilder, ir::Var};
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

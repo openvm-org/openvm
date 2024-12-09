@@ -1,6 +1,8 @@
-use ax_stark_backend::interaction::InteractionBuilder;
-use p3_air::AirBuilder;
-use p3_field::{AbstractField, Field};
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::AirBuilder,
+    p3_field::{AbstractField, Field},
+};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},

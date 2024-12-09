@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilderWithPublicValues},
+    p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{AnyRap, PartitionedBaseAir},
     utils::disable_debug_builder,
@@ -9,12 +12,8 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    utils::to_field_vec,
+    p3_baby_bear::BabyBear, utils::to_field_vec,
 };
-use p3_air::{Air, AirBuilderWithPublicValues};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::VmCoreAir,

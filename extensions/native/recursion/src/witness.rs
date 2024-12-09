@@ -1,17 +1,20 @@
 use core::borrow::Borrow;
 
-use ax_stark_backend::prover::{
-    opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
-    types::{AirProofData, Commitments, Proof},
+use ax_stark_backend::{
+    p3_util::log2_strict_usize,
+    prover::{
+        opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
+        types::{AirProofData, Commitments, Proof},
+    },
 };
-use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
+use ax_stark_sdk::{
+    config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, p3_baby_bear::BabyBear,
+    p3_bn254_fr::Bn254Fr,
+};
 use axvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
-use p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
-use p3_util::log2_strict_usize;
 
 use crate::{
     config::outer::{OuterChallenge, OuterConfig, OuterVal},

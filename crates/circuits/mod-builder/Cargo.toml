@@ -5,12 +5,6 @@ edition = "2021"
 description = "Modular arithmetic framework for building axVM circuits."
 
 [dependencies]
-p3-air = { workspace = true }
-p3-field = { workspace = true }
-p3-matrix = { workspace = true }
-p3-util = { workspace = true }
-p3-baby-bear = { workspace = true }
-
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }

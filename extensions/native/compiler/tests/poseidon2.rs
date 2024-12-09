@@ -5,8 +5,8 @@ use axvm_native_compiler::{
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};
 

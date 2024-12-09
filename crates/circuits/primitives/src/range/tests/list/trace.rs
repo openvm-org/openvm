@@ -1,5 +1,4 @@
-use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
+use ax_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{columns::NUM_LIST_COLS, ListChip};
 

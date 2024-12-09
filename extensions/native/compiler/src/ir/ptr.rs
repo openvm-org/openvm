@@ -1,6 +1,6 @@
 use core::ops::{Add, Sub};
 
-use p3_field::{Field, PrimeField};
+use ax_stark_backend::p3_field::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{Builder, Config, DslIr, MemIndex, MemVariable, RVar, SymbolicVar, Var, Variable};

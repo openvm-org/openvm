@@ -29,8 +29,6 @@ axvm-rv32im-circuit.workspace = true
 axvm-rv32im-transpiler.workspace = true
 
 clap = { version = "4.5.9", features = ["derive", "env"] }
-p3-field.workspace = true
-p3-baby-bear.workspace = true
 eyre.workspace = true
 tempfile.workspace = true
 metrics.workspace = true

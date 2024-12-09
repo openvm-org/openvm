@@ -16,7 +16,7 @@ use axvm_transpiler::{
     axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
 };
 use eyre::Result;
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use test_case::test_case;
 
 use crate::utils::{build_example_program, build_example_program_with_features};

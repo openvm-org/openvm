@@ -13,8 +13,8 @@ use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::AbstractField;
 
 use super::{EcAddNeChip, EcDoubleChip};
 

@@ -1,7 +1,9 @@
+use ax_stark_backend::{
+    p3_commit::TwoAdicMultiplicativeCoset,
+    p3_field::{AbstractField, TwoAdicField},
+};
 use ax_stark_sdk::config::FriParameters;
 use axvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
-use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{AbstractField, TwoAdicField};
 
 use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 

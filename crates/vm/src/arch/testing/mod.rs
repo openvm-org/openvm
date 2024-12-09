@@ -4,6 +4,11 @@ use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeChe
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
+    p3_field::PrimeField32,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     prover::types::AirProofInput,
     verifier::VerificationError,
     Chip,
@@ -18,12 +23,7 @@ use ax_stark_sdk::{
 };
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
-use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

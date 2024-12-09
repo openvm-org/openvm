@@ -4,13 +4,13 @@ use ax_stark_sdk::{
         prover::types::Proof,
     },
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    p3_baby_bear::BabyBear,
 };
 use axvm_circuit::{
     prover::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
 };
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use derivative::Derivative;
-use p3_baby_bear::BabyBear;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 

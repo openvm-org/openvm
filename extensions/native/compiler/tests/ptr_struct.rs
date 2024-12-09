@@ -5,8 +5,8 @@ use axvm_native_compiler::{
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
 use axvm_native_compiler_derive::DslVariable;
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 use rand::{thread_rng, Rng};
 
 #[derive(DslVariable, Clone, Debug)]

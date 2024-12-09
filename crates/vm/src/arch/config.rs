@@ -3,7 +3,7 @@ use ax_stark_backend::ChipUsageGetter;
 use axvm_circuit::system::memory::MemoryTraceHeights;
 use axvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use derive_new::new;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{

@@ -1,9 +1,11 @@
+use ax_stark_backend::{
+    p3_challenger::{CanObserve, CanSample, FieldChallenger},
+    p3_field::{extension::BinomialExtensionField, AbstractField},
+};
 use ax_stark_sdk::config::baby_bear_poseidon2_outer::outer_perm;
 use axvm_native_compiler::ir::{Builder, SymbolicExt, Witness};
-use p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
-use p3_challenger::{CanObserve, CanSample, FieldChallenger};
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 use p3_symmetric::Hash;
 
 use crate::{

@@ -35,9 +35,6 @@ axvm-pairing-guest = { workspace = true, features = [
 axvm-instructions = { workspace = true }
 axvm-platform = { workspace = true }
 
-p3-baby-bear.workspace = true
-p3-field.workspace = true
-
 eyre.workspace = true
 test-case.workspace = true
 tempfile.workspace = true

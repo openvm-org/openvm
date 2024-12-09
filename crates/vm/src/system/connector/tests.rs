@@ -17,8 +17,8 @@ use ax_stark_sdk::{
 use axvm_instructions::{
     instruction::Instruction, program::Program, AxVmOpcode, SystemOpcode::TERMINATE,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::AbstractField;
 
 use super::VmConnectorPvs;
 use crate::{

@@ -4,12 +4,12 @@ use air::{DummyMemoryInteractionCols, MemoryDummyAir};
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::system::memory::{

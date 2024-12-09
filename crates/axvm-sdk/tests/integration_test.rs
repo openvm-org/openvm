@@ -7,6 +7,7 @@ use ax_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkEngine, StarkFriEngine},
+    p3_baby_bear::BabyBear,
 };
 use axvm_build::GuestOptions;
 use axvm_circuit::{
@@ -33,7 +34,6 @@ use axvm_sdk::{
     Sdk, StdIn,
 };
 use axvm_transpiler::transpiler::Transpiler;
-use p3_baby_bear::BabyBear;
 use utils::{assert_agg_config_eq, assert_agg_pk_eq};
 
 mod utils;

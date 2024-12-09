@@ -1,7 +1,6 @@
-use ax_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_field::AbstractField;
 
 use super::{
     check_carry_to_zero::{CheckCarryToZeroCols, CheckCarryToZeroSubAir},

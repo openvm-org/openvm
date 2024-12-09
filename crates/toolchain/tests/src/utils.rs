@@ -29,6 +29,14 @@ pub fn build_example_program_with_features<S: AsRef<str>>(
     features: impl IntoIterator<Item = S>,
 ) -> Result<Elf> {
     let manifest_dir = get_programs_dir();
+    build_example_program_at_path_with_features(manifest_dir, example_name, features)
+}
+
+pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
+    manifest_dir: PathBuf,
+    example_name: &str,
+    features: impl IntoIterator<Item = S>,
+) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features

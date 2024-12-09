@@ -6,11 +6,11 @@ use std::{
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rustc_hash::FxHashSet;
 
 use super::merkle::DirectCompressionBus;

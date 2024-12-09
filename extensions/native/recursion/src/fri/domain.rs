@@ -1,6 +1,8 @@
+use ax_stark_backend::{
+    p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset},
+    p3_field::{AbstractField, Field, TwoAdicField},
+};
 use axvm_native_compiler::prelude::*;
-use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
-use p3_field::{AbstractField, Field, TwoAdicField};
 
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
@@ -165,15 +167,17 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use ax_stark_backend::config::{Domain, StarkGenericConfig, Val};
+    use ax_stark_backend::{
+        config::{Domain, StarkGenericConfig, Val},
+        p3_commit::{Pcs, PolynomialSpace},
+        p3_field::PrimeField,
+    };
     use ax_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };
     use axvm_native_circuit::execute_program;
     use axvm_native_compiler::asm::AsmBuilder;
-    use p3_commit::{Pcs, PolynomialSpace};
-    use p3_field::PrimeField;
     use rand::{thread_rng, Rng};
 
     use super::*;

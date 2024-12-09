@@ -2,6 +2,9 @@ use std::cmp::Reverse;
 
 use ax_stark_backend::{
     keygen::types::TraceWidth,
+    p3_commit::ExtensionMmcs,
+    p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field},
+    p3_util::log2_strict_usize,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{AirProofData, Commitments, Proof},
@@ -12,13 +15,10 @@ use axvm_native_compiler::ir::{
     unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
-use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
-use p3_commit::ExtensionMmcs;
-use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
+use ax_stark_sdk::p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use p3_util::log2_strict_usize;
 
 use crate::{
     types::{InnerConfig, VerifierInput},
@@ -468,12 +468,12 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
 
 #[cfg(test)]
 mod test {
+    use ax_stark_backend::p3_field::AbstractField;
     use axvm_native_circuit::execute_program;
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
     };
-    use p3_field::AbstractField;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 

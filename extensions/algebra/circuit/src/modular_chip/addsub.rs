@@ -17,8 +17,8 @@ use axvm_circuit::arch::{
 use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_air::BaseAir;
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]

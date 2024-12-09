@@ -1,10 +1,10 @@
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::Field,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir};
-use p3_field::Field;
-use p3_matrix::Matrix;
 
 use super::ProgramTester;
 use crate::system::program::ProgramBus;

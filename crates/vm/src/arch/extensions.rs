@@ -9,6 +9,8 @@ use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
     Chip, ChipUsageGetter,
@@ -20,8 +22,6 @@ use axvm_instructions::{
 };
 use derive_more::derive::From;
 use getset::Getters;
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};

@@ -14,7 +14,7 @@ use axvm_circuit_derive::InstructionExecutor;
 use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output

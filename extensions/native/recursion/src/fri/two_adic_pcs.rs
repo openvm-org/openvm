@@ -1,6 +1,8 @@
+use ax_stark_backend::{
+    p3_commit::TwoAdicMultiplicativeCoset,
+    p3_field::{AbstractField, TwoAdicField},
+};
 use axvm_native_compiler::prelude::*;
-use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
 
 use super::{
@@ -312,7 +314,12 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use ax_stark_backend::config::{StarkGenericConfig, Val};
+    use ax_stark_backend::{
+        config::{StarkGenericConfig, Val},
+        p3_challenger::{CanObserve, FieldChallenger},
+        p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
+        p3_matrix::dense::RowMajorMatrix,
+    };
     use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use axvm_circuit::arch::instructions::program::Program;
     use axvm_native_compiler::{
@@ -320,10 +327,7 @@ pub mod tests {
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use itertools::Itertools;
-    use p3_baby_bear::BabyBear;
-    use p3_challenger::{CanObserve, FieldChallenger};
-    use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_matrix::dense::RowMajorMatrix;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::rngs::OsRng;
 
     use crate::{

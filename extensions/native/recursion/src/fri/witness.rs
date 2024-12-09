@@ -1,5 +1,5 @@
 use axvm_native_compiler::ir::{Builder, Witness};
-use p3_bn254_fr::Bn254Fr;
+use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 
 use super::types::BatchOpeningVariable;
 use crate::{

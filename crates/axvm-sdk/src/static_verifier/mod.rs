@@ -20,7 +20,7 @@ use axvm_native_recursion::{
     utils::const_fri_config,
     witness::Witnessable,
 };
-use p3_baby_bear::BabyBear;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     keygen::RootVerifierProvingKey,

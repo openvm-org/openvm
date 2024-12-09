@@ -6,7 +6,7 @@ use axvm_circuit::arch::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 use super::*;
 

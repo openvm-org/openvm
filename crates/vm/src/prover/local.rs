@@ -7,7 +7,7 @@ use ax_stark_backend::{
     Chip,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{

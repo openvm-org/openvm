@@ -1,5 +1,10 @@
 use ark_ff::PrimeField as _;
-use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_backend::{
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
 use ax_stark_sdk::{
     any_rap_arc_vec,
     config::{
@@ -8,11 +13,9 @@ use ax_stark_sdk::{
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkEngine,
+    p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters, Poseidon2BabyBear},
     utils::create_seeded_rng,
 };
-use p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters, Poseidon2BabyBear};
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
 use p3_monty_31::InternalLayerBaseParameters;
 use p3_poseidon2::{ExternalLayerConstants, Poseidon2};
 use p3_symmetric::Permutation;

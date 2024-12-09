@@ -1,9 +1,8 @@
 use std::{borrow::Cow, cmp::max, collections::VecDeque, iter::repeat, ops::Neg, str::FromStr};
 
-use ax_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeField64};
 use num_bigint_dig::{algorithms::mod_inverse, BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, Num, One, ToPrimitive, Zero};
-use p3_field::PrimeField64;
 
 use crate::var_range::VariableRangeCheckerBus;
 

@@ -1,6 +1,8 @@
+use ax_stark_backend::{
+    p3_field::{AbstractField, Field},
+    p3_matrix::dense::RowMajorMatrix,
+};
 use itertools::izip;
-use p3_field::{AbstractField, Field};
-use p3_matrix::dense::RowMajorMatrix;
 
 use super::{
     air::SBOX_DEGREE,

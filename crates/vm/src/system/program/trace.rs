@@ -3,6 +3,9 @@ use std::{borrow::BorrowMut, sync::Arc};
 use ax_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
+    p3_field::{Field, PrimeField64},
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     prover::{
         helper::AirProofInputTestHelper,
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
@@ -11,9 +14,6 @@ use ax_stark_backend::{
 use axvm_instructions::{exe::AxVmExe, program::Program, AxVmOpcode, SystemOpcode};
 use derivative::Derivative;
 use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};

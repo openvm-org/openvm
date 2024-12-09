@@ -7,7 +7,7 @@ use axvm_algebra_transpiler::Fp2Opcode;
 use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use axvm_circuit_derive::InstructionExecutor;
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp2;
 
@@ -95,8 +95,8 @@ mod tests {
     use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
+    use ax_stark_backend::p3_field::AbstractField;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::Fp2AddSubChip;

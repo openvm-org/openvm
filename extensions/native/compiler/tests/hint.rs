@@ -3,8 +3,8 @@ use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Felt, RVar, Var},
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField, Field};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

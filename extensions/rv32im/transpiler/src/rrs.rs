@@ -5,7 +5,7 @@ use axvm_transpiler::util::{
     from_b_type, from_i_type, from_i_type_shamt, from_j_type, from_load, from_r_type, from_s_type,
     from_u_type, nop,
 };
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     InstructionProcessor,
