@@ -9,7 +9,8 @@ use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
+        instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES, SystemConfig, SystemExecutor,
+        SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
@@ -38,7 +39,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::F;
 
-#[derive(Clone, Debug)]
+const DEFAULT_LEAF_BLOWUP: usize = 1;
+const DEFAULT_INTERNAL_BLOWUP: usize = 2;
+const DEFAULT_ROOT_BLOWUP: usize = 3;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {
     pub app_fri_params: FriParameters,
     pub app_vm_config: VC,
@@ -174,8 +179,48 @@ impl SdkVmConfig {
     }
 }
 
+impl Default for FullAggConfig {
+    fn default() -> Self {
+        Self {
+            agg_config: AggConfig::default(),
+            halo2_config: Halo2Config {
+                verifier_k: 24,
+                wrapper_k: None,
+            },
+        }
+    }
+}
+
+impl Default for AggConfig {
+    fn default() -> Self {
+        Self {
+            max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_LEAF_BLOWUP,
+            ),
+            internal_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_INTERNAL_BLOWUP,
+            ),
+            root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_ROOT_BLOWUP,
+            ),
+            compiler_options: Default::default(),
+        }
+    }
+}
+
 impl<VC> AppConfig<VC> {
-    pub fn new(
+    pub fn new(app_fri_params: FriParameters, app_vm_config: VC) -> Self {
+        Self {
+            app_fri_params,
+            app_vm_config,
+            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_LEAF_BLOWUP,
+            ),
+            compiler_options: Default::default(),
+        }
+    }
+    pub fn new_with_leaf_fri_params(
         app_fri_params: FriParameters,
         app_vm_config: VC,
         leaf_fri_params: FriParameters,

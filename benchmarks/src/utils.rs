@@ -9,7 +9,7 @@ use ax_stark_sdk::{
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
 use axvm_sdk::{
-    commit::commit_app_exe, config::AppConfig, keygen::AppProvingKey, prover::app::AppProver, StdIn,
+    commit::commit_app_exe, config::AppConfig, keygen::AppProvingKey, prover::AppProver, StdIn,
 };
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};

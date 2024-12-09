@@ -6,13 +6,18 @@ use axvm_native_recursion::halo2::EvmProof;
 
 use crate::{io::StdIn, keygen::AppProvingKey, NonRootCommittedExe, F, SC};
 
-pub mod agg;
-pub mod app;
-pub mod halo2;
+mod agg;
+pub use agg::*;
+mod app;
+pub use app::*;
+mod halo2;
+#[allow(unused_imports)]
+pub use halo2::*;
 mod root;
-pub mod stark;
-
 pub use root::*;
+mod stark;
+#[allow(unused_imports)]
+pub use stark::*;
 
 use crate::{
     keygen::FullAggProvingKey,

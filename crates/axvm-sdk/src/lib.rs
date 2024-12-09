@@ -58,7 +58,7 @@ pub use io::*;
 use crate::{
     config::FullAggConfig,
     keygen::FullAggProvingKey,
-    prover::{app::AppProver, ContinuationProver},
+    prover::{AppProver, ContinuationProver},
 };
 
 pub(crate) type SC = BabyBearPoseidon2Config;
