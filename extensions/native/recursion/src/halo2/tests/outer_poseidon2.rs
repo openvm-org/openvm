@@ -1,7 +1,7 @@
 use ax_stark_sdk::config::baby_bear_poseidon2_outer::outer_perm;
 use axvm_native_compiler::ir::{Builder, Felt, Var, Witness};
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
+use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 use ax_stark_backend::p3_field::AbstractField;
 use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 

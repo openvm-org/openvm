@@ -9,7 +9,7 @@ use std::{
 use axvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
+use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 use ax_stark_backend::p3_field::{ExtensionField, PrimeField};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
