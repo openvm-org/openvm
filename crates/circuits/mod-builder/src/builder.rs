@@ -17,7 +17,7 @@ use ax_stark_backend::{
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField64};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField64};
 use p3_matrix::Matrix;
 
 use super::{FieldVariable, SymbolicExpr};

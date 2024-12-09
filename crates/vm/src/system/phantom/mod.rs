@@ -17,7 +17,7 @@ use axvm_instructions::{
     SysPhantom, SystemOpcode, UsizeOpcode,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;

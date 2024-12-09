@@ -9,7 +9,7 @@ use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 use crate::system::memory::{

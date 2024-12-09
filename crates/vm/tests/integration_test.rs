@@ -48,7 +48,7 @@ use axvm_native_compiler::{
 use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use derive_more::derive::From;
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use test_log::test;
 

@@ -20,7 +20,7 @@ use axvm_instructions::{
 };
 use derive_more::derive::From;
 use getset::Getters;
-use p3_field::{AbstractField, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;

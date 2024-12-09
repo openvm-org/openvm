@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-p3-field.workspace = true
+ax-stark-backend.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
 

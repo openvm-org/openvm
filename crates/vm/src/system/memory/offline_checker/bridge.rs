@@ -7,7 +7,7 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::interaction::InteractionBuilder;
 use p3_air::AirBuilder;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 
 use super::bus::MemoryBus;
 use crate::system::memory::{

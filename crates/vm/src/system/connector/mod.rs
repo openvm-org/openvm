@@ -14,7 +14,7 @@ use ax_stark_backend::{
 };
 use axvm_instructions::UsizeOpcode;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder};
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{

@@ -2,7 +2,7 @@ use axvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-use p3_field::{AbstractField, Field};
+use ax_stark_backend::p3_field::{AbstractField, Field};
 
 use crate::{
     challenger::{
@@ -224,7 +224,7 @@ mod tests {
     };
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, CanSample};
-    use p3_field::AbstractField;
+    use ax_stark_backend::p3_field::AbstractField;
     use rand::Rng;
 
     use super::DuplexChallengerVariable;

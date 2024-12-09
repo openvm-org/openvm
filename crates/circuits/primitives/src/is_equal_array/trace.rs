@@ -1,4 +1,4 @@
-use p3_field::{Field, PrimeField};
+use ax_stark_backend::p3_field::{Field, PrimeField};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{

@@ -33,7 +33,7 @@ use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use test_case::test_case;
 
 type F = BabyBear;

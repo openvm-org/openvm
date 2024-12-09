@@ -8,7 +8,7 @@ use ax_stark_backend::{
 use derive_new::new;
 use itertools::izip;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field};
+use ax_stark_backend::p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};

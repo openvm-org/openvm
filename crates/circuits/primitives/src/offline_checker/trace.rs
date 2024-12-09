@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use p3_field::PrimeField64;
+use ax_stark_backend::p3_field::PrimeField64;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{

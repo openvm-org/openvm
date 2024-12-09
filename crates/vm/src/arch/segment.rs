@@ -8,7 +8,7 @@ use ax_stark_backend::{
 use axvm_instructions::exe::FnBound;
 use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,

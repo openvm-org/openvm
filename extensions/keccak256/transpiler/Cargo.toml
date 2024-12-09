@@ -6,6 +6,7 @@ edition.workspace = true
 description = "Transpiler extension for Keccak256"
 
 [dependencies]
+ax-stark-backend = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
 p3-field = { workspace = true }

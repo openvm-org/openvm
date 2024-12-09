@@ -17,7 +17,7 @@ use axvm_native_compiler::{
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
+use ax_stark_backend::p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
 use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 
 use crate::{

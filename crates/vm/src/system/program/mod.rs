@@ -3,7 +3,7 @@ use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use p3_field::PrimeField64;
+use ax_stark_backend::p3_field::PrimeField64;
 
 use crate::{arch::ExecutionError, system::program::trace::padding_instruction};
 

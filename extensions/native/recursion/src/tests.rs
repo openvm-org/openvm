@@ -23,7 +23,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::utils::gen_vm_program_test_proof_input;
 use axvm_native_circuit::NativeConfig;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{

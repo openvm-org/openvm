@@ -10,7 +10,7 @@ use ax_circuit_primitives::bigint::{
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, Zero};
 use p3_air::AirBuilder;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use p3_util::log2_ceil_usize;
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,

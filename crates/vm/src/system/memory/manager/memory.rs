@@ -8,7 +8,7 @@ use std::{
     fmt::Debug,
 };
 
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
 use crate::system::memory::{Equipartition, TimestampedEquipartition, TimestampedValues};
@@ -425,7 +425,7 @@ impl<F: PrimeField32> Memory<F> {
 #[cfg(test)]
 mod tests {
     use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
+    use ax_stark_backend::p3_field::AbstractField;
 
     use super::{Block, Memory};
     use crate::system::memory::{

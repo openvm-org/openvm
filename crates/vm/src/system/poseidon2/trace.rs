@@ -8,7 +8,7 @@ use ax_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use p3_air::BaseAir;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::*, Poseidon2Chip};

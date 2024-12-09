@@ -19,7 +19,7 @@ use axvm_native_compiler::{
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;

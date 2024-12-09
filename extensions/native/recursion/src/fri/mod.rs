@@ -6,7 +6,7 @@ use axvm_native_compiler::{
     prelude::MemVariable,
 };
 pub use domain::*;
-use p3_field::{AbstractField, Field, TwoAdicField};
+use ax_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{

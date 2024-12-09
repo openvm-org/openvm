@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
 
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 use rustc_hash::FxHashSet;
 

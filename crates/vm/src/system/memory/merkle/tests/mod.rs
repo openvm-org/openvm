@@ -11,7 +11,7 @@ use ax_stark_sdk::{
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use rand::RngCore;
 

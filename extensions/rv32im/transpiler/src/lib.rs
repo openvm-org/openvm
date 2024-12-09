@@ -12,7 +12,7 @@ use axvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension,
 };
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rrs::InstructionTranspiler;
 use rrs_lib::{
     instruction_formats::{IType, RType},

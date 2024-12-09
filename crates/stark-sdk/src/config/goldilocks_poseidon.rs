@@ -4,7 +4,7 @@ use ax_stark_backend::{config::StarkConfig, interaction::stark_log_up::StarkLogU
 use p3_challenger::DuplexChallenger;
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
-use p3_field::{extension::BinomialExtensionField, Field};
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, Field};
 use p3_fri::{FriConfig, TwoAdicFriPcs};
 use p3_goldilocks::{Goldilocks, MdsMatrixGoldilocks};
 use p3_merkle_tree::MerkleTreeMmcs;

@@ -6,7 +6,7 @@ use axvm_instructions::{
 };
 pub use axvm_platform;
 use elf::Elf;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use transpiler::Transpiler;
 
 use crate::util::elf_memory_image_to_axvm_memory_image;

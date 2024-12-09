@@ -7,7 +7,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::arch::{ExecutionBus, ExecutionState};

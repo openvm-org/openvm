@@ -1,5 +1,5 @@
 use axvm_circuit::arch::instructions::program::Program;
-use p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 
 use super::{config::AsmConfig, AsmCompiler};
 use crate::{

@@ -1,7 +1,7 @@
 use std::iter;
 
 use ax_stark_backend::interaction::InteractionBuilder;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramBus(pub usize);

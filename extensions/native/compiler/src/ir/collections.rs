@@ -2,7 +2,7 @@ use alloc::rc::Rc;
 use std::cell::RefCell;
 
 use itertools::Itertools;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{

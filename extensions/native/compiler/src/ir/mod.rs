@@ -1,7 +1,7 @@
 pub use builder::*;
 pub use collections::*;
 pub use instructions::*;
-use p3_field::{ExtensionField, PrimeField, TwoAdicField};
+use ax_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
 pub use poseidon::{DIGEST_SIZE, PERMUTATION_WIDTH};
 pub use ptr::*;
 pub use ref_ptr::*;

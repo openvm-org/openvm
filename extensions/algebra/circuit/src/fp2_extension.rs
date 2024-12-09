@@ -15,7 +15,7 @@ use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};

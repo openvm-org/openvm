@@ -6,7 +6,7 @@ use axvm_native_compiler::{
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;

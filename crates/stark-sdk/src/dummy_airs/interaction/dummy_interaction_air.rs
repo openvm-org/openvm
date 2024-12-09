@@ -16,7 +16,7 @@ use ax_stark_backend::{
 };
 use itertools::izip;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
+use ax_stark_backend::p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 pub struct DummyInteractionCols;

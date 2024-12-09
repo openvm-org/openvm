@@ -19,7 +19,7 @@ use ax_stark_sdk::{
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use p3_matrix::{
     dense::{DenseMatrix, RowMajorMatrix},
     Matrix,

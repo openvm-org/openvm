@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_field::{AbstractField, Field, PrimeField32},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -11,7 +12,6 @@ use ax_stark_sdk::{
 };
 use derive_new::new;
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 

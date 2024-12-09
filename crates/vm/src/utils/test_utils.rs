@@ -1,6 +1,6 @@
 use std::array;
 
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
 pub fn i32_to_f<F: PrimeField32>(val: i32) -> F {

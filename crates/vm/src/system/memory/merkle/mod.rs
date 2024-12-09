@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
 use super::manager::dimensions::MemoryDimensions;

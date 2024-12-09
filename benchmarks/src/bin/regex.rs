@@ -21,7 +21,7 @@ use axvm_sdk::StdIn;
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {

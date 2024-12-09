@@ -6,7 +6,7 @@ use axvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };
 use p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{

@@ -10,7 +10,7 @@ use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{

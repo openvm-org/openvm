@@ -11,7 +11,7 @@ use ax_stark_backend::{
 use axvm_instructions::{exe::AxVmExe, program::Program, AxVmOpcode, SystemOpcode};
 use derivative::Derivative;
 use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
+use ax_stark_backend::p3_field::{Field, PrimeField64};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use serde::{Deserialize, Serialize};

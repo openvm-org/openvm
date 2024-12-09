@@ -2,10 +2,10 @@ use std::borrow::Borrow;
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_field::{AbstractField, Field},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::columns::{ListCols, NUM_LIST_COLS};

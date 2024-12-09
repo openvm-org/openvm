@@ -33,7 +33,7 @@ use axvm_rv32im_transpiler::{
 use axvm_transpiler::transpiler::Transpiler;
 use bon::Builder;
 use derive_more::derive::From;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use crate::F;

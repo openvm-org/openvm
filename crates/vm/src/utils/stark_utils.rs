@@ -14,7 +14,7 @@ use ax_stark_sdk::{
 };
 use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 use crate::{
     arch::{

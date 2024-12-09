@@ -14,7 +14,7 @@ use axvm_native_compiler::ir::{
 use itertools::Itertools;
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_commit::ExtensionMmcs;
-use p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
@@ -473,7 +473,7 @@ mod test {
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
     };
-    use p3_field::AbstractField;
+    use ax_stark_backend::p3_field::AbstractField;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 

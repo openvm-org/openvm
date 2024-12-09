@@ -5,7 +5,7 @@ use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant,
 };
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use thiserror::Error;
 
 use super::Streams;

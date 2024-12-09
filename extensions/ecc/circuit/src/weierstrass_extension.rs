@@ -18,7 +18,7 @@ use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};

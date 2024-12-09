@@ -24,7 +24,7 @@ use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use rand::Rng;
 
 use super::{

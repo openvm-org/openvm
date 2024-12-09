@@ -6,7 +6,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use p3_matrix::Matrix;
 
 use super::{air::FibonacciAir, trace::generate_trace_rows};

@@ -10,7 +10,7 @@ use ax_stark_backend::{
     Chip,
 };
 use axvm_instructions::exe::AxVmExe;
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};

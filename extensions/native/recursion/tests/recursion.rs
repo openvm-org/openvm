@@ -9,7 +9,7 @@ use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use axvm_native_recursion::testing_utils::inner::run_recursive_test;
 use p3_baby_bear::BabyBear;
 use p3_commit::PolynomialSpace;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;

@@ -9,7 +9,7 @@ use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rustc_hash::FxHashSet;
 

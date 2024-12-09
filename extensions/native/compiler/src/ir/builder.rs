@@ -1,7 +1,7 @@
 use std::{iter::Zip, vec::IntoIter};
 
 use backtrace::Backtrace;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use super::{

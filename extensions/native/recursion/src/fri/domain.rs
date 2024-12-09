@@ -1,6 +1,6 @@
 use axvm_native_compiler::prelude::*;
 use p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset};
-use p3_field::{AbstractField, Field, TwoAdicField};
+use ax_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
@@ -173,7 +173,7 @@ pub(crate) mod tests {
     use axvm_native_circuit::execute_program;
     use axvm_native_compiler::asm::AsmBuilder;
     use p3_commit::{Pcs, PolynomialSpace};
-    use p3_field::PrimeField;
+    use ax_stark_backend::p3_field::PrimeField;
     use rand::{thread_rng, Rng};
 
     use super::*;

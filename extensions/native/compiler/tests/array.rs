@@ -6,7 +6,7 @@ use axvm_native_compiler::{
 };
 use axvm_native_compiler_derive::DslVariable;
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {

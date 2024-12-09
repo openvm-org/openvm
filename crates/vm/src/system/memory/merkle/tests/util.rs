@@ -2,7 +2,7 @@ use std::array::from_fn;
 
 use ax_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
-use p3_field::Field;
+use ax_stark_backend::p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::arch::{

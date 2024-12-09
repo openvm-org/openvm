@@ -7,11 +7,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 p3-bn254-fr = { workspace = true }
 zkhash = { workspace = true }
 
+ax-stark-backend = { workspace = true }
 axvm-native-compiler-derive = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-instructions-derive = { workspace = true }

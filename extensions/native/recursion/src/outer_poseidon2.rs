@@ -1,6 +1,6 @@
 use axvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
 use itertools::Itertools;
-use p3_field::{AbstractField, Field};
+use ax_stark_backend::p3_field::{AbstractField, Field};
 
 use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};
 

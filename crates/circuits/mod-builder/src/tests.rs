@@ -7,7 +7,7 @@ use ax_stark_sdk::{
 use num_bigint_dig::BigUint;
 use p3_air::BaseAir;
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr};

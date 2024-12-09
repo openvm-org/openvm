@@ -1,6 +1,6 @@
 use axvm_native_compiler::prelude::*;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{AbstractField, TwoAdicField};
+use ax_stark_backend::p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
 
 use super::{

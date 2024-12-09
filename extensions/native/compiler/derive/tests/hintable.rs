@@ -1,7 +1,7 @@
 use axvm_native_compiler::prelude::*;
 use axvm_native_compiler_derive::Hintable;
 use axvm_native_recursion::{hints::InnerVal, types::InnerConfig};
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 
 #[derive(Hintable)]
 struct TestStruct {

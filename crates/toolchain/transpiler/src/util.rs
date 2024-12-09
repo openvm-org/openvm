@@ -4,7 +4,7 @@ use axvm_instructions::{
     exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
     utils::isize_to_field, AxVmOpcode, SystemOpcode,
 };
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 
 fn i12_to_u24(imm: i32) -> u32 {

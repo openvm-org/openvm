@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 use ax_stark_sdk::p3_baby_bear;
 use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{
@@ -6,7 +6,6 @@ use axvm_native_compiler::{
     ir::{Felt, Var},
 };
 use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {

@@ -1,5 +1,5 @@
 use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
-use p3_field::AbstractField;
+use ax_stark_backend::p3_field::AbstractField;
 
 // Represents a bus for (x, bits) where either (x, bits) = (0, 0) or
 // x is in [0, 2^bits) and bits is in [1, range_max_bits]

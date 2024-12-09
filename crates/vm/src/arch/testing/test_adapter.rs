@@ -8,7 +8,7 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::interaction::InteractionBuilder;
 use axvm_instructions::instruction::Instruction;
 use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{

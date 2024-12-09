@@ -4,7 +4,7 @@ use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use p3_baby_bear::BabyBear;
-use p3_field::{
+use ax_stark_backend::p3_field::{
     extension::{BinomialExtensionField, BinomiallyExtendable},
     AbstractExtensionField, AbstractField, Field, PrimeField32, PrimeField64,
 };

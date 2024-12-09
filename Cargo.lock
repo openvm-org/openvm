@@ -625,11 +625,11 @@ dependencies = [
 name = "axvm-algebra-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-algebra-guest",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-transpiler",
- "p3-field",
  "rrs-lib",
  "strum",
  "strum_macros",
@@ -721,12 +721,12 @@ dependencies = [
 name = "axvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-bigint-guest",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-rv32im-transpiler",
  "axvm-transpiler",
- "p3-field",
  "rrs-lib",
  "strum",
 ]
@@ -889,11 +889,11 @@ dependencies = [
 name = "axvm-ecc-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-ecc-guest",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-transpiler",
- "p3-field",
  "rrs-lib",
  "strum",
 ]
@@ -970,6 +970,7 @@ dependencies = [
 name = "axvm-keccak256-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-keccak256-guest",
@@ -1020,6 +1021,7 @@ name = "axvm-native-compiler"
 version = "0.1.0"
 dependencies = [
  "ax-circuit-primitives",
+ "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-circuit",
  "axvm-instructions",
@@ -1041,7 +1043,6 @@ dependencies = [
  "p3-bn254-fr",
  "p3-challenger",
  "p3-dft",
- "p3-field",
  "p3-merkle-tree",
  "p3-symmetric",
  "rand",
@@ -1060,9 +1061,9 @@ dependencies = [
 name = "axvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-native-compiler",
  "axvm-native-recursion",
- "p3-field",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
@@ -1162,11 +1163,11 @@ dependencies = [
 name = "axvm-pairing-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-pairing-guest",
  "axvm-transpiler",
- "p3-field",
  "rrs-lib",
  "strum",
 ]
@@ -1245,11 +1246,11 @@ dependencies = [
 name = "axvm-rv32im-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "axvm-instructions",
  "axvm-instructions-derive",
  "axvm-rv32im-guest",
  "axvm-transpiler",
- "p3-field",
  "rrs-lib",
  "strum",
  "tracing",
@@ -1334,6 +1335,7 @@ dependencies = [
 name = "axvm-transpiler"
 version = "0.1.0"
 dependencies = [
+ "ax-stark-backend",
  "ax-stark-sdk",
  "axvm-algebra-transpiler",
  "axvm-build",
@@ -1346,7 +1348,6 @@ dependencies = [
  "eyre",
  "num-bigint-dig",
  "p3-baby-bear",
- "p3-field",
  "rrs-lib",
  "serde",
  "strum",
