@@ -10,6 +10,7 @@ use axvm_circuit::{
         local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
     },
 };
+use tracing::info_span;
 
 use crate::{NonRootCommittedExe, StdIn, F, SC};
 
@@ -41,7 +42,12 @@ impl<VC> AppProver<VC> {
             self.app_prover.committed_exe.exe.clone(),
             input.clone(),
         );
-        ContinuationVmProver::prove(&self.app_prover, input)
+        info_span!("app proof", group = "app_proof").in_scope(|| {
+            #[cfg(feature = "bench-metrics")]
+            metrics::counter!("fri.log_blowup")
+                .absolute(self.app_prover.pk.fri_params.log_blowup as u64);
+            ContinuationVmProver::prove(&self.app_prover, input)
+        })
     }
 }
 
