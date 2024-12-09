@@ -207,6 +207,7 @@ static_assertions = "1.1.0"
 async-trait = "0.1.83"
 getset = "0.1.3"
 rrs-lib = "0.1.0"
+bson = "2.13.0"
 
 # cryptography, default-features = false for no_std
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }

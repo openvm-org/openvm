@@ -18,15 +18,14 @@ axvm-rv32-adapters = { workspace = true }
 axvm-algebra-transpiler = { workspace = true }
 
 itertools = { workspace = true }
-hex-literal = { workspace = true }
-num-bigint-dig = { workspace = true }
+num-bigint-dig = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
-once_cell = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
 derive_more = { workspace = true, features = ["from"] }
 strum = { workspace = true }
 derive-new = { workspace = true }
+serde.workspace = true
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }

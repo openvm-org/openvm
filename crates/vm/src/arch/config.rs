@@ -3,7 +3,7 @@ use ax_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use axvm_circuit::system::memory::MemoryTraceHeights;
 use axvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use derive_new::new;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
@@ -32,7 +32,7 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmConfig<F: PrimeField32>: Clone {
+pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 

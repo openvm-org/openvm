@@ -22,12 +22,13 @@ use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip}
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
+use serde::{Deserialize, Serialize};
 use strum::{EnumCount, FromRepr};
 
 use super::*;
 
 // All the supported pairing curves.
-#[derive(Clone, Copy, Debug, FromRepr)]
+#[derive(Clone, Copy, Debug, FromRepr, Serialize, Deserialize)]
 #[repr(usize)]
 pub enum PairingCurve {
     Bn254,
@@ -60,7 +61,7 @@ impl PairingCurve {
     }
 }
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }

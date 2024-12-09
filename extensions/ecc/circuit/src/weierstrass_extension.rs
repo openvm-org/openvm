@@ -19,11 +19,12 @@ use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
     pub modulus: BigUint,
@@ -42,7 +43,7 @@ pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
     b: BigUint::from_u8(7u8).unwrap(),
 });
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }

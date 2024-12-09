@@ -21,12 +21,13 @@ use axvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use derive_more::derive::From;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
 /// Config for a VM with base extension and IO extension
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32IConfig {
     #[system]
     pub system: SystemConfig,
@@ -37,7 +38,7 @@ pub struct Rv32IConfig {
 }
 
 /// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImConfig {
     #[system]
     pub system: SystemConfig,
@@ -122,15 +123,15 @@ impl Rv32ImConfig {
 // ============ Extension Implementations ============
 
 /// RISC-V 32-bit Base (RV32I) Extension
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Rv32I;
 
 /// RISC-V Extension for handling IO (not to be confused with I base extension)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Rv32Io;
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Extension
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Rv32M {
     pub range_tuple_checker_sizes: [u32; 2],
 }

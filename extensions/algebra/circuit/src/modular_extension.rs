@@ -17,6 +17,7 @@ use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
+use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
 use crate::modular_chip::{
@@ -24,7 +25,7 @@ use crate::modular_chip::{
     ModularMulDivChip, ModularMulDivCoreChip,
 };
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }

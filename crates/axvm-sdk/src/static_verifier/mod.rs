@@ -1,5 +1,3 @@
-mod utils;
-
 use ax_stark_sdk::{
     ax_stark_backend::{
         p3_field::{AbstractField, PrimeField32},

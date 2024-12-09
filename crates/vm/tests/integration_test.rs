@@ -53,6 +53,7 @@ use axvm_native_compiler::{
 use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use derive_more::derive::From;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use test_log::test;
 
 const LIMB_BITS: usize = 29;
@@ -984,7 +985,7 @@ fn instructions_for_keccak256_test(input: &[u8]) -> Vec<Instruction<BabyBear>> {
     instructions
 }
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct NativeKeccakConfig {
     #[system]
     pub system: SystemConfig,

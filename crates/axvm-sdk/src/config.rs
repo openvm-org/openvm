@@ -39,9 +39,12 @@ use serde::{Deserialize, Serialize};
 use crate::F;
 
 #[derive(Clone, Debug)]
-pub struct AppConfig<VC: VmConfig<F>> {
+pub struct AppConfig<VC> {
     pub app_fri_params: FriParameters,
     pub app_vm_config: VC,
+    pub leaf_fri_params: FriParameters,
+    /// Only for AggVM debugging. App VM users should not need this in regular flow.
+    pub compiler_options: CompilerOptions,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -50,6 +53,7 @@ pub struct AggConfig {
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
     pub root_fri_params: FriParameters,
+    /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
 }
 
@@ -69,7 +73,7 @@ pub struct FullAggConfig {
     pub halo2_config: Halo2Config,
 }
 
-#[derive(Builder, Clone, Debug)]
+#[derive(Builder, Clone, Debug, Serialize, Deserialize)]
 pub struct SdkVmConfig {
     pub system: SystemConfig,
     pub rv32i: Option<Rv32I>,
@@ -167,6 +171,21 @@ impl SdkVmConfig {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
         transpiler
+    }
+}
+
+impl<VC> AppConfig<VC> {
+    pub fn new(
+        app_fri_params: FriParameters,
+        app_vm_config: VC,
+        leaf_fri_params: FriParameters,
+    ) -> Self {
+        Self {
+            app_fri_params,
+            app_vm_config,
+            leaf_fri_params,
+            compiler_options: Default::default(),
+        }
     }
 }
 

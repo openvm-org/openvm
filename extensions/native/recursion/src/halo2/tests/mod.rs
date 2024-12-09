@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use ax_stark_backend::p3_field::{
     reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField,
 };
@@ -171,9 +173,16 @@ fn test_wrapper_select_k() {
 #[test]
 fn test_pinning_serde() {
     let (_, _, pinning) = snarks_dummy_circuit();
+    // Something went wrong when Halo2ProvingPinning is a field. So we explicitly test with a struct
+    // contains Haplo2ProvingPinning.
+    let wrapper = Halo2WrapperProvingKey {
+        pinning: pinning.clone(),
+    };
+
     let mut f = tempfile::NamedTempFile::new().unwrap();
-    serde_json::to_writer_pretty(&mut f, &pinning).unwrap();
-    let new_pinning: Halo2ProvingPinning = serde_json::from_reader(f.reopen().unwrap()).unwrap();
+    f.write_all(&bson::to_vec(&wrapper).unwrap()).unwrap();
+    let new_wrapper: Halo2WrapperProvingKey = bson::from_reader(f.reopen().unwrap()).unwrap();
+    let new_pinning = new_wrapper.pinning;
     let params = gen_kzg_params(DUMMY_K as u32);
     let mut builder = BaseCircuitBuilder::from_stage(Prover)
         .use_params(new_pinning.metadata.config_params.clone())

@@ -23,6 +23,9 @@ use crate::halo2::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvmVerifier(pub Vec<u8>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Halo2WrapperProvingKey {
     pub pinning: Halo2ProvingPinning,
 }
@@ -66,22 +69,22 @@ impl Halo2WrapperProvingKey {
     }
     /// A helper function for testing to verify the proof of this circuit with evm verifier.
     // FIXME: the signature is not ideal. It should return an Error instead of panicking when the verification fails.
-    pub fn evm_verify(evm_verifier_deployment_codes: Vec<u8>, evm_proof: EvmProof) {
+    pub fn evm_verify(evm_verifier: &EvmVerifier, evm_proof: &EvmProof) {
         evm_verify(
-            evm_verifier_deployment_codes,
-            evm_proof.instances,
-            evm_proof.proof,
+            evm_verifier.0.clone(),
+            evm_proof.instances.clone(),
+            evm_proof.proof.clone(),
         );
     }
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
-    pub fn generate_evm_verifier(&self) -> Vec<u8> {
+    pub fn generate_evm_verifier(&self) -> EvmVerifier {
         let params = read_params(self.pinning.metadata.config_params.k as u32);
-        gen_evm_verifier_shplonk::<AggregationCircuit>(
+        EvmVerifier(gen_evm_verifier_shplonk::<AggregationCircuit>(
             &params,
             self.pinning.pk.get_vk(),
             self.pinning.metadata.num_pvs.clone(),
             None,
-        )
+        ))
     }
     pub fn prove_for_evm(&self, snark_to_verify: Snark) -> EvmProof {
         let k = self.pinning.metadata.config_params.k;

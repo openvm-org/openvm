@@ -34,6 +34,7 @@ use axvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
+use serde::{Deserialize, Serialize};
 use test_case::test_case;
 
 type F = BabyBear;
@@ -93,7 +94,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularFp2Int256Config {
     #[system]
     pub system: SystemConfig,

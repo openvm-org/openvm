@@ -24,10 +24,11 @@ use axvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use derive_more::derive::From;
+use serde::{Deserialize, Serialize};
 
 use crate::*;
 
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv32Config {
     #[system]
     pub system: SystemConfig,
@@ -53,7 +54,7 @@ impl Default for Int256Rv32Config {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Int256 {
     pub range_tuple_checker_sizes: [u32; 2],
 }

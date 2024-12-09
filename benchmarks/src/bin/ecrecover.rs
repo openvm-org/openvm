@@ -47,6 +47,7 @@ use eyre::Result;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use num_bigint_dig::BigUint;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Keccak};
 use tracing::info_span;
 
@@ -66,7 +67,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
     input.into_iter().map(BabyBear::from_canonical_u8).collect()
 }
 
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImEcRecoverConfig {
     #[system]
     pub system: SystemConfig,

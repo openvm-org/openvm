@@ -15,11 +15,12 @@ use axvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use derive_more::derive::From;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
 
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
     #[system]
     pub system: SystemConfig,
@@ -45,7 +46,7 @@ impl Default for Keccak256Rv32Config {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
