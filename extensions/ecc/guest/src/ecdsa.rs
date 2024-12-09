@@ -16,7 +16,7 @@ pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;
 #[repr(C)]
 #[derive(Clone)]
 pub struct VerifyingKey<C: IntrinsicCurve> {
-    pub inner: PublicKey<C>,
+    pub(crate) inner: PublicKey<C>,
 }
 
 #[repr(C)]
@@ -29,6 +29,12 @@ pub struct PublicKey<C: IntrinsicCurve> {
 impl<C: IntrinsicCurve> PublicKey<C> {
     pub fn into_inner(self) -> <C as IntrinsicCurve>::Point {
         self.point
+    }
+}
+
+impl<C: IntrinsicCurve> VerifyingKey<C> {
+    pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
+        &self.inner.point
     }
 }
 

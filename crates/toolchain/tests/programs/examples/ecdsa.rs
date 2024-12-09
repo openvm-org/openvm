@@ -43,18 +43,15 @@ pub fn main() {
     let recovered_key =
         VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&prehash, &signature, recid);
 
-    recovered_key
-        .clone()
-        .verify_prehashed(&prehash, &signature)
-        .unwrap();
-
     let expected_key = ecdsa::VerifyingKey::from_sec1_bytes(&hex!(
         "0200866db99873b09fc2fb1e3ba549b156e96d1a567e3284f5f0e859a83320cb8b"
     ))
     .unwrap();
+    // sec1 encoding, the first byte is for compression flag
     let expected_key = expected_key.to_encoded_point(false);
-    let x = Secp256k1Coord::from_be_bytes(&expected_key.as_bytes()[1..33]);
-    let y = Secp256k1Coord::from_be_bytes(&expected_key.as_bytes()[33..65]);
-    let expected_point = Secp256k1Point::from_xy(x, y).unwrap();
-    assert_eq!(recovered_key.inner.into_inner(), expected_point);
+    assert_eq!(recovered_key.as_affine().as_le_bytes(), &expected_key[1..]);
+
+    recovered_key
+        .verify_prehashed(&prehash, &signature)
+        .unwrap();
 }

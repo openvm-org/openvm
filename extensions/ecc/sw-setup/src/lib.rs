@@ -193,6 +193,12 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
+                /// SAFETY: assumes that #intmod_type has a memory representation
+                /// such that with repr(C), two coordinates are packed contiguously.
+                fn as_le_bytes(&self) -> &[u8] {
+                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as axvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
+                }
+
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                     Self { x, y }
                 }

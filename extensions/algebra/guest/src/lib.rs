@@ -160,9 +160,7 @@ pub trait IntMod:
     fn as_le_bytes(&self) -> &[u8];
 
     /// Value of this IntMod as an array of bytes, big endian.
-    fn as_be_bytes(&self) -> Vec<u8> {
-        self.as_le_bytes().iter().rev().copied().collect::<Vec<_>>()
-    }
+    fn to_be_bytes(&self) -> Self::Repr;
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]

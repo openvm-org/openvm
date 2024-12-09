@@ -375,6 +375,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         &(self.0)
                     }
 
+                    fn to_be_bytes(&self) -> [u8; #limbs] {
+                        core::array::from_fn(|i| self.0[#limbs - 1 - i])
+                    }
+
                     #[cfg(not(target_os = "zkvm"))]
                     fn modulus_biguint() -> num_bigint_dig::BigUint {
                         num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)

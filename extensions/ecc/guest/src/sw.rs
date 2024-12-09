@@ -4,13 +4,19 @@ use axvm_algebra_guest::{IntMod, Reduce};
 
 use super::group::{CyclicGroup, Group};
 
-// TODO: consider consolidate with AffineCoords. Also separate encoding and x/y.
 /// Short Weierstrass curve affine point.
 pub trait SwPoint: Group {
     /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_B: Self::Coordinate;
 
     type Coordinate: IntMod;
+
+    /// The concatenated `x, y` coordinates of the affine point, where
+    /// coordinates are in little endian.
+    ///
+    /// **Warning**: The memory layout of `Self` is expected to pack
+    /// `x` and `y` contigously with no unallocated space in between.
+    fn as_le_bytes(&self) -> &[u8];
 
     /// Raw constructor without asserting point is on the curve.
     fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;
