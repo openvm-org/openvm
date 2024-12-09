@@ -1,9 +1,8 @@
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use ax_stark_backend::ChipUsageGetter;
+use ax_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use axvm_circuit::system::memory::MemoryTraceHeights;
 use axvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use derive_new::new;
-use ax_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{

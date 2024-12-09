@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
@@ -5,7 +6,6 @@ use axvm_instructions::{
 };
 use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
-use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 

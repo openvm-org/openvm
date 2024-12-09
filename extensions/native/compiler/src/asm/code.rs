@@ -1,8 +1,8 @@
 use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
-use axvm_circuit::arch::instructions::instruction::DebugInfo;
 use ax_stark_backend::p3_field::{ExtensionField, PrimeField32};
+use axvm_circuit::arch::instructions::instruction::DebugInfo;
 
 use super::AsmInstruction;
 

@@ -1,10 +1,12 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
@@ -19,8 +21,6 @@ use axvm_sdk::StdIn;
 use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {

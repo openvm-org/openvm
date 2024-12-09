@@ -3,11 +3,11 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
     prover::types::Proof,
     Chip,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
-use ax_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{

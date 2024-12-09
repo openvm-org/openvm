@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 use axvm_native_compiler::{
     ir::{
         Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
@@ -6,7 +7,6 @@ use axvm_native_compiler::{
     prelude::MemVariable,
 };
 pub use domain::*;
-use ax_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{

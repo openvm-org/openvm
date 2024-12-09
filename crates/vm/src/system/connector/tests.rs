@@ -4,8 +4,8 @@ use std::{
 };
 
 use ax_stark_backend::{
-    config::StarkGenericConfig, engine::StarkEngine, prover::types::AirProofInput,
-    utils::disable_debug_builder,
+    config::StarkGenericConfig, engine::StarkEngine, p3_field::AbstractField,
+    prover::types::AirProofInput, utils::disable_debug_builder,
 };
 use ax_stark_sdk::{
     config::{
@@ -13,12 +13,11 @@ use ax_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
 use axvm_instructions::{
     instruction::Instruction, program::Program, AxVmOpcode, SystemOpcode::TERMINATE,
 };
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
 
 use super::VmConnectorPvs;
 use crate::{

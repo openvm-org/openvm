@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::{AbstractField, PrimeField32},
     verifier::VerificationError,
     Chip,
 };
@@ -11,10 +12,9 @@ use ax_stark_sdk::{
         setup_tracing, FriParameters,
     },
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
+    p3_baby_bear::BabyBear,
 };
 use axvm_instructions::{exe::AxVmExe, program::Program};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 use crate::{
     arch::{

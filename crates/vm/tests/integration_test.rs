@@ -1,7 +1,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::{config::StarkGenericConfig, engine::StarkEngine};
+use ax_stark_backend::{
+    config::StarkGenericConfig,
+    engine::StarkEngine,
+    p3_field::{AbstractField, PrimeField32},
+};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -9,6 +13,7 @@ use ax_stark_sdk::{
         setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use axvm_circuit::{
@@ -47,8 +52,6 @@ use axvm_native_compiler::{
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode::*;
 use derive_more::derive::From;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use rand::Rng;
 use test_log::test;
 

@@ -220,13 +220,13 @@ mod tests {
     use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
+        p3_baby_bear::BabyBear,
     };
     use axvm_native_circuit::execute_program;
     use axvm_native_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::Rng;
 
     use super::DuplexChallengerVariable;

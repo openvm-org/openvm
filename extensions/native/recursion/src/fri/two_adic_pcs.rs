@@ -320,14 +320,16 @@ pub mod tests {
         p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
         p3_matrix::dense::RowMajorMatrix,
     };
-    use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
+    use ax_stark_sdk::{
+        config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+        p3_baby_bear::BabyBear,
+    };
     use axvm_circuit::arch::instructions::program::Program;
     use axvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use itertools::Itertools;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::rngs::OsRng;
 
     use crate::{

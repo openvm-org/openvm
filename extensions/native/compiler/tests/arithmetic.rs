@@ -1,3 +1,7 @@
+use ax_stark_backend::p3_field::{
+    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field,
+};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::{ExecutionError, VmExecutor};
 use axvm_native_circuit::{execute_program, NativeConfig};
 use axvm_native_compiler::{
@@ -5,8 +9,6 @@ use axvm_native_compiler::{
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
 };
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field};
 use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;

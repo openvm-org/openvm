@@ -5,6 +5,7 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_transpiler::Fp2Opcode;
 use axvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
@@ -15,7 +16,6 @@ use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
-use ax_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};

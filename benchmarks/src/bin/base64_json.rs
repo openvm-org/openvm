@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -21,7 +22,6 @@ use axvm_sdk::StdIn;
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use ax_stark_backend::p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {

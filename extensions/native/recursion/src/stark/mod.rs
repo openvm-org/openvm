@@ -10,7 +10,10 @@ use ax_stark_backend::{
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
-use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
+use ax_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    p3_baby_bear::BabyBear,
+};
 use axvm_circuit::arch::instructions::program::Program;
 use axvm_native_compiler::{
     conversion::CompilerOptions,
@@ -18,7 +21,6 @@ use axvm_native_compiler::{
     prelude::RVar,
 };
 use itertools::Itertools;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
