@@ -314,6 +314,7 @@ pub mod tests {
 
     use ax_stark_backend::{
         config::{StarkGenericConfig, Val},
+        p3_challenger::{CanObserve, FieldChallenger},
         p3_matrix::dense::RowMajorMatrix,
     };
     use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
@@ -324,7 +325,6 @@ pub mod tests {
     };
     use itertools::Itertools;
     use p3_baby_bear::BabyBear;
-    use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
     use rand::rngs::OsRng;
 
