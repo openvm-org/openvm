@@ -14,9 +14,9 @@ use ax_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_util::indices_arr,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_util::indices_arr;
 
 pub use crate::range::RangeCheckBus;
 

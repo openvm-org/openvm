@@ -1,5 +1,5 @@
+use ax_stark_backend::p3_util::log2_ceil_usize;
 use itertools::Itertools;
-use p3_util::log2_ceil_usize;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::{
     evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk},

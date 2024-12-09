@@ -6,7 +6,7 @@ use std::{
 };
 
 use ax_circuit_primitives::bigint::check_carry_to_zero::get_carry_max_abs_and_bits;
-use p3_util::log2_ceil_usize;
+use ax_stark_backend::p3_util::log2_ceil_usize;
 
 use super::{ExprBuilder, SymbolicExpr};
 

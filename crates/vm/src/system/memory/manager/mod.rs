@@ -22,6 +22,7 @@ use ax_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
+    p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     rap::AnyRap,
 };
@@ -29,7 +30,6 @@ use axvm_instructions::exe::MemoryImage;
 use getset::Getters;
 use itertools::{izip, zip_eq, Itertools};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
-use p3_util::log2_strict_usize;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 

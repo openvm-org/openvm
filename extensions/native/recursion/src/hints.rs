@@ -4,6 +4,7 @@ use ax_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
     p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field},
+    p3_util::log2_strict_usize,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},
         types::{AirProofData, Commitments, Proof},
@@ -18,7 +19,6 @@ use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use p3_util::log2_strict_usize;
 
 use crate::{
     types::{InnerConfig, VerifierInput},
