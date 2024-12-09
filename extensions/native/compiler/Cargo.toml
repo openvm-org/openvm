@@ -7,8 +7,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-p3-baby-bear = { workspace = true }
-p3-bn254-fr = { workspace = true }
 zkhash = { workspace = true }
 
 ax-stark-backend = { workspace = true }
@@ -37,7 +35,6 @@ cfg-if = { workspace = true }
 strum = { workspace = true }
 
 [dev-dependencies]
-p3-challenger = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

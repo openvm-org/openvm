@@ -14,8 +14,6 @@ axvm-circuit = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
 p3-symmetric = { workspace = true }
-p3-bn254-fr = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-merkle-tree = { workspace = true }
 snark-verifier-sdk = { workspace = true, features = [
     "loader_evm",

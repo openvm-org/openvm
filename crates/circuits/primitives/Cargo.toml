@@ -20,11 +20,8 @@ lazy_static.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-p3-baby-bear = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
-p3-goldilocks = { workspace = true }
-p3-keccak = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }

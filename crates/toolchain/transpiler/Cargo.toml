@@ -20,7 +20,6 @@ tracing.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 
 [dev-dependencies]
-p3-baby-bear.workspace = true
 test-case.workspace = true
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-build.workspace = true
