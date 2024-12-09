@@ -34,15 +34,14 @@ async fn main() -> Result<()> {
     let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
     let root_log_blowup = cli_args.root_log_blowup.unwrap_or(2);
     let internal_log_blowup = cli_args.internal_log_blowup.unwrap_or(2);
-
     // Must be larger than RangeTupleCheckerAir.height == 524288
-    let segment_len = 1_000_000;
+    let max_segment_length = cli_args.max_segment_length.unwrap_or(1_000_000);
 
     let app_config = AppConfig {
         app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
         app_vm_config: Rv32ImConfig::with_public_values_and_segment_len(
             NUM_PUBLIC_VALUES,
-            segment_len,
+            max_segment_length,
         ),
     };
     let agg_config = AggConfig {

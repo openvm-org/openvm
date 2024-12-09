@@ -33,6 +33,11 @@ on:
         required: false
         description: Internal level log blowup (only for e2e)
         default: 2
+      max_segment_length:
+        type: number
+        required: false
+        description: Max segment length for continuations, must be larger than 524288
+        default: 1048476
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results

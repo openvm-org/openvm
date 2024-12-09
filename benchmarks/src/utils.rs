@@ -41,6 +41,10 @@ pub struct BenchmarkCli {
     /// Internal level log blowup, default set by the benchmark
     #[arg(short, long, alias = "internal_log_blowup")]
     pub internal_log_blowup: Option<usize>,
+
+    /// Max segment length for continuations
+    #[arg(short, long, alias = "max_segment_length")]
+    pub max_segment_length: Option<usize>,
 }
 
 fn get_programs_dir() -> PathBuf {

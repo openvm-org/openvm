@@ -43,12 +43,11 @@ pub mod verifier;
 pub use chip::{Chip, ChipUsageGetter};
 
 // Use jemalloc as global allocator for performance
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", unix, not(test)))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 // Use mimalloc as global allocator
-#[cfg(not(test))]
-#[cfg(feature = "mimalloc")]
+#[cfg(all(feature = "mimalloc", not(test)))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;

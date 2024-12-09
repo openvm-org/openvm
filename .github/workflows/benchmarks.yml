@@ -70,6 +70,7 @@ jobs:
                 agg_log_blowup: .agg_log_blowup,
                 root_log_blowup: (.root_log_blowup // 0),
                 internal_log_blowup: (.internal_log_blowup // 0),
+                max_segment_length: (.max_segment_length // 1048476)
               }
             ]
           ' ./ci/benchmark-config.json)
@@ -93,6 +94,7 @@ jobs:
       agg_log_blowup: ${{ matrix.benchmark_run.agg_log_blowup }}
       root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
       internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
+      max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
     secrets: inherit
 
   summarize:
@@ -143,14 +145,14 @@ jobs:
           md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench != true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
           md_file_list=$(echo -n "$md_files" | paste -sd "," -)
 
           e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench == true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
             sort)
           e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 

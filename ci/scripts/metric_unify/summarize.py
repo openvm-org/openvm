@@ -86,6 +86,10 @@ def read_first_markdown_table(md_file):
 
     other_info = []
     for line in lines:
+        if "Max Segment Length:" in line:
+            other_info += [f"{line.split(':')[1].strip()}"]
+            continue
+
         if "Instance Type:" in line:
             other_info += [f"{line.split(':')[1].strip()}"]
             continue
@@ -144,8 +148,8 @@ def main():
     aggregations = read_aggregations(args.aggregation_json)
     aggregations = sorted([agg.name.replace("fri.", "") for agg in aggregations])
     headers = ["group"] + ["app_" + agg for agg in aggregations] + ["leaf_" + agg for agg in aggregations]
-    e2e_headers = headers + ["root_" + agg for agg in aggregations] + ["internal_" + agg for agg in aggregations] + ["instance", "alloc"]
-    headers += ["instance", "alloc"]
+    e2e_headers = headers + ["root_" + agg for agg in aggregations] + ["internal_" + agg for agg in aggregations] + ["max_segment_length", "instance", "alloc"]
+    headers += ["max_segment_length", "instance", "alloc"]
 
     md_files = args.metrics_md_files.split(',')
     outputs = []
