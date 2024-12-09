@@ -4,6 +4,8 @@ use std::{
 };
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_stark_backend::p3_field::PrimeField32;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
@@ -32,8 +34,6 @@ use axvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::PrimeField32;
 use test_case::test_case;
 
 type F = BabyBear;

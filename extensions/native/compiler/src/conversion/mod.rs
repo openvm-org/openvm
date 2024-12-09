@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use axvm_circuit::arch::instructions::program::Program;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
@@ -6,7 +7,6 @@ use axvm_instructions::{
     UsizeOpcode,
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode;
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use serde::{Deserialize, Serialize};
 
 use crate::{

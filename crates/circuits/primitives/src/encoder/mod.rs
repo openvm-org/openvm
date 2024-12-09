@@ -1,5 +1,7 @@
-use ax_stark_backend::interaction::InteractionBuilder;
-use ax_stark_backend::p3_field::{AbstractField, Field};
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_field::{AbstractField, Field},
+};
 
 use crate::SubAir;
 

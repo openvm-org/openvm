@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
-use axvm_instructions::instruction::Instruction;
 use ax_stark_backend::p3_field::PrimeField32;
+use axvm_instructions::instruction::Instruction;
 
 use crate::TranspilerExtension;
 

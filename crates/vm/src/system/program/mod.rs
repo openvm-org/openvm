@@ -1,9 +1,8 @@
-use ax_stark_backend::ChipUsageGetter;
+use ax_stark_backend::{p3_field::PrimeField64, ChipUsageGetter};
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use ax_stark_backend::p3_field::PrimeField64;
 
 use crate::{arch::ExecutionError, system::program::trace::padding_instruction};
 

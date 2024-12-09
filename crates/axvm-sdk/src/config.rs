@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::PrimeField32;
 use ax_stark_sdk::config::FriParameters;
 use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
@@ -33,7 +34,6 @@ use axvm_rv32im_transpiler::{
 use axvm_transpiler::transpiler::Transpiler;
 use bon::Builder;
 use derive_more::derive::From;
-use ax_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use crate::F;

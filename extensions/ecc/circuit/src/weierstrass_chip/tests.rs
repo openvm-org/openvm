@@ -7,14 +7,14 @@ use ax_circuit_primitives::{
 use ax_mod_circuit_builder::{
     test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpressionCoreChip,
 };
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use axvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
 
 use super::{EcAddNeChip, EcDoubleChip};
 

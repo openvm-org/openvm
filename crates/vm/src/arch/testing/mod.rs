@@ -20,10 +20,10 @@ use ax_stark_sdk::{
         setup_tracing_with_log_level,
     },
     engine::StarkEngine,
+    p3_baby_bear::BabyBear,
 };
 use axvm_instructions::instruction::Instruction;
 use itertools::izip;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

@@ -10,7 +10,8 @@ use ax_mod_circuit_builder::{
     test_utils::{biguint_to_limbs, generate_field_element},
     ExprBuilderConfig,
 };
-use ax_stark_sdk::utils::create_seeded_rng;
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use axvm_circuit::arch::{
     instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
@@ -23,8 +24,6 @@ use axvm_rv32_adapters::{
 use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
 use rand::Rng;
 
 use super::{

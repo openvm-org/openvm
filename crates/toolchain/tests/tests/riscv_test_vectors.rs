@@ -1,5 +1,6 @@
 use std::{fs::read_dir, path::PathBuf};
 
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, VmExecutor},
     utils::new_air_test_with_min_segments,
@@ -11,7 +12,6 @@ use axvm_rv32im_transpiler::{
 use axvm_toolchain_tests::utils::decode_elf;
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
 

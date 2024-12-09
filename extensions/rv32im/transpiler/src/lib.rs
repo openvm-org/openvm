@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
     SystemOpcode,
@@ -12,7 +13,6 @@ use axvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension,
 };
-use ax_stark_backend::p3_field::PrimeField32;
 use rrs::InstructionTranspiler;
 use rrs_lib::{
     instruction_formats::{IType, RType},

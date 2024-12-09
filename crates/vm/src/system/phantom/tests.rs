@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use axvm_instructions::{instruction::Instruction, AxVmOpcode, SystemOpcode};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use axvm_instructions::{instruction::Instruction, AxVmOpcode, SystemOpcode};
 use parking_lot::Mutex;
 
 use super::PhantomChip;

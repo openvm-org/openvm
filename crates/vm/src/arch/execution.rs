@@ -1,11 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant,
 };
-use ax_stark_backend::p3_field::AbstractField;
 use thiserror::Error;
 
 use super::Streams;

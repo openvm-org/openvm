@@ -5,6 +5,7 @@ use ax_stark_sdk::{
         p3_field::{AbstractField, PrimeField32},
         prover::types::Proof,
     },
+    p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
 use axvm_circuit::{arch::PROGRAM_CACHED_TRACE_INDEX, prover::SingleSegmentVmProver};
@@ -20,7 +21,6 @@ use axvm_native_recursion::{
     utils::const_fri_config,
     witness::Witnessable,
 };
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     keygen::RootVerifierProvingKey,

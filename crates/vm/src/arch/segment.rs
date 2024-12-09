@@ -1,6 +1,7 @@
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     Chip,
 };
@@ -8,7 +9,6 @@ use ax_stark_backend::{
 use axvm_instructions::exe::FnBound;
 use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
-use ax_stark_backend::p3_field::PrimeField32;
 
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,

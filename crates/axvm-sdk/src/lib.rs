@@ -12,6 +12,7 @@ use ax_stark_sdk::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,
         baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     },
+    p3_baby_bear::BabyBear,
 };
 use axvm_build::GuestOptions;
 use axvm_circuit::{
@@ -28,7 +29,6 @@ use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::Result;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 use prover::{generate_leaf_committed_exe, StarkProver};
 
 pub mod commit;

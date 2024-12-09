@@ -5,6 +5,7 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
@@ -18,7 +19,6 @@ use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
-use ax_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};

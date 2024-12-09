@@ -10,12 +10,14 @@ use ax_stark_backend::{
         types::{AirProofData, Commitments, Proof},
     },
 };
-use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use ax_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    p3_baby_bear::{BabyBear, Poseidon2BabyBear},
+};
 use axvm_native_compiler::ir::{
     unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
-use ax_stark_sdk::p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};

@@ -5,6 +5,7 @@ use ax_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use axvm_circuit::{
     self,
@@ -16,7 +17,6 @@ use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
-use ax_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use crate::modular_chip::{

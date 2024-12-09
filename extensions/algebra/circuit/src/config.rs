@@ -1,4 +1,5 @@
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_circuit::arch::{
     SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
 };
@@ -6,7 +7,6 @@ use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
-use ax_stark_backend::p3_field::PrimeField32;
 
 use super::*;
 

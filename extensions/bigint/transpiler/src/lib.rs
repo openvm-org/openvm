@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use axvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, AxVmOpcode,
@@ -8,7 +9,6 @@ use axvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
-use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, RType};
 use strum::IntoEnumIterator;
 

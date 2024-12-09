@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, SystemConfig},
@@ -12,7 +12,6 @@ use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 use rand::SeedableRng;
 
 type F = BabyBear;

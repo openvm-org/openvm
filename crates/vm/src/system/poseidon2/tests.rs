@@ -1,16 +1,19 @@
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
-use ax_stark_backend::{utils::disable_debug_builder, verifier::VerificationError};
+use ax_stark_backend::{
+    p3_field::{AbstractField, PrimeField64},
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
 use ax_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use axvm_instructions::{instruction::Instruction, AxVmOpcode};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::{AbstractField, PrimeField64};
 use rand::Rng;
 
 use super::{Poseidon2Chip, Poseidon2VmIoCols, CHUNK, WIDTH};

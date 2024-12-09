@@ -1,3 +1,4 @@
+use ax_stark_backend::p3_field::PrimeField32;
 use axvm_algebra_guest::{
     ComplexExtFieldBaseFunct7, ModArithBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3,
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
@@ -7,7 +8,6 @@ use axvm_instructions::{
 };
 use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
-use ax_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 

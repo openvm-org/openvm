@@ -1,5 +1,7 @@
-use ax_stark_backend::interaction::{InteractionBuilder, InteractionType};
-use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_backend::{
+    interaction::{InteractionBuilder, InteractionType},
+    p3_field::AbstractField,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BitwiseOperationLookupBus {

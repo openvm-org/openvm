@@ -5,12 +5,12 @@ use ax_stark_backend::{
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     prover::types::{CommittedTraceData, Proof, ProofInput},
     verifier::VerificationError,
     Chip,
 };
 use axvm_instructions::exe::AxVmExe;
-use ax_stark_backend::p3_field::PrimeField32;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};

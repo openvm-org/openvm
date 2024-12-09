@@ -2,11 +2,12 @@
 #![allow(unused_imports)]
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::p3_field::PrimeField32;
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
     p3_keccak::Keccak256Hash,
 };
 use axvm_algebra_circuit::{
@@ -45,8 +46,6 @@ use derive_more::derive::From;
 use eyre::Result;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use num_bigint_dig::BigUint;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use tiny_keccak::{Hasher, Keccak};
 use tracing::info_span;

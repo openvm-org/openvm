@@ -4,6 +4,7 @@ use ax_stark_sdk::{
     ax_stark_backend::{engine::VerificationData, Chip},
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{StarkFriEngine, VerificationDataWithFriParams},
+    p3_baby_bear::BabyBear,
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
@@ -17,7 +18,6 @@ use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
 use tempfile::tempdir;
 
 type F = BabyBear;
