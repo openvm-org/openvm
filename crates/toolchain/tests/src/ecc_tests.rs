@@ -208,6 +208,6 @@ fn test_ecdsa_runtime() -> Result<()> {
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     );
-    new_air_test_with_min_segments(config, axvm_exe, vec![], 1, false);
+    new_air_test_with_min_segments(config, axvm_exe, vec![], 1, true);
     Ok(())
 }

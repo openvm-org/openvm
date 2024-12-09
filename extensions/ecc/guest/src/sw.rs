@@ -1,11 +1,6 @@
-use alloc::vec::Vec;
 use core::ops::Mul;
 
 use axvm_algebra_guest::{IntMod, Reduce};
-use elliptic_curve::{
-    sec1::{EncodedPoint, ModulusSize},
-    Curve,
-};
 
 use super::group::{CyclicGroup, Group};
 
@@ -16,17 +11,6 @@ pub trait SwPoint: Group {
     const CURVE_B: Self::Coordinate;
 
     type Coordinate: IntMod;
-
-    // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/sec1/index.html
-    // Note: sec1 bytes are in big endian.
-    fn from_encoded_point<C: Curve>(p: &EncodedPoint<C>) -> Self
-    where
-        C::FieldBytesSize: ModulusSize;
-
-    // TODO: I(lunkai) tried to do to_encoded_point, but that requires the IntMod
-    // to integrate with ModulusSize which is very annoying. So I just gave up for now and use bytes.
-    // Note: sec1 bytes are in big endian.
-    fn to_sec1_bytes(&self, is_compressed: bool) -> Vec<u8>;
 
     /// Raw constructor without asserting point is on the curve.
     fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;

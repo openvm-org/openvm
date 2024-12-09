@@ -116,7 +116,7 @@ pub trait IntMod:
     + for<'a> DivAssignUnsafe<&'a Self>
 {
     /// Underlying representation of IntMod. Usually of the form `[u8; NUM_LIMBS]`.
-    type Repr;
+    type Repr: AsRef<[u8]> + AsMut<[u8]>;
     /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
@@ -145,10 +145,7 @@ pub trait IntMod:
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
-    fn from_be_bytes(bytes: &[u8]) -> Self {
-        let vec = bytes.iter().rev().copied().collect::<Vec<_>>();
-        Self::from_le_bytes(&vec)
-    }
+    fn from_be_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -223,7 +220,7 @@ pub trait IntMod:
         let _ = core::hint::black_box(PartialEq::eq(self, self));
     }
 
-    /// This function is mostly be internal use in other internal implemntations.
+    /// This function is mostly for internal use in other internal implemntations.
     /// Normal users are not advised to use it.
     ///
     /// If `self` was directly constructed from a raw representation

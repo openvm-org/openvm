@@ -193,46 +193,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
-                // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
-                fn from_encoded_point<C: elliptic_curve::Curve>(p: &elliptic_curve::sec1::EncodedPoint<C>) -> Self
-                where
-                    C::FieldBytesSize: elliptic_curve::sec1::ModulusSize
-                {
-                    match p.coordinates() {
-                        elliptic_curve::sec1::Coordinates::Identity => Self::identity(),
-                        elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
-                            // Sec1 bytes are in big endian.
-                            let x = Self::Coordinate::from_be_bytes(x.as_ref());
-                            let y = Self::Coordinate::from_be_bytes(y.as_ref());
-                            // TODO: Verify that the point is on the curve
-
-                            Self { x, y }
-
-                        }
-                        elliptic_curve::sec1::Coordinates::Compact { x } => unimplemented!(),
-                        elliptic_curve::sec1::Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
-                    }
-                }
-
-                fn to_sec1_bytes(&self, is_compressed: bool) -> Vec<u8>
-                {
-                    let mut bytes = Vec::new();
-                    if is_compressed {
-                        let y_is_odd = self.y().as_le_bytes()[0] & 1;
-                        if y_is_odd == 1 {
-                            bytes.push(0x03);
-                        } else {
-                            bytes.push(0x02);
-                        }
-                        bytes.extend_from_slice(&self.x().as_be_bytes());
-                    } else {
-                        bytes.push(0x04);
-                        bytes.extend_from_slice(&self.x().as_be_bytes());
-                        bytes.extend_from_slice(&self.y().as_be_bytes());
-                    }
-                    bytes
-                }
-
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                     Self { x, y }
                 }

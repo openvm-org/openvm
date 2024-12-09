@@ -347,6 +347,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         Self(arr)
                     }
 
+                    fn from_be_bytes(bytes: &[u8]) -> Self {
+                        let mut arr = [0u8; #limbs];
+                        for (a, b) in arr.iter_mut().zip(bytes.iter().rev()) {
+                            *a = *b;
+                        }
+                        Self(arr)
+                    }
+
                     fn from_u8(val: u8) -> Self {
                         Self::from_const_u8(val)
                     }
@@ -867,6 +875,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         mod axvm_intrinsics_ffi {
             #(#externs)*
         }
+        #[allow(non_snake_case)]
         pub mod axvm_intrinsics_meta_do_not_type_this_by_yourself {
             pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];

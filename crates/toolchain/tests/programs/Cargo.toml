@@ -29,7 +29,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 ], optional = true }
 
 [features]
-default = []
+default = ["k256"]
 std = [
     "serde/std",
     "axvm/std",
