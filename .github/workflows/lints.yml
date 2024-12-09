@@ -13,7 +13,6 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    if: github.event.pull_request.draft == false
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
@@ -32,5 +31,5 @@ jobs:
         run: |
           # list of features generated using:
           # echo -e "\033[1;32mAll unique features across workspace:\033[0m" && cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | sed 's/^/• /'
-          cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 default entrypoint export-getrandom export-libm function-span getrandom halo2-compiler halo2curves heap-embedded-alloc k256 mimalloc nightly-features p3-baby-bear panic-handler parallel rust-runtime static-verifier std test-traits test-utils unstable" -- -D warnings
+          cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 default entrypoint export-getrandom export-libm function-span getrandom halo2-compiler halo2curves heap-embedded-alloc k256 mimalloc nightly-features panic-handler parallel rust-runtime static-verifier std test-utils unstable" -- -D warnings
           cargo clippy --all --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
