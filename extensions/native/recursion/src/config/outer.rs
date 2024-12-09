@@ -1,13 +1,13 @@
 use ax_stark_backend::{
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
     p3_challenger::MultiField32Challenger,
+    p3_commit::ExtensionMmcs,
     p3_field::extension::BinomialExtensionField,
 };
 use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
 use axvm_native_compiler::ir::Config;
 use p3_baby_bear::BabyBear;
 use p3_bn254_fr::{Bn254Fr, Poseidon2Bn254};
-use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;

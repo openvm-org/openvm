@@ -5,6 +5,7 @@ use ax_stark_backend::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
     },
+    p3_commit::LagrangeSelectors,
     p3_field::{AbstractExtensionField, AbstractField, TwoAdicField},
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     prover::{opener::AdjacentOpenedValues, types::Proof},
@@ -18,7 +19,6 @@ use axvm_native_compiler::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_commit::LagrangeSelectors;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
