@@ -36,6 +36,24 @@ impl<C: Config> Builder<C> {
     pub fn store<V: MemVariable<C>>(&mut self, ptr: Ptr<C::N>, index: MemIndex<C::N>, value: V) {
         value.store(ptr, index, self);
     }
+
+    pub fn load_heap_ptr(&mut self) -> Ptr<C::N> {
+        assert!(
+            !self.flags.static_only,
+            "heap pointer only exists in dynamic mode"
+        );
+        let ptr = Ptr::uninit(self);
+        self.push(DslIr::LoadHeapPtr(ptr));
+        ptr
+    }
+
+    pub fn store_heap_ptr(&mut self, ptr: Ptr<C::N>) {
+        assert!(
+            !self.flags.static_only,
+            "heap pointer only exists in dynamic mode"
+        );
+        self.push(DslIr::StoreHeapPtr(ptr));
+    }
 }
 
 impl<C: Config> Variable<C> for Ptr<C::N> {
