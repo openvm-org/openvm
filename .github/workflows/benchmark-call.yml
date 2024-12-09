@@ -298,6 +298,8 @@ jobs:
           fi
           echo "Commit: ${commit_url}" >> $RESULT_PATH
           echo "" >> $RESULT_PATH
+          echo "Max Segment Length: ${{ inputs.max_segment_length }}" >> $RESULT_PATH
+          echo "" >> $RESULT_PATH
           echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
           echo "" >> $RESULT_PATH
           echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
