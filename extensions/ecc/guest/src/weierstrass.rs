@@ -1,4 +1,4 @@
-use core::ops::Mul;
+use core::ops::{Add, Mul};
 
 use axvm_algebra_guest::{IntMod, Reduce};
 
@@ -75,4 +75,14 @@ pub trait WeierstrassPoint: Group {
 pub trait IntrinsicCurve {
     type Scalar: IntMod + Reduce;
     type Point: WeierstrassPoint + CyclicGroup;
+
+    /// Multi-scalar multiplication. The default implementation may be
+    /// replaced by specialized implementations that use properties of the curve
+    /// (e.g., if the curve order is prime).
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        super::msm(coeffs, bases)
+    }
 }
