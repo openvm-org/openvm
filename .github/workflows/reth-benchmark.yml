@@ -50,11 +50,11 @@ on:
         required: false
         description: Running mode, one of execute, prove, or prove-e2e
         default: prove
-      collect_metrics:
-        type: boolean
-        required: false
-        description: Whether to collect metrics for flamegraphs
-        default: false
+      # collect_metrics:
+      #   type: boolean
+      #   required: false
+      #   description: Whether to collect metrics for flamegraphs
+      #   default: false
       # TODO: store a github secret for this
       rpc_url:
         type: string
