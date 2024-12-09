@@ -31,4 +31,4 @@ jobs:
       - name: Run clippy
         run: |
           cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 default entrypoint export-getrandom export-libm function-span getrandom halo2-compiler halo2curves heap-embedded-alloc k256 mimalloc nightly-features p3-baby-bear panic-handler parallel rust-runtime static-verifier std test-traits test-utils unstable" -- -D warnings
-          cargo clippy --all-targets --all --tests --no-default-features --features jemalloc jemalloc-prof -- -D warnings
+          cargo clippy --all-targets --all --tests --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
