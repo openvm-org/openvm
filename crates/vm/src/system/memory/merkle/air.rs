@@ -2,10 +2,10 @@ use std::{borrow::Borrow, iter};
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
+    p3_field::{AbstractField, Field},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, Field};
 use p3_matrix::Matrix;
 
 use super::{DirectCompressionBus, MemoryMerkleBus};

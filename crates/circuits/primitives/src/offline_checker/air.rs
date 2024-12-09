@@ -2,10 +2,10 @@ use std::iter;
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, BaseAir};
 use p3_matrix::Matrix;
 
 use super::{

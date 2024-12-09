@@ -1,4 +1,4 @@
-use p3_air::AirBuilder;
+use ax_stark_backend::p3_air::AirBuilder;
 
 /// Trait with associated types intended to allow re-use of constraint logic
 /// inside other AIRs.

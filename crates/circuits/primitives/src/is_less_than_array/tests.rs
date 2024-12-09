@@ -5,6 +5,7 @@ use std::{
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
+    p3_air::{Air, BaseAir},
     p3_field::{AbstractField, Field},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
@@ -13,7 +14,6 @@ use ax_stark_backend::{
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
-use p3_air::{Air, BaseAir};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 

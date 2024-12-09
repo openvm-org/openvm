@@ -7,13 +7,13 @@ use ax_stark_backend::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
     config::{StarkGenericConfig, Val},
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, PrimeField32},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
 use axvm_instructions::instruction::Instruction;
-use p3_air::{Air, AirBuilder, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 

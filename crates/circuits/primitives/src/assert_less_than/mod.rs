@@ -1,8 +1,10 @@
 use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::interaction::InteractionBuilder;
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::AirBuilder,
+    p3_field::{AbstractField, Field},
+};
 use derive_new::new;
-use p3_air::AirBuilder;
-use ax_stark_backend::p3_field::{AbstractField, Field};
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},

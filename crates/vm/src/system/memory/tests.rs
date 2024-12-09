@@ -11,6 +11,8 @@ use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeChe
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::{AbstractField, PrimeField32},
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
@@ -20,9 +22,7 @@ use ax_stark_sdk::{
     utils::create_seeded_rng,
 };
 use itertools::Itertools;
-use p3_air::{Air, BaseAir};
 use p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{
     prelude::{SliceRandom, StdRng},

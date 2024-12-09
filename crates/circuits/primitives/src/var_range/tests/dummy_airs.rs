@@ -1,9 +1,9 @@
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::var_range::bus::VariableRangeCheckerBus;

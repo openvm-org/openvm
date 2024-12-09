@@ -1,10 +1,10 @@
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::AirBuilder,
     p3_field::{AbstractField, PrimeField32},
 };
 use itertools::izip;
-use p3_air::AirBuilder;
 
 use crate::{
     is_less_than::{IsLtSubAir, LessThanAuxCols},

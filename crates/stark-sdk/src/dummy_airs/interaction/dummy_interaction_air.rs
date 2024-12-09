@@ -10,13 +10,13 @@ use ax_stark_backend::{
     air_builders::PartitionedAirBuilder,
     config::{StarkGenericConfig, Val},
     interaction::{InteractionBuilder, InteractionType},
+    p3_air::{Air, BaseAir},
+    p3_field::{AbstractField, Field},
     prover::types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
 use itertools::izip;
-use p3_air::{Air, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, Field};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 pub struct DummyInteractionCols;

@@ -1,5 +1,5 @@
-use itertools::Itertools;
 use ax_stark_backend::p3_field::AbstractField;
+use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// Deterministic seeded RNG, for testing use

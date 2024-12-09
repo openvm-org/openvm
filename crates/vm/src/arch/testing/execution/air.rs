@@ -3,10 +3,10 @@ use std::{borrow::Borrow, mem::size_of};
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::Field,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir};
-use ax_stark_backend::p3_field::Field;
 use p3_matrix::Matrix;
 
 use crate::arch::{ExecutionBus, ExecutionState};

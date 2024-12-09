@@ -8,6 +8,8 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
@@ -16,8 +18,6 @@ use axvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant,
     SysPhantom, SystemOpcode, UsizeOpcode,
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;

@@ -15,10 +15,10 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use ax_stark_backend::p3_field::{AbstractField, Field, PrimeField32};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
 
