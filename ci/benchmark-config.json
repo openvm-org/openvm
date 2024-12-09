@@ -76,7 +76,8 @@
           "app_log_blowup": 2,
           "agg_log_blowup": 2,
           "root_log_blowup": 2,
-          "internal_log_blowup": 2
+          "internal_log_blowup": 2,
+          "max_segment_length": 1000000
         }
       ]
     },
