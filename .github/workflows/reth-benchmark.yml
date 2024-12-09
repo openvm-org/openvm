@@ -91,4 +91,4 @@ jobs:
       - name: Run Reth
         run: |
           cd rsp
-          cargo run --release --features=bench-metrics,parallel,nightly-features -- --log-level=debug --log-blowup=${{ inputs.app_log_blowup }} --agg-log-blowup=${{ inputs.agg_log_blowup }} --root-log-blowup=${{ inputs.root_log_blowup }} --internal-log-blowup=${{ inputs.internal_log_blowup }}
+          ./run.sh
