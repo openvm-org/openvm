@@ -45,6 +45,11 @@ on:
         required: false
         description: Internal level log blowup (only for e2e)
         default: 2
+      mode:
+        type: string
+        required: false
+        description: Running mode: execute, prove, or prove-e2e
+        default: prove
       collect_metrics:
         type: boolean
         required: false
@@ -111,5 +116,6 @@ jobs:
           cd ../..
           mkdir -p rpc-cache
           export RPC_1=${{ inputs.rpc_url }}
-          RUSTFLAGS="-Ctarget-cpu=native" RUST_BACKTRACE=1 cargo run --bin rsp --release -- --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache --prove
+          export MODE=${{ inputs.mode }}
+          RUSTFLAGS="-Ctarget-cpu=native" RUST_BACKTRACE=1 cargo run --bin rsp --release -- --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
 
