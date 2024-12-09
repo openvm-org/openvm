@@ -109,8 +109,6 @@ jobs:
       - name: Run Reth
         run: |
           cd rsp
-          git branch
-          git log
           cd bin/client-eth
           echo "building reth program..."
           cargo axiom build
