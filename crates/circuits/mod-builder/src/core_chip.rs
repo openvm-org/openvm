@@ -5,6 +5,7 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
 use axvm_circuit::arch::{
@@ -14,7 +15,6 @@ use axvm_circuit::arch::{
 use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},

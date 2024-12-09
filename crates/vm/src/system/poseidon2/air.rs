@@ -5,11 +5,11 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use derive_new::new;
 use itertools::izip;
-use p3_matrix::Matrix;
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{

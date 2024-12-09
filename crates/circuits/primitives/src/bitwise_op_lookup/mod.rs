@@ -10,11 +10,11 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 mod bus;
 #[cfg(test)]

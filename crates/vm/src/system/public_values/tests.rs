@@ -4,6 +4,7 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilderWithPublicValues},
     p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{AnyRap, PartitionedBaseAir},
     utils::disable_debug_builder,
@@ -14,7 +15,6 @@ use ax_stark_sdk::{
     utils::to_field_vec,
 };
 use p3_baby_bear::BabyBear;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     arch::VmCoreAir,

@@ -2,9 +2,9 @@ use ax_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::bitwise_op_lookup::bus::BitwiseOperationLookupBus;
 

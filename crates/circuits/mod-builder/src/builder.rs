@@ -14,11 +14,11 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField64},
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
-use p3_matrix::Matrix;
 
 use super::{FieldVariable, SymbolicExpr};
 

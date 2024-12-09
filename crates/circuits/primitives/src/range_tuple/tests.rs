@@ -1,14 +1,12 @@
 use std::{array, iter, sync::Arc};
 
-use ax_stark_backend::rap::AnyRap;
+use ax_stark_backend::{p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, rap::AnyRap};
 use ax_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use ax_stark_backend::p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 

@@ -5,9 +5,9 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::Field,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_matrix::Matrix;
 
 use crate::arch::{ExecutionBus, ExecutionState};
 

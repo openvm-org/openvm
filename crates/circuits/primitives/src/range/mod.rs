@@ -14,9 +14,9 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 mod bus;
 

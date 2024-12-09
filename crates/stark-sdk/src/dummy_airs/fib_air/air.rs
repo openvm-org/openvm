@@ -2,9 +2,9 @@ use std::borrow::Borrow;
 
 use ax_stark_backend::{
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_matrix::Matrix;
 
 use super::columns::{FibonacciCols, NUM_FIBONACCI_COLS};
 

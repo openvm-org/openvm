@@ -13,6 +13,7 @@ use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{AbstractField, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
@@ -23,7 +24,6 @@ use ax_stark_sdk::{
 };
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use rand::{
     prelude::{SliceRandom, StdRng},
     Rng,

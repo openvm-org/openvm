@@ -4,11 +4,11 @@ pub use ax_stark_backend::engine::StarkEngine;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
+    p3_matrix::dense::DenseMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
     verifier::VerificationError,
 };
-use p3_matrix::dense::DenseMatrix;
 use tracing::Level;
 
 use crate::config::{instrument::StarkHashStatistics, setup_tracing_with_log_level, FriParameters};

@@ -7,6 +7,10 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{AbstractField, Field},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -16,10 +20,6 @@ use ax_stark_sdk::{
 };
 use derive_new::new;
 use p3_baby_bear::BabyBear;
-use p3_matrix::{
-    dense::{DenseMatrix, RowMajorMatrix},
-    Matrix,
-};
 use p3_maybe_rayon::prelude::*;
 
 use super::*;

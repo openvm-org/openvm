@@ -1,6 +1,6 @@
+use ax_stark_backend::p3_field::{AbstractField, TwoAdicField};
 use axvm_native_compiler::prelude::*;
 use p3_commit::TwoAdicMultiplicativeCoset;
-use ax_stark_backend::p3_field::{AbstractField, TwoAdicField};
 use p3_symmetric::Hash;
 
 use super::{
@@ -312,7 +312,10 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use ax_stark_backend::config::{StarkGenericConfig, Val};
+    use ax_stark_backend::{
+        config::{StarkGenericConfig, Val},
+        p3_matrix::dense::RowMajorMatrix,
+    };
     use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
     use axvm_circuit::arch::instructions::program::Program;
     use axvm_native_compiler::{
@@ -323,7 +326,6 @@ pub mod tests {
     use p3_baby_bear::BabyBear;
     use p3_challenger::{CanObserve, FieldChallenger};
     use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_matrix::dense::RowMajorMatrix;
     use rand::rngs::OsRng;
 
     use crate::{

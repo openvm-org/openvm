@@ -5,6 +5,8 @@ use ax_stark_backend::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
     },
+    p3_field::{AbstractExtensionField, AbstractField, TwoAdicField},
+    p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
 use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
@@ -17,8 +19,6 @@ use axvm_native_compiler::{
 use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_commit::LagrangeSelectors;
-use ax_stark_backend::p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
