@@ -103,6 +103,7 @@ jobs:
       - name: Checkout Reth. This is inside afs-prototype dir but it's fine.
         run: |
           git clone git@github.com:axiom-crypto/rsp.git
+          git branch
       - name: setup nightly toolchain
         run: |
           rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
