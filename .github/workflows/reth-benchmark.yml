@@ -19,7 +19,7 @@ on:
         type: string
         required: false
         description: The family of the instance, can be multiple ones concat with "+" e.g. r8g+r7g
-        default: m8g
+        default: m7
       memory_allocator:
         type: string
         required: false
@@ -81,9 +81,14 @@ jobs:
       - name: Setup halo2
         run: |
           bash extensions/native/recursion/trusted_setup_s3.sh
+      - name: Setup CLI
+        working-directory: crates/cargo-axiom
+        run: |
+          cargo install --force --path .
       - name: Checkout Reth. This is inside afs-prototype dir but it's fine.
         run: |
           git clone git@github.com:axiom-crypto/rsp.git
-      - name: test
+      - name: Run Reth
         run: |
-          ls
+          cd rsp
+          cargo run --release --features=bench-metrics,parallel,nightly-features -- --log-level=debug --log-blowup=${{ inputs.app_log_blowup }} --agg-log-blowup=${{ inputs.agg_log_blowup }} --root-log-blowup=${{ inputs.root_log_blowup }} --internal-log-blowup=${{ inputs.internal_log_blowup }}
