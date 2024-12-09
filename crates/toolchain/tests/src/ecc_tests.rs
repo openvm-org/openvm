@@ -130,10 +130,10 @@ fn test_ec_runtime() -> Result<()> {
 }
 
 #[test]
-fn test_hint_decompress() -> Result<()> {
+fn test_decompress() -> Result<()> {
     use axvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
 
-    let elf = build_example_program_with_features("hint_decompress", ["k256"])?;
+    let elf = build_example_program_with_features("decompress", ["k256"])?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()

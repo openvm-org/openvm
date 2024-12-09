@@ -29,4 +29,8 @@ pub fn main() {
 
     let hint_y = Secp256k1Point::hint_decompress(&x, &rec_id);
     assert_eq!(y, hint_y);
+
+    let p = Secp256k1Point::decompress(x.clone(), &rec_id);
+    assert_eq!(p.x, x);
+    assert_eq!(p.y, y);
 }

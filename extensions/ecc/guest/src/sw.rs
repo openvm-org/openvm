@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::ops::Mul;
 
 use axvm_algebra_guest::{IntMod, Reduce};
 use elliptic_curve::{
@@ -11,6 +12,9 @@ use super::group::{CyclicGroup, Group};
 // TODO: consider consolidate with AffineCoords. Also separate encoding and x/y.
 /// Short Weierstrass curve affine point.
 pub trait SwPoint: Group {
+    /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
+    const CURVE_B: Self::Coordinate;
+
     type Coordinate: IntMod;
 
     // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/sec1/index.html
@@ -24,10 +28,48 @@ pub trait SwPoint: Group {
     // Note: sec1 bytes are in big endian.
     fn to_sec1_bytes(&self, is_compressed: bool) -> Vec<u8>;
 
+    /// Raw constructor without asserting point is on the curve.
+    fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;
+    fn into_coords(self) -> (Self::Coordinate, Self::Coordinate);
     fn x(&self) -> &Self::Coordinate;
     fn y(&self) -> &Self::Coordinate;
+    fn x_mut(&mut self) -> &mut Self::Coordinate;
+    fn y_mut(&mut self) -> &mut Self::Coordinate;
 
-    fn into_coords(self) -> (Self::Coordinate, Self::Coordinate);
+    fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
+    where
+        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
+    {
+        let lhs = &y * &y;
+        let rhs = &x * &x * &x + &Self::CURVE_B;
+        if lhs != rhs {
+            return None;
+        }
+        Some(Self::from_xy_unchecked(x, y))
+    }
+
+    /// Given `x`-coordinate,
+    ///
+    /// ## Panics
+    /// If the input is not a valid compressed point.
+    /// The zkVM panics instead of returning an [Option] because this function
+    /// can only guarantee correct behavior when decompression is possible,
+    /// but the function cannot compute the boolean equal to true if and only
+    /// if decompression is possible.
+    // This is because we rely on a hint for the correct decompressed value
+    // and then constrain its correctness. A malicious prover could hint
+    // incorrectly, so there is no way to use a hint to prove that the input
+    // **cannot** be decompressed.
+    fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self
+    where
+        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
+    {
+        let y = Self::hint_decompress(&x, rec_id);
+        // Must assert unique so we can check the parity
+        y.assert_unique();
+        assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
+        Self::from_xy(x, y).expect("decompressed point not on curve")
+    }
 
     /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
     /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.

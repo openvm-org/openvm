@@ -30,6 +30,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_type: Option<syn::Path> = None;
+        let mut const_b: Option<syn::Expr> = None;
         for param in item.params {
             match param.name.to_string().as_str() {
                 "mod_type" => {
@@ -41,6 +42,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             .into();
                     }
                 }
+                "b" => {
+                    // We currently leave it to the compiler to check if the expression is actually a constant
+                    const_b = Some(param.value);
+                }
                 _ => {
                     panic!("Unknown parameter {}", param.name);
                 }
@@ -48,6 +53,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
+        let const_b = const_b.expect("constant b coefficient is required");
 
         macro_rules! create_extern_func {
             ($name:ident) => {
@@ -184,6 +190,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
+                const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
                 // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
@@ -226,12 +233,24 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     bytes
                 }
 
+                fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
+                    Self { x, y }
+                }
+
                 fn x(&self) -> &Self::Coordinate {
                     &self.x
                 }
 
                 fn y(&self) -> &Self::Coordinate {
                     &self.y
+                }
+
+                fn x_mut(&mut self) -> &mut Self::Coordinate {
+                    &mut self.x
+                }
+
+                fn y_mut(&mut self) -> &mut Self::Coordinate {
+                    &mut self.y
                 }
 
                 fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {

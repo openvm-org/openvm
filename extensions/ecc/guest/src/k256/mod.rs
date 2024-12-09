@@ -24,6 +24,12 @@ lazy_static! {
 pub const SECP256K1_NUM_LIMBS: usize = 32;
 pub const SECP256K1_LIMB_BITS: usize = 8;
 pub const SECP256K1_BLOCK_SIZE: usize = 32;
+const CURVE_B: Secp256k1Coord = Secp256k1Coord::from_const_bytes(seven_le());
+const fn seven_le() -> [u8; 32] {
+    let mut buf = [0u8; 32];
+    buf[0] = 7;
+    buf
+}
 
 axvm_algebra_moduli_setup::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },
@@ -31,7 +37,7 @@ axvm_algebra_moduli_setup::moduli_declare! {
 }
 
 axvm_ecc_sw_setup::sw_declare! {
-    Secp256k1Point { mod_type = Secp256k1Coord },
+    Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 
 impl CyclicGroup for Secp256k1Point {

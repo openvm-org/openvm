@@ -1,9 +1,11 @@
-use ax_stark_backend::Chip;
+use std::borrow::Borrow;
+
+use ax_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    verifier::VerificationError,
+    Chip,
+};
 use ax_stark_sdk::{
-    ax_stark_backend::{
-        config::{StarkGenericConfig, Val},
-        verifier::VerificationError,
-    },
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
@@ -12,11 +14,14 @@ use ax_stark_sdk::{
 };
 use axvm_instructions::{exe::AxVmExe, program::Program};
 use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
+use p3_field::{AbstractField, PrimeField32};
 
-use crate::arch::{
-    vm::{VirtualMachine, VmExecutor},
-    Streams, VmConfig, VmMemoryState,
+use crate::{
+    arch::{
+        vm::{VirtualMachine, VmExecutor},
+        ExitCode, Streams, VmConfig, VmMemoryState, CONNECTOR_AIR_ID,
+    },
+    system::connector::VmConnectorPvs,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<AxVmExe<BabyBear>>)
@@ -72,6 +77,16 @@ where
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let connector_pvs = &result.per_segment.last().unwrap().per_air[CONNECTOR_AIR_ID]
+        .1
+        .raw
+        .public_values[..];
+    let pvs: &VmConnectorPvs<_> = connector_pvs.borrow();
+    assert_eq!(
+        pvs.exit_code,
+        AbstractField::from_canonical_u32(ExitCode::Success as u32),
+        "Runtime did not exit successfully"
+    );
     let final_memory = result.final_memory.take();
     if std::env::var("RUN_AIR_TEST_PROVING").is_ok() || always_prove {
         let proofs = vm.prove(&pk, result);

@@ -207,6 +207,33 @@ pub trait IntMod:
         ret *= self;
         ret
     }
+
+    /// zkVM specific concept: the in-memory values of `Self` will normally
+    /// be in their canonical unique form (e.g., less than modulus) but the
+    /// zkVM circuit does not constrain it. In cases where uniqueness is
+    /// essential for security, this function should be called to constrain
+    /// uniqueness.
+    ///
+    /// Note that this is done automatically in [PartialEq] and [Eq] implementations.
+    ///
+    /// ## Panics
+    /// If assertion fails.
+    fn assert_unique(&self) {
+        // This must not be optimized out
+        let _ = core::hint::black_box(PartialEq::eq(self, self));
+    }
+
+    /// This function is mostly be internal use in other internal implemntations.
+    /// Normal users are not advised to use it.
+    ///
+    /// If `self` was directly constructed from a raw representation
+    /// and not in its canonical unique form (e.g., less than the modulus),
+    /// this function will "reduce" `self` to its canonical form and also
+    /// call `assert_unique`.
+    fn reduce(&mut self) {
+        self.add_assign(&Self::ZERO);
+        self.assert_unique();
+    }
 }
 
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
