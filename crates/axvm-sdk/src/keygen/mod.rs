@@ -67,9 +67,9 @@ pub struct AggProvingKey {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
-    pub verifier: Arc<Halo2VerifierProvingKey>,
+    pub verifier: Halo2VerifierProvingKey,
     /// Wrapper circuit to verify static verifier and reduce the verification costs in the final proof.
-    pub wrapper: Arc<Halo2WrapperProvingKey>,
+    pub wrapper: Halo2WrapperProvingKey,
 }
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
@@ -288,22 +288,16 @@ impl FullAggProvingKey {
             .root_verifier_pk
             .generate_dummy_root_proof(dummy_internal_proof);
         // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
-        #[allow(clippy::arc_with_non_send_sync)]
-        let verifier = Arc::new(
-            agg_vm_pk
-                .root_verifier_pk
-                .keygen_static_verifier(halo2_config.verifier_k, dummy_root_proof),
-        );
+        let verifier = agg_vm_pk
+            .root_verifier_pk
+            .keygen_static_verifier(halo2_config.verifier_k, dummy_root_proof);
         let dummy_snark = verifier.generate_dummy_snark();
         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
             Halo2WrapperProvingKey::keygen(wrapper_k, dummy_snark)
         } else {
             Halo2WrapperProvingKey::keygen_auto_tune(dummy_snark)
         };
-        let halo2_pk = Halo2ProvingKey {
-            verifier,
-            wrapper: Arc::new(wrapper),
-        };
+        let halo2_pk = Halo2ProvingKey { verifier, wrapper };
         Self {
             agg_vm_pk,
             halo2_pk,
