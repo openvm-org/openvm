@@ -12,6 +12,7 @@ extern crate alloc;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
+pub use axvm_platform as platform;
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
 use axvm_platform::rust_rt;

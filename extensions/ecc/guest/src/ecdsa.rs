@@ -1,108 +1,140 @@
-use core::ops::Add;
+use core::ops::{Add, AddAssign, Mul};
 
 use axvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
-use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result, Signature, SignatureSize};
-use elliptic_curve::{
-    bigint::CheckedAdd,
-    generic_array::ArrayLength,
-    point::DecompressPoint,
-    sec1::{FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
-    PrimeField,
-};
+use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
+use elliptic_curve::PrimeCurve;
 
 use crate::{
     msm,
-    sw::{IntrinsicCurve, SwPoint},
-    CyclicGroup,
+    weierstrass::{IntrinsicCurve, WeierstrassPoint},
+    CyclicGroup, Group,
 };
 
-pub struct VerifyingKey<C>(pub ecdsa::VerifyingKey<C>)
-where
-    C: PrimeCurve + CurveArithmetic + IntrinsicCurve;
+pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
+pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct VerifyingKey<C: IntrinsicCurve> {
+    pub(crate) inner: PublicKey<C>,
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct PublicKey<C: IntrinsicCurve> {
+    /// Affine point
+    point: <C as IntrinsicCurve>::Point,
+}
+
+impl<C: IntrinsicCurve> PublicKey<C> {
+    pub fn into_inner(self) -> <C as IntrinsicCurve>::Point {
+        self.point
+    }
+}
+
+impl<C: IntrinsicCurve> VerifyingKey<C> {
+    pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
+        &self.inner.point
+    }
+}
 
 impl<C> VerifyingKey<C>
 where
-    C: PrimeCurve + CurveArithmetic + IntrinsicCurve,
-    SignatureSize<C>: ArrayLength<u8>,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C> + DecompressPoint<C>,
-    FieldBytesSize<C>: ModulusSize,
+    C: PrimeCurve + IntrinsicCurve,
 {
-    // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/recovery.rs.html#281-316
+    /// Ref: <https://github.com/RustCrypto/signatures/blob/85c984bcc9927c2ce70c7e15cbfe9c6936dd3521/ecdsa/src/recovery.rs#L297>
+    ///
+    /// Recovery does not require additional signature verification: <https://github.com/RustCrypto/signatures/pull/831>
+    ///
+    /// ## Panics
+    /// If the signature is invalid or public key cannot be recovered from the given input.
     #[allow(non_snake_case)]
-    pub fn recover_from_prehash(
+    pub fn recover_from_prehash_noverify(
         prehash: &[u8],
-        sig: &Signature<C>,
+        sig: &[u8],
         recovery_id: RecoveryId,
-    ) -> Result<VerifyingKey<C>>
+    ) -> VerifyingKey<C>
     where
         for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+        for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
     {
-        let (r, s) = sig.split_scalars();
+        // This should get compiled out:
+        assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
+        // IntMod limbs are currently always bytes
+        assert_eq!(sig.len(), <C as IntrinsicCurve>::Scalar::NUM_LIMBS * 2);
+        // Signature is default encoded in big endian bytes
+        let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
+        // Note: Scalar internally stores using little endian
+        let r = Scalar::<C>::from_be_bytes(r_be);
+        let s = Scalar::<C>::from_be_bytes(s_be);
+        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
+        // are in the canonical unique form (i.e., less than the modulus).
+        assert_ne!(r, Scalar::<C>::ZERO);
+        assert_ne!(s, Scalar::<C>::ZERO);
 
-        let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
-            bits2field::<C>(prehash).unwrap().as_ref(),
-        );
+        // TODO: don't use bits2field from ::ecdsa
+        let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
 
-        let mut r_bytes = r.to_repr();
+        // `r` is in the Scalar field, we now possibly add C::ORDER to it to get `x`
+        // in the Coordinate field.
+        let mut x = Coordinate::<C>::from_le_bytes(r.as_le_bytes());
         if recovery_id.is_x_reduced() {
-            // TODO: maybe need to optimize this.
-            match Option::<C::Uint>::from(
-                C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
-            ) {
-                Some(restored) => r_bytes = restored.encode_field_bytes(),
-                // No reduction should happen here if r was reduced
-                None => return Err(Error::new()),
-            };
+            // Copy from slice in case Coordinate has more bytes than Scalar
+            let order = Coordinate::<C>::from_le_bytes(Scalar::<C>::MODULUS.as_ref());
+            x.add_assign(order);
         }
-        let R = AffinePoint::<C>::decompress(&r_bytes, u8::from(recovery_id.is_y_odd()).into());
+        let rec_id = recovery_id.to_byte();
+        // The point R decompressed from x-coordinate `r`
+        let R: C::Point = WeierstrassPoint::decompress(x, &rec_id);
 
-        if R.is_none().into() {
-            return Err(Error::new());
-        }
-        let R = C::Point::from_encoded_point::<C>(&R.unwrap().to_encoded_point(false));
-
-        let r =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
-        let s =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
-        let public_key = msm(&[neg_u1, u2], &[NEG_G, R]);
+        let point = msm(&[neg_u1, u2], &[NEG_G, R]);
+        let public_key = PublicKey { point };
 
-        let vk = VerifyingKey(
-            ecdsa::VerifyingKey::<C>::from_sec1_bytes(&public_key.to_sec1_bytes(true)).unwrap(),
-        );
-
-        vk.verify_prehashed(prehash, sig)?;
-
-        Ok(vk)
+        VerifyingKey { inner: public_key }
     }
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
     #[allow(non_snake_case)]
-    pub fn verify_prehashed(&self, prehash: &[u8], sig: &Signature<C>) -> Result<()>
+    pub fn verify_prehashed(self, prehash: &[u8], sig: &[u8]) -> Result<()>
     where
         for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+        for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
     {
+        // This should get compiled out:
+        assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
+        // IntMod limbs are currently always bytes
+        assert_eq!(sig.len(), Scalar::<C>::NUM_LIMBS * 2);
+        // Signature is default encoded in big endian bytes
+        let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
+        // Note: Scalar internally stores using little endian
+        let r = Scalar::<C>::from_be_bytes(r_be);
+        let s = Scalar::<C>::from_be_bytes(s_be);
+        // The PartialEq implementation of Scalar: IntMod will constrain `r, s`
+        // are in the canonical unique form (i.e., less than the modulus).
+        assert_ne!(r, Scalar::<C>::ZERO);
+        assert_ne!(s, Scalar::<C>::ZERO);
+
+        // TODO: don't use bits2field from ::ecdsa
         let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
             bits2field::<C>(prehash).unwrap().as_ref(),
         );
-        let (r, s) = sig.split_scalars();
-        let r =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(r).as_ref());
-        let s =
-            <C as IntrinsicCurve>::Scalar::from_be_bytes(Into::<FieldBytes<C>>::into(s).as_ref());
+
         let u1 = z.div_unsafe(&s);
-        let u2 = r.clone().div_unsafe(&s);
+        let u2 = (&r).div_unsafe(&s);
 
         let G = C::Point::GENERATOR;
-        let Q = C::Point::from_encoded_point::<C>(&self.0.to_encoded_point(false));
-        let result = msm(&[u1, u2], &[G, Q]);
-
-        let x_in_scalar = <C as IntrinsicCurve>::Scalar::reduce_le_bytes(result.x().as_le_bytes());
-        if x_in_scalar == r {
+        // public key
+        let Q = self.inner.point;
+        let R = msm(&[u1, u2], &[G, Q]);
+        if R.is_identity() {
+            return Err(Error::new());
+        }
+        let (x_1, _) = R.into_coords();
+        let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
+        if x_mod_n == r {
             Ok(())
         } else {
             Err(Error::new())

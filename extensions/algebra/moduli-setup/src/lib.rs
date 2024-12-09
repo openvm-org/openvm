@@ -77,7 +77,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             .chain(vec![0u8; limbs])
             .take(limbs)
             .collect::<Vec<_>>();
-        let num_bytes = modulus_bytes.len();
 
         let modulus_hex = modulus_bytes
             .iter()
@@ -334,7 +333,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     const ZERO: Self = Self([0; #limbs]);
 
-                    const NUM_BYTES: usize = #num_bytes;
+                    const NUM_LIMBS: usize = #limbs;
 
                     const ONE: Self = Self::from_const_u8(1);
 
@@ -345,6 +344,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     fn from_le_bytes(bytes: &[u8]) -> Self {
                         let mut arr = [0u8; #limbs];
                         arr.copy_from_slice(bytes);
+                        Self(arr)
+                    }
+
+                    fn from_be_bytes(bytes: &[u8]) -> Self {
+                        let mut arr = [0u8; #limbs];
+                        for (a, b) in arr.iter_mut().zip(bytes.iter().rev()) {
+                            *a = *b;
+                        }
                         Self(arr)
                     }
 
@@ -366,6 +373,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     fn as_le_bytes(&self) -> &[u8] {
                         &(self.0)
+                    }
+
+                    fn to_be_bytes(&self) -> [u8; #limbs] {
+                        core::array::from_fn(|i| self.0[#limbs - 1 - i])
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
@@ -805,8 +816,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
 
         setups.push(quote::quote_spanned! { span.into() =>
-            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
-            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -843,16 +852,20 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                         remaining.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
-                        ::axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
-                            + #mod_idx
-                                * (::axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
-                    );
+                    unsafe {
+                        // This should not be x0:
+                        let mut tmp = uninit.as_mut_ptr() as usize;
+                        // rs2="x2" will be parsed as 2 and therefore transpiled to SETUP_ISEQ
+                        core::arch::asm!(
+                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, x2",
+                            opcode = const ::axvm_algebra_guest::OPCODE,
+                            funct3 = const ::axvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                            funct7 = const ::axvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize + #mod_idx * (::axvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            rd = inout(reg) tmp,
+                            rs1 = in(reg) remaining.as_ptr(),
+                        );
+                        // rd = inout(reg) is necessary because this instruction will write to `rd` register
+                    }
                 }
             }
         });
@@ -866,6 +879,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         mod axvm_intrinsics_ffi {
             #(#externs)*
         }
+        #[allow(non_snake_case)]
         pub mod axvm_intrinsics_meta_do_not_type_this_by_yourself {
             pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];

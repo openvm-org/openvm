@@ -21,7 +21,7 @@ use axvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
-use num_traits::Zero;
+use num_traits::{FromPrimitive, Zero};
 use strum::{EnumCount, FromRepr};
 
 use super::*;
@@ -37,13 +37,17 @@ pub enum PairingCurve {
 impl PairingCurve {
     pub fn curve_config(&self) -> CurveConfig {
         match self {
-            PairingCurve::Bn254 => {
-                CurveConfig::new(BN254_MODULUS.clone(), BN254_ORDER.clone(), BigUint::zero())
-            }
+            PairingCurve::Bn254 => CurveConfig::new(
+                BN254_MODULUS.clone(),
+                BN254_ORDER.clone(),
+                BigUint::zero(),
+                BigUint::from_u8(3).unwrap(),
+            ),
             PairingCurve::Bls12_381 => CurveConfig::new(
                 BLS12_381_MODULUS.clone(),
                 BLS12_381_ORDER.clone(),
                 BigUint::zero(),
+                BigUint::from_u8(4).unwrap(),
             ),
         }
     }

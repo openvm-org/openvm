@@ -14,6 +14,7 @@ pub enum SwBaseFunct7 {
     SwAddNe = 0,
     SwDouble,
     SwSetup,
+    HintDecompress,
 }
 
 impl SwBaseFunct7 {
@@ -33,11 +34,11 @@ mod group;
 pub use group::*;
 mod msm;
 pub use msm::*;
-mod ecdsa;
-pub use ecdsa::*;
 
+/// ECDSA
+pub mod ecdsa;
 /// Weierstrass curve traits
-pub mod sw;
+pub mod weierstrass;
 
 /// Types for Secp256k1 curve with intrinsic functions. Implements traits necessary for ECDSA.
 #[cfg(feature = "k256")]

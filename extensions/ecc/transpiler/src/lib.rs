@@ -1,6 +1,7 @@
 use axvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, UsizeOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, AxVmOpcode, PhantomDiscriminant,
+    UsizeOpcode,
 };
 use axvm_instructions_derive::UsizeOpcode;
 use axvm_transpiler::{util::from_r_type, TranspilerExtension};
@@ -19,6 +20,12 @@ pub enum Rv32WeierstrassOpcode {
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum EccPhantom {
+    HintDecompress = 0x40,
 }
 
 #[derive(Default)]
@@ -47,9 +54,21 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             );
             let dec_insn = RType::new(instruction_u32);
             let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
-            let curve_idx_shift =
-                ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize
-                    * Rv32WeierstrassOpcode::COUNT;
+            let curve_idx =
+                ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
+            let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
+            if let Some(SwBaseFunct7::HintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
+                assert_eq!(dec_insn.rd, 0);
+                return Some((
+                    Instruction::phantom(
+                        PhantomDiscriminant(EccPhantom::HintDecompress as u16),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                        curve_idx as u16,
+                    ),
+                    1,
+                ));
+            }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
                     0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
