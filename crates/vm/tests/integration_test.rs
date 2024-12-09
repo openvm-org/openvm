@@ -694,8 +694,8 @@ fn test_vm_max_access_adapter_8() {
         config.system.memory_config.max_access_adapter_n = 8;
         let chip_complex2 = config.create_chip_complex().unwrap();
         let mem_ctrl2 = chip_complex2.base.memory_controller.borrow();
-        // AccessAdapterAir with N=16/32/64 are disabled. (64 is by default disabled)
-        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 2);
+        // AccessAdapterAir with N=16/32/64 are disabled.
+        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 3);
         assert_eq!(
             mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
             mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 3

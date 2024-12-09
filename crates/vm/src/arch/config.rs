@@ -62,7 +62,7 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(29, 1, 29, 29, 17, 32)
+        Self::new(29, 1, 29, 29, 17, 64)
     }
 }
 
