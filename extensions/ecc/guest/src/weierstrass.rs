@@ -5,7 +5,7 @@ use axvm_algebra_guest::{IntMod, Reduce};
 use super::group::{CyclicGroup, Group};
 
 /// Short Weierstrass curve affine point.
-pub trait SwPoint: Group {
+pub trait WeierstrassPoint: Group {
     /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_B: Self::Coordinate;
 
@@ -74,5 +74,5 @@ pub trait SwPoint: Group {
 /// Implement this for external curves with corresponding axvm point and scalar types.
 pub trait IntrinsicCurve {
     type Scalar: IntMod + Reduce;
-    type Point: SwPoint + CyclicGroup;
+    type Point: WeierstrassPoint + CyclicGroup;
 }

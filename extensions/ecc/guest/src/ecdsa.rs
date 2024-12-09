@@ -6,11 +6,11 @@ use elliptic_curve::PrimeCurve;
 
 use crate::{
     msm,
-    sw::{IntrinsicCurve, SwPoint},
+    weierstrass::{IntrinsicCurve, WeierstrassPoint},
     CyclicGroup, Group,
 };
 
-pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as SwPoint>::Coordinate;
+pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
 pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;
 
 #[repr(C)]
@@ -85,7 +85,7 @@ where
         }
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
-        let R: C::Point = SwPoint::decompress(x, &rec_id);
+        let R: C::Point = WeierstrassPoint::decompress(x, &rec_id);
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);

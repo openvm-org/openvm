@@ -5,7 +5,7 @@ use axvm::io::read_vec;
 use axvm_ecc_guest::{
     algebra::IntMod,
     k256::{Secp256k1Coord, Secp256k1Point},
-    sw::SwPoint,
+    weierstrass::WeierstrassPoint,
 };
 
 axvm::entry!(main);

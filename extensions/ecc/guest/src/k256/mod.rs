@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use num_bigint_dig::BigUint;
 
 use super::group::{CyclicGroup, Group};
-use crate::sw::IntrinsicCurve;
+use crate::weierstrass::IntrinsicCurve;
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {

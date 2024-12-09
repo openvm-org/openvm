@@ -189,7 +189,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
+            impl ::axvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 

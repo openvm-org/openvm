@@ -5,9 +5,9 @@ use core::{hint::black_box, ptr::slice_from_raw_parts};
 
 use axvm_ecc_guest::{
     algebra::IntMod,
+    ecdsa::VerifyingKey,
     k256::{Secp256k1Coord, Secp256k1Point},
-    sw::SwPoint,
-    VerifyingKey,
+    weierstrass::WeierstrassPoint,
 };
 use axvm_keccak256_guest::keccak256;
 use hex_literal::hex;
@@ -49,7 +49,11 @@ pub fn main() {
     .unwrap();
     // sec1 encoding, the first byte is for compression flag
     let expected_key = expected_key.to_encoded_point(false);
-    assert_eq!(recovered_key.as_affine().as_le_bytes(), &expected_key[1..]);
+    let public_key = recovered_key.as_affine();
+    let mut buffer = [0u8; 64];
+    buffer[..32].copy_from_slice(&public_key.x().to_be_bytes());
+    buffer[32..].copy_from_slice(&public_key.y().to_be_bytes());
+    assert_eq!(&buffer, &expected_key.as_bytes()[1..]);
 
     recovered_key
         .verify_prehashed(&prehash, &signature)
