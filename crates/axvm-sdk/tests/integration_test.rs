@@ -24,7 +24,6 @@ use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_native_recursion::types::InnerConfig;
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{
-    commit::generate_leaf_committed_exe,
     config::{AggConfig, AppConfig, FullAggConfig, Halo2Config},
     keygen::AppProvingKey,
     verifier::{
@@ -65,7 +64,7 @@ where
     Ok(runtime_pvs)
 }
 
-fn app_committed_exe_for_test() -> Arc<AxVmCommittedExe<SC>> {
+fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<AxVmCommittedExe<SC>> {
     let program = {
         let n = 200;
         let mut builder = Builder::<C>::default();
@@ -81,7 +80,7 @@ fn app_committed_exe_for_test() -> Arc<AxVmCommittedExe<SC>> {
         builder.compile_isa()
     };
     Sdk.commit_app_exe(
-        standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
+        standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
         program.into(),
     )
     .unwrap()
@@ -133,21 +132,15 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
 
 #[test]
 fn test_public_values_and_leaf_verification() {
-    let app_config = small_test_app_config(3);
+    let app_log_blowup = 3;
+    let app_config = small_test_app_config(app_log_blowup);
     let app_pk = AppProvingKey::keygen(app_config);
-    let app_committed_exe = app_committed_exe_for_test();
+    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
 
     let agg_config = agg_config_for_test();
     let leaf_vm_config = agg_config.leaf_vm_config();
     let leaf_vm = SingleSegmentVmExecutor::new(leaf_vm_config);
-    let leaf_committed_exe = generate_leaf_committed_exe(
-        standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
-        CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        },
-        &app_pk,
-    );
+    let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
     let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
     let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
@@ -261,8 +254,9 @@ fn test_public_values_and_leaf_verification() {
 
 #[test]
 fn test_e2e_app_log_blowup_1() {
+    let app_log_blowup = 1;
     const AGG_PK_PATH: &str = "temp/agg_pk.out";
-    let app_config = small_test_app_config(1);
+    let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config, None::<&str>).unwrap();
     Sdk.agg_keygen(full_agg_config_for_test(), Some(AGG_PK_PATH))
         .unwrap();
@@ -273,7 +267,7 @@ fn test_e2e_app_log_blowup_1() {
         .unwrap();
 
     let e2e_prover = Sdk
-        .create_e2e_prover(app_pk, app_committed_exe_for_test(), agg_pk)
+        .create_e2e_prover(app_pk, app_committed_exe_for_test(app_log_blowup), agg_pk)
         .unwrap();
     let evm_proof = e2e_prover.generate_proof_for_evm(StdIn::default());
     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
