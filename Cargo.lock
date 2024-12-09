@@ -1286,6 +1286,7 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "eyre",
+ "itertools 0.13.0",
  "metrics",
  "p3-baby-bear",
  "p3-field",

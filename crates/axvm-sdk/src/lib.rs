@@ -32,6 +32,7 @@ use axvm_transpiler::{
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
 use eyre::{bail, Result};
+use itertools::Itertools;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
 use p3_baby_bear::BabyBear;
 use prover::{generate_leaf_committed_exe, StarkProver};
@@ -71,15 +72,15 @@ impl Sdk {
 
         let elf_path = pkg
             .targets
-            .iter()
-            .find(|target| target.kind.iter().any(|kind| kind == "bin"))
+            .into_iter()
+            .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
+            .exactly_one()
             .map(|target| {
                 target_dir
                     .join("riscv32im-risc0-zkvm-elf")
                     .join("release")
                     .join(&target.name)
-            })
-            .expect("Could not find target binary");
+            })?;
         let data = read(elf_path)?;
         Elf::decode(&data, MEM_SIZE as u32)
     }
