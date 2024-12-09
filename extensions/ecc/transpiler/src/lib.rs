@@ -76,7 +76,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize
                             + Rv32WeierstrassOpcode::default_offset()
                     }
-                    _ => unimplemented!(),
+                    _ => {
+                        println!("wtf? {}", base_funct7);
+                        unimplemented!();
+                    }
                 };
                 let global_opcode = global_opcode + curve_idx_shift;
                 Some(from_r_type(global_opcode, 2, &dec_insn))

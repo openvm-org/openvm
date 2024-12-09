@@ -45,7 +45,12 @@ on:
         required: false
         description: Internal level log blowup (only for e2e)
         default: 2
-      # temporary
+      collect_metrics:
+        type: boolean
+        required: false
+        description: Whether to collect metrics for flamegraphs
+        default: false
+      # TODO: store a github secret for this
       rpc_url:
         type: string
         required: true
