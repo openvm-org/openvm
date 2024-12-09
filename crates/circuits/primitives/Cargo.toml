@@ -6,8 +6,6 @@ edition.workspace = true
 description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
 
 [dependencies]
-p3-baby-bear = { workspace = true, optional = true }
-
 ax-stark-backend = { workspace = true }
 ax-circuit-derive = { workspace = true }
 
@@ -30,5 +28,4 @@ ax-stark-sdk = { workspace = true }
 
 [features]
 default = ["parallel"]
-test-traits = ["p3-baby-bear"]           # traits for testing
 parallel = ["ax-stark-backend/parallel"]
