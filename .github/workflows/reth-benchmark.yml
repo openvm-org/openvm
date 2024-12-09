@@ -3,11 +3,23 @@ name: "Reth Benchmark"
 on:
   workflow_dispatch:
     inputs:
-      instance_type:
+      # Default runner is not big enough for this
+      # https://aws.amazon.com/ec2/instance-types/
+      instance_cpu:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The number of CPUs of the instance to start
+        default: 64
+      instance_ram:
+        type: string
+        required: false
+        description: The number of CPUs of the instance to start
+        default: 512
+      instance_family:
+        type: string
+        required: false
+        description: The family of the instance, can be multiple ones concat with "+" e.g. r8g+r7g
+        default: r8g
       memory_allocator:
         type: string
         required: false
@@ -48,9 +60,10 @@ jobs:
     name: Run Reth benchmark
     runs-on:
       - runs-on
-      - runner=${{ inputs.instance_type }}
       - run-id=${{ github.run_id }}
-      - family=m7
+      - cpu=${{ inputs.instance_cpu }}
+      - ram=${{ inputs.instance_ram }}
+      - family=${{ inputs.instance_family }}
       - tag=bench-reth-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -65,16 +78,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: test
+      - name: Setup halo2
         run: |
-          pwd
-      - name: test2
-        run: |
-          echo $GITHUB_WORKSPACE
-          cd $GITHUB_WORKSPACE/..
-      - name: Checkout Reth.
+          bash extensions/native/recursion/trusted_setup_s3.sh
+      - name: Checkout Reth. This is inside afs-prototype dir but it's fine.
         run: |
           git clone git@github.com:axiom-crypto/rsp.git
-      - name: test2
+      - name: test
         run: |
           ls
