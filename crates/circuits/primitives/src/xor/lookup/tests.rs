@@ -1,8 +1,8 @@
 use std::{iter, sync::Arc};
 
 use ax_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, rap::AnyRap,
-    utils::disable_debug_builder, verifier::VerificationError,
+    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -10,7 +10,6 @@ use ax_stark_sdk::{
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
 use crate::xor::XorLookupChip;

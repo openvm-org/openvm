@@ -1,15 +1,14 @@
 use std::{iter, sync::Arc};
 
 use ax_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, prover::USE_DEBUG_BUILDER,
-    rap::AnyRap, verifier::VerificationError,
+    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError,
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
     utils::create_seeded_rng,
 };
 use p3_baby_bear::BabyBear;
-use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
 use crate::var_range::{

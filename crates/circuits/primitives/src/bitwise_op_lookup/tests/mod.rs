@@ -1,8 +1,12 @@
 use std::{iter, sync::Arc};
 
 use ax_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, prover::USE_DEBUG_BUILDER,
-    rap::AnyRap, verifier::VerificationError,
+    p3_field::AbstractField,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    prover::USE_DEBUG_BUILDER,
+    rap::AnyRap,
+    verifier::VerificationError,
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
@@ -10,7 +14,6 @@ use ax_stark_sdk::{
 };
 use dummy::DummyAir;
 use p3_baby_bear::BabyBear;
-use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rand::Rng;
 
 use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};

@@ -11,6 +11,7 @@ use ax_stark_backend::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
     },
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -20,7 +21,6 @@ use ax_stark_sdk::{
 };
 use derive_new::new;
 use p3_baby_bear::BabyBear;
-use p3_maybe_rayon::prelude::*;
 
 use super::*;
 use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
