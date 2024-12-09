@@ -14,12 +14,12 @@ on:
         type: string
         required: false
         description: The number of CPUs of the instance to start
-        default: 512
+        default: 256
       instance_family:
         type: string
         required: false
         description: The family of the instance, can be multiple ones concat with "+" e.g. r8g+r7g
-        default: r8g
+        default: m8g
       memory_allocator:
         type: string
         required: false
