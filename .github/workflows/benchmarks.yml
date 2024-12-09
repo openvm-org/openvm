@@ -70,7 +70,7 @@ jobs:
                 agg_log_blowup: .agg_log_blowup,
                 root_log_blowup: (.root_log_blowup // 0),
                 internal_log_blowup: (.internal_log_blowup // 0),
-                max_segment_length: (.max_segment_length // 1000000)
+                max_segment_length: (.max_segment_length // 1048476)
               }
             ]
           ' ./ci/benchmark-config.json)

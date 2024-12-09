@@ -48,7 +48,7 @@ on:
         type: number
         required: false
         description: Max segment length for continuations, must be larger than 524288
-        default: 1000000
+        default: 1048476
   workflow_call:
     inputs:
       benchmark_name:
@@ -89,7 +89,7 @@ on:
         type: number
         required: false
         description: Max segment length for continuations, must be larger than 524288
-        default: 1000000
+        default: 1048476
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -182,7 +182,7 @@ jobs:
             select(.run_params[] | .agg_log_blowup == $agg_log_blowup) |
             select(.run_params[] | (.root_log_blowup // 0) == $root_log_blowup) |
             select(.run_params[] | (.internal_log_blowup // 0) == $internal_log_blowup) |
-            select(.run_params[] | (.max_segment_length // 1000000) == $max_segment_length) |
+            select(.run_params[] | (.max_segment_length // 1048476) == $max_segment_length) |
             .e2e_bench
           ' ../../../ci/benchmark-config.json)
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
