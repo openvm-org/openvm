@@ -151,9 +151,10 @@ jobs:
           cargo build --bin rsp --release
           OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp \
             --$MODE --block-number $BLOCK_NUMBER --rpc-url $RPC_1 --cache-dir rpc-cache \
-            --app_log_blowup ${{ inputs.app_log_blowup }} --agg_log_blowup ${{ inputs.agg_log_blowup }} \
-            --root_log_blowup ${{ inputs.root_log_blowup }} \
-            --max_segment_length ${{ inputs.max_segment_length }} $OPTIONAL_ARGS
+            --app-log-blowup ${{ inputs.app_log_blowup }} \
+            --agg-log-blowup ${{ inputs.agg_log_blowup }} \
+            --root-log-blowup ${{ inputs.root_log_blowup }} \
+            --max-segment-length ${{ inputs.max_segment_length }} $OPTIONAL_ARGS
 
       - name: Upload Benchmark Metrics
         working-directory: rsp
