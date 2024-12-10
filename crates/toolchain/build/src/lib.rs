@@ -348,7 +348,6 @@ pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
             }
             true
         })
-        .map(|target| target_dir.as_ref().join(&target.name))
         .collect::<Vec<_>>();
     if elf_paths.len() != 1 {
         Err(eyre::eyre!(
@@ -357,7 +356,7 @@ pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
             elf_paths
         ))
     } else {
-        Ok(elf_paths[0].clone())
+        Ok(target_dir.as_ref().join(&elf_paths[0].name))
     }
 }
 

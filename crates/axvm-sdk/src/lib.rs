@@ -89,7 +89,6 @@ impl Sdk {
                 ));
             }
         };
-        let target_dir = target_dir.join("riscv32im-risc0-zkvm-elf").join("release");
 
         eprintln!("target_dir: {:?}", target_dir);
         eprintln!("targets: {:?}", pkg.targets);
