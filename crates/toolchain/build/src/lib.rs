@@ -14,9 +14,8 @@ use std::{
 
 use axvm_platform::memory;
 use cargo_metadata::{MetadataCommand, Package};
-use config::GuestBuildOptions;
 
-pub use self::config::{DockerOptions, GuestOptions};
+pub use self::config::GuestOptions;
 
 mod config;
 
@@ -230,20 +229,21 @@ fn tty_println(msg: &str) {
 
 /// Builds a package that targets the riscv guest into the specified target
 /// directory.
-pub fn build_guest_package<P>(
+pub fn build_guest_package(
     pkg: &Package,
-    target_dir: P,
-    guest_opts: &GuestBuildOptions,
+    guest_opts: &GuestOptions,
     runtime_lib: Option<&str>,
-) -> Result<(), Option<i32>>
-where
-    P: AsRef<Path>,
-{
+) -> Result<PathBuf, Option<i32>> {
     if is_skip_build() {
         return Err(None);
     }
 
-    fs::create_dir_all(target_dir.as_ref()).unwrap();
+    let target_dir = guest_opts
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| get_target_dir(pkg.manifest_path.clone()));
+
+    fs::create_dir_all(&target_dir).unwrap();
 
     let runtime_rust_flags = runtime_lib
         .map(|lib| vec![String::from("-C"), format!("link_arg={}", lib)])
@@ -268,12 +268,17 @@ where
         "--manifest-path",
         pkg.manifest_path.as_str(),
         "--target-dir",
-        target_dir.as_ref().to_str().unwrap(),
+        target_dir.to_str().unwrap(),
     ]);
 
-    if !is_debug() {
-        cmd.args(["--release"]);
-    }
+    let profile = if let Some(profile) = &guest_opts.profile {
+        profile
+    } else if is_debug() {
+        "debug"
+    } else {
+        "release"
+    };
+    cmd.args(["--profile", profile]);
 
     cmd.args(&guest_opts.options);
     tty_println(&format!("cargo command: {:?}", cmd));
@@ -298,7 +303,7 @@ where
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(())
+        Ok(target_dir.join("riscv32im-risc0-zkvm-elf").join(profile))
     }
 }
 

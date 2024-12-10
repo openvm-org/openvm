@@ -55,8 +55,8 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
-    let guest_opts = GuestOptions::default().into();
-    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_opts, None) {
+    let guest_opts = GuestOptions::default().with_target_dir(target_dir.path());
+    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None) {
         std::process::exit(code);
     }
     // Assumes the package has a single target binary

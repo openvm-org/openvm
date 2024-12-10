@@ -19,7 +19,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
+use axvm_build::{build_guest_package, get_package, GuestOptions};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     prover::ContinuationVmProof,
@@ -39,7 +39,7 @@ use axvm_transpiler::{
 };
 use commit::commit_app_exe;
 use config::AppConfig;
-use eyre::{bail, Result};
+use eyre::Result;
 use keygen::AppProvingKey;
 
 pub mod commit;
@@ -80,16 +80,18 @@ impl Sdk {
         pkg_dir: P,
         target_filter: TargetFilter,
     ) -> Result<Vec<PathBuf>> {
-        if guest_opts.use_docker.is_some() {
-            bail!("docker build is not supported yet");
-        }
         let pkg = get_package(pkg_dir.as_ref());
-        let target_dir = get_target_dir(&pkg.manifest_path);
-        if let Err(Some(code)) =
-            build_guest_package(&pkg, target_dir.clone(), &guest_opts.into(), None)
-        {
-            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
-        }
+        let target_dir = match build_guest_package(&pkg, &guest_opts, None) {
+            Ok(target_dir) => target_dir,
+            Err(Some(code)) => {
+                return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+            }
+            Err(None) => {
+                return Err(eyre::eyre!(
+                    "Failed to build guest (AXIOM_SKIP_BUILD is set)"
+                ));
+            }
+        };
         let target_dir = target_dir.join("riscv32im-risc0-zkvm-elf").join("release");
 
         eprintln!("target_dir: {:?}", target_dir);
