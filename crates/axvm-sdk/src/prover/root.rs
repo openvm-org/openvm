@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ax_stark_sdk::{
     ax_stark_backend::prover::types::Proof,
-    config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterEngine,
+    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
     engine::{StarkEngine, StarkFriEngine},
 };
 use axvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
@@ -12,7 +12,7 @@ use crate::{
     keygen::RootVerifierProvingKey,
     prover::vm::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
     verifier::root::types::RootVmVerifierInput,
-    OuterSC, F, SC,
+    RootSC, F, SC,
 };
 
 /// Local prover for a root verifier.
@@ -42,8 +42,8 @@ impl RootVerifierLocalProver {
     }
 }
 
-impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
-    fn prove(&self, input: impl Into<Streams<F>>) -> Proof<OuterSC> {
+impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
+    fn prove(&self, input: impl Into<Streams<F>>) -> Proof<RootSC> {
         let input = input.into();
         let vm = SingleSegmentVmExecutor::new(self.root_verifier_pk.vm_pk.vm_config.clone());
         let mut proof_input = vm
@@ -68,14 +68,14 @@ impl SingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
             // Overwrite the AIR ID.
             proof_input.per_air[i].0 = i;
         }
-        let e = BabyBearPoseidon2OuterEngine::new(self.root_verifier_pk.vm_pk.fri_params);
+        let e = BabyBearPoseidon2RootEngine::new(self.root_verifier_pk.vm_pk.fri_params);
         e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
     }
 }
 
 #[async_trait]
-impl AsyncSingleSegmentVmProver<OuterSC> for RootVerifierLocalProver {
-    async fn prove(&self, input: impl Into<Streams<F>> + Send + Sync) -> Proof<OuterSC> {
+impl AsyncSingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
+    async fn prove(&self, input: impl Into<Streams<F>> + Send + Sync) -> Proof<RootSC> {
         SingleSegmentVmProver::prove(self, input)
     }
 }

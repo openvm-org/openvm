@@ -9,7 +9,7 @@ use ax_stark_sdk::{
     },
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterEngine, FriParameters,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters,
     },
     engine::StarkFriEngine,
     p3_bn254_fr::Bn254Fr,
@@ -35,7 +35,7 @@ use crate::{
     verifier::{
         internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
     },
-    NonRootCommittedExe, OuterSC, F, SC,
+    NonRootCommittedExe, RootSC, F, SC,
 };
 
 pub(crate) mod dummy;
@@ -185,7 +185,7 @@ impl AggProvingKey {
         );
 
         let root_verifier_pk = {
-            let root_engine = BabyBearPoseidon2OuterEngine::new(config.root_fri_params);
+            let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
@@ -194,7 +194,7 @@ impl AggProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let root_committed_exe = Arc::new(AxVmCommittedExe::<OuterSC>::commit(
+            let root_committed_exe = Arc::new(AxVmCommittedExe::<RootSC>::commit(
                 root_program.into(),
                 root_engine.config.pcs(),
             ));
@@ -258,9 +258,9 @@ pub struct RootVerifierProvingKey {
     /// - AIR proving key in `MultiStarkProvingKey` is ordered by trace height.
     /// - `VmConfig.overridden_executor_heights` is specified and is in the original AIR order.
     /// - `VmConfig.memory_config.boundary_air_height` is specified.
-    pub vm_pk: VmProvingKey<OuterSC, NativeConfig>,
+    pub vm_pk: VmProvingKey<RootSC, NativeConfig>,
     /// Committed executable for the root VM.
-    pub root_committed_exe: Arc<AxVmCommittedExe<OuterSC>>,
+    pub root_committed_exe: Arc<AxVmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
     // The following is currently not used:

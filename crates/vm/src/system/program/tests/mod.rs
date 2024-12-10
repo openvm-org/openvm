@@ -8,7 +8,7 @@ use ax_stark_backend::{
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkFriEngine,
@@ -32,7 +32,7 @@ use crate::{
 };
 
 assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
-assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2OuterConfig>: Serialize, DeserializeOwned);
+assert_impl_all!(AxVmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let instructions = program.instructions();

@@ -8,7 +8,7 @@ use axvm_native_recursion::{
 };
 use tracing::info_span;
 
-use crate::{keygen::Halo2ProvingKey, OuterSC};
+use crate::{keygen::Halo2ProvingKey, RootSC};
 pub struct Halo2Prover {
     halo2_pk: Halo2ProvingKey,
     verifier_srs: Arc<Halo2Params>,
@@ -31,7 +31,7 @@ impl Halo2Prover {
             wrapper_srs,
         }
     }
-    pub fn prove_for_evm(&self, root_proof: &Proof<OuterSC>) -> EvmProof {
+    pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let snark = info_span!("halo2 verifier", group = "halo2_verifier").in_scope(|| {

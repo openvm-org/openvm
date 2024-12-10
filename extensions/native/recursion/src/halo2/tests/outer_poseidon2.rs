@@ -1,6 +1,6 @@
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{
-    config::baby_bear_poseidon2_outer::outer_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
 use axvm_native_compiler::ir::{Builder, Felt, Var, Witness};
 use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
@@ -14,7 +14,7 @@ use crate::{
 
 #[test]
 fn test_p2_permute_mut() {
-    let poseidon2 = outer_perm();
+    let poseidon2 = root_perm();
     let input: [Bn254Fr; 3] = [
         Bn254Fr::from_canonical_u32(0),
         Bn254Fr::from_canonical_u32(1),
@@ -45,7 +45,7 @@ fn test_p2_permute_mut() {
 
 #[test]
 fn test_p2_hash() {
-    let perm = outer_perm();
+    let perm = root_perm();
     let hasher = OuterHash::new(perm.clone()).unwrap();
 
     let input: [BabyBear; 7] = [
@@ -82,7 +82,7 @@ fn test_p2_hash() {
 
 #[test]
 fn test_p2_compress() {
-    let perm = outer_perm();
+    let perm = root_perm();
     let compressor = OuterCompress::new(perm.clone());
 
     let a: [Bn254Fr; 1] = [Bn254Fr::TWO];

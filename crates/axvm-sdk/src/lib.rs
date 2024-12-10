@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     ax_stark_backend::{verifier::VerificationError, Chip},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -64,7 +64,7 @@ use crate::{
 pub(crate) type SC = BabyBearPoseidon2Config;
 pub(crate) type C = InnerConfig;
 pub(crate) type F = BabyBear;
-pub(crate) type OuterSC = BabyBearPoseidon2OuterConfig;
+pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
 pub(crate) type NonRootCommittedExe = AxVmCommittedExe<SC>;
 
 pub struct Sdk;

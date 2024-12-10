@@ -27,7 +27,7 @@ use crate::{
         common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
     },
-    OuterSC, F, SC,
+    RootSC, F, SC,
 };
 
 impl RootVerifierProvingKey {
@@ -35,7 +35,7 @@ impl RootVerifierProvingKey {
     pub fn keygen_static_verifier(
         &self,
         halo2_k: usize,
-        root_proof: Proof<OuterSC>,
+        root_proof: Proof<RootSC>,
     ) -> Halo2VerifierProvingKey {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
@@ -46,7 +46,7 @@ impl RootVerifierProvingKey {
         }
     }
 
-    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<OuterSC> {
+    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<RootSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
         let num_public_values = prover
@@ -69,7 +69,7 @@ impl RootVerifierProvingKey {
 
 fn build_static_verifier_operations(
     root_verifier_pk: &RootVerifierProvingKey,
-    proof: &Proof<OuterSC>,
+    proof: &Proof<RootSC>,
 ) -> DslOperations<OuterConfig> {
     let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
     let special_air_ids = root_verifier_pk.air_id_permutation().get_special_air_ids();

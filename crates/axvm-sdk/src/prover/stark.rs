@@ -6,7 +6,7 @@ use axvm_circuit::arch::VmConfig;
 use crate::{
     keygen::{AggProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
-    NonRootCommittedExe, OuterSC, StdIn, F, SC,
+    NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
 pub struct StarkProver<VC> {
@@ -42,7 +42,7 @@ impl<VC> StarkProver<VC> {
             agg_prover: AggStarkProver::new(agg_pk, leaf_committed_exe),
         }
     }
-    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<OuterSC>
+    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
