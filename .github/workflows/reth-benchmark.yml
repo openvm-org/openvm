@@ -150,6 +150,7 @@ jobs:
           source ci/scripts/utils.sh
           METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+          mkdir -p .bench_metrics
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
@@ -164,8 +165,7 @@ jobs:
           export RPC_1=${{ inputs.rpc_url }}
           export MODE=${{ inputs.mode }}
           cargo build --bin rsp --release
-          OUTPUT_PATH=metrics.json RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 20526624 --rpc-url $RPC_1 --cache-dir rpc-cache
-          cp metrics.json ${METRIC_PATH}
+          OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 20526624 --rpc-url $RPC_1 --cache-dir rpc-cache
 
       - name: Upload Benchmark Metrics
         working-directory: rsp
