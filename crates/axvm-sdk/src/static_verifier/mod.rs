@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
-use axvm_circuit::{arch::PROGRAM_CACHED_TRACE_INDEX, prover::SingleSegmentVmProver};
+use axvm_circuit::arch::PROGRAM_CACHED_TRACE_INDEX;
 use axvm_native_compiler::prelude::*;
 use axvm_native_recursion::{
     challenger::multi_field32::MultiField32ChallengerVariable,
@@ -22,7 +22,7 @@ use axvm_native_recursion::{
 
 use crate::{
     keygen::RootVerifierProvingKey,
-    prover::RootVerifierLocalProver,
+    prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
     verifier::{
         common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},

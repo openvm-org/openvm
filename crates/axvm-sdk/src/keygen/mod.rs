@@ -16,7 +16,6 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    prover::types::VmProvingKey,
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_circuit::NativeConfig;
@@ -32,6 +31,7 @@ use crate::{
     commit::babybear_digest_to_bn254,
     config::{AggConfig, AppConfig, FullAggConfig},
     keygen::perm::AirIdPermutation,
+    prover::vm::types::VmProvingKey,
     verifier::{
         internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
     },

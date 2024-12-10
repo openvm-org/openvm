@@ -8,19 +8,19 @@ use ax_stark_backend::{
     Chip,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
-
-use crate::{
+use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, Streams, VmComplexTraceHeights,
+        hasher::poseidon2::vm_poseidon2_hasher, Streams, VirtualMachine, VmComplexTraceHeights,
         VmConfig,
-    },
-    prover::{
-        types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
-        ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
     system::{
         memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
     },
+};
+
+use crate::prover::vm::{
+    types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
+    ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
 };
 
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {

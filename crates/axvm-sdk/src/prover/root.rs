@@ -4,15 +4,15 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterEngine,
     engine::{StarkEngine, StarkFriEngine},
 };
-use axvm_circuit::{
-    arch::{SingleSegmentVmExecutor, Streams},
-    prover::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
-};
+use axvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use axvm_native_circuit::NativeConfig;
 use axvm_native_recursion::hints::Hintable;
 
 use crate::{
-    keygen::RootVerifierProvingKey, verifier::root::types::RootVmVerifierInput, OuterSC, F, SC,
+    keygen::RootVerifierProvingKey,
+    prover::vm::{AsyncSingleSegmentVmProver, SingleSegmentVmProver},
+    verifier::root::types::RootVmVerifierInput,
+    OuterSC, F, SC,
 };
 
 /// Local prover for a root verifier.

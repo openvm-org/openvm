@@ -22,7 +22,6 @@ use ax_stark_sdk::{
 use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
-    prover::ContinuationVmProof,
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_recursion::{
@@ -54,6 +53,7 @@ pub mod verifier;
 
 mod io;
 pub use io::*;
+use prover::vm::ContinuationVmProof;
 
 use crate::{
     config::FullAggConfig,

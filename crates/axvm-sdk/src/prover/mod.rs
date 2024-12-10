@@ -16,6 +16,8 @@ pub use halo2::*;
 mod root;
 pub use root::*;
 mod stark;
+pub mod vm;
+
 #[allow(unused_imports)]
 pub use stark::*;
 

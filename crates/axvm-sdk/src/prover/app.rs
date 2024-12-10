@@ -2,17 +2,17 @@ use std::sync::Arc;
 
 use ax_stark_backend::Chip;
 use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use axvm_circuit::arch::VmConfig;
 #[cfg(feature = "bench-metrics")]
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VmExecutor};
-use axvm_circuit::{
-    arch::VmConfig,
-    prover::{
-        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
-    },
-};
 use tracing::info_span;
 
-use crate::{NonRootCommittedExe, StdIn, F, SC};
+use crate::{
+    prover::vm::{
+        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
+    },
+    NonRootCommittedExe, StdIn, F, SC,
+};
 
 pub struct AppProver<VC> {
     /// If true, will run execution once with full metric collection for

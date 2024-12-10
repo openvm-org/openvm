@@ -18,10 +18,6 @@ use axvm_circuit::{
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
-    prover::{
-        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
-        SingleSegmentVmProver,
-    },
     system::program::trace::AxVmCommittedExe,
     utils::next_power_of_two_or_zero,
 };
@@ -31,6 +27,10 @@ use axvm_native_recursion::hints::Hintable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 
 use crate::{
+    prover::vm::{
+        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
+        SingleSegmentVmProver,
+    },
     verifier::{
         internal::types::InternalVmVerifierInput,
         leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},

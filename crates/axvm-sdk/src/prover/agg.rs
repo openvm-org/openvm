@@ -6,17 +6,17 @@ use ax_stark_sdk::{
 };
 #[cfg(feature = "bench-metrics")]
 use axvm_circuit::arch::SingleSegmentVmExecutor;
-use axvm_circuit::{
-    arch::Streams,
-    prover::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
-};
+use axvm_circuit::arch::Streams;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_recursion::hints::Hintable;
 use tracing::info_span;
 
 use crate::{
     keygen::AggProvingKey,
-    prover::RootVerifierLocalProver,
+    prover::{
+        vm::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
+        RootVerifierLocalProver,
+    },
     verifier::{
         internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
         root::types::RootVmVerifierInput,
