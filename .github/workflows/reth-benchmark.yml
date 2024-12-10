@@ -150,7 +150,6 @@ jobs:
           source ci/scripts/utils.sh
           METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
-          mkdir -p .bench_metrics
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
@@ -162,6 +161,7 @@ jobs:
           cp target/riscv32im-risc0-zkvm-elf/release/rsp-client-eth ../host/elf/
           cd ../..
           mkdir -p rpc-cache
+          mkdir -p .bench_metrics
           export RPC_1=${{ inputs.rpc_url }}
           export MODE=${{ inputs.mode }}
           cargo build --bin rsp --release
@@ -171,14 +171,12 @@ jobs:
         working-directory: rsp
         run: |
           current_sha=$(git rev-parse HEAD)
-          s5cmd cp ${METRIC_PATH} ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
-      
-      - name: Store metric json and compute diff with previous
-        run: |
-          current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
-
+          s5cmd cp ${METRIC_PATH} ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+      
+      - name: Generate markdown
+        run: |
           source ci/scripts/utils.sh
           generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
 
