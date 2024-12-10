@@ -170,6 +170,8 @@ where
         tracing::debug!("Number of continuation segments: {}", segments.len());
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
+        #[cfg(feature = "bench-metrics")]
+        tracing::info!("execute_time [all segments]: {:?}", start.elapsed());
 
         Ok(segments)
     }
@@ -247,8 +249,16 @@ where
                     let start = std::time::Instant::now();
                     let ret = seg.generate_proof_input(committed_program.clone());
                     #[cfg(feature = "bench-metrics")]
-                    metrics::gauge!("trace_gen_time_ms", "segment" => seg_idx.to_string())
-                        .set(start.elapsed().as_millis() as f64);
+                    {
+                        metrics::gauge!("trace_gen_time_ms", "segment" => seg_idx.to_string())
+                            .set(start.elapsed().as_millis() as f64);
+                        tracing::info!(
+                            "trace_gen_time: {:?} [segment {}]",
+                            start.elapsed(),
+                            seg_idx
+                        );
+                    }
+
                     ret
                 })
                 .collect(),
