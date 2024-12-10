@@ -1,10 +1,10 @@
 extern crate core;
 
 use std::{
-    fs::{create_dir_all, write},
+    fs::{create_dir_all, read, write},
     io::Write,
     panic::catch_unwind,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -19,7 +19,9 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_build::{build_guest_package, get_package, GuestOptions};
+use axvm_build::{
+    build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
+};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     prover::ContinuationVmProof,
@@ -33,6 +35,7 @@ use axvm_native_recursion::{
     types::InnerConfig,
 };
 use axvm_transpiler::{
+    axvm_platform::memory::MEM_SIZE,
     elf::Elf,
     transpiler::{Transpiler, TranspilerError},
     FromElf,
@@ -67,19 +70,13 @@ pub(crate) type NonRootCommittedExe = AxVmCommittedExe<SC>;
 
 pub struct Sdk;
 
-#[derive(Default)]
-pub struct TargetFilter {
-    pub name_substr: Option<String>,
-    pub kind: Option<String>,
-}
-
 impl Sdk {
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
         pkg_dir: P,
-        target_filter: TargetFilter,
-    ) -> Result<Vec<PathBuf>> {
+        target_filter: &TargetFilter,
+    ) -> Result<Elf> {
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None) {
             Ok(target_dir) => target_dir,
@@ -97,25 +94,9 @@ impl Sdk {
         eprintln!("target_dir: {:?}", target_dir);
         eprintln!("targets: {:?}", pkg.targets);
 
-        let elf_paths = pkg
-            .targets
-            .into_iter()
-            .filter(move |target| {
-                if let Some(name_substr) = &target_filter.name_substr {
-                    if !target.name.contains(name_substr) {
-                        return false;
-                    }
-                }
-                if let Some(kind) = &target_filter.kind {
-                    if !target.kind.iter().any(|k| k == kind) {
-                        return false;
-                    }
-                }
-                true
-            })
-            .map(|target| target_dir.join(&target.name))
-            .collect();
-        Ok(elf_paths)
+        let elf_path = find_unique_executable(pkg_dir, target_dir, target_filter)?;
+        let data = read(&elf_path)?;
+        Elf::decode(&data, MEM_SIZE as u32)
     }
 
     pub fn transpile(

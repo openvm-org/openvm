@@ -68,6 +68,14 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
         .into()
 }
 
+/// Returns the target executable directory given `target_dir` and `profile`.
+pub fn get_dir_with_profile(target_dir: impl AsRef<Path>, profile: &str) -> PathBuf {
+    target_dir
+        .as_ref()
+        .join("riscv32im-risc0-zkvm-elf")
+        .join(profile)
+}
+
 /// When called from a build.rs, returns the current package being built.
 pub fn current_package() -> Package {
     get_package(env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -303,7 +311,53 @@ pub fn build_guest_package(
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(target_dir.join("riscv32im-risc0-zkvm-elf").join(profile))
+        Ok(get_dir_with_profile(&target_dir, profile))
+    }
+}
+
+/// A filter for selecting a target from a package.
+#[derive(Default)]
+pub struct TargetFilter {
+    /// A substring of the target name to match.
+    pub name_substr: Option<String>,
+    /// The kind of target to match.
+    pub kind: Option<String>,
+}
+
+/// Finds the unique executable target in the given package and target directory,
+/// using the given target filter.
+pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
+    pkg_dir: P,
+    target_dir: Q,
+    target_filter: &TargetFilter,
+) -> eyre::Result<PathBuf> {
+    let pkg = get_package(pkg_dir.as_ref());
+    let elf_paths = pkg
+        .targets
+        .into_iter()
+        .filter(move |target| {
+            if let Some(name_substr) = &target_filter.name_substr {
+                if !target.name.contains(name_substr) {
+                    return false;
+                }
+            }
+            if let Some(kind) = &target_filter.kind {
+                if !target.kind.iter().any(|k| k == kind) {
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|target| target_dir.as_ref().join(&target.name))
+        .collect::<Vec<_>>();
+    if elf_paths.len() != 1 {
+        Err(eyre::eyre!(
+            "Expected 1 target, got {}: {:#?}",
+            elf_paths.len(),
+            elf_paths
+        ))
+    } else {
+        Ok(elf_paths[0].clone())
     }
 }
 

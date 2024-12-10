@@ -4,9 +4,11 @@ use std::{
     path::PathBuf,
 };
 
-use axvm_build::GuestOptions;
+use axvm_build::{
+    find_unique_executable, get_dir_with_profile, get_target_dir, GuestOptions, TargetFilter,
+};
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
-use axvm_sdk::{Sdk, TargetFilter};
+use axvm_sdk::Sdk;
 use axvm_transpiler::{
     axvm_platform::{bincode, memory::MEM_SIZE},
     elf::Elf,
@@ -55,6 +57,10 @@ pub struct BuildArgs {
     /// Output path for the transpiled program (default: <ELF base path>.axvmexe)
     #[arg(long)]
     pub transpile_path: Option<PathBuf>,
+
+    /// Build profile
+    #[arg(long, default_value = "release")]
+    pub profile: String,
 }
 
 #[derive(clap::Args)]
@@ -89,18 +95,19 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
         features: build_args.features.clone(),
         ..Default::default()
     };
-    let elf_paths = Sdk.build(guest_options, &pkg_dir, target_filter)?;
-    assert!(elf_paths.len() == 1);
+    let _elf = Sdk.build(guest_options, &pkg_dir, &target_filter)?;
 
+    let target_dir = get_dir_with_profile(get_target_dir(&pkg_dir), &build_args.profile);
+    let elf_path = find_unique_executable(&pkg_dir, &target_dir, &target_filter)?;
     if build_args.transpile {
         let output_path = build_args
             .transpile_path
             .clone()
-            .unwrap_or_else(|| elf_paths[0].with_extension("axvmexe"));
-        transpile(elf_paths[0].clone(), output_path.clone())?;
+            .unwrap_or_else(|| elf_path.with_extension("axvmexe"));
+        transpile(elf_path.clone(), output_path.clone())?;
         Ok(output_path)
     } else {
-        Ok(elf_paths[0].clone())
+        Ok(elf_path)
     }
 }
 

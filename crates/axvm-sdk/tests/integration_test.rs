@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fs::read, path::PathBuf, sync::Arc};
+use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, Chip},
@@ -32,8 +32,7 @@ use axvm_sdk::{
     },
     Sdk, StdIn,
 };
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
-use itertools::Itertools;
+use axvm_transpiler::transpiler::Transpiler;
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -282,24 +281,13 @@ fn test_sdk_guest_build_and_transpile() {
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("example");
-    let elf_from_path = |path: PathBuf| {
-        let data = read(path.clone()).unwrap();
-        Elf::decode(&data, MEM_SIZE as u32).unwrap()
-    };
-    let one = elf_from_path(
-        sdk.build(guest_opts.clone(), &pkg_dir, Default::default())
-            .unwrap()
-            .into_iter()
-            .exactly_one()
-            .unwrap(),
-    );
-    let two = elf_from_path(
-        sdk.build(guest_opts.clone(), &pkg_dir, Default::default())
-            .unwrap()
-            .into_iter()
-            .exactly_one()
-            .unwrap(),
-    );
+    let one = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    let two = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    assert_eq!(one.instructions, two.instructions);
     assert_eq!(one.instructions, two.instructions);
     let transpiler = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)
