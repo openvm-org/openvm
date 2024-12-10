@@ -42,7 +42,7 @@ impl<VC> StarkProver<VC> {
             agg_prover: AggStarkProver::new(agg_pk, leaf_committed_exe),
         }
     }
-    pub fn generate_e2e_proof(&self, input: StdIn) -> Proof<OuterSC>
+    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<OuterSC>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,

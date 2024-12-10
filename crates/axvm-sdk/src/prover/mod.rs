@@ -54,7 +54,7 @@ impl<VC> ContinuationProver<VC> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let root_proof = self.stark_prover.generate_e2e_proof(input);
+        let root_proof = self.stark_prover.generate_proof_for_outer_recursion(input);
         self.halo2_prover.prove_for_evm(&root_proof)
     }
 }
