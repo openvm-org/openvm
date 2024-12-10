@@ -92,7 +92,8 @@ fn main() -> Result<()> {
         #[cfg(all(feature = "aggregation", feature = "bench-metrics"))]
         {
             let leaf_vm_pk = leaf_keygen(leaf_fri_params);
-            let stark_prover = AggStarkProver::leaf_agg_only(leaf_vm_pk, app_pk.leaf_committed_exe);
+            let stark_prover =
+                AggStarkProver::leaf_agg_only(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
             stark_prover.generate_leaf_proof(&app_proof);
         }
 
