@@ -75,4 +75,5 @@ jobs:
         working-directory: crates/axvm-sdk
         run: |
           export RUST_BACKTRACE=1
+          export AXIOM_FAST_TEST=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel
