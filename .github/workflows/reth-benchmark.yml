@@ -73,8 +73,6 @@ jobs:
     runs-on:
       - runs-on
       - run-id=${{ github.run_id }}
-      - cpu=${{ inputs.instance_cpu }}
-      - ram=${{ inputs.instance_ram }}
       - family=${{ inputs.instance_family }}
       - disk=large
       - tag=bench-reth-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
