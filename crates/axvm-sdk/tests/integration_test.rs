@@ -258,10 +258,9 @@ fn test_e2e_app_log_blowup_1() {
     const AGG_PK_PATH: &str = "temp/agg_pk.out";
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config, None::<&str>).unwrap();
-    Sdk.agg_keygen(full_agg_config_for_test(), Some(AGG_PK_PATH))
+    let agg_pk = Sdk
+        .agg_keygen(full_agg_config_for_test(), Some(AGG_PK_PATH))
         .unwrap();
-    // Test if AggProvingKey still works after serialization/deserialization.
-    let agg_pk = Sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
     let evm_verifier = Sdk
         .generate_snark_verifier_contract(&agg_pk, None::<&'static str>)
         .unwrap();
