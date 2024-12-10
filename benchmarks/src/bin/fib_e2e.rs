@@ -14,7 +14,7 @@ use axvm_sdk::{
     config::{AggConfig, AppConfig, FullAggConfig, Halo2Config},
     Sdk, StdIn,
 };
-use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 
@@ -82,9 +82,10 @@ async fn main() -> Result<()> {
     let e2e_prover = Sdk.create_e2e_prover(app_pk, app_committed_exe, full_agg_pk)?;
 
     let n = 800_000u64;
-    let app_input: Vec<_> = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        e2e_prover.generate_proof_for_evm(StdIn::from_bytes(&app_input));
+        e2e_prover.generate_proof_for_evm(stdin);
     });
 
     Ok(())
