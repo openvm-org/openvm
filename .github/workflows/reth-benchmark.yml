@@ -9,12 +9,12 @@ on:
         type: string
         required: false
         description: The number of CPUs of the instance to start
-        default: 64
+        default: "64"
       instance_ram:
         type: string
         required: false
-        description: The number of CPUs of the instance to start
-        default: 256
+        description: The RAM of the instance to start
+        default: "256"
       instance_family:
         type: string
         required: false
@@ -122,5 +122,5 @@ jobs:
           mkdir -p rpc-cache
           export RPC_1=${{ inputs.rpc_url }}
           export MODE=${{ inputs.mode }}
-          RUSTFLAGS="-Ctarget-cpu=native" RUST_BACKTRACE=1 cargo run --bin rsp --release -- --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
-
+          cargo build --bin rsp --release
+          RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
