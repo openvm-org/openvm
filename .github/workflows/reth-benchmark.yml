@@ -40,11 +40,12 @@ on:
         required: false
         description: Root level log blowup (only for e2e)
         default: 2
-      internal_log_blowup:
-        type: number
-        required: false
-        description: Internal level log blowup (only for e2e)
-        default: 2
+      # TODO: sadly workflow dispatch can only support 10 inputs. Find a workaround.
+      # internal_log_blowup:
+      #   type: number
+      #   required: false
+      #   description: Internal level log blowup (only for e2e)
+      #   default: 2
       mode:
         type: string
         required: false
@@ -143,6 +144,14 @@ jobs:
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
           ln -s params rsp/params
+      
+      - name: Set metric name
+        run: |
+          source ci/scripts/workflow_utils/functions.sh
+          METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
+          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
       - name: Run Reth
         run: |
@@ -155,11 +164,35 @@ jobs:
           export RPC_1=${{ inputs.rpc_url }}
           export MODE=${{ inputs.mode }}
           cargo build --bin rsp --release
-          OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
+          OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
 
       - name: Upload Benchmark Metrics
         working-directory: rsp
         run: |
           current_sha=$(git rev-parse HEAD)
-          METRIC_NAME="reth"
-          s5cmd cp metrics.json ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+          s5cmd cp ${METRIC_PATH} ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+      
+      - name: Store metric json and compute diff with previous
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          echo "Current SHA: $current_sha"
+          echo "current_sha=${current_sha}" >> $GITHUB_ENV
+
+          source ci/scripts/utils.sh
+          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
+
+      - name: Install inferno-flamegraph
+        run: cargo install inferno
+
+      - name: Generate flamegraphs
+        run: |
+          if [[ -f $METRIC_PATH ]]; then
+            python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.PUBLIC_S3_PATH }}/${current_sha}/"
+            echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
+          fi
+
+      - name: Add benchmark metadata
+        run: |
+          source ci/scripts/utils.sh
+          add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}

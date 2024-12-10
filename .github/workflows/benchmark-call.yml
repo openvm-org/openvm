@@ -1,4 +1,4 @@
-name: "Benchmark: Coordinate Runner & Reporting"
+name: "Benchmark: running individual benchmarks"
 
 on:
   workflow_dispatch:
@@ -222,13 +222,21 @@ jobs:
           if [[ "${E2E_BENCH}" == "true" ]]; then
             bash ./extensions/native/recursion/trusted_setup_s3.sh
           fi
+      
+      - name: Set metric name
+        run: |
+          source ci/scripts/workflow_utils/functions.sh
+          METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
+          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
       ##########################################################################
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
-        run: |
+        run: |  # bench.py should take in metric_name to avoid duplicating logic
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
       ##########################################################################
@@ -236,36 +244,12 @@ jobs:
       ##########################################################################
       - name: Store metric json and compute diff with previous
         run: |
-          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            METRIC_NAME="${METRIC_NAME}-${{ inputs.root_log_blowup }}-${{ inputs.internal_log_blowup }}"
-          fi
-          METRIC_NAME="${METRIC_NAME}-${{ inputs.max_segment_length }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
-          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
-
-          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
-          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
-
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
-          if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
-
-            prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
-            count=`s5cmd ls $prev_path | wc -l`
-
-            if [[ $count -gt 0 ]]; then
-              s5cmd cp $prev_path prev.json
-              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
-            else
-              echo "No previous benchmark on main branch found"
-              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
-            fi
-          else
-            echo "No benchmark metrics found at ${METRIC_PATH}"
-          fi
+          source ci/scripts/utils.sh
+          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
 
       - name: Install inferno-flamegraph
         run: cargo install inferno
@@ -280,32 +264,35 @@ jobs:
 
       - name: Add benchmark metadata
         run: |
-          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
-          RESULT_PATH=results.md
-          echo "" >> $RESULT_PATH
-          if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
-            echo "<details>" >> $RESULT_PATH
-            echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
-            echo "" >> $RESULT_PATH
-            for file in .bench_metrics/flamegraphs/*.svg; do
-              filename=$(basename "$file")
-              flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
-              echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
-            done
-            echo "" >> $RESULT_PATH
-            echo "</details>" >> $RESULT_PATH
-            echo "" >> $RESULT_PATH
-          fi
-          echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Max Segment Length: ${{ inputs.max_segment_length }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
+          source ci/scripts/utils.sh
+          add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
+        
+        # commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
+        # RESULT_PATH=results.md
+        # echo "" >> $RESULT_PATH
+        # if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
+        #   echo "<details>" >> $RESULT_PATH
+        #   echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
+        #   echo "" >> $RESULT_PATH
+        #   for file in .bench_metrics/flamegraphs/*.svg; do
+        #     filename=$(basename "$file")
+        #     flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+        #     echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
+        #   done
+        #   echo "" >> $RESULT_PATH
+        #   echo "</details>" >> $RESULT_PATH
+        #   echo "" >> $RESULT_PATH
+        # fi
+        # echo "Commit: ${commit_url}" >> $RESULT_PATH
+        # echo "" >> $RESULT_PATH
+        # echo "Max Segment Length: ${{ inputs.max_segment_length }}" >> $RESULT_PATH
+        # echo "" >> $RESULT_PATH
+        # echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
+        # echo "" >> $RESULT_PATH
+        # echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
+        # echo "" >> $RESULT_PATH
+        # echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
+        # s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
