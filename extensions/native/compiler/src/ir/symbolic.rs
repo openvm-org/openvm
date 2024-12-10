@@ -11,7 +11,7 @@ use std::{
     ops::{AddAssign, DivAssign, MulAssign, SubAssign},
 };
 
-use p3_field::{AbstractField, ExtensionField, Field, FieldArray, PrimeField};
+use ax_stark_backend::p3_field::{AbstractField, ExtensionField, Field, FieldArray, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};

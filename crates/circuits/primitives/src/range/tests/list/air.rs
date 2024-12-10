@@ -2,11 +2,11 @@ use std::borrow::Borrow;
 
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::{AbstractField, Field},
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
 
 use super::columns::{ListCols, NUM_LIST_COLS};
 use crate::range::bus::RangeCheckBus;

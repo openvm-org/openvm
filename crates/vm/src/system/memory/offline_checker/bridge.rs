@@ -5,9 +5,9 @@ use ax_circuit_primitives::{
     var_range::VariableRangeCheckerBus,
     SubAir,
 };
-use ax_stark_backend::interaction::InteractionBuilder;
-use p3_air::AirBuilder;
-use p3_field::AbstractField;
+use ax_stark_backend::{
+    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::AbstractField,
+};
 
 use super::bus::MemoryBus;
 use crate::system::memory::{

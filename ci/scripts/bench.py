@@ -7,7 +7,17 @@ from metric_unify.main import generate_displayable_metrics;
 from metric_unify.utils import get_git_root, create_bench_metrics_dir
 
 
-def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, root_log_blowup, internal_log_blowup, instance_type, memory_allocator):
+def run_cargo_command(
+    bin_name,
+    feature_flags,
+    app_log_blowup,
+    agg_log_blowup,
+    root_log_blowup,
+    internal_log_blowup,
+    max_segment_length,
+    instance_type,
+    memory_allocator,
+):
     # Command to run
     command = [
         "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", "maxperf", "--features", ",".join(feature_flags), "--"
@@ -26,6 +36,9 @@ def run_cargo_command(bin_name, feature_flags, app_log_blowup, agg_log_blowup, r
     if internal_log_blowup is not None:
         command.extend(["--internal_log_blowup", internal_log_blowup])
         output_path += f"-{internal_log_blowup}"
+    if max_segment_length is not None:
+        command.extend(["--max_segment_length", max_segment_length])
+        output_path += f"-{max_segment_length}"
     output_path += f"-{instance_type}-{memory_allocator}.json"
 
     # Change the current working directory to the Git root
@@ -63,13 +76,24 @@ def bench():
     parser.add_argument('--agg_log_blowup', type=str, help="Aggregation level log blowup")
     parser.add_argument('--root_log_blowup', type=str, help="Application level log blowup")
     parser.add_argument('--internal_log_blowup', type=str, help="Aggregation level log blowup")
+    parser.add_argument('--max_segment_length', type=str, help="Max segment length for continuations")
     parser.add_argument('--features', type=str, help="Additional features")
     args = parser.parse_args()
 
     feature_flags = ["bench-metrics", "parallel", "function-span"] + ([args.features] if args.features else []) + [args.memory_allocator]
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
-    run_cargo_command(args.bench_name, feature_flags, args.app_log_blowup, args.agg_log_blowup, args.root_log_blowup, args.internal_log_blowup, args.instance_type, args.memory_allocator)
+    run_cargo_command(
+        args.bench_name,
+        feature_flags,
+        args.app_log_blowup,
+        args.agg_log_blowup,
+        args.root_log_blowup,
+        args.internal_log_blowup,
+        args.max_segment_length,
+        args.instance_type,
+        args.memory_allocator,
+    )
 
 
 if __name__ == '__main__':

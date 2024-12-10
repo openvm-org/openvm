@@ -1,4 +1,4 @@
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 
 use crate::system::memory::{
     merkle::{DirectCompressionBus, MemoryMerkleChip},

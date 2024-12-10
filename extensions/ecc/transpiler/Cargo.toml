@@ -6,9 +6,9 @@ edition.workspace = true
 description = "Transpiler extension for ecc"
 
 [dependencies]
+ax-stark-backend = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
-p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
 axvm-ecc-guest = { workspace = true }

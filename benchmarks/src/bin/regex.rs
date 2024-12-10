@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -21,7 +22,6 @@ use axvm_sdk::StdIn;
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
-use p3_field::AbstractField;
 use tracing::info_span;
 
 fn main() -> Result<()> {
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(Keccak256TranspilerExtension),
-    );
+    )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {
             let engine = BabyBearPoseidon2Engine::new(

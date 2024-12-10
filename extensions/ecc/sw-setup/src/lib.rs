@@ -2,16 +2,12 @@
 
 extern crate proc_macro;
 
-use std::sync::atomic::AtomicUsize;
-
 use axvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Expr, ExprPath, Path, Token,
 };
-
-static CURVE_IDX: AtomicUsize = AtomicUsize::new(0);
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it places the curve parameters into a special static variable to be later extracted from the ELF and used by the VM.
 /// Usage:
@@ -34,6 +30,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_type: Option<syn::Path> = None;
+        let mut const_b: Option<syn::Expr> = None;
         for param in item.params {
             match param.name.to_string().as_str() {
                 "mod_type" => {
@@ -45,6 +42,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             .into();
                     }
                 }
+                "b" => {
+                    // We currently leave it to the compiler to check if the expression is actually a constant
+                    const_b = Some(param.value);
+                }
                 _ => {
                     panic!("Unknown parameter {}", param.name);
                 }
@@ -52,7 +53,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
-        let ec_idx = CURVE_IDX.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let const_b = const_b.expect("constant b coefficient is required");
 
         macro_rules! create_extern_func {
             ($name:ident) => {
@@ -73,11 +74,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
+        create_extern_func!(hint_decompress_extern_func);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
+                fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -88,8 +91,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             impl #struct_name {
-                pub const EC_IDX: usize = #ec_idx;
-
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
@@ -188,55 +189,61 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::axvm_ecc_guest::sw::SwPoint for #struct_name {
+            impl ::axvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
+                const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
-                // Ref: https://docs.rs/k256/latest/src/k256/arithmetic/affine.rs.html#247
-                fn from_encoded_point<C: elliptic_curve::Curve>(p: &elliptic_curve::sec1::EncodedPoint<C>) -> Self
-                where
-                    C::FieldBytesSize: elliptic_curve::sec1::ModulusSize
-                {
-                    match p.coordinates() {
-                        elliptic_curve::sec1::Coordinates::Identity => Self::identity(),
-                        elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
-                            // Sec1 bytes are in big endian.
-                            let x = Self::Coordinate::from_be_bytes(x.as_ref());
-                            let y = Self::Coordinate::from_be_bytes(y.as_ref());
-                            // TODO: Verify that the point is on the curve
+                /// SAFETY: assumes that #intmod_type has a memory representation
+                /// such that with repr(C), two coordinates are packed contiguously.
+                fn as_le_bytes(&self) -> &[u8] {
+                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as axvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
+                }
 
-                            Self { x, y }
+                fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
+                    Self { x, y }
+                }
 
-                        }
-                        elliptic_curve::sec1::Coordinates::Compact { x } => unimplemented!(),
-                        elliptic_curve::sec1::Coordinates::Compressed { x, y_is_odd } => unimplemented!(),
+                fn x(&self) -> &Self::Coordinate {
+                    &self.x
+                }
+
+                fn y(&self) -> &Self::Coordinate {
+                    &self.y
+                }
+
+                fn x_mut(&mut self) -> &mut Self::Coordinate {
+                    &mut self.x
+                }
+
+                fn y_mut(&mut self) -> &mut Self::Coordinate {
+                    &mut self.y
+                }
+
+                fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
+                    (self.x, self.y)
+                }
+
+                fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
+                    #[cfg(not(target_os = "zkvm"))]
+                    {
+                        unimplemented!()
                     }
-                }
+                    #[cfg(target_os = "zkvm")]
+                    {
+                        use axvm::platform as axvm_platform; // needed for hint_store_u32!
 
-                fn to_sec1_bytes(&self, is_compressed: bool) -> Vec<u8>
-                {
-                    let mut bytes = Vec::new();
-                    if is_compressed {
-                        let y_is_odd = self.y().as_le_bytes()[0] & 1;
-                        if y_is_odd == 1 {
-                            bytes.push(0x03);
-                        } else {
-                            bytes.push(0x02);
+                        let y = core::mem::MaybeUninit::<Self::Coordinate>::uninit();
+                        unsafe {
+                            #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
+                            let mut ptr = y.as_ptr() as *const u8;
+                            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                            for _ in (0..<Self::Coordinate as axvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                axvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                                ptr = ptr.add(4);
+                            }
+                            y.assume_init()
                         }
-                        bytes.extend_from_slice(&self.x().as_be_bytes());
-                    } else {
-                        bytes.push(0x04);
-                        bytes.extend_from_slice(&self.x().as_be_bytes());
-                        bytes.extend_from_slice(&self.y().as_be_bytes());
                     }
-                    bytes
-                }
-
-                fn x(&self) -> Self::Coordinate {
-                    self.x.clone()
-                }
-
-                fn y(&self) -> Self::Coordinate {
-                    self.y.clone()
                 }
             }
 
@@ -426,14 +433,18 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
         let double_extern_func =
             syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
+        let hint_decompress_extern_func = syn::Ident::new(
+            &format!("hint_decompress_extern_func_{}", str_path),
+            span.into(),
+        );
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 axvm_platform::custom_insn_r!(
-                    ::axvm_ecc_guest::OPCODE,
-                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                    ::axvm_ecc_guest::SwBaseFunct7::SwAddNe as usize + #ec_idx
-                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    OPCODE,
+                    SW_FUNCT3 as usize,
+                    SwBaseFunct7::SwAddNe as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     rs2
@@ -443,22 +454,34 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 axvm_platform::custom_insn_r!(
-                    ::axvm_ecc_guest::OPCODE,
-                    ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                    ::axvm_ecc_guest::SwBaseFunct7::SwDouble as usize + #ec_idx
-                        * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                    OPCODE,
+                    SW_FUNCT3 as usize,
+                    SwBaseFunct7::SwDouble as usize + #ec_idx
+                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd,
                     rs1,
                     "x0"
                 );
             }
+
+            #[no_mangle]
+            extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
+                unsafe {
+                    core::arch::asm!(
+                        ".insn r {opcode}, {funct3}, {funct7}, x0, {rs1}, {rs2}",
+                        opcode = const OPCODE,
+                        funct3 = const SW_FUNCT3 as usize,
+                        funct7 = const SwBaseFunct7::HintDecompress as usize + #ec_idx
+                            * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                        rs1 = in(reg) rs1,
+                        rs2 = in(reg) rs2
+                    );
+                }
+            }
         });
 
         let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
         setups.push(quote::quote_spanned! { span.into() =>
-            // make a setup function that sends setup op to ec add, ec double. fp2 ?
-            // Inline never is necessary, as otherwise if compiler thinks it's ok to reorder, the setup result might overwrite some register in use.
-            #[inline(never)]
             #[allow(non_snake_case)]
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
@@ -466,7 +489,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
                     let modulus_bytes = <#item as axvm_algebra_guest::IntMod>::MODULUS;
-                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_BYTES];
+                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
@@ -505,6 +528,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
         mod axvm_intrinsics_ffi_2 {
+            use ::axvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+
             #(#externs)*
         }
         #(#setups)*

@@ -1,12 +1,11 @@
-use ax_stark_sdk::config::baby_bear_poseidon2::default_perm;
+use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use ax_stark_sdk::{config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear};
 use axvm_native_circuit::execute_program;
 use axvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
 use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};
 

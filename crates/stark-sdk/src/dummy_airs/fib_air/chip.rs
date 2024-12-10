@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    p3_matrix::Matrix,
     prover::types::{AirProofInput, AirProofRawInput},
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use p3_field::PrimeField32;
-use p3_matrix::Matrix;
 
 use super::{air::FibonacciAir, trace::generate_trace_rows};
 use crate::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;

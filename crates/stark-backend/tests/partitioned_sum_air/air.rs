@@ -5,10 +5,10 @@
 
 use ax_stark_backend::{
     air_builders::PartitionedAirBuilder,
+    p3_field::AbstractField,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, BaseAir};
-use p3_field::AbstractField;
 use p3_matrix::Matrix;
 
 /// Inner value is width of y-submatrix

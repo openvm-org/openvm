@@ -1,7 +1,6 @@
 use ax_circuit_derive::AlignedBorrow;
+use ax_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 use itertools::izip;
-use p3_air::AirBuilder;
-use p3_field::Field;
 
 use crate::{SubAir, TraceSubRowGenerator};
 

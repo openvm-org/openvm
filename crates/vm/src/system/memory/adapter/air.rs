@@ -6,11 +6,11 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::AbstractField,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::AbstractField;
-use p3_matrix::Matrix;
 
 use crate::system::memory::{
     adapter::columns::AccessAdapterCols, offline_checker::MemoryBus, MemoryAddress,

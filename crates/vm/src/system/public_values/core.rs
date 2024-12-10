@@ -1,12 +1,15 @@
 use std::sync::Mutex;
 
 use ax_circuit_primitives::{encoder::Encoder, SubAir};
-use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
+};
 use axvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };
-use p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
 
 use crate::{
     arch::{

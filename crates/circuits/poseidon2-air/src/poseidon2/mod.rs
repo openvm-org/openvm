@@ -6,9 +6,9 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
+use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
+use ax_stark_sdk::p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
 use lazy_static::lazy_static;
-use p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
-use p3_field::{AbstractField, PrimeField32};
 use p3_monty_31::InternalLayerBaseParameters;
 
 pub use self::{air::Poseidon2Air, columns::Poseidon2Cols};

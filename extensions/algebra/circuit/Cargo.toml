@@ -17,11 +17,6 @@ axvm-rv32im-circuit = { workspace = true }
 axvm-rv32-adapters = { workspace = true }
 axvm-algebra-transpiler = { workspace = true }
 
-p3-air = { workspace = true }
-p3-field = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-matrix = { workspace = true }
-
 itertools = { workspace = true }
 hex-literal = { workspace = true }
 num-bigint-dig = { workspace = true }

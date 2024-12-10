@@ -3,13 +3,13 @@ use std::sync::Arc;
 use ax_circuit_primitives::utils::next_power_of_two_or_zero;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_air::BaseAir,
+    p3_field::PrimeField32,
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
-use p3_air::BaseAir;
-use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
 
 use super::{columns::*, Poseidon2Chip};
 

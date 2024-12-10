@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, SystemConfig},
@@ -12,7 +12,6 @@ use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
-use p3_baby_bear::BabyBear;
 use rand::SeedableRng;
 
 type F = BabyBear;
@@ -64,7 +63,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -94,7 +93,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -146,7 +145,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -189,7 +188,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -236,7 +235,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -324,7 +323,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -354,7 +353,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -407,7 +406,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -450,7 +449,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -503,7 +502,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -555,7 +554,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
+        )?;
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();

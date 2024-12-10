@@ -83,7 +83,6 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
-// TODO[jpw]: split this into CustomIntrinsic (for MOD_IDX) + IntegralDomain
 /// Trait definition for axVM modular integers, where each operation
 /// is done modulo MODULUS.
 ///
@@ -116,8 +115,8 @@ pub trait IntMod:
     + for<'a> MulAssign<&'a Self>
     + for<'a> DivAssignUnsafe<&'a Self>
 {
-    /// Underlying representation of IntMod.
-    type Repr;
+    /// Underlying representation of IntMod. Usually of the form `[u8; NUM_LIMBS]`.
+    type Repr: AsRef<[u8]> + AsMut<[u8]>;
     /// `SelfRef<'a>` should almost always be `&'a Self`. This is a way to include implementations of binary operations where both sides are `&'a Self`.
     type SelfRef<'a>: Add<&'a Self, Output = Self>
         + Sub<&'a Self, Output = Self>
@@ -130,8 +129,8 @@ pub trait IntMod:
     /// Modulus as a Repr.
     const MODULUS: Self::Repr;
 
-    /// Number of bytes in the modulus.
-    const NUM_BYTES: usize;
+    /// Number of limbs used to internally represent an element of `Self`.
+    const NUM_LIMBS: usize;
 
     /// The zero element (i.e. the additive identity).
     const ZERO: Self;
@@ -146,10 +145,7 @@ pub trait IntMod:
     fn from_le_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
-    fn from_be_bytes(bytes: &[u8]) -> Self {
-        let vec = bytes.iter().rev().copied().collect::<Vec<_>>();
-        Self::from_le_bytes(&vec)
-    }
+    fn from_be_bytes(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
     fn from_u8(val: u8) -> Self;
@@ -164,9 +160,7 @@ pub trait IntMod:
     fn as_le_bytes(&self) -> &[u8];
 
     /// Value of this IntMod as an array of bytes, big endian.
-    fn as_be_bytes(&self) -> Vec<u8> {
-        self.as_le_bytes().iter().rev().copied().collect::<Vec<_>>()
-    }
+    fn to_be_bytes(&self) -> Self::Repr;
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -207,6 +201,33 @@ pub trait IntMod:
         let mut ret = self.square();
         ret *= self;
         ret
+    }
+
+    /// zkVM specific concept: the in-memory values of `Self` will normally
+    /// be in their canonical unique form (e.g., less than modulus) but the
+    /// zkVM circuit does not constrain it. In cases where uniqueness is
+    /// essential for security, this function should be called to constrain
+    /// uniqueness.
+    ///
+    /// Note that this is done automatically in [PartialEq] and [Eq] implementations.
+    ///
+    /// ## Panics
+    /// If assertion fails.
+    fn assert_unique(&self) {
+        // This must not be optimized out
+        let _ = core::hint::black_box(PartialEq::eq(self, self));
+    }
+
+    /// This function is mostly for internal use in other internal implemntations.
+    /// Normal users are not advised to use it.
+    ///
+    /// If `self` was directly constructed from a raw representation
+    /// and not in its canonical unique form (e.g., less than the modulus),
+    /// this function will "reduce" `self` to its canonical form and also
+    /// call `assert_unique`.
+    fn reduce(&mut self) {
+        self.add_assign(&Self::ZERO);
+        self.assert_unique();
     }
 }
 

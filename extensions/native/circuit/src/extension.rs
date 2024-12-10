@@ -72,9 +72,9 @@ pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
-    LoadStore(KernelLoadStoreChip<F, 1>),
-    BranchEqual(KernelBranchEqChip<F>),
-    Jal(KernelJalChip<F>),
+    LoadStore(NativeLoadStoreChip<F, 1>),
+    BranchEqual(NativeBranchEqChip<F>),
+    Jal(NativeJalChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     Poseidon2(Poseidon2Chip<F>),
@@ -101,14 +101,14 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             memory_controller,
         } = builder.system_port();
 
-        let mut load_store_chip = KernelLoadStoreChip::<F, 1>::new(
+        let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
                 execution_bus,
                 program_bus,
                 memory_controller.clone(),
                 NativeLoadStoreOpcode::default_offset(),
             ),
-            KernelLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
+            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
             memory_controller.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
@@ -118,7 +118,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeLoadStoreOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
-        let branch_equal_chip = KernelBranchEqChip::new(
+        let branch_equal_chip = NativeBranchEqChip::new(
             BranchNativeAdapterChip::<_>::new(
                 execution_bus,
                 program_bus,
@@ -132,7 +132,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeBranchEqualOpcode::iter().map(AxVmOpcode::with_default_offset),
         )?;
 
-        let jal_chip = KernelJalChip::new(
+        let jal_chip = NativeJalChip::new(
             JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_controller.clone()),
             JalCoreChip::new(NativeJalOpcode::default_offset()),
             memory_controller.clone(),

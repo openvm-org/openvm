@@ -6,9 +6,9 @@ edition.workspace = true
 description = "Transpiler extension for RISC-V32IM"
 
 [dependencies]
+ax-stark-backend = { workspace = true }
 axvm-instructions = { workspace = true }
 axvm-transpiler = { workspace = true }
-p3-field = { workspace = true }
 rrs-lib = { workspace = true }
 tracing = { workspace = true }
 axvm-rv32im-guest = { workspace = true }

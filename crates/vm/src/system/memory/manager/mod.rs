@@ -18,7 +18,11 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::{
     config::{Domain, StarkGenericConfig},
+    p3_air::BaseAir,
     p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     rap::AnyRap,
 };
@@ -26,10 +30,6 @@ use axvm_instructions::exe::MemoryImage;
 use getset::Getters;
 use itertools::{izip, zip_eq, Itertools};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
-use p3_air::BaseAir;
-use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_util::log2_strict_usize;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -841,8 +841,8 @@ mod tests {
     use std::sync::Arc;
 
     use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
+    use ax_stark_backend::p3_field::AbstractField;
+    use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;

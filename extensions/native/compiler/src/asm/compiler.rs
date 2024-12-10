@@ -1,8 +1,8 @@
 use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
+use ax_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
 use axvm_circuit::arch::instructions::instruction::DebugInfo;
-use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{

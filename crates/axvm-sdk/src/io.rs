@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
+use ax_stark_backend::p3_field::AbstractField;
 use axvm_circuit::arch::Streams;
-use p3_field::AbstractField;
 use serde::{Deserialize, Serialize};
 
 use crate::F;

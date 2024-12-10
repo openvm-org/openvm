@@ -5,14 +5,9 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-field = { workspace = true }
-p3-matrix = { workspace = true }
 p3-monty-31 = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-poseidon2 = { workspace = true }
-p3-util = { workspace = true }
 zkhash = { workspace = true }
 
 ax-circuit-primitives = { workspace = true }
@@ -24,8 +19,6 @@ lazy_static.workspace = true
 itertools.workspace = true
 
 [dev-dependencies]
-p3-baby-bear = { workspace = true }
-p3-challenger = { workspace = true }
 p3-symmetric = { workspace = true }
 test-case = "3.3.1"
 ark-ff = { version = "^0.4.0", default-features = false }

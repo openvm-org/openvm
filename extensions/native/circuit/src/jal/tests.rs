@@ -20,13 +20,13 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{
     super::adapters::jal_native_adapter::JalNativeAdapterChip, JalCoreChip, JalCoreCols,
-    KernelJalChip,
+    NativeJalChip,
 };
 type F = BabyBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut KernelJalChip<F>,
+    chip: &mut NativeJalChip<F>,
     rng: &mut StdRng,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
@@ -53,7 +53,7 @@ fn set_and_execute(
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelJalChip<F>) {
+fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
 
@@ -63,7 +63,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelJalChip<F>) {
         tester.memory_controller(),
     );
     let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
-    let chip = KernelJalChip::<F>::new(adapter, inner, tester.memory_controller());
+    let chip = NativeJalChip::<F>::new(adapter, inner, tester.memory_controller());
     (rng, tester, chip)
 }
 

@@ -4,6 +4,8 @@ use std::{
 };
 
 use ax_circuit_derive::{Chip, ChipUsageGetter};
+use ax_stark_backend::p3_field::PrimeField32;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
@@ -32,8 +34,6 @@ use axvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
-use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
 use test_case::test_case;
 
 type F = BabyBear;
@@ -69,7 +69,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Rv32IoTranspilerExtension)
         .with_extension(ModularTranspilerExtension)
-        .transpile(&elf.instructions);
+        .transpile(&elf.instructions)?;
     for instruction in program {
         println!("{:?}", instruction);
     }
@@ -86,7 +86,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
-    );
+    )?;
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(exe, vec![])?;
@@ -140,7 +140,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
-    );
+    )?;
     let executor = VmExecutor::<F, _>::new(config);
     executor.execute(axvm_exe, vec![])?;
     Ok(())
@@ -157,7 +157,7 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
-    );
+    )?;
     new_air_test_with_min_segments(config, axvm_exe, vec![], 1, true);
     Ok(())
 }

@@ -13,13 +13,13 @@ use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir, PairBuilder},
+    p3_field::{Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use p3_air::{Air, BaseAir, PairBuilder};
-use p3_field::{Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use tracing::instrument;
 
 mod bus;

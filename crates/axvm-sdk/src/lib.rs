@@ -12,8 +12,9 @@ use ax_stark_sdk::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,
         baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig,
     },
+    p3_baby_bear::BabyBear,
 };
-use axvm_build::GuestOptions;
+use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
 use axvm_circuit::{
     arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig},
     prover::ContinuationVmProof,
@@ -23,12 +24,17 @@ use axvm_native_recursion::{
     halo2::{verifier::Halo2VerifierProvingKey, EvmProof},
     types::InnerConfig,
 };
-use axvm_transpiler::{elf::Elf, transpiler::Transpiler};
+use axvm_transpiler::{
+    axvm_platform::memory::MEM_SIZE,
+    elf::Elf,
+    transpiler::{Transpiler, TranspilerError},
+    FromElf,
+};
 use bincode::{deserialize, serialize};
 use config::{AggConfig, AppConfig};
-use eyre::Result;
+use eyre::{bail, Result};
+use itertools::Itertools;
 use keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey};
-use p3_baby_bear::BabyBear;
 use prover::{generate_leaf_committed_exe, StarkProver};
 
 pub mod commit;
@@ -50,12 +56,41 @@ pub(crate) type OuterSC = BabyBearPoseidon2OuterConfig;
 pub struct Sdk;
 
 impl Sdk {
-    pub fn build<P: AsRef<Path>>(&self, _guest_opts: GuestOptions, _pkg_dir: P) -> Result<Elf> {
-        todo!()
+    pub fn build<P: AsRef<Path>>(&self, guest_opts: GuestOptions, pkg_dir: P) -> Result<Elf> {
+        if guest_opts.use_docker.is_some() {
+            bail!("docker build is not supported yet");
+        }
+        let pkg = get_package(pkg_dir.as_ref());
+        let target_dir = get_target_dir(&pkg.manifest_path);
+        if let Err(Some(code)) =
+            build_guest_package(&pkg, target_dir.clone(), &guest_opts.into(), None)
+        {
+            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+        }
+        eprintln!("target_dir: {:?}", target_dir);
+        eprintln!("targets: {:?}", pkg.targets);
+
+        let elf_path = pkg
+            .targets
+            .into_iter()
+            .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
+            .exactly_one()
+            .map(|target| {
+                target_dir
+                    .join("riscv32im-risc0-zkvm-elf")
+                    .join("release")
+                    .join(&target.name)
+            })?;
+        let data = read(elf_path)?;
+        Elf::decode(&data, MEM_SIZE as u32)
     }
 
-    pub fn transpile(&self, _elf: Elf, _transpiler: Transpiler<F>) -> Result<AxVmExe<F>> {
-        todo!()
+    pub fn transpile(
+        &self,
+        elf: Elf,
+        transpiler: Transpiler<F>,
+    ) -> Result<AxVmExe<F>, TranspilerError> {
+        AxVmExe::from_elf(elf, transpiler)
     }
 
     pub fn execute(&self, _exe: AxVmExe<F>, _inputs: StdIn) -> Result<(), ExecutionError> {

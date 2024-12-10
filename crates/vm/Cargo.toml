@@ -6,13 +6,7 @@ edition.workspace = true
 description = "axVM circuits"
 
 [dependencies]
-p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
-p3-field = { workspace = true }
-p3-matrix = { workspace = true }
-p3-maybe-rayon = { workspace = true }
 p3-symmetric = { workspace = true }
-p3-util = { workspace = true }
 
 ax-poseidon2-air = { workspace = true }
 ax-stark-backend = { workspace = true }
@@ -44,12 +38,8 @@ async-trait.workspace = true
 getset.workspace = true
 
 [dev-dependencies]
-p3-baby-bear = { workspace = true }
-p3-challenger = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
-p3-goldilocks = { workspace = true }
-p3-keccak = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-symmetric = { workspace = true }
 zkhash = { workspace = true }

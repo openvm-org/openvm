@@ -1,7 +1,9 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use ax_stark_backend::{config::StarkGenericConfig, utils::disable_debug_builder, Chip};
+use ax_stark_backend::{
+    config::StarkGenericConfig, p3_field::AbstractField, utils::disable_debug_builder, Chip,
+};
 /// Test utils
 use ax_stark_sdk::{
     any_rap_arc_vec, config,
@@ -14,7 +16,6 @@ use ax_stark_sdk::{
     utils,
 };
 use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
 
 mod cached_lookup;
 mod fib_selector_air;

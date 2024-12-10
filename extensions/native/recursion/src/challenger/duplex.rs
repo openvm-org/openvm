@@ -1,8 +1,8 @@
+use ax_stark_backend::p3_field::{AbstractField, Field};
 use axvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
-use p3_field::{AbstractField, Field};
 
 use crate::{
     challenger::{
@@ -212,19 +212,21 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use ax_stark_backend::config::{StarkGenericConfig, Val};
+    use ax_stark_backend::{
+        config::{StarkGenericConfig, Val},
+        p3_challenger::{CanObserve, CanSample},
+        p3_field::AbstractField,
+    };
     use ax_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
+        p3_baby_bear::BabyBear,
     };
     use axvm_native_circuit::execute_program;
     use axvm_native_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };
-    use p3_baby_bear::BabyBear;
-    use p3_challenger::{CanObserve, CanSample};
-    use p3_field::AbstractField;
     use rand::Rng;
 
     use super::DuplexChallengerVariable;

@@ -1,6 +1,10 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::prover::types::AirProofInput;
+use ax_stark_backend::{
+    p3_field::AbstractField,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    prover::types::AirProofInput,
+};
 use ax_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -8,6 +12,7 @@ use ax_stark_sdk::{
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
 use axvm_instructions::{
     instruction::Instruction,
@@ -18,9 +23,6 @@ use axvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode::*;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
 

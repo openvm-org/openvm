@@ -2,18 +2,18 @@ use std::borrow::{Borrow, BorrowMut};
 
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
 use ax_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, Field};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use test_case::test_case;
 
 use super::{IsZeroIo, IsZeroSubAir};

@@ -24,7 +24,7 @@ use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct KernelLoadStoreCoreCols<T, const NUM_CELLS: usize> {
+pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_loadw: T,
     pub is_storew: T,
     pub is_loadw2: T,
@@ -37,7 +37,7 @@ pub struct KernelLoadStoreCoreCols<T, const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Debug)]
-pub struct KernelLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
+pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,
 
     pub pointer_reads: [F; 2],
@@ -46,22 +46,22 @@ pub struct KernelLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Debug)]
-pub struct KernelLoadStoreCoreAir<const NUM_CELLS: usize> {
+pub struct NativeLoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for KernelLoadStoreCoreAir<NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> BaseAir<F> for NativeLoadStoreCoreAir<NUM_CELLS> {
     fn width(&self) -> usize {
-        KernelLoadStoreCoreCols::<F, NUM_CELLS>::width()
+        NativeLoadStoreCoreCols::<F, NUM_CELLS>::width()
     }
 }
 
 impl<F: Field, const NUM_CELLS: usize> BaseAirWithPublicValues<F>
-    for KernelLoadStoreCoreAir<NUM_CELLS>
+    for NativeLoadStoreCoreAir<NUM_CELLS>
 {
 }
 
-impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for KernelLoadStoreCoreAir<NUM_CELLS>
+impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for NativeLoadStoreCoreAir<NUM_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -75,7 +75,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &KernelLoadStoreCoreCols<_, NUM_CELLS> = (*local_core).borrow();
+        let cols: &NativeLoadStoreCoreCols<_, NUM_CELLS> = (*local_core).borrow();
         let flags = [
             cols.is_loadw,
             cols.is_storew,
@@ -115,15 +115,15 @@ where
 }
 
 #[derive(Debug)]
-pub struct KernelLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
-    pub air: KernelLoadStoreCoreAir<NUM_CELLS>,
+pub struct NativeLoadStoreCoreChip<F: Field, const NUM_CELLS: usize> {
+    pub air: NativeLoadStoreCoreAir<NUM_CELLS>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
-impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
+impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
     pub fn new(offset: usize) -> Self {
         Self {
-            air: KernelLoadStoreCoreAir::<NUM_CELLS> { offset },
+            air: NativeLoadStoreCoreAir::<NUM_CELLS> { offset },
             streams: OnceLock::new(),
         }
     }
@@ -133,13 +133,13 @@ impl<F: Field, const NUM_CELLS: usize> KernelLoadStoreCoreChip<F, NUM_CELLS> {
 }
 
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for KernelLoadStoreCoreChip<F, NUM_CELLS>
+    for NativeLoadStoreCoreChip<F, NUM_CELLS>
 where
     I::Reads: Into<([F; 2], F)>,
     I::Writes: From<[F; NUM_CELLS]>,
 {
-    type Record = KernelLoadStoreCoreRecord<F, NUM_CELLS>;
-    type Air = KernelLoadStoreCoreAir<NUM_CELLS>;
+    type Record = NativeLoadStoreCoreRecord<F, NUM_CELLS>;
+    type Air = NativeLoadStoreCoreAir<NUM_CELLS>;
 
     fn execute_instruction(
         &self,
@@ -163,7 +163,7 @@ where
         };
 
         let output = AdapterRuntimeContext::without_pc(data_write);
-        let record = KernelLoadStoreCoreRecord {
+        let record = NativeLoadStoreCoreRecord {
             opcode: NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             pointer_reads,
             data_read,
@@ -180,7 +180,7 @@ where
     }
 
     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let cols: &mut KernelLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
+        let cols: &mut NativeLoadStoreCoreCols<_, NUM_CELLS> = row_slice.borrow_mut();
         cols.is_loadw = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW);
         cols.is_storew = F::from_bool(record.opcode == NativeLoadStoreOpcode::STOREW);
         cols.is_loadw2 = F::from_bool(record.opcode == NativeLoadStoreOpcode::LOADW2);

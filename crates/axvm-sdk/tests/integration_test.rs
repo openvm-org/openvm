@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, path::PathBuf};
 
 use ax_stark_sdk::{
     ax_stark_backend::{p3_field::AbstractField, prover::types::Proof, Chip},
@@ -7,7 +7,9 @@ use ax_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkEngine, StarkFriEngine},
+    p3_baby_bear::BabyBear,
 };
+use axvm_build::GuestOptions;
 use axvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
@@ -18,6 +20,7 @@ use axvm_circuit::{
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use axvm_native_recursion::types::InnerConfig;
+use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggConfig, AppConfig, SdkVmConfig},
@@ -30,7 +33,7 @@ use axvm_sdk::{
     },
     Sdk, StdIn,
 };
-use p3_baby_bear::BabyBear;
+use axvm_transpiler::transpiler::Transpiler;
 use utils::{assert_agg_config_eq, assert_agg_pk_eq};
 
 mod utils;
@@ -302,6 +305,24 @@ fn test_agg_keygen_store_and_load() {
     let (file_config, file_pk) = sdk.load_agg_pk_from_file(AGG_PK_PATH).unwrap();
     assert_agg_config_eq(&agg_config, &file_config);
     assert_agg_pk_eq(&agg_pk, &file_pk);
+}
+
+#[test]
+fn test_sdk_guest_build_and_transpile() {
+    let sdk = Sdk;
+    let guest_opts = GuestOptions::default()
+        // .with_features(vec!["zkvm"])
+        // .with_options(vec!["--release"]);
+        ;
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("example");
+    let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    assert_eq!(one.instructions, two.instructions);
+    let transpiler = Transpiler::<F>::default()
+        .with_extension(Rv32ITranspilerExtension)
+        .with_extension(Rv32MTranspilerExtension);
+    let _exe = sdk.transpile(one, transpiler).unwrap();
 }
 
 #[test]

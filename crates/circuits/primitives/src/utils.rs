@@ -1,6 +1,8 @@
+use ax_stark_backend::{
+    p3_air::{AirBuilder, VirtualPairCol},
+    p3_field::{AbstractField, Field},
+};
 use itertools::zip_eq;
-use p3_air::{AirBuilder, VirtualPairCol};
-use p3_field::{AbstractField, Field};
 
 /// Return either 0 if n is zero or the next power of two of n.
 /// Used to resize the number of rows in a trace matrix.

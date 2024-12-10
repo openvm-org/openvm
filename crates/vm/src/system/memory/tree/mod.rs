@@ -2,7 +2,7 @@ pub mod public_values;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use p3_field::PrimeField32;
+use ax_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;

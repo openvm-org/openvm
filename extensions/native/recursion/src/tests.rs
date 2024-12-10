@@ -2,6 +2,8 @@ use std::{panic::catch_unwind, sync::Arc};
 
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     utils::disable_debug_builder,
     Chip,
@@ -23,8 +25,6 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::utils::gen_vm_program_test_proof_input;
 use axvm_native_circuit::NativeConfig;
-use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,

@@ -7,12 +7,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-p3-field.workspace = true
+ax-stark-backend.workspace = true
 axvm-platform.workspace = true
 axvm-instructions.workspace = true
 
 strum.workspace = true
 eyre.workspace = true
+thiserror.workspace = true
 elf = "0.7.4"
 rrs-lib.workspace = true
 num-bigint-dig.workspace = true
@@ -20,7 +21,6 @@ tracing.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 
 [dev-dependencies]
-p3-baby-bear.workspace = true
 test-case.workspace = true
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 axvm-build.workspace = true

@@ -8,7 +8,12 @@ use ax_mod_circuit_builder::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable, SymbolicExpr,
 };
-use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
+use ax_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
+};
 use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use axvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
@@ -17,8 +22,6 @@ use axvm_circuit::arch::{
 use axvm_instructions::{instruction::Instruction, UsizeOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]

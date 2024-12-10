@@ -15,12 +15,12 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{

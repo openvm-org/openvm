@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ax_stark_backend::{
     keygen::MultiStarkKeygenBuilder,
+    p3_matrix::dense::RowMajorMatrix,
     prover::{
         types::{AirProofInput, AirProofRawInput, ProofInput},
         MultiTraceStarkProver,
@@ -11,7 +12,6 @@ use ax_stark_backend::{
 };
 use itertools::{izip, Itertools};
 use p3_baby_bear::BabyBear;
-use p3_matrix::dense::RowMajorMatrix;
 
 use crate::config::{self, baby_bear_poseidon2::BabyBearPoseidon2Config};
 

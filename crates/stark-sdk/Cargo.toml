@@ -6,12 +6,6 @@ edition.workspace = true
 description = "SDK for production and testing usage of STARKs."
 
 [dependencies]
-p3-air = { workspace = true }
-p3-challenger = { workspace = true }
-p3-commit = { workspace = true }
-p3-field = { workspace = true }
-p3-matrix = { workspace = true }
-p3-util = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 p3-fri = { workspace = true }

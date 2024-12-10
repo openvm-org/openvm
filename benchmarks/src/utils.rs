@@ -4,6 +4,7 @@ use ax_stark_sdk::{
     ax_stark_backend::{engine::VerificationData, Chip},
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{StarkFriEngine, VerificationDataWithFriParams},
+    p3_baby_bear::BabyBear,
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
@@ -17,7 +18,6 @@ use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};
-use p3_baby_bear::BabyBear;
 use tempfile::tempdir;
 
 type F = BabyBear;
@@ -41,6 +41,10 @@ pub struct BenchmarkCli {
     /// Internal level log blowup, default set by the benchmark
     #[arg(short, long, alias = "internal_log_blowup")]
     pub internal_log_blowup: Option<usize>,
+
+    /// Max segment length for continuations
+    #[arg(short, long, alias = "max_segment_length")]
+    pub max_segment_length: Option<usize>,
 }
 
 fn get_programs_dir() -> PathBuf {
@@ -55,7 +59,9 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default().into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_opts, None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
     let data = read(elf_path)?;

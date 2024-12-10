@@ -11,16 +11,9 @@ axvm-native-compiler = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
 
-p3-field = { workspace = true }
-p3-commit = { workspace = true }
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
-p3-matrix = { workspace = true }
-p3-util = { workspace = true }
 p3-symmetric = { workspace = true }
-p3-challenger = { workspace = true }
-p3-bn254-fr = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-merkle-tree = { workspace = true }
 snark-verifier-sdk = { workspace = true, features = [
     "loader_evm",

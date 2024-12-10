@@ -4,12 +4,11 @@ use ax_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_stark_sdk::utils::create_seeded_rng;
+use ax_stark_backend::p3_field::PrimeField64;
+use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use axvm_circuit::utils::generate_long_number;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
-use p3_baby_bear::BabyBear;
-use p3_field::PrimeField64;
 use rand::{rngs::StdRng, RngCore};
 
 use crate::{ExprBuilder, ExprBuilderConfig};

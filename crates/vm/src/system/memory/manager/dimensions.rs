@@ -1,6 +1,5 @@
+use ax_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use derive_new::new;
-use p3_field::PrimeField32;
-use p3_util::log2_strict_usize;
 
 use crate::{arch::MemoryConfig, system::memory::CHUNK};
 

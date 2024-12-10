@@ -29,6 +29,14 @@ pub fn build_example_program_with_features<S: AsRef<str>>(
     features: impl IntoIterator<Item = S>,
 ) -> Result<Elf> {
     let manifest_dir = get_programs_dir();
+    build_example_program_at_path_with_features(manifest_dir, example_name, features)
+}
+
+pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
+    manifest_dir: PathBuf,
+    example_name: &str,
+    features: impl IntoIterator<Item = S>,
+) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
@@ -36,7 +44,9 @@ pub fn build_example_program_with_features<S: AsRef<str>>(
         .with_options(["--example", example_name])
         .with_features(features)
         .into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    if let Err(Some(code)) = build_guest_package(&pkg, &target_dir, &guest_opts, None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let profile = if is_debug() { "debug" } else { "release" };
     let elf_path = pkg
