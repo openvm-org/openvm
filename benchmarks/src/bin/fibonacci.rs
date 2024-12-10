@@ -83,7 +83,9 @@ fn main() -> Result<()> {
             vm.execute_and_generate_with_cached_program(committed_exe.clone(), stdin.clone())
         })?;
 
-        let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), committed_exe).with_profile();
+        let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), committed_exe)
+            .with_profile()
+            .with_program_name("fibonacci_program".to_string());
         let app_proof = app_prover.generate_app_proof(stdin);
         Sdk.verify_app_proof(&app_pk, &app_proof)?;
 
