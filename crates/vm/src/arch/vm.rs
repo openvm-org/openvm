@@ -127,7 +127,7 @@ where
         let mut pc = exe.pc_start;
 
         loop {
-            println!("Executing segment: {}", segments.len());
+            tracing::info!("Executing segment: {}", segments.len());
             let state = segment.execute_from_pc(pc)?;
             pc = state.pc;
 
@@ -247,7 +247,7 @@ where
                     let start = std::time::Instant::now();
                     let ret = seg.generate_proof_input(committed_program.clone());
                     #[cfg(feature = "bench-metrics")]
-                    metrics::gauge!("execute_and_trace_gen_time_ms", "segment" => seg_idx.to_string())
+                    metrics::gauge!("trace_gen_time_ms", "segment" => seg_idx.to_string())
                         .set(start.elapsed().as_millis() as f64);
                     ret
                 })

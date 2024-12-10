@@ -15,6 +15,9 @@ use tracing::info_span;
 use crate::{NonRootCommittedExe, StdIn, F, SC};
 
 pub struct AppProver<VC> {
+    /// If true, will run execution once with full metric collection for
+    /// flamegraphs (WARNING: this degrades performance).
+    pub profile: bool,
     app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
 }
 
@@ -24,6 +27,7 @@ impl<VC> AppProver<VC> {
         VC: VmConfig<F>,
     {
         Self {
+            profile: false,
             app_prover: VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(
                 app_vm_pk,
                 app_committed_exe,
@@ -36,13 +40,15 @@ impl<VC> AppProver<VC> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        #[cfg(feature = "bench-metrics")]
-        emit_app_execution_metrics(
-            self.app_prover.pk.vm_config.clone(),
-            self.app_prover.committed_exe.exe.clone(),
-            input.clone(),
-        );
         info_span!("app proof", group = "app_proof").in_scope(|| {
+            #[cfg(feature = "bench-metrics")]
+            if self.profile {
+                emit_app_execution_metrics(
+                    self.app_prover.pk.vm_config.clone(),
+                    self.app_prover.committed_exe.exe.clone(),
+                    input.clone(),
+                );
+            }
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.pk.fri_params.log_blowup as u64);

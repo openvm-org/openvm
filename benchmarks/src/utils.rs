@@ -110,7 +110,8 @@ where
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
-    let prover = AppProver::new(app_pk.app_vm_pk, committed_exe);
+    let mut prover = AppProver::new(app_pk.app_vm_pk, committed_exe);
+    prover.profile = true;
     let proofs = prover.generate_app_proof(input_stream).per_segment;
     // 6. Verify STARK proofs.
     vm.verify(&vk, proofs.clone()).expect("Verification failed");
