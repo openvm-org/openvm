@@ -14,7 +14,7 @@ ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 axvm-circuit-derive = { workspace = true }
 axvm-instructions = { workspace = true }
-ax-stark-sdk = { workspace = true }
+ax-stark-sdk = { workspace = true, optional = true }
 
 parking_lot.workspace = true
 itertools.workspace = true
@@ -45,13 +45,13 @@ p3-symmetric = { workspace = true }
 zkhash = { workspace = true }
 rand_xoshiro = "0.6.0"
 ark-ff = { version = "^0.4.0", default-features = false }
-ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
 axvm-ecc-guest = { workspace = true, features = ["halo2curves", "k256"] }
 axvm-circuit = { workspace = true, features = ["test-utils"] }
 
+ax-stark-sdk.workspace = true
 axvm-native-circuit.workspace = true
 axvm-native-compiler.workspace = true
 axvm-bigint-circuit.workspace = true
@@ -69,7 +69,7 @@ hex.workspace = true
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["axvm-ecc-guest/halo2curves"]
+test-utils = ["axvm-ecc-guest/halo2curves", "dep:ax-stark-sdk"]
 bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
 function-span = []
 # performance features:
