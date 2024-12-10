@@ -225,7 +225,7 @@ jobs:
       
       - name: Set metric name
         run: |
-          source ci/scripts/workflow_utils/functions.sh
+          source ci/scripts/utils.sh
           METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
