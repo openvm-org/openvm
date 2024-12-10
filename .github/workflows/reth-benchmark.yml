@@ -85,6 +85,7 @@ jobs:
       - cpu=${{ inputs.instance_cpu }}
       - ram=${{ inputs.instance_ram }}
       - family=${{ inputs.instance_family }}
+      - disk=large
       - tag=bench-reth-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -99,19 +100,50 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: Setup halo2
-        run: |
-          bash extensions/native/recursion/trusted_setup_s3.sh
       - name: Setup CLI
         working-directory: crates/cargo-axiom
         run: |
           cargo install --force --path .
+      - name: Install architecture specific tools
+        run: |
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
+
       - name: Checkout Reth. This is inside afs-prototype dir but it's fine.
         run: |
           git clone git@github.com:axiom-crypto/rsp.git
-      - name: setup nightly toolchain
+
+      - name: Setup halo2
+        if: ${{ github.event.inputs.mode == 'prove-e2e' }}
         run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+          bash ./extensions/native/recursion/trusted_setup_s3.sh
+          ln -s params rsp/params
+
       - name: Run Reth
         run: |
           cd rsp/bin/client-eth
