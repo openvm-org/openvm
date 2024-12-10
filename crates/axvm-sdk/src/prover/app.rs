@@ -18,6 +18,7 @@ pub struct AppProver<VC> {
     /// If true, will run execution once with full metric collection for
     /// flamegraphs (WARNING: this degrades performance).
     pub profile: bool,
+    pub program_name: Option<String>,
     app_prover: VmLocalProver<SC, VC, BabyBearPoseidon2Engine>,
 }
 
@@ -28,19 +29,38 @@ impl<VC> AppProver<VC> {
     {
         Self {
             profile: false,
+            program_name: None,
             app_prover: VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(
                 app_vm_pk,
                 app_committed_exe,
             ),
         }
     }
+
+    pub fn with_profile(mut self) -> Self {
+        self.profile = true;
+        self
+    }
+
+    pub fn with_program_name(mut self, program_name: String) -> Self {
+        self.program_name = Some(program_name);
+        self
+    }
+
     pub fn generate_app_proof(&self, input: StdIn) -> ContinuationVmProof<SC>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        info_span!("app proof", group = "app_proof").in_scope(|| {
+        info_span!(
+            "app proof",
+            group = self
+                .program_name
+                .as_ref()
+                .unwrap_or(&"app_proof".to_string())
+        )
+        .in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             if self.profile {
                 emit_app_execution_metrics(

@@ -304,3 +304,19 @@ impl FullAggProvingKey {
         }
     }
 }
+
+// #[cfg(feature = "bench-metrics")]
+pub fn leaf_keygen(fri_params: FriParameters) -> VmProvingKey<SC, NativeConfig> {
+    let agg_config = AggConfig {
+        leaf_fri_params: fri_params,
+        ..Default::default()
+    };
+    let vm_config = agg_config.leaf_vm_config();
+    let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
+    let leaf_vm_pk = VirtualMachine::new(leaf_engine, vm_config.clone()).keygen();
+    VmProvingKey {
+        fri_params,
+        vm_config,
+        vm_pk: leaf_vm_pk,
+    }
+}

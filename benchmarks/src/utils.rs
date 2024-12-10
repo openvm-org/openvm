@@ -128,7 +128,7 @@ where
     Ok(vdata)
 }
 
-fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {
+pub fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {
     let start = Instant::now();
     let res = f();
     gauge.set(start.elapsed().as_millis() as f64);
