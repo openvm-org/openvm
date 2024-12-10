@@ -3,16 +3,23 @@ name: "Reth Benchmark"
 on:
   workflow_dispatch:
     inputs:
-      instance_type:
+      # Default runner is not big enough for this
+      # https://aws.amazon.com/ec2/instance-types/
+      instance_family:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The family of the instance, can be multiple ones concat with "+" e.g. r8g+r7g
+        default: m7a.48xlarge
       memory_allocator:
         type: string
         required: false
         description: Memory allocator to use (mimalloc or jemalloc)
         default: mimalloc
+      block_number:
+        type: number
+        required: false
+        description: Block number to run the benchmark on
+        default: 21345144
       app_log_blowup:
         type: number
         required: false
@@ -27,17 +34,29 @@ on:
         type: number
         required: false
         description: Root level log blowup (only for e2e)
-        default: 2
-      internal_log_blowup:
-        type: number
+        default: 3
+      # workflow dispatch has a limit on how many inputs
+      # we always use the default for now
+      # internal_log_blowup:
+      #   type: number
+      #   required: false
+      #   description: Internal level log blowup (only for e2e)
+      #   default: 2
+      mode:
+        type: string
         required: false
-        description: Internal level log blowup (only for e2e)
-        default: 2
+        description: Running mode, one of execute, prove, or prove-e2e
+        default: prove
+      collect_metrics:
+        type: boolean
+        required: false
+        description: Whether to collect metrics for flamegraphs
+        default: false
       max_segment_length:
         type: number
         required: false
         description: Max segment length for continuations, must be larger than 524288
-        default: 1048476
+        default: 8388508 # 2**23 - 100
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -53,9 +72,11 @@ jobs:
     name: Run Reth benchmark
     runs-on:
       - runs-on
-      - runner=${{ inputs.instance_type }}
       - run-id=${{ github.run_id }}
-      - family=m7
+      - cpu=${{ inputs.instance_cpu }}
+      - ram=${{ inputs.instance_ram }}
+      - family=${{ inputs.instance_family }}
+      - disk=large
       - tag=bench-reth-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +91,75 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: Checkout Reth
+      - name: Setup CLI
+        working-directory: crates/cargo-axiom
         run: |
-          git clone https://github.com/axiom-crypto/rsp
+          cargo install --force --path .
+      - name: Install architecture specific tools
+        run: |
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+          echo "Checking s5cmd"
+          if type s5cmd &>/dev/null; then
+              echo "s5cmd was installed."
+          else
+              TMP_DIR=/tmp/s5cmd
+              rm -rf $TMP_DIR
+              mkdir $TMP_DIR
+              echo "s5cmd was not installed. Installing.."
+              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
+              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
+          fi
+
+      - name: Checkout Reth. This is inside afs-prototype dir but it's fine.
+        run: |
+          git clone git@github.com:axiom-crypto/rsp.git
+
+      - name: Setup halo2
+        if: ${{ github.event.inputs.mode == 'prove-e2e' }}
+        run: |
+          bash ./extensions/native/recursion/trusted_setup_s3.sh
+          ln -s params rsp/params
+
+      - name: Run Reth
+        run: |
+          cd rsp/bin/client-eth
+          cargo axiom build
+          mkdir -p ../host/elf
+          cp target/riscv32im-risc0-zkvm-elf/release/rsp-client-eth ../host/elf/
+          cd ../..
+          mkdir -p rpc-cache
+          RPC_1=${{ secrets.RPC_URL_1 }}
+          MODE=${{ inputs.mode }}
+          BLOCK_NUMBER=${{ inputs.block_number }}
+          OPTIONAL_ARGS=""
+          if [[ "${{ inputs.collect_metrics }}" == "true" ]]; then
+            OPTIONAL_ARGS="--collect-metrics"
+          fi
+          cargo build --bin rsp --release
+          OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp \
+            --$MODE --block-number $BLOCK_NUMBER --rpc-url $RPC_1 --cache-dir rpc-cache \
+            --app_log_blowup ${{ inputs.app_log_blowup }} --agg_log_blowup ${{ inputs.agg_log_blowup }} \
+            --root_log_blowup ${{ inputs.root_log_blowup }} \
+            --max_segment_length ${{ inputs.max_segment_length }} $OPTIONAL_ARGS
+
+      - name: Upload Benchmark Metrics
+        working-directory: rsp
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          METRIC_NAME="reth"
+          s5cmd cp metrics.json ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
