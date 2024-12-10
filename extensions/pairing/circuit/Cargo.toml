@@ -33,7 +33,7 @@ once_cell = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 eyre = { workspace = true }
-serde = { version = "1.0.215", features = ["derive"] }
+serde = { workspace = true, features = ["derive", "std"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 axvm-pairing-guest = { workspace = true }
