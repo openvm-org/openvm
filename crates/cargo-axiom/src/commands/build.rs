@@ -1,12 +1,17 @@
 use std::{
     fs::{read, File},
+    io::Write,
     path::PathBuf,
 };
 
 use axvm_build::GuestOptions;
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{Sdk, TargetFilter};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
+use axvm_transpiler::{
+    axvm_platform::{bincode, memory::MEM_SIZE},
+    elf::Elf,
+    transpiler::Transpiler,
+};
 use clap::Parser;
 use eyre::Result;
 
@@ -108,8 +113,8 @@ fn transpile(elf_path: PathBuf, output_path: PathBuf) -> Result<()> {
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension),
     )?;
-    let file = File::create(output_path.clone())?;
-    serde_json::to_writer(file, &exe)?;
+    let data = bincode::serde::encode_to_vec(&exe, bincode::config::standard())?;
+    File::create(output_path.clone())?.write_all(&data)?;
     eprintln!("Successfully transpiled to {}", output_path.display());
     Ok(())
 }

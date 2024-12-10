@@ -24,10 +24,8 @@ pub enum AxVmCliCommands {
     Build(BuildCmd),
     Contract(ContractCmd),
     Keygen(KeygenCmd),
-    // New(NewCmd),
     Prove(ProveCmd),
     Run(RunCmd),
-    // Transpile(TranspileCmd),
     Verify(VerifyCmd),
 }
 
