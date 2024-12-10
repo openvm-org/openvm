@@ -46,12 +46,12 @@ generate_markdown() {
 }
 
 add_metadata() {
-    local result_path="$2"
-    local max_segment_length="$5"
-    local instance_type="$6"
-    local memory_allocator="$7"
-    local repo="$8"
-    local run_id="$9"
+    local result_path="$1"
+    local max_segment_length="$2"
+    local instance_type="$3"
+    local memory_allocator="$4"
+    local repo="$5"
+    local run_id="$6"
 
     commit_url="https://github.com/${repo}/commit/${current_sha}"
     echo "" >> $result_path

@@ -191,6 +191,7 @@ jobs:
             ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
+            bash ./extensions/native/recursion/trusted_setup_s3.sh
           fi
 
       - name: Set BIN_NAME and CMD_ARGS
@@ -219,10 +220,7 @@ jobs:
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            bash ./extensions/native/recursion/trusted_setup_s3.sh
-          fi
-      
+
       - name: Set metric name
         run: |
           source ci/scripts/utils.sh
@@ -236,7 +234,8 @@ jobs:
       ##########################################################################
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
-        run: |  # bench.py should take in metric_name to avoid duplicating logic
+        run:
+          | # bench.py should take in metric_name from above step to avoid duplicating logic
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
       ##########################################################################
@@ -266,33 +265,6 @@ jobs:
         run: |
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
-        
-        # commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
-        # RESULT_PATH=results.md
-        # echo "" >> $RESULT_PATH
-        # if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
-        #   echo "<details>" >> $RESULT_PATH
-        #   echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
-        #   echo "" >> $RESULT_PATH
-        #   for file in .bench_metrics/flamegraphs/*.svg; do
-        #     filename=$(basename "$file")
-        #     flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
-        #     echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
-        #   done
-        #   echo "" >> $RESULT_PATH
-        #   echo "</details>" >> $RESULT_PATH
-        #   echo "" >> $RESULT_PATH
-        # fi
-        # echo "Commit: ${commit_url}" >> $RESULT_PATH
-        # echo "" >> $RESULT_PATH
-        # echo "Max Segment Length: ${{ inputs.max_segment_length }}" >> $RESULT_PATH
-        # echo "" >> $RESULT_PATH
-        # echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
-        # echo "" >> $RESULT_PATH
-        # echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
-        # echo "" >> $RESULT_PATH
-        # echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-        # s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
@@ -338,28 +310,28 @@ jobs:
         run: |
           mkdir -p ${GH_PAGES_PATH}
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md	
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"	
+          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
 
-          MAX_RETRIES=10	
-          RETRY_DELAY=5	
-          ATTEMPT=0	
-          SUCCESS=false	
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          ATTEMPT=0
+          SUCCESS=false
 
-          while [ $ATTEMPT -lt $MAX_RETRIES ]; do	
-              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."	
-              git fetch origin gh-pages	
-              git merge origin/gh-pages --no-edit	
-              if git push origin gh-pages; then	
-                  SUCCESS=true	
-                  break	
-              else	
-                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."	
-                  sleep $RETRY_DELAY	
-                  ATTEMPT=$((ATTEMPT + 1))	
-              fi	
+          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
+              git fetch origin gh-pages
+              git merge origin/gh-pages --no-edit
+              if git push origin gh-pages; then
+                  SUCCESS=true
+                  break
+              else
+                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."
+                  sleep $RETRY_DELAY
+                  ATTEMPT=$((ATTEMPT + 1))
+              fi
           done
           if [ "$SUCCESS" = false ]; then
               echo "PUSH_FAILED"
-              exit 1	
+              exit 1
           fi

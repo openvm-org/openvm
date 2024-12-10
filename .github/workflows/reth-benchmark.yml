@@ -132,7 +132,7 @@ jobs:
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
           ln -s params rsp/params
-      
+
       - name: Set metric name
         run: |
           source ci/scripts/utils.sh
@@ -172,7 +172,7 @@ jobs:
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
           s5cmd cp ${METRIC_PATH} ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
-      
+
       - name: Generate markdown # result path is hardcoded results.md
         run: |
           source ci/scripts/utils.sh
@@ -194,7 +194,7 @@ jobs:
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
           s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
-      
+
       ### Update gh-pages
       - uses: actions/checkout@v4
         with:
@@ -205,7 +205,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
-      - name: Set github pages path for dispatch
+      - name: Commit to gh-pages branch
         run: |
           GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
