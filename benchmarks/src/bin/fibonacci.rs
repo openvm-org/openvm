@@ -37,20 +37,19 @@ fn main() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata =
-            info_span!("Fibonacci Program", group = "fibonacci_program").in_scope(|| {
-                let engine = BabyBearPoseidon2Engine::new(
-                    FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-                );
-                let n = 100_000u64;
-                let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
-                bench_from_exe(
-                    engine,
-                    Rv32ImConfig::default(),
-                    exe,
-                    StdIn::from_bytes(&input),
-                )
-            })?;
+        let vdata = info_span!("Fibonacci Program").in_scope(|| {
+            let engine = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+            );
+            let n = 100_000u64;
+            let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
+            bench_from_exe(
+                engine,
+                Rv32ImConfig::default(),
+                exe,
+                StdIn::from_bytes(&input),
+            )
+        })?;
 
         #[cfg(feature = "aggregation")]
         {

@@ -37,18 +37,17 @@ fn main() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata =
-            info_span!("revm 100 transfers", group = "revm_100_transfers").in_scope(|| {
-                let engine = BabyBearPoseidon2Engine::new(
-                    FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-                );
-                bench_from_exe(
-                    engine,
-                    Keccak256Rv32Config::default(),
-                    exe,
-                    StdIn::default(),
-                )
-            })?;
+        let vdata = info_span!("revm 100 transfers").in_scope(|| {
+            let engine = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+            );
+            bench_from_exe(
+                engine,
+                Keccak256Rv32Config::default(),
+                exe,
+                StdIn::default(),
+            )
+        })?;
         Ok(())
     })
 }

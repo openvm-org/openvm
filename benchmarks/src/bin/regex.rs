@@ -39,7 +39,7 @@ fn main() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata = info_span!("Regex Program", group = "regex_program").in_scope(|| {
+        let vdata = info_span!("Regex Program").in_scope(|| {
             let engine = BabyBearPoseidon2Engine::new(
                 FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
             );
