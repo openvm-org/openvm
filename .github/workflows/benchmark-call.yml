@@ -49,6 +49,10 @@ on:
         required: false
         description: Max segment length for continuations, must be larger than 524288
         default: 1048476
+      e2e_bench:
+        type: boolean
+        required: true
+        description: Whether to run the e2e benchmark
   workflow_call:
     inputs:
       benchmark_name:
@@ -90,6 +94,10 @@ on:
         required: false
         description: Max segment length for continuations, must be larger than 524288
         default: 1048476
+      e2e_bench:
+        type: boolean
+        required: true
+        description: Whether to run the e2e benchmark
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -129,33 +137,8 @@ jobs:
 
       - name: Install architecture specific tools
         run: |
-          arch=$(uname -m)
-          case $arch in
-            arm64|aarch64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
-              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
-              ;;
-            x86_64|amd64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
-              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
-              ;;
-            *)
-              echo "Unsupported architecture: $arch"
-              exit 1
-              ;;
-          esac
-
-          echo "Checking s5cmd"
-          if type s5cmd &>/dev/null; then
-              echo "s5cmd was installed."
-          else
-              TMP_DIR=/tmp/s5cmd
-              rm -rf $TMP_DIR
-              mkdir $TMP_DIR
-              echo "s5cmd was not installed. Installing.."
-              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
-              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
-          fi
+          source ci/scripts/utils.sh
+          install_s5cmd
 
       - name: Feature flags
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -166,25 +149,7 @@ jobs:
       - name: Setup e2e (halo2 and arguments)
         working-directory: extensions/native/recursion # We only ever run halo2 for recursion
         run: |
-          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" \
-          --arg instance_type "${{ inputs.instance_type }}" \
-          --arg memory_allocator "${{ inputs.memory_allocator }}" \
-          --argjson app_log_blowup "${{ inputs.app_log_blowup }}" \
-          --argjson agg_log_blowup "${{ inputs.agg_log_blowup }}" \
-          --argjson root_log_blowup "${{ inputs.root_log_blowup }}" \
-          --argjson internal_log_blowup "${{ inputs.internal_log_blowup }}" \
-          --argjson max_segment_length "${{ inputs.max_segment_length }}" \
-          '.benchmarks[] |
-            select(.name == $name) |
-            select(.run_params[] | .instance_type == $instance_type) |
-            select(.run_params[] | .memory_allocator == $memory_allocator) |
-            select(.run_params[] | .app_log_blowup == $app_log_blowup) |
-            select(.run_params[] | .agg_log_blowup == $agg_log_blowup) |
-            select(.run_params[] | (.root_log_blowup // 0) == $root_log_blowup) |
-            select(.run_params[] | (.internal_log_blowup // 0) == $internal_log_blowup) |
-            select(.run_params[] | (.max_segment_length // 1048476) == $max_segment_length) |
-            .e2e_bench
-          ' ../../../ci/benchmark-config.json)
+          E2E_BENCH=${{ inputs.e2e_bench }}
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
 
           if [[ "${E2E_BENCH}" == "true" ]]; then

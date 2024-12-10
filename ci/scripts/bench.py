@@ -79,7 +79,6 @@ def bench():
     parser.add_argument('--internal_log_blowup', type=str, help="Aggregation level log blowup")
     parser.add_argument('--max_segment_length', type=str, help="Max segment length for continuations")
     parser.add_argument('--features', type=str, help="Additional features")
-    parser.add_argument('--flamegraph', type=bool, help="Create flamegraphs")
     args = parser.parse_args()
 
     feature_flags = ["bench-metrics", "parallel", "function-span"] + ([args.features] if args.features else []) + [args.memory_allocator]

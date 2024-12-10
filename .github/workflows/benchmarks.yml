@@ -95,6 +95,7 @@ jobs:
       root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
       internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
+      e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
     secrets: inherit
 
   summarize:
