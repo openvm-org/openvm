@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::F;
 
-const DEFAULT_LEAF_BLOWUP: usize = 1;
+const DEFAULT_LEAF_BLOWUP: usize = 2;
 const DEFAULT_INTERNAL_BLOWUP: usize = 2;
 const DEFAULT_ROOT_BLOWUP: usize = 3;
 
