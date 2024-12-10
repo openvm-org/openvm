@@ -111,7 +111,7 @@ pub struct CachedMulTable<'a, C: IntrinsicCurve> {
     /// For alignment, we currently require this to divide 8 (bits in a byte).
     pub window_bits: usize,
     pub bases: &'a [C::Point],
-    /// `table[i][j] = (j + 2) * base_i` for `j + 2 < 2 ** window`
+    /// `table[i][j] = (j + 2) * bases[i]` for `j + 2 < 2 ** window_bits`
     table: Vec<Vec<C::Point>>,
     /// Needed to return reference to the identity point.
     identity: C::Point,
