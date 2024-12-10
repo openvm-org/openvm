@@ -51,8 +51,8 @@ pub struct BuildArgs {
     pub name: Option<String>,
 
     /// Transpile the program after building
-    #[arg(long)]
-    pub transpile: bool,
+    #[arg(long, default_value = "false")]
+    pub do_not_transpile: bool,
 
     /// Output path for the transpiled program (default: <ELF base path>.axvmexe)
     #[arg(long)]
@@ -77,6 +77,7 @@ pub struct BinTypeFilter {
 
 // Returns elf_path for now
 pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
+    println!("[axiom] Building the package...");
     let target_filter = TargetFilter {
         name_substr: build_args.name.clone(),
         kind: if build_args.bin_type_filter.bin {
@@ -99,14 +100,23 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
 
     let target_dir = get_dir_with_profile(get_target_dir(&pkg_dir), &build_args.profile);
     let elf_path = find_unique_executable(&pkg_dir, &target_dir, &target_filter)?;
-    if build_args.transpile {
+    if !build_args.do_not_transpile {
+        println!("[axiom] Transpiling the package...");
         let output_path = build_args
             .transpile_path
             .clone()
             .unwrap_or_else(|| elf_path.with_extension("axvmexe"));
         transpile(elf_path.clone(), output_path.clone())?;
+        println!(
+            "[axiom] Successfully transpiled to {}",
+            output_path.display()
+        );
         Ok(output_path)
     } else {
+        println!(
+            "[axiom] Successfully built the package: {}",
+            elf_path.display()
+        );
         Ok(elf_path)
     }
 }

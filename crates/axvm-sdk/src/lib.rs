@@ -90,9 +90,6 @@ impl Sdk {
             }
         };
 
-        eprintln!("target_dir: {:?}", target_dir);
-        eprintln!("targets: {:?}", pkg.targets);
-
         let elf_path = find_unique_executable(pkg_dir, target_dir, target_filter)?;
         let data = read(&elf_path)?;
         Elf::decode(&data, MEM_SIZE as u32)
