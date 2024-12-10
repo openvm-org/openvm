@@ -91,7 +91,7 @@ where
             }
         };
         let leaf_committed_exe = {
-            let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
+            let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
                 app_fri_params: config.app_fri_params,
                 app_system_config: config.app_vm_config.system().clone(),
@@ -105,7 +105,7 @@ where
         };
         Self {
             leaf_committed_exe,
-            leaf_fri_params: config.leaf_fri_params,
+            leaf_fri_params: config.leaf_fri_params.fri_params,
             app_vm_pk,
         }
     }

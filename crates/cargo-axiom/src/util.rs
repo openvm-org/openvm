@@ -1,12 +1,13 @@
-use std::{fmt::Display, path::PathBuf, str::FromStr};
+use std::{
+    fmt::Display,
+    fs::{read, read_to_string},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
-use clap::ValueEnum;
-
-#[derive(ValueEnum, Clone)]
-pub(crate) enum ProofMode {
-    App,
-    E2e,
-}
+use axvm_sdk::StdIn;
+use eyre::Result;
+use serde::de::DeserializeOwned;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -53,4 +54,21 @@ pub(crate) fn is_valid_hex_string(s: &str) -> bool {
 
 pub(crate) fn write_status(style: &dyn Display, status: &str, msg: &str) {
     println!("{style}{status:>12}{style:#} {msg}");
+}
+
+pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {
+    let toml = read_to_string(path.as_ref() as &Path)?;
+    let ret = toml::from_str(&toml)?;
+    Ok(ret)
+}
+
+pub(crate) fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
+    match input {
+        Some(Input::FilePath(path)) => {
+            let bytes = read(path)?;
+            Ok(StdIn::from_bytes(&bytes))
+        }
+        Some(Input::HexBytes(bytes)) => Ok(StdIn::from_bytes(bytes)),
+        None => Ok(StdIn::default()),
+    }
 }

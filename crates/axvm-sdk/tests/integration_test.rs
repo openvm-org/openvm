@@ -122,7 +122,8 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
                 .with_public_values(16),
             Native,
         ),
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
+        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
+            .into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -253,22 +254,21 @@ fn test_public_values_and_leaf_verification() {
 }
 
 #[test]
-fn test_e2e_app_log_blowup_1() {
+fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
-    const AGG_PK_PATH: &str = "temp/agg_pk.out";
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config, None::<&str>).unwrap();
-    let agg_pk = Sdk
-        .agg_keygen(full_agg_config_for_test(), Some(AGG_PK_PATH))
-        .unwrap();
-    let evm_verifier = Sdk
-        .generate_snark_verifier_contract(&agg_pk, None::<&'static str>)
-        .unwrap();
+    let app_pk = Sdk.app_keygen(app_config).unwrap();
+    let agg_pk = Sdk.agg_keygen(full_agg_config_for_test()).unwrap();
+    let evm_verifier = Sdk.generate_snark_verifier_contract(&agg_pk).unwrap();
 
-    let e2e_prover = Sdk
-        .create_e2e_prover(app_pk, app_committed_exe_for_test(app_log_blowup), agg_pk)
+    let evm_proof = Sdk
+        .generate_evm_proof(
+            app_pk,
+            app_committed_exe_for_test(app_log_blowup),
+            agg_pk,
+            StdIn::default(),
+        )
         .unwrap();
-    let evm_proof = e2e_prover.generate_proof_for_evm(StdIn::default());
     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
 }
 

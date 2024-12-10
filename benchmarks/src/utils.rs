@@ -90,7 +90,7 @@ where
         app_vm_config: config.clone(),
         app_fri_params: engine.fri_params(),
         // leaf_fri_params/compiler_options don't matter for this benchmark.
-        leaf_fri_params: engine.fri_params(),
+        leaf_fri_params: engine.fri_params().into(),
         compiler_options: Default::default(),
     };
     let vm = VirtualMachine::new(engine, config);

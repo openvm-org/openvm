@@ -15,6 +15,10 @@ pub mod types;
 
 #[derive(Serialize, Deserialize, Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
 pub struct ContinuationVmProof<SC: StarkGenericConfig> {
     pub per_segment: Vec<Proof<SC>>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,

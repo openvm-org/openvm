@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
             NUM_PUBLIC_VALUES,
             max_segment_length,
         ),
-        leaf_fri_params,
+        leaf_fri_params: leaf_fri_params.into(),
         compiler_options,
     };
     let full_agg_config = FullAggConfig {
@@ -67,8 +67,8 @@ async fn main() -> Result<()> {
         },
     };
 
-    let app_pk = Sdk.app_keygen(app_config, None::<&str>)?;
-    let full_agg_pk = Sdk.agg_keygen(full_agg_config, None::<&str>)?;
+    let app_pk = Sdk.app_keygen(app_config)?;
+    let full_agg_pk = Sdk.agg_keygen(full_agg_config)?;
     let elf = build_bench_program("fibonacci")?;
     let exe = AxVmExe::from_elf(
         elf,
@@ -79,13 +79,12 @@ async fn main() -> Result<()> {
     )?;
     let app_committed_exe = commit_app_exe(app_fri_params, exe);
 
-    let e2e_prover = Sdk.create_e2e_prover(app_pk, app_committed_exe, full_agg_pk)?;
-
     let n = 800_000u64;
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        e2e_prover.generate_proof_for_evm(stdin);
+        Sdk.generate_evm_proof(app_pk, app_committed_exe, full_agg_pk, stdin)
+            .unwrap();
     });
 
     Ok(())

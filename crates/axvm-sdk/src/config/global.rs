@@ -1,5 +1,4 @@
 use ax_stark_backend::p3_field::PrimeField32;
-use ax_stark_sdk::config::FriParameters;
 use axvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
@@ -9,8 +8,7 @@ use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
     arch::{
-        instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES, SystemConfig, SystemExecutor,
-        SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
@@ -22,7 +20,6 @@ use axvm_ecc_transpiler::EccTranspilerExtension;
 use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use axvm_native_circuit::{Native, NativeExecutor, NativePeriphery};
-use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery};
 use axvm_pairing_transpiler::PairingTranspilerExtension;
 use axvm_rv32im_circuit::{
@@ -39,58 +36,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::F;
 
-const DEFAULT_LEAF_BLOWUP: usize = 2;
-const DEFAULT_INTERNAL_BLOWUP: usize = 2;
-const DEFAULT_ROOT_BLOWUP: usize = 3;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AppConfig<VC> {
-    pub app_fri_params: FriParameters,
-    pub app_vm_config: VC,
-    pub leaf_fri_params: FriParameters,
-    /// Only for AggVM debugging. App VM users should not need this in regular flow.
-    pub compiler_options: CompilerOptions,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct AggConfig {
-    pub max_num_user_public_values: usize,
-    pub leaf_fri_params: FriParameters,
-    pub internal_fri_params: FriParameters,
-    pub root_fri_params: FriParameters,
-    /// Only for AggVM debugging.
-    pub compiler_options: CompilerOptions,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Halo2Config {
-    /// Log degree for the outer recursion verifier circuit.
-    pub verifier_k: usize,
-    /// If not specified, keygen will tune wrapper_k automatically.
-    pub wrapper_k: Option<usize>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct FullAggConfig {
-    /// STARK aggregation config
-    pub agg_config: AggConfig,
-    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
-    pub halo2_config: Halo2Config,
-}
-
 #[derive(Builder, Clone, Debug, Serialize, Deserialize)]
 pub struct SdkVmConfig {
-    pub system: SystemConfig,
-    pub rv32i: Option<Rv32I>,
+    #[serde(default)]
+    pub system: SdkSystemConfig,
+
+    pub rv32i: Option<UnitStruct>,
+    pub io: Option<UnitStruct>,
+    pub keccak: Option<UnitStruct>,
+    pub native: Option<UnitStruct>,
+
     pub rv32m: Option<Rv32M>,
-    pub io: Option<Rv32Io>,
     pub bigint: Option<Int256>,
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
-    pub native: Option<Native>,
-    pub keccak: Option<Keccak256>,
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
@@ -100,9 +61,13 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Rv32i(Rv32IExecutor<F>),
     #[any_enum]
-    Rv32m(Rv32MExecutor<F>),
-    #[any_enum]
     Io(Rv32IoExecutor<F>),
+    #[any_enum]
+    Keccak(Keccak256Executor<F>),
+    #[any_enum]
+    Native(NativeExecutor<F>),
+    #[any_enum]
+    Rv32m(Rv32MExecutor<F>),
     #[any_enum]
     BigInt(Int256Executor<F>),
     #[any_enum]
@@ -113,10 +78,6 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     Pairing(PairingExtensionExecutor<F>),
     #[any_enum]
     Ecc(WeierstrassExtensionExecutor<F>),
-    #[any_enum]
-    Keccak(Keccak256Executor<F>),
-    #[any_enum]
-    Native(NativeExecutor<F>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -126,9 +87,13 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Rv32i(Rv32IPeriphery<F>),
     #[any_enum]
-    Rv32m(Rv32MPeriphery<F>),
-    #[any_enum]
     Io(Rv32IoPeriphery<F>),
+    #[any_enum]
+    Keccak(Keccak256Periphery<F>),
+    #[any_enum]
+    Native(NativePeriphery<F>),
+    #[any_enum]
+    Rv32m(Rv32MPeriphery<F>),
     #[any_enum]
     BigInt(Int256Periphery<F>),
     #[any_enum]
@@ -139,10 +104,6 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     Pairing(PairingExtensionPeriphery<F>),
     #[any_enum]
     Ecc(WeierstrassExtensionPeriphery<F>),
-    #[any_enum]
-    Keccak(Keccak256Periphery<F>),
-    #[any_enum]
-    Native(NativePeriphery<F>),
 }
 
 impl SdkVmConfig {
@@ -151,11 +112,14 @@ impl SdkVmConfig {
         if self.rv32i.is_some() {
             transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
         }
-        if self.rv32m.is_some() {
-            transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
-        }
         if self.io.is_some() {
             transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
+        }
+        if self.keccak.is_some() {
+            transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
+        }
+        if self.rv32m.is_some() {
+            transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
         }
         if self.bigint.is_some() {
             transpiler = transpiler.with_extension(Int256TranspilerExtension);
@@ -172,65 +136,7 @@ impl SdkVmConfig {
         if self.ecc.is_some() {
             transpiler = transpiler.with_extension(EccTranspilerExtension);
         }
-        if self.keccak.is_some() {
-            transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
-        }
         transpiler
-    }
-}
-
-impl Default for FullAggConfig {
-    fn default() -> Self {
-        Self {
-            agg_config: AggConfig::default(),
-            halo2_config: Halo2Config {
-                verifier_k: 24,
-                wrapper_k: None,
-            },
-        }
-    }
-}
-
-impl Default for AggConfig {
-    fn default() -> Self {
-        Self {
-            max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
-            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_BLOWUP,
-            ),
-            internal_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_INTERNAL_BLOWUP,
-            ),
-            root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_ROOT_BLOWUP,
-            ),
-            compiler_options: Default::default(),
-        }
-    }
-}
-
-impl<VC> AppConfig<VC> {
-    pub fn new(app_fri_params: FriParameters, app_vm_config: VC) -> Self {
-        Self {
-            app_fri_params,
-            app_vm_config,
-            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_BLOWUP,
-            ),
-            compiler_options: Default::default(),
-        }
-    }
-    pub fn new_with_leaf_fri_params(
-        app_fri_params: FriParameters,
-        app_vm_config: VC,
-        leaf_fri_params: FriParameters,
-    ) -> Self {
-        Self {
-            app_fri_params,
-            app_vm_config,
-            leaf_fri_params,
-            compiler_options: Default::default(),
-        }
     }
 }
 
@@ -239,26 +145,33 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
     type Periphery = SdkVmConfigPeriphery<F>;
 
     fn system(&self) -> &SystemConfig {
-        &self.system
+        &self.system.config
     }
 
     fn system_mut(&mut self) -> &mut SystemConfig {
-        &mut self.system
+        &mut self.system.config
     }
 
     fn create_chip_complex(
         &self,
     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut complex = self.system.create_chip_complex()?.transmute();
+        let mut complex = self.system.config.create_chip_complex()?.transmute();
 
-        if let Some(ref rv32i) = self.rv32i {
-            complex = complex.extend(rv32i)?;
+        if self.rv32i.is_some() {
+            complex = complex.extend(&Rv32I)?;
         }
+        if self.io.is_some() {
+            complex = complex.extend(&Rv32Io)?;
+        }
+        if self.keccak.is_some() {
+            complex = complex.extend(&Keccak256)?;
+        }
+        if self.native.is_some() {
+            complex = complex.extend(&Native)?;
+        }
+
         if let Some(ref rv32m) = self.rv32m {
             complex = complex.extend(rv32m)?;
-        }
-        if let Some(ref io) = self.io {
-            complex = complex.extend(io)?;
         }
         if let Some(ref bigint) = self.bigint {
             complex = complex.extend(bigint)?;
@@ -275,13 +188,55 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if let Some(ref ecc) = self.ecc {
             complex = complex.extend(ecc)?;
         }
-        if let Some(ref keccak) = self.keccak {
-            complex = complex.extend(keccak)?;
-        }
-        if let Some(ref native) = self.native {
-            complex = complex.extend(native)?;
-        }
 
         Ok(complex)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SdkSystemConfig {
+    pub config: SystemConfig,
+}
+
+impl Default for SdkSystemConfig {
+    fn default() -> Self {
+        Self {
+            config: SystemConfig::default().with_continuations(),
+        }
+    }
+}
+
+impl From<SystemConfig> for SdkSystemConfig {
+    fn from(config: SystemConfig) -> Self {
+        Self { config }
+    }
+}
+
+/// A struct that is used to represent a unit struct in the config, used for
+/// serialization and deserialization.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct UnitStruct {}
+
+impl From<Rv32I> for UnitStruct {
+    fn from(_: Rv32I) -> Self {
+        UnitStruct {}
+    }
+}
+
+impl From<Rv32Io> for UnitStruct {
+    fn from(_: Rv32Io) -> Self {
+        UnitStruct {}
+    }
+}
+
+impl From<Keccak256> for UnitStruct {
+    fn from(_: Keccak256) -> Self {
+        UnitStruct {}
+    }
+}
+
+impl From<Native> for UnitStruct {
+    fn from(_: Native) -> Self {
+        UnitStruct {}
     }
 }
