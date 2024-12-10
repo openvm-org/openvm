@@ -4,8 +4,8 @@ pub use bench::*;
 mod build;
 pub use build::*;
 
-mod contract;
-pub use contract::*;
+mod init;
+pub use init::*;
 
 mod keygen;
 pub use keygen::*;

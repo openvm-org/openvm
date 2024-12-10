@@ -15,7 +15,7 @@ use ax_stark_sdk::{
 };
 use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig, VmExecutor},
+    arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig, VmExecutor, VmMemoryState},
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_recursion::{
@@ -107,14 +107,14 @@ impl Sdk {
         exe: AxVmExe<F>,
         vm_config: VC,
         inputs: StdIn,
-    ) -> Result<(), ExecutionError>
+    ) -> Result<Option<VmMemoryState<F>>, ExecutionError>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let vm = VmExecutor::new(vm_config);
-        vm.execute_segments(exe, inputs).unwrap();
-        Ok(())
+        let ret = vm.execute(exe, inputs)?;
+        Ok(ret)
     }
 
     pub fn commit_app_exe(

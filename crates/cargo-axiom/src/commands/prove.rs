@@ -29,7 +29,11 @@ pub struct ProveCmd {
     #[clap(long, action, help = "Path to output proof")]
     output: PathBuf,
 
-    #[clap(long, action, help = "Generates end-to-end EVM proof if present")]
+    #[clap(
+        long,
+        action,
+        help = "Generates end-to-end EVM proof if present. WARNING: this requires large amounts of computation and memory."
+    )]
     evm: bool,
 
     #[clap(long, action, help = "Path to aggregation proving key")]
@@ -43,6 +47,7 @@ impl ProveCmd {
         let committed_exe = Sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
         let input = read_to_stdin(&self.input)?;
         if self.evm {
+            println!("Generating EVM proof, this may take a lot of compute and memory...");
             let agg_pk = read_agg_pk_from_file(self.agg_pk.as_ref().unwrap())?;
             let evm_proof = Sdk.generate_evm_proof(app_pk, committed_exe, agg_pk, input)?;
             write_evm_proof_to_file(evm_proof, &self.output)?;

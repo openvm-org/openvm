@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use axvm_sdk::{config::SdkVmConfig, fs::read_exe_from_file, Sdk};
+use axvm_sdk::{
+    config::{AppConfig, SdkVmConfig},
+    fs::read_exe_from_file,
+    Sdk,
+};
 use clap::Parser;
 use eyre::Result;
 
@@ -12,8 +16,8 @@ pub struct RunCmd {
     #[clap(long, action, help = "Path to axVM executable")]
     exe: PathBuf,
 
-    #[clap(long, action, help = "Path to VM configuration TOML file")]
-    vm_config: PathBuf,
+    #[clap(long, action, help = "Path to app config TOML file")]
+    config: PathBuf,
 
     #[clap(long, value_parser, help = "Input to axVM program")]
     input: Option<Input>,
@@ -22,8 +26,9 @@ pub struct RunCmd {
 impl RunCmd {
     pub fn run(&self) -> Result<()> {
         let exe = read_exe_from_file(&self.exe)?;
-        let vm_config: SdkVmConfig = read_to_struct_toml(&self.vm_config)?;
-        Sdk.execute(exe, vm_config, read_to_stdin(&self.input)?)?;
+        let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&self.config)?;
+        let results = Sdk.execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
+        println!("Final memory state: {:?}", results);
         Ok(())
     }
 }
