@@ -10,26 +10,6 @@ get_metric_name() {
     local instance_type="$8"
     local memory_allocator="$9"
 
-    echo "start"
-    echo $is_e2e
-    echo "start"
-    echo $bin_name
-    echo "start"
-    echo $app_log_blowup
-    echo "start"
-    echo $agg_log_blowup
-    echo "start"
-    echo $root_log_blowup
-    echo "start"
-    echo $internal_log_blowup
-    echo "start"
-    echo $max_segment_length
-    echo "start"
-    echo $instance_type
-    echo "start"
-    echo $memory_allocator
-    echo "start"
-
     local metric_name="${bin_name}-${app_log_blowup}-${agg_log_blowup}"
     
     if [[ "$is_e2e" == "true" ]]; then

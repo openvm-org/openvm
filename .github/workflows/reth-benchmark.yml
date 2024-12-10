@@ -114,8 +114,9 @@ jobs:
 
       - name: Set metric name
         run: |
+          e2e=${{ inputs.mode == 'prove-e2e' }}
           source ci/scripts/utils.sh
-          METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} reth ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
+          METRIC_NAME=$(get_metric_name $e2e reth ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
