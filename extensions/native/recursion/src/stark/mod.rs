@@ -109,9 +109,19 @@ where
         m_advice: &MultiStarkVerificationAdvice<C>,
         proof: &StarkProofVariable<C>,
     ) {
-        let mut challenger = CH::new(builder);
-
-        Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
+        if builder.flags.static_only {
+            let mut challenger = CH::new(builder);
+            Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
+        } else {
+            // Recycle stack space after verifying
+            let mut tmp_builder = builder.create_sub_builder();
+            // Recycle heap space after verifying by resetting the heap pointer.
+            let old_heap_ptr = tmp_builder.load_heap_ptr();
+            let mut challenger = CH::new(&mut tmp_builder);
+            Self::verify_raps(&mut tmp_builder, pcs, m_advice, &mut challenger, proof);
+            tmp_builder.store_heap_ptr(old_heap_ptr);
+            builder.operations.extend(tmp_builder.operations);
+        }
     }
 
     /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].

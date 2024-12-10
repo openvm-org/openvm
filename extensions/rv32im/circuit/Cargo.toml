@@ -26,6 +26,7 @@ eyre.workspace = true
 # for div_rem:
 num-bigint.workspace = true
 num-integer.workspace = true
+serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }

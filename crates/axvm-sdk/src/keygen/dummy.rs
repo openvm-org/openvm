@@ -18,10 +18,6 @@ use axvm_circuit::{
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
-    prover::{
-        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
-        SingleSegmentVmProver,
-    },
     system::program::trace::AxVmCommittedExe,
     utils::next_power_of_two_or_zero,
 };
@@ -31,12 +27,16 @@ use axvm_native_recursion::hints::Hintable;
 use axvm_rv32im_circuit::Rv32ImConfig;
 
 use crate::{
+    prover::vm::{
+        local::VmLocalProver, types::VmProvingKey, ContinuationVmProof, ContinuationVmProver,
+        SingleSegmentVmProver,
+    },
     verifier::{
         internal::types::InternalVmVerifierInput,
         leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
         root::types::RootVmVerifierInput,
     },
-    F, SC,
+    NonRootCommittedExe, F, SC,
 };
 
 /// Returns:
@@ -68,7 +68,7 @@ pub(super) fn compute_root_proof_heights(
 
 pub(super) fn dummy_internal_proof(
     internal_vm_pk: VmProvingKey<SC, NativeConfig>,
-    internal_exe: Arc<AxVmCommittedExe<SC>>,
+    internal_exe: Arc<NonRootCommittedExe>,
     leaf_proof: Proof<SC>,
 ) -> Proof<SC> {
     let mut internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
@@ -87,7 +87,7 @@ pub(super) fn dummy_internal_proof(
 pub(super) fn dummy_internal_proof_riscv_app_vm(
     leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
     internal_vm_pk: VmProvingKey<SC, NativeConfig>,
-    internal_exe: Arc<AxVmCommittedExe<SC>>,
+    internal_exe: Arc<NonRootCommittedExe>,
     num_public_values: usize,
 ) -> Proof<SC> {
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
@@ -126,7 +126,7 @@ fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
 ) -> Proof<SC> {
     let leaf_program = LeafVmVerifierConfig {
         app_fri_params: app_vm_pk.fri_params,
-        app_vm_config: app_vm_pk.vm_config.clone(),
+        app_system_config: app_vm_pk.vm_config.system().clone(),
         compiler_options: Default::default(),
     }
     .build_program(&app_vm_pk.vm_pk.get_vk());
@@ -196,7 +196,7 @@ where
     ContinuationVmProver::prove(&app_prover, vec![])
 }
 
-fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<AxVmCommittedExe<SC>> {
+fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe> {
     let program = dummy_app_program();
     let e = BabyBearPoseidon2Engine::new(fri_params);
     Arc::new(AxVmCommittedExe::<SC>::commit(

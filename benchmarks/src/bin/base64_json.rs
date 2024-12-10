@@ -40,22 +40,21 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata =
-            info_span!("Base64 Json Program", group = "base64_json_program").in_scope(|| {
-                let engine = BabyBearPoseidon2Engine::new(
-                    FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-                );
+        let vdata = info_span!("Base64 Json Program").in_scope(|| {
+            let engine = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+            );
 
-                let data = include_str!("../../programs/base64_json/json_payload_encoded.txt");
+            let data = include_str!("../../programs/base64_json/json_payload_encoded.txt");
 
-                let fe_bytes = data.to_owned().into_bytes();
-                bench_from_exe(
-                    engine,
-                    Keccak256Rv32Config::default(),
-                    exe,
-                    StdIn::from_bytes(&fe_bytes),
-                )
-            })?;
+            let fe_bytes = data.to_owned().into_bytes();
+            bench_from_exe(
+                engine,
+                Keccak256Rv32Config::default(),
+                exe,
+                StdIn::from_bytes(&fe_bytes),
+            )
+        })?;
 
         #[cfg(feature = "aggregation")]
         {

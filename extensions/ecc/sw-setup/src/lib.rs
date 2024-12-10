@@ -91,6 +91,12 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             impl #struct_name {
+                const fn identity() -> Self {
+                    Self {
+                        x: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
+                        y: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
+                    }
+                }
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
@@ -223,6 +229,22 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     (self.x, self.y)
                 }
 
+                fn add_ne_nonidentity(p1: &Self, p2: &Self) -> Self {
+                    Self::add_ne(p1, p2)
+                }
+
+                fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
+                    Self::add_ne_assign(self, p2);
+                }
+
+                fn double_nonidentity(p: &Self) -> Self {
+                    Self::double_impl(p)
+                }
+
+                fn double_assign_nonidentity(&mut self) {
+                    Self::double_assign_impl(self);
+                }
+
                 fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
                     #[cfg(not(target_os = "zkvm"))]
                     {
@@ -250,12 +272,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             impl Group for #struct_name {
                 type SelfRef<'a> = &'a Self;
 
-                fn identity() -> Self {
-                    Self {
-                        x: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
-                        y: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
-                    }
-                }
+                const IDENTITY: Self = Self::identity();
 
                 fn is_identity(&self) -> bool {
                     self.x == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO

@@ -16,11 +16,12 @@ use axvm_instructions::{AxVmOpcode, UsizeOpcode};
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
+use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
 use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct Fp2Extension {
     pub supported_modulus: Vec<BigUint>,
 }

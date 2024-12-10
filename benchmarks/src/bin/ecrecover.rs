@@ -47,6 +47,7 @@ use eyre::Result;
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use num_bigint_dig::BigUint;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Keccak};
 use tracing::info_span;
 
@@ -66,7 +67,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
     input.into_iter().map(BabyBear::from_canonical_u8).collect()
 }
 
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImEcRecoverConfig {
     #[system]
     pub system: SystemConfig,
@@ -122,37 +123,36 @@ fn main() -> Result<()> {
     let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata =
-            info_span!("ECDSA Recover Program", group = "ecrecover_program").in_scope(|| {
-                let mut rng = ChaCha8Rng::seed_from_u64(12345);
-                let signing_key: SigningKey = SigningKey::random(&mut rng);
-                let verifying_key = VerifyingKey::from(&signing_key);
-                let mut hasher = Keccak::v256();
-                let mut expected_address = [0u8; 32];
-                hasher.update(
-                    &verifying_key
-                        .to_encoded_point(/* compress = */ false)
-                        .as_bytes()[1..],
-                );
-                hasher.finalize(&mut expected_address);
-                expected_address[..12].fill(0); // 20 bytes as the address.
-                let mut input_stream = vec![expected_address
-                    .into_iter()
-                    .map(BabyBear::from_canonical_u8)
-                    .collect::<Vec<_>>()];
+        let vdata = info_span!("ECDSA Recover Program").in_scope(|| {
+            let mut rng = ChaCha8Rng::seed_from_u64(12345);
+            let signing_key: SigningKey = SigningKey::random(&mut rng);
+            let verifying_key = VerifyingKey::from(&signing_key);
+            let mut hasher = Keccak::v256();
+            let mut expected_address = [0u8; 32];
+            hasher.update(
+                &verifying_key
+                    .to_encoded_point(/* compress = */ false)
+                    .as_bytes()[1..],
+            );
+            hasher.finalize(&mut expected_address);
+            expected_address[..12].fill(0); // 20 bytes as the address.
+            let mut input_stream = vec![expected_address
+                .into_iter()
+                .map(BabyBear::from_canonical_u8)
+                .collect::<Vec<_>>()];
 
-                let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
-                input_stream.extend(
-                    msg.iter()
-                        .map(|s| make_input(&signing_key, s.as_bytes()))
-                        .collect::<Vec<_>>(),
-                );
+            let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
+            input_stream.extend(
+                msg.iter()
+                    .map(|s| make_input(&signing_key, s.as_bytes()))
+                    .collect::<Vec<_>>(),
+            );
 
-                let engine = BabyBearPoseidon2Engine::new(
-                    FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-                );
-                bench_from_exe(engine, vm_config, exe, input_stream.into())
-            })?;
+            let engine = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+            );
+            bench_from_exe(engine, vm_config, exe, input_stream.into())
+        })?;
 
         Ok(())
     })

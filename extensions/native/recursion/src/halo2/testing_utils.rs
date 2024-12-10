@@ -1,6 +1,6 @@
 use ax_stark_sdk::{
     config::{
-        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
+        baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         FriParameters,
     },
     engine::{ProofInputForTest, StarkFriEngine},
@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub fn run_static_verifier_test(
-    test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>,
+    test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierProvingKey, Snark) {
     let test_proof_input = ProofInputForTest {
@@ -26,7 +26,7 @@ pub fn run_static_verifier_test(
     };
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
-    let engine = BabyBearPoseidon2OuterEngine::new(fri_params);
+    let engine = BabyBearPoseidon2RootEngine::new(fri_params);
     let vparams = test_proof_input.run_test(&engine).unwrap();
 
     info_span.exit();

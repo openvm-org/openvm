@@ -18,7 +18,8 @@ use itertools::Itertools;
 use serde::{
     de,
     de::{MapAccess, Visitor},
-    Deserialize, Deserializer, Serialize,
+    ser::SerializeStruct,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 use snark_verifier_sdk::{
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
@@ -60,9 +61,8 @@ pub struct DslOperations<C: Config> {
 
 /// Necessary metadata to prove a Halo2 circuit
 /// Attention: Deserializer of this struct is not generic. It only works for verifier/wrapper circuit.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Halo2ProvingPinning {
-    #[serde(serialize_with = "pk_serializer")]
     pub pk: ProvingKey<G1Affine>,
     pub metadata: Halo2ProvingMetadata,
 }
@@ -268,11 +268,19 @@ impl Halo2Prover {
     }
 }
 
-fn pk_serializer<S>(value: &ProvingKey<G1Affine>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_bytes(&value.to_bytes(SerdeFormat::RawBytes))
+impl Serialize for Halo2ProvingPinning {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let pk_bytes = self.pk.to_bytes(SerdeFormat::RawBytes);
+
+        // Start serializing as a struct with 2 fields: "pk" and "metadata"
+        let mut state = serializer.serialize_struct("Halo2ProvingPinning", 2)?;
+        state.serialize_field("pk", &pk_bytes)?;
+        state.serialize_field("metadata", &self.metadata)?;
+        state.end()
+    }
 }
 
 impl<'de> Deserialize<'de> for Halo2ProvingPinning {

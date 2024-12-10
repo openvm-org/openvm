@@ -9,7 +9,8 @@ use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
+        instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES, SystemConfig, SystemExecutor,
+        SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
@@ -38,10 +39,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::F;
 
-#[derive(Clone, Debug)]
-pub struct AppConfig<VC: VmConfig<F>> {
+const DEFAULT_LEAF_BLOWUP: usize = 2;
+const DEFAULT_INTERNAL_BLOWUP: usize = 2;
+const DEFAULT_ROOT_BLOWUP: usize = 3;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppConfig<VC> {
     pub app_fri_params: FriParameters,
     pub app_vm_config: VC,
+    pub leaf_fri_params: FriParameters,
+    /// Only for AggVM debugging. App VM users should not need this in regular flow.
+    pub compiler_options: CompilerOptions,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -50,6 +58,7 @@ pub struct AggConfig {
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
     pub root_fri_params: FriParameters,
+    /// Only for AggVM debugging.
     pub compiler_options: CompilerOptions,
 }
 
@@ -69,7 +78,7 @@ pub struct FullAggConfig {
     pub halo2_config: Halo2Config,
 }
 
-#[derive(Builder, Clone, Debug)]
+#[derive(Builder, Clone, Debug, Serialize, Deserialize)]
 pub struct SdkVmConfig {
     pub system: SystemConfig,
     pub rv32i: Option<Rv32I>,
@@ -167,6 +176,61 @@ impl SdkVmConfig {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
         transpiler
+    }
+}
+
+impl Default for FullAggConfig {
+    fn default() -> Self {
+        Self {
+            agg_config: AggConfig::default(),
+            halo2_config: Halo2Config {
+                verifier_k: 24,
+                wrapper_k: None,
+            },
+        }
+    }
+}
+
+impl Default for AggConfig {
+    fn default() -> Self {
+        Self {
+            max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
+            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_LEAF_BLOWUP,
+            ),
+            internal_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_INTERNAL_BLOWUP,
+            ),
+            root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_ROOT_BLOWUP,
+            ),
+            compiler_options: Default::default(),
+        }
+    }
+}
+
+impl<VC> AppConfig<VC> {
+    pub fn new(app_fri_params: FriParameters, app_vm_config: VC) -> Self {
+        Self {
+            app_fri_params,
+            app_vm_config,
+            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_LEAF_BLOWUP,
+            ),
+            compiler_options: Default::default(),
+        }
+    }
+    pub fn new_with_leaf_fri_params(
+        app_fri_params: FriParameters,
+        app_vm_config: VC,
+        leaf_fri_params: FriParameters,
+    ) -> Self {
+        Self {
+            app_fri_params,
+            app_vm_config,
+            leaf_fri_params,
+            compiler_options: Default::default(),
+        }
     }
 }
 

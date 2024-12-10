@@ -3,13 +3,12 @@ use ax_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     prover::types::Proof,
 };
-use derivative::Derivative;
-use serde::{Deserialize, Serialize};
-
-use crate::{
+use axvm_circuit::{
     arch::Streams,
     system::memory::{tree::public_values::UserPublicValuesProof, CHUNK},
 };
+use derivative::Derivative;
+use serde::{Deserialize, Serialize};
 
 pub mod local;
 pub mod types;

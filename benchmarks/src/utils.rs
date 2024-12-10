@@ -9,10 +9,7 @@ use ax_stark_sdk::{
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
 use axvm_sdk::{
-    config::AppConfig,
-    keygen::AppProvingKey,
-    prover::{commit_app_exe, StarkProver},
-    StdIn,
+    commit::commit_app_exe, config::AppConfig, keygen::AppProvingKey, prover::AppProver, StdIn,
 };
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
@@ -92,6 +89,9 @@ where
     let app_config = AppConfig {
         app_vm_config: config.clone(),
         app_fri_params: engine.fri_params(),
+        // leaf_fri_params/compiler_options don't matter for this benchmark.
+        leaf_fri_params: engine.fri_params(),
+        compiler_options: Default::default(),
     };
     let vm = VirtualMachine::new(engine, config);
     // 1. Generate proving key from config.
@@ -100,7 +100,7 @@ where
     });
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-        commit_app_exe(&app_config, exe)
+        commit_app_exe(app_config.app_fri_params, exe)
     });
     // 3. Executes runtime again without metric collection and generate trace.
     time(gauge!("execute_and_trace_gen_time_ms"), || {
@@ -109,10 +109,11 @@ where
     // 4. Executes runtime once with full metric collection for flamegraphs (slow).
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
-    let prover = StarkProver::new(app_pk, committed_exe);
+    let vk = app_pk.app_vm_pk.vm_pk.get_vk();
+    let mut prover = AppProver::new(app_pk.app_vm_pk, committed_exe);
+    prover.profile = true;
     let proofs = prover.generate_app_proof(input_stream).per_segment;
     // 6. Verify STARK proofs.
-    let vk = prover.app_pk.app_vm_pk.vm_pk.get_vk();
     vm.verify(&vk, proofs.clone()).expect("Verification failed");
     let vdata = proofs
         .into_iter()

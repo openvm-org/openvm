@@ -40,7 +40,8 @@ k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
-num-bigint-dig = { workspace = true, features = ["std"] }
+num-bigint-dig = { workspace = true, features = ["std", "serde"] }
+serde.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

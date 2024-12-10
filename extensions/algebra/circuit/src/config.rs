@@ -7,10 +7,11 @@ use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {
     #[system]
     pub system: SystemConfig,
@@ -36,7 +37,7 @@ impl Rv32ModularConfig {
     }
 }
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularWithFp2Config {
     #[system]
     pub system: SystemConfig,

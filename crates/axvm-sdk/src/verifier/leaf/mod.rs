@@ -6,7 +6,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use axvm_circuit::{
-    arch::{instructions::program::Program, VmConfig},
+    arch::{instructions::program::Program, SystemConfig},
     system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -33,13 +33,13 @@ pub mod types;
 mod vars;
 
 /// Config to generate leaf VM verifier program.
-pub struct LeafVmVerifierConfig<VC: VmConfig<F>> {
+pub struct LeafVmVerifierConfig {
     pub app_fri_params: FriParameters,
-    pub app_vm_config: VC,
+    pub app_system_config: SystemConfig,
     pub compiler_options: CompilerOptions,
 }
 
-impl<VC: VmConfig<F>> LeafVmVerifierConfig<VC> {
+impl LeafVmVerifierConfig {
     pub fn build_program(
         &self,
         app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
@@ -111,17 +111,12 @@ impl<VC: VmConfig<F>> LeafVmVerifierConfig<VC> {
         &self,
         builder: &mut Builder<C>,
     ) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
-        let memory_dimensions = self
-            .app_vm_config
-            .system()
-            .memory_config
-            .memory_dimensions();
+        let memory_dimensions = self.app_system_config.memory_config.memory_dimensions();
         let pv_as = F::from_canonical_usize(
             PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset,
         );
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
-        let pv_height =
-            log2_strict_usize(self.app_vm_config.system().num_public_values / DIGEST_SIZE);
+        let pv_height = log2_strict_usize(self.app_system_config.num_public_values / DIGEST_SIZE);
         let proof_len = memory_dimensions.overall_height() - pv_height;
         let idx_prefix = pv_start_idx >> pv_height;
 

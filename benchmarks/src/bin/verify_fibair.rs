@@ -42,7 +42,7 @@ fn main() -> Result<()> {
             enable_cycle_tracker: true,
             ..Default::default()
         };
-        info_span!("Verify Fibonacci AIR", group = "verify_fibair",).in_scope(|| {
+        info_span!("Verify Fibonacci AIR").in_scope(|| {
             let (program, input_stream) = build_verification_program(vdata, compiler_options);
             let engine = BabyBearPoseidon2Engine::new(
                 FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup),

@@ -18,13 +18,10 @@ axvm-rv32-adapters = { workspace = true }
 axvm-bigint-transpiler = { workspace = true }
 axvm-rv32im-transpiler = { workspace = true }
 
-hex-literal.workspace = true
-itertools.workspace = true
-tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
-eyre.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }

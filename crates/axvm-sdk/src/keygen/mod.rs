@@ -9,13 +9,13 @@ use ax_stark_sdk::{
     },
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        baby_bear_poseidon2_outer::BabyBearPoseidon2OuterEngine,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters,
     },
     engine::StarkFriEngine,
+    p3_bn254_fr::Bn254Fr,
 };
 use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    prover::types::VmProvingKey,
     system::program::trace::AxVmCommittedExe,
 };
 use axvm_native_circuit::NativeConfig;
@@ -28,16 +28,20 @@ use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    commit::babybear_digest_to_bn254,
     config::{AggConfig, AppConfig, FullAggConfig},
     keygen::perm::AirIdPermutation,
-    verifier::{internal::InternalVmVerifierConfig, root::RootVmVerifierConfig},
-    OuterSC, F, SC,
+    prover::vm::types::VmProvingKey,
+    verifier::{
+        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
+    },
+    NonRootCommittedExe, RootSC, F, SC,
 };
 
 pub(crate) mod dummy;
 pub mod perm;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FullAggProvingKey {
     pub agg_vm_pk: AggProvingKey,
     pub halo2_pk: Halo2ProvingKey,
@@ -45,20 +49,22 @@ pub struct FullAggProvingKey {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {
+    pub leaf_committed_exe: Arc<NonRootCommittedExe>,
+    pub leaf_fri_params: FriParameters,
     pub app_vm_pk: VmProvingKey<SC, VC>,
 }
 pub type AppVerifyingKey = MultiStarkVerifyingKey<SC>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
     pub internal_vm_pk: VmProvingKey<SC, NativeConfig>,
-    pub internal_committed_exe: Arc<AxVmCommittedExe<SC>>,
+    pub internal_committed_exe: Arc<NonRootCommittedExe>,
     pub root_verifier_pk: RootVerifierProvingKey,
 }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
     pub verifier: Halo2VerifierProvingKey,
@@ -84,7 +90,24 @@ where
                 vm_pk,
             }
         };
-        Self { app_vm_pk }
+        let leaf_committed_exe = {
+            let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
+            let leaf_program = LeafVmVerifierConfig {
+                app_fri_params: config.app_fri_params,
+                app_system_config: config.app_vm_config.system().clone(),
+                compiler_options: config.compiler_options,
+            }
+            .build_program(&app_vm_pk.vm_pk.get_vk());
+            Arc::new(AxVmCommittedExe::commit(
+                leaf_program.into(),
+                leaf_engine.config.pcs(),
+            ))
+        };
+        Self {
+            leaf_committed_exe,
+            leaf_fri_params: config.leaf_fri_params,
+            app_vm_pk,
+        }
     }
 
     pub fn num_public_values(&self) -> usize {
@@ -93,6 +116,15 @@ where
 
     pub fn get_vk(&self) -> AppVerifyingKey {
         self.app_vm_pk.vm_pk.get_vk()
+    }
+    pub fn app_fri_params(&self) -> FriParameters {
+        self.app_vm_pk.fri_params
+    }
+    pub fn commit_in_bn254(&self) -> Bn254Fr {
+        babybear_digest_to_bn254(&self.commit_in_babybear())
+    }
+    pub fn commit_in_babybear(&self) -> [F; DIGEST_SIZE] {
+        self.leaf_committed_exe.get_program_commit().into()
     }
 }
 
@@ -153,7 +185,7 @@ impl AggProvingKey {
         );
 
         let root_verifier_pk = {
-            let root_engine = BabyBearPoseidon2OuterEngine::new(config.root_fri_params);
+            let root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
@@ -162,7 +194,7 @@ impl AggProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let root_committed_exe = Arc::new(AxVmCommittedExe::<OuterSC>::commit(
+            let root_committed_exe = Arc::new(AxVmCommittedExe::<RootSC>::commit(
                 root_program.into(),
                 root_engine.config.pcs(),
             ));
@@ -226,9 +258,9 @@ pub struct RootVerifierProvingKey {
     /// - AIR proving key in `MultiStarkProvingKey` is ordered by trace height.
     /// - `VmConfig.overridden_executor_heights` is specified and is in the original AIR order.
     /// - `VmConfig.memory_config.boundary_air_height` is specified.
-    pub vm_pk: VmProvingKey<OuterSC, NativeConfig>,
+    pub vm_pk: VmProvingKey<RootSC, NativeConfig>,
     /// Committed executable for the root VM.
-    pub root_committed_exe: Arc<AxVmCommittedExe<OuterSC>>,
+    pub root_committed_exe: Arc<AxVmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
     // The following is currently not used:
@@ -255,6 +287,7 @@ impl FullAggProvingKey {
         let dummy_root_proof = agg_vm_pk
             .root_verifier_pk
             .generate_dummy_root_proof(dummy_internal_proof);
+        // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
         let verifier = agg_vm_pk
             .root_verifier_pk
             .keygen_static_verifier(halo2_config.verifier_k, dummy_root_proof);
@@ -264,9 +297,10 @@ impl FullAggProvingKey {
         } else {
             Halo2WrapperProvingKey::keygen_auto_tune(dummy_snark)
         };
+        let halo2_pk = Halo2ProvingKey { verifier, wrapper };
         Self {
             agg_vm_pk,
-            halo2_pk: Halo2ProvingKey { verifier, wrapper },
+            halo2_pk,
         }
     }
 }

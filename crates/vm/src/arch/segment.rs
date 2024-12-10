@@ -279,10 +279,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
 
             self.collected_metrics.emit();
-            if did_terminate {
-                metrics::counter!("total_cells_used")
-                    .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-            }
+            metrics::counter!("total_cells_used")
+                .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
         }
 
         Ok(ExecutionSegmentState {

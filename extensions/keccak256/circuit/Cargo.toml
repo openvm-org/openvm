@@ -27,6 +27,7 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 ax-stark-sdk = { workspace = true }

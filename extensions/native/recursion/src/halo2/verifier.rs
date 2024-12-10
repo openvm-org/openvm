@@ -1,7 +1,5 @@
 use ax_stark_backend::prover::types::Proof;
-use ax_stark_sdk::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
-};
+use ax_stark_sdk::config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters};
 use axvm_native_compiler::ir::Witness;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::Snark;
@@ -25,7 +23,7 @@ pub fn generate_halo2_verifier_proving_key(
     halo2_k: usize,
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
-    proof: &Proof<BabyBearPoseidon2OuterConfig>,
+    proof: &Proof<BabyBearPoseidon2RootConfig>,
 ) -> Halo2VerifierProvingKey {
     let mut witness = Witness::default();
     proof.write(&mut witness);

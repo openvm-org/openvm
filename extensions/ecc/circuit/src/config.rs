@@ -7,10 +7,11 @@ use axvm_circuit::arch::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use axvm_rv32im_circuit::*;
 use derive_more::derive::From;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {
     #[system]
     pub system: SystemConfig,

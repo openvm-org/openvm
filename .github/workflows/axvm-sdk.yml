@@ -2,9 +2,9 @@ name: axVM SDK Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "**" ]
+    branches: ["**"]
     paths:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
@@ -23,7 +23,8 @@ jobs:
   tests:
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
+      - family=m7a.48xlarge
+      - disk=large
 
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +42,11 @@ jobs:
           case $arch in
             arm64|aarch64)
               S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
               ;;
             x86_64|amd64)
               S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
+              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
               ;;
             *)
               echo "Unsupported architecture: $arch"
@@ -71,6 +74,5 @@ jobs:
       - name: Run axvm-sdk crate tests
         working-directory: crates/axvm-sdk
         run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel

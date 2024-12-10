@@ -34,6 +34,7 @@ use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::{build_example_program, build_example_program_with_features};
 
@@ -157,7 +158,7 @@ fn test_decompress() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularKeccak256Config {
     #[system]
     pub system: SystemConfig,

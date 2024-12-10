@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use num_bigint_dig::BigUint;
 
 use super::group::{CyclicGroup, Group};
-use crate::weierstrass::IntrinsicCurve;
+use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -61,4 +61,17 @@ impl CyclicGroup for Secp256k1Point {
 impl IntrinsicCurve for k256::Secp256k1 {
     type Scalar = Secp256k1Scalar;
     type Point = Secp256k1Point;
+
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        // heuristic
+        if coeffs.len() < 25 {
+            let table = CachedMulTable::<k256::Secp256k1>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            crate::msm(coeffs, bases)
+        }
+    }
 }
