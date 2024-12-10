@@ -63,7 +63,6 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
             None
         },
     };
-    let sdk = Sdk;
     let pkg_dir = build_args
         .manifest_dir
         .clone()
@@ -72,6 +71,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
         features: build_args.features.clone(),
         ..Default::default()
     };
-    let (_, elf_path) = sdk.build(guest_options, &pkg_dir, target_filter)?;
-    Ok(elf_path)
+    let elf_paths = Sdk.build(guest_options, &pkg_dir, target_filter)?;
+    assert!(elf_paths.len() == 1);
+    Ok(elf_paths[0].clone())
 }

@@ -1,7 +1,7 @@
 extern crate core;
 
 use std::{
-    fs::{create_dir_all, read, write},
+    fs::{create_dir_all, write},
     io::Write,
     panic::catch_unwind,
     path::{Path, PathBuf},
@@ -33,7 +33,6 @@ use axvm_native_recursion::{
     types::InnerConfig,
 };
 use axvm_transpiler::{
-    axvm_platform::memory::MEM_SIZE,
     elf::Elf,
     transpiler::{Transpiler, TranspilerError},
     FromElf,
@@ -41,7 +40,6 @@ use axvm_transpiler::{
 use commit::commit_app_exe;
 use config::AppConfig;
 use eyre::{bail, Result};
-use itertools::Itertools;
 use keygen::AppProvingKey;
 
 pub mod commit;
@@ -81,7 +79,7 @@ impl Sdk {
         guest_opts: GuestOptions,
         pkg_dir: P,
         target_filter: TargetFilter,
-    ) -> Result<(Elf, PathBuf)> {
+    ) -> Result<Vec<PathBuf>> {
         if guest_opts.use_docker.is_some() {
             bail!("docker build is not supported yet");
         }
@@ -92,10 +90,12 @@ impl Sdk {
         {
             return Err(eyre::eyre!("Failed to build guest: code = {}", code));
         }
+        let target_dir = target_dir.join("riscv32im-risc0-zkvm-elf").join("release");
+
         eprintln!("target_dir: {:?}", target_dir);
         eprintln!("targets: {:?}", pkg.targets);
 
-        let elf_path = pkg
+        let elf_paths = pkg
             .targets
             .into_iter()
             .filter(move |target| {
@@ -111,16 +111,9 @@ impl Sdk {
                 }
                 true
             })
-            .exactly_one()
-            .map(|target| {
-                target_dir
-                    .join("riscv32im-risc0-zkvm-elf")
-                    .join("release")
-                    .join(&target.name)
-            })?;
-        let data = read(elf_path.clone())?;
-        let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        Ok((elf, elf_path))
+            .map(|target| target_dir.join(&target.name))
+            .collect();
+        Ok(elf_paths)
     }
 
     pub fn transpile(
