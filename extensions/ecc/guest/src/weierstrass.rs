@@ -178,7 +178,11 @@ impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
         let num_windows = C::Scalar::NUM_LIMBS * windows_per_byte;
         let mask = (1u8 << self.window_bits) - 1;
 
+        // The current byte index (little endian) at the current step of the
+        // windowed method, across all scalars.
         let mut limb_idx = C::Scalar::NUM_LIMBS;
+        // The current bit (little endian) within the current byte of the windowed
+        // method. The window will look at bits `bit_idx..bit_idx + window_bits`.
         // bit_idx will always be in range [0, 8)
         let mut bit_idx = 0;
 
