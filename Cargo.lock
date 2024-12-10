@@ -749,6 +749,7 @@ dependencies = [
  "lazy_static",
  "metrics",
  "once_cell",
+ "p3-baby-bear",
  "p3-dft",
  "p3-fri",
  "p3-merkle-tree",
