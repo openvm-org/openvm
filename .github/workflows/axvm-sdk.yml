@@ -24,6 +24,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - family=c7a.48xlarge
+      - disk=large
 
     steps:
       - uses: actions/checkout@v4
