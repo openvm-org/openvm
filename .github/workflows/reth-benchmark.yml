@@ -155,4 +155,11 @@ jobs:
           export RPC_1=${{ inputs.rpc_url }}
           export MODE=${{ inputs.mode }}
           cargo build --bin rsp --release
-          RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
+          OUTPUT_PATH="metrics.json" RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp --$MODE --block-number 18884864 --rpc-url $RPC_1 --cache-dir rpc-cache
+
+      - name: Upload Benchmark Metrics
+        working-directory: rsp
+        run: |
+          current_sha=$(git rev-parse HEAD)
+          METRIC_NAME="reth"
+          s5cmd cp metrics.json ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
