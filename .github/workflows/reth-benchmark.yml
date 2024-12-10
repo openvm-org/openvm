@@ -175,7 +175,7 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
           s5cmd cp ${METRIC_PATH} ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
       
-      - name: Generate markdown
+      - name: Generate markdown # result path is hardcoded results.md
         run: |
           source ci/scripts/utils.sh
           generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
@@ -191,7 +191,29 @@ jobs:
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
 
-      - name: Add benchmark metadata
+      - name: Add benchmark metadata to markdown, and upload
         run: |
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
+        # need?
+        # s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
+      
+      ### Update gh-pages
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Set up git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Set github pages path for dispatch
+        run: |
+          GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          mkdir -p ${GH_PAGES_PATH}
+          mv results.md ${GH_PAGES_PATH}/${METRIC_NAME}.md
+
+          source ci/scripts/utils.sh
+          commit_and_push_gh_pages ${GH_PAGES_PATH}/${METRIC_NAME}.md "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"

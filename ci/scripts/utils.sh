@@ -80,4 +80,33 @@ add_metadata() {
     s5cmd cp $result_path "${S3_PATH}/${current_sha}-${METRIC_NAME}.md"
 }
 
+commit_and_push_gh_pages() {
+    local files=$1
+    local commit_message=$2
+    git add ${files}
+    git commit --allow-empty -m "${commit_message}"
 
+    MAX_RETRIES=10
+    RETRY_DELAY=5
+    ATTEMPT=0
+    SUCCESS=false
+
+    while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+        echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
+        git fetch origin gh-pages
+        git merge origin/gh-pages --no-edit
+        if git push origin gh-pages; then
+            SUCCESS=true
+            break
+        else
+            echo "Push failed. Retrying in $RETRY_DELAY seconds..."
+            sleep $RETRY_DELAY
+            ATTEMPT=$((ATTEMPT + 1))
+        fi
+    done
+
+    if [ "$SUCCESS" = false ]; then
+        echo "PUSH_FAILED"
+        exit 1
+    fi
+}

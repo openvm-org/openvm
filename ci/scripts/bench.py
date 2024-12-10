@@ -47,6 +47,7 @@ def run_cargo_command(
     create_bench_metrics_dir()
     output_path_old = None
 
+    # Local only: in CI we will download the old metrics file from S3
     if os.path.exists(output_path):
         output_path_old = f"{output_path}.old"
         shutil.move(output_path, f"{output_path_old}")
@@ -62,6 +63,7 @@ def run_cargo_command(
 
     print(f"Output metrics written to {git_root}/{output_path}")
 
+    # Local only: in CI the old file is not present yet and we will generate markdown in a later step.
     markdown_output = generate_displayable_metrics(output_path, output_path_old)
     with open(f"{git_root}/.bench_metrics/{bin_name}.md", "w") as f:
         f.write(markdown_output)
