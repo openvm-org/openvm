@@ -127,8 +127,8 @@ where
         let mut pc = exe.pc_start;
 
         loop {
-            tracing::info!("Executing segment: {}", segments.len());
-            let state = segment.execute_from_pc(pc)?;
+            let state = tracing::info_span!("execute_segment", segment = segments.len())
+                .in_scope(|| segment.execute_from_pc(pc))?;
             pc = state.pc;
 
             if state.is_terminated {

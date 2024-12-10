@@ -21,7 +21,11 @@ use crate::{
 ///
 /// Designed to be general enough to support RAP with multiple rounds of challenges.
 #[allow(clippy::too_many_arguments)]
-#[instrument(name = "compute single RAP quotient polynomial", skip_all)]
+#[instrument(
+    name = "compute single RAP quotient polynomial",
+    level = "trace",
+    skip_all
+)]
 pub fn compute_single_rap_quotient_values<'a, SC, R, Mat>(
     rap: &'a R,
     symbolic_constraints: &SymbolicConstraints<Val<SC>>,
