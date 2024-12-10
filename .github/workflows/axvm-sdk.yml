@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "".github/workflows/axvm-sdk.yml"
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
