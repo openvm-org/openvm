@@ -1,7 +1,12 @@
-use std::path::PathBuf;
+use std::{
+    fs::{read, File},
+    path::PathBuf,
+};
 
 use axvm_build::GuestOptions;
+use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{Sdk, TargetFilter};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
 use clap::Parser;
 use eyre::Result;
 
@@ -37,6 +42,14 @@ pub struct BuildArgs {
     /// Target name substring filter
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Transpile the program after building
+    #[arg(long)]
+    pub transpile: bool,
+
+    /// Output path for the transpiled program (default: <ELF base path>.axvmexe)
+    #[arg(long)]
+    pub transpile_path: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -73,5 +86,30 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
     };
     let elf_paths = Sdk.build(guest_options, &pkg_dir, target_filter)?;
     assert!(elf_paths.len() == 1);
-    Ok(elf_paths[0].clone())
+
+    if build_args.transpile {
+        let output_path = build_args
+            .transpile_path
+            .clone()
+            .unwrap_or_else(|| elf_paths[0].with_extension("axvmexe"));
+        transpile(elf_paths[0].clone(), output_path.clone())?;
+        Ok(output_path)
+    } else {
+        Ok(elf_paths[0].clone())
+    }
+}
+
+fn transpile(elf_path: PathBuf, output_path: PathBuf) -> Result<()> {
+    let data = read(elf_path.clone())?;
+    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    let exe = Sdk.transpile(
+        elf,
+        Transpiler::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension),
+    )?;
+    let file = File::create(output_path.clone())?;
+    serde_json::to_writer(file, &exe)?;
+    eprintln!("Successfully transpiled to {}", output_path.display());
+    Ok(())
 }

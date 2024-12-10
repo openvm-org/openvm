@@ -19,8 +19,5 @@ pub use prove::*;
 mod run;
 pub use run::*;
 
-mod transpile;
-pub use transpile::*;
-
 mod verify;
 pub use verify::*;
