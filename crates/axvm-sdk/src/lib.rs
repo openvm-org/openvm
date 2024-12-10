@@ -113,10 +113,10 @@ impl Sdk {
 
     pub fn commit_app_exe(
         &self,
-        fri_params: FriParameters,
+        app_fri_params: FriParameters,
         exe: AxVmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
-        Ok(commit_app_exe(fri_params, exe))
+        Ok(commit_app_exe(app_fri_params, exe))
     }
 
     pub fn app_keygen<VC: VmConfig<F>, P: AsRef<Path>>(
