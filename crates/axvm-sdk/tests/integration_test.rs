@@ -281,8 +281,12 @@ fn test_sdk_guest_build_and_transpile() {
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("example");
-    let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
-    let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    let (one, _) = sdk
+        .build(guest_opts.clone(), &pkg_dir, Default::default())
+        .unwrap();
+    let (two, _) = sdk
+        .build(guest_opts.clone(), &pkg_dir, Default::default())
+        .unwrap();
     assert_eq!(one.instructions, two.instructions);
     let transpiler = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)

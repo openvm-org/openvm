@@ -4,7 +4,7 @@ use std::{
     fs::{create_dir_all, read, write},
     io::Write,
     panic::catch_unwind,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -69,8 +69,19 @@ pub(crate) type NonRootCommittedExe = AxVmCommittedExe<SC>;
 
 pub struct Sdk;
 
+#[derive(Default)]
+pub struct TargetFilter {
+    pub name_substr: Option<String>,
+    pub kind: Option<String>,
+}
+
 impl Sdk {
-    pub fn build<P: AsRef<Path>>(&self, guest_opts: GuestOptions, pkg_dir: P) -> Result<Elf> {
+    pub fn build<P: AsRef<Path>>(
+        &self,
+        guest_opts: GuestOptions,
+        pkg_dir: P,
+        target_filter: TargetFilter,
+    ) -> Result<(Elf, PathBuf)> {
         if guest_opts.use_docker.is_some() {
             bail!("docker build is not supported yet");
         }
@@ -87,7 +98,19 @@ impl Sdk {
         let elf_path = pkg
             .targets
             .into_iter()
-            .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
+            .filter(move |target| {
+                if let Some(name_substr) = &target_filter.name_substr {
+                    if !target.name.contains(name_substr) {
+                        return false;
+                    }
+                }
+                if let Some(kind) = &target_filter.kind {
+                    if !target.kind.iter().any(|k| k == kind) {
+                        return false;
+                    }
+                }
+                true
+            })
             .exactly_one()
             .map(|target| {
                 target_dir
@@ -95,8 +118,9 @@ impl Sdk {
                     .join("release")
                     .join(&target.name)
             })?;
-        let data = read(elf_path)?;
-        Elf::decode(&data, MEM_SIZE as u32)
+        let data = read(elf_path.clone())?;
+        let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+        Ok((elf, elf_path))
     }
 
     pub fn transpile(
