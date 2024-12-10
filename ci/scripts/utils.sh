@@ -26,6 +26,7 @@ generate_markdown() {
     local metric_name="$2"
     local current_sha="$3"
     local s3_metrics_path="$4"
+    local afs_root="$5"
 
     if [[ -f $metric_path ]]; then
         s5cmd cp $metric_path $s3_metrics_path/${current_sha}-${metric_name}.json
@@ -35,10 +36,10 @@ generate_markdown() {
 
         if [[ $count -gt 0 ]]; then
             s5cmd cp $prev_path prev.json
-            python3 ci/scripts/metric_unify/main.py $metric_path --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
+            python3 ${afs_root}/ci/scripts/metric_unify/main.py $metric_path --prev prev.json --aggregation-json ${afs_root}/ci/scripts/metric_unify/aggregation.json > results.md
         else
             echo "No previous benchmark on main branch found"
-            python3 ci/scripts/metric_unify/main.py $metric_path --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
+            python3 ${afs_root}/ci/scripts/metric_unify/main.py $metric_path --aggregation-json ${afs_root}/ci/scripts/metric_unify/aggregation.json > results.md
         fi
     else
         echo "No benchmark metrics found at ${metric_path}"

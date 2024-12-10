@@ -157,7 +157,7 @@ jobs:
         working-directory: rsp
         run: |
           source ../ci/scripts/utils.sh
-          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
+          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }} ".."
 
       - name: Install inferno-flamegraph
         run: cargo install inferno

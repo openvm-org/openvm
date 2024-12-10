@@ -213,7 +213,7 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           source ci/scripts/utils.sh
-          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }}
+          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }} "."
 
       - name: Install inferno-flamegraph
         run: cargo install inferno
