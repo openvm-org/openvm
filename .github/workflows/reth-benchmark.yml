@@ -212,9 +212,6 @@ jobs:
           mkdir -p ${GH_PAGES_PATH}
           s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" "${GH_PAGES_PATH}/${METRIC_NAME}.md"
 
-          source ci/scripts/utils.sh
-          commit_and_push_gh_pages ${GH_PAGES_PATH}/${METRIC_NAME}.md "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
-
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md	
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"	
           MAX_RETRIES=10	
