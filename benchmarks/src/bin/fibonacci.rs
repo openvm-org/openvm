@@ -18,7 +18,7 @@ use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use axvm_sdk::StdIn;
-use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 use tracing::info_span;
@@ -42,13 +42,9 @@ fn main() -> Result<()> {
                 FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
             );
             let n = 100_000u64;
-            let input = bincode::serde::encode_to_vec(n, bincode::config::standard())?;
-            bench_from_exe(
-                engine,
-                Rv32ImConfig::default(),
-                exe,
-                StdIn::from_bytes(&input),
-            )
+            let mut stdin = StdIn::default();
+            stdin.write(&n);
+            bench_from_exe(engine, Rv32ImConfig::default(), exe, stdin)
         })?;
 
         #[cfg(feature = "aggregation")]

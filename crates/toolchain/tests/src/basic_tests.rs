@@ -12,9 +12,7 @@ use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_transpiler::{
-    axvm_platform::bincode, elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf,
-};
+use axvm_transpiler::{elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf};
 use eyre::Result;
 use test_case::test_case;
 
@@ -106,17 +104,13 @@ fn test_read_runtime() -> Result<()> {
         bar: 42,
         baz: vec![0, 1, 2, 3],
     };
-    let serialized_foo = bincode::serde::encode_to_vec(&foo, bincode::config::standard())
-        .expect("serialize to vec failed");
-    executor
-        .execute(
-            exe,
-            vec![serialized_foo
-                .into_iter()
-                .map(F::from_canonical_u8)
-                .collect()],
-        )
-        .unwrap();
+    let serialized_foo = axvm::serde::to_vec(&foo).unwrap();
+    let input = serialized_foo
+        .into_iter()
+        .flat_map(|w| w.to_le_bytes())
+        .map(F::from_canonical_u8)
+        .collect();
+    executor.execute(exe, vec![input]).unwrap();
     Ok(())
 }
 

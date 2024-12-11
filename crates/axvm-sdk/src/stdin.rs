@@ -23,7 +23,8 @@ impl StdIn {
     }
 
     pub fn write<T: Serialize>(&mut self, data: &T) {
-        let bytes = bincode::serde::encode_to_vec(data, bincode::config::standard()).unwrap();
+        let words = axvm::serde::to_vec(data).unwrap();
+        let bytes: Vec<u8> = words.into_iter().flat_map(|w| w.to_le_bytes()).collect();
         self.write_bytes(&bytes);
     }
 

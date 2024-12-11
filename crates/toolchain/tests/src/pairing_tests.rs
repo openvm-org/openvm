@@ -292,7 +292,6 @@ mod bls12_381 {
     use axvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
     use crate::utils::build_example_program_with_features;
@@ -580,14 +579,13 @@ mod bls12_381 {
             .collect::<Vec<_>>();
         let [c, s] = [c, s].map(|x| axvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
-        let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
-        new_air_test_with_min_segments(
-            get_testing_config(),
-            axvm_exe,
-            vec![io.into_iter().map(F::from_canonical_u8).collect()],
-            1,
-            false,
-        );
+        let io = axvm::serde::to_vec(&io).unwrap();
+        let io = io
+            .into_iter()
+            .flat_map(|w| w.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect();
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io], 1, false);
         Ok(())
     }
 }

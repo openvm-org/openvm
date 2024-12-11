@@ -39,8 +39,7 @@ use axvm_rv32im_circuit::{
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_sdk::StdIn;
-use axvm_transpiler::{axvm_platform::bincode, transpiler::Transpiler, FromElf};
+use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use derive_more::derive::From;
 use eyre::Result;

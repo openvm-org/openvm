@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::{string::String, vec};
+use alloc::{string::String, vec::Vec};
 
 use axvm_platform::{align_up, WORD_SIZE};
 use bytemuck::Pod;
@@ -356,10 +356,15 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
         V: Visitor<'de>,
     {
         let len_bytes = self.try_take_word()? as usize;
-        // TODO: Can we use MaybeUninit here instead of zeroing out?
-        // The documentation for sys::io::Read implies that it's not
-        // safe; is there another way to not do double writes here?
-        let mut bytes = vec![0u8; len_bytes];
+        // We always allocate vec to be word-aligned
+        let capacity = len_bytes.div_ceil(WORD_SIZE) * WORD_SIZE;
+        // SAFETY: read_padded_bytes **must** error if the
+        // buffer is not fully written to.
+        let mut bytes = Vec::with_capacity(capacity);
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            bytes.set_len(len_bytes);
+        }
         self.reader.read_padded_bytes(&mut bytes)?;
         visitor.visit_byte_buf(bytes)
     }
