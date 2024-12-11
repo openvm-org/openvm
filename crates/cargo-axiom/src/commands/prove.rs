@@ -8,7 +8,7 @@ use axvm_sdk::{
         write_evm_proof_to_file,
     },
     keygen::AppProvingKey,
-    Sdk,
+    NonRootCommittedExe, Sdk, StdIn,
 };
 use clap::Parser;
 use eyre::Result;
@@ -20,34 +20,82 @@ use crate::util::{read_to_stdin, Input};
 pub struct ProveCmd {
     #[clap(subcommand)]
     command: ProveSubCommand,
-
-    #[clap(long, action, help = "Path to app proving key")]
-    app_pk: PathBuf,
-
-    #[clap(long, action, help = "Path to axVM executable")]
-    exe: PathBuf,
-
-    #[clap(long, value_parser, help = "Input to axVM program")]
-    input: Option<Input>,
-
-    #[clap(long, action, help = "Path to output proof")]
-    output: PathBuf,
 }
 
 #[derive(Parser)]
 enum ProveSubCommand {
-    App {},
+    App {
+        #[clap(long, action, help = "Path to app proving key")]
+        app_pk: PathBuf,
+
+        #[clap(long, action, help = "Path to axVM executable")]
+        exe: PathBuf,
+
+        #[clap(long, value_parser, help = "Input to axVM program")]
+        input: Option<Input>,
+
+        #[clap(long, action, help = "Path to output proof")]
+        output: PathBuf,
+    },
     Evm {
+        #[clap(long, action, help = "Path to app proving key")]
+        app_pk: PathBuf,
+
+        #[clap(long, action, help = "Path to axVM executable")]
+        exe: PathBuf,
+
         #[clap(long, action, help = "Path to aggregation proving key")]
         agg_pk: PathBuf,
+
+        #[clap(long, value_parser, help = "Input to axVM program")]
+        input: Option<Input>,
+
+        #[clap(long, action, help = "Path to output proof")]
+        output: PathBuf,
     },
 }
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
-        let app_pk: Arc<AppProvingKey<SdkVmConfig>> =
-            Arc::new(read_app_pk_from_file(&self.app_pk)?);
-        let app_exe = read_exe_from_file(&self.exe)?;
+        match &self.command {
+            ProveSubCommand::App {
+                app_pk,
+                exe,
+                input,
+                output,
+            } => {
+                let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
+                let app_proof = Sdk.generate_app_proof(app_pk, committed_exe, input)?;
+                write_app_proof_to_file(app_proof, output)?;
+            }
+            ProveSubCommand::Evm {
+                app_pk,
+                exe,
+                agg_pk,
+                input,
+                output,
+            } => {
+                let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
+                println!("Generating EVM proof, this may take a lot of compute and memory...");
+                let agg_pk = read_agg_pk_from_file(agg_pk)?;
+                let evm_proof = Sdk.generate_evm_proof(app_pk, committed_exe, agg_pk, input)?;
+                write_evm_proof_to_file(evm_proof, output)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn prepare_execution(
+        app_pk: &PathBuf,
+        exe: &PathBuf,
+        input: &Option<Input>,
+    ) -> Result<(
+        Arc<AppProvingKey<SdkVmConfig>>,
+        Arc<NonRootCommittedExe>,
+        StdIn,
+    )> {
+        let app_pk: Arc<AppProvingKey<SdkVmConfig>> = Arc::new(read_app_pk_from_file(app_pk)?);
+        let app_exe = read_exe_from_file(exe)?;
         let committed_exe = Sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
 
         let commits = AppExecutionCommit::compute(
@@ -58,20 +106,7 @@ impl ProveCmd {
         println!("app_pk commit: {:?}", commits.app_config_commit_to_bn254());
         println!("exe commit: {:?}", commits.exe_commit_to_bn254());
 
-        match &self.command {
-            ProveSubCommand::App {} => {
-                let input = read_to_stdin(&self.input)?;
-                let app_proof = Sdk.generate_app_proof(app_pk, committed_exe, input)?;
-                write_app_proof_to_file(app_proof, &self.output)?;
-            }
-            ProveSubCommand::Evm { agg_pk } => {
-                println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let input = read_to_stdin(&self.input)?;
-                let agg_pk = read_agg_pk_from_file(agg_pk)?;
-                let evm_proof = Sdk.generate_evm_proof(app_pk, committed_exe, agg_pk, input)?;
-                write_evm_proof_to_file(evm_proof, &self.output)?;
-            }
-        }
-        Ok(())
+        let input = read_to_stdin(input)?;
+        Ok((app_pk, committed_exe, input))
     }
 }

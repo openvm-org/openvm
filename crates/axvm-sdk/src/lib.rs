@@ -63,7 +63,7 @@ pub(crate) type SC = BabyBearPoseidon2Config;
 pub(crate) type C = InnerConfig;
 pub(crate) type F = BabyBear;
 pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
-pub(crate) type NonRootCommittedExe = AxVmCommittedExe<SC>;
+pub type NonRootCommittedExe = AxVmCommittedExe<SC>;
 
 pub struct Sdk;
 
