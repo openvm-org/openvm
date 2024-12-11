@@ -15,8 +15,10 @@ use ax_stark_sdk::{
 };
 use axvm_build::{build_guest_package, get_package, get_target_dir, GuestOptions};
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig, VmExecutor, VmMemoryState},
-    system::program::trace::AxVmCommittedExe,
+    arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig, VmExecutor},
+    system::{
+        memory::tree::public_values::extract_public_values, program::trace::AxVmCommittedExe,
+    },
 };
 use axvm_native_recursion::{
     halo2::{
@@ -107,14 +109,19 @@ impl Sdk {
         exe: AxVmExe<F>,
         vm_config: VC,
         inputs: StdIn,
-    ) -> Result<Option<VmMemoryState<F>>, ExecutionError>
+    ) -> Result<Vec<F>, ExecutionError>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let vm = VmExecutor::new(vm_config);
-        let ret = vm.execute(exe, inputs)?;
-        Ok(ret)
+        let final_memory = vm.execute(exe, inputs)?;
+        let public_values = extract_public_values(
+            &vm.config.system().memory_config.memory_dimensions(),
+            vm.config.system().num_public_values,
+            final_memory.as_ref().unwrap(),
+        );
+        Ok(public_values)
     }
 
     pub fn commit_app_exe(

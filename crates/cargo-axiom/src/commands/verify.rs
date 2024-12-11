@@ -10,7 +10,7 @@ use axvm_sdk::{
     Sdk,
 };
 use clap::Parser;
-use eyre::Result;
+use eyre::{eyre, Result};
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -38,7 +38,9 @@ impl VerifyCmd {
                 Sdk.generate_snark_verifier_contract(&agg_pk)?
             };
             let evm_proof = read_evm_proof_from_file(&self.proof)?;
-            Sdk.verify_evm_proof(&evm_verifier, &evm_proof);
+            if !Sdk.verify_evm_proof(&evm_verifier, &evm_proof) {
+                return Err(eyre!("EVM proof verification failed"));
+            }
         } else {
             let app_pk: AppProvingKey<SdkVmConfig> =
                 read_app_pk_from_file(self.pk.as_ref().unwrap())?;

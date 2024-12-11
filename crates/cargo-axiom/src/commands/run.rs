@@ -27,8 +27,8 @@ impl RunCmd {
     pub fn run(&self) -> Result<()> {
         let exe = read_exe_from_file(&self.exe)?;
         let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&self.config)?;
-        let results = Sdk.execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
-        println!("Final memory state: {:?}", results);
+        let output = Sdk.execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
+        println!("Execution output: {:?}", output);
         Ok(())
     }
 }
