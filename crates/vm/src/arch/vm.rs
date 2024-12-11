@@ -494,7 +494,7 @@ where
         results: VmExecutorResult<SC>,
     ) -> Vec<Proof<SC>> {
         #[cfg(feature = "bench-metrics")]
-        metrics::counter!("num_segments").absolute(results.per_segment.len() as u64);
+        metrics::counter!("num_segments_or_nodes").absolute(results.per_segment.len() as u64);
         results
             .per_segment
             .into_iter()

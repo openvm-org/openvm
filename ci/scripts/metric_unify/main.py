@@ -28,12 +28,14 @@ class Aggregation:
     group_by = [] # Label keys to group by
     metrics = []
     operation = ""
+    divisor = ""
 
-    def __init__(self, name, group_by, metrics, operation):
+    def __init__(self, name, group_by, metrics, operation, divisor=""):
         self.name = name
         self.group_by = group_by
         self.metrics = metrics
         self.operation = operation
+        self.divisor = divisor
 
     def __str__(self):
         return f"Aggregation(name={self.name}, group_by={self.group_by}, metrics={self.metrics}, operation={self.operation})"
@@ -158,14 +160,15 @@ def read_aggregations(aggregation_json):
         aggregation_data = json.load(f)
     aggregations = []
     for aggregation in aggregation_data['aggregations']:
-        aggregations.append(Aggregation(aggregation['name'], aggregation['group_by'], aggregation['metrics'], aggregation['operation']))
+        aggregations.append(Aggregation(aggregation['name'], aggregation['group_by'], aggregation['metrics'], aggregation['operation'], aggregation.get('divisor', "")))
     return aggregations
 
 def apply_aggregations(db: MetricDb, aggregations):
     for aggregation in aggregations:
         # group_by_values => aggregation metric
         group_by_dict = {}
-        if aggregation.operation == "sum" or aggregation.operation == "unique":
+        if aggregation.operation == "sum" or aggregation.operation == "unique" or aggregation.operation == "average":
+            divisor = None
             for tuple_keys, metrics_dict in db.dict_by_label_types.items():
                 if not set(aggregation.group_by).issubset(set(tuple_keys)):
                     continue
@@ -174,7 +177,7 @@ def apply_aggregations(db: MetricDb, aggregations):
                     group_by_values = tuple([label_dict[key] for key in aggregation.group_by])
                     for metric in metrics:
                         if metric.name in aggregation.metrics:
-                            if aggregation.operation == "sum":
+                            if aggregation.operation == "sum" or aggregation.operation == "average":
                                 if group_by_values not in group_by_dict:
                                     group_by_dict[group_by_values] = 0
                                 group_by_dict[group_by_values] += metric.value
@@ -183,6 +186,14 @@ def apply_aggregations(db: MetricDb, aggregations):
                                     group_by_dict[group_by_values] = metric.value
                                 else:
                                     assert group_by_dict[group_by_values] == metric.value
+                        if metric.name == aggregation.divisor:
+                            divisor = metric.value
+
+            if aggregation.operation == "average":
+                if not divisor:
+                    raise ValueError(f"Divisor is required for average operation")
+                for group_by_values in group_by_dict.keys():
+                    group_by_dict[group_by_values] /= divisor
 
             for group_by_values, agg_value in group_by_dict.items():
                 aggregation_label = labels_to_tuple([(k,v) for k,v in zip(aggregation.group_by, group_by_values)])

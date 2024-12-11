@@ -145,8 +145,12 @@ impl AggStarkProver {
             let group = format!("internal_verifier_height_{}", internal_node_height);
             proofs = info_span!("internal verifier", group = group).in_scope(|| {
                 #[cfg(feature = "bench-metrics")]
-                metrics::counter!("fri.log_blowup")
-                    .absolute(self.internal_prover.pk.fri_params.log_blowup as u64);
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(self.internal_prover.pk.fri_params.log_blowup as u64);
+                    metrics::counter!("num_segments_or_nodes")
+                        .absolute(internal_inputs.len() as u64);
+                }
                 internal_inputs
                     .into_iter()
                     .map(|input| {
@@ -171,25 +175,27 @@ impl AggStarkProver {
         info_span!("root verifier", group = "root_verifier").in_scope(|| {
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
-            metrics::counter!("fri.log_blowup").absolute(
-                self.root_prover
-                    .root_verifier_pk
-                    .vm_pk
-                    .fri_params
-                    .log_blowup as u64,
-            );
-            #[cfg(feature = "bench-metrics")]
-            if self.profile {
-                let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-                vm_config.system.collect_metrics = true;
-                let vm = SingleSegmentVmExecutor::new(vm_config);
-                let exe = self
-                    .root_prover
-                    .root_verifier_pk
-                    .root_committed_exe
-                    .exe
-                    .clone();
-                vm.execute(exe, input.clone()).unwrap();
+            {
+                metrics::counter!("fri.log_blowup").absolute(
+                    self.root_prover
+                        .root_verifier_pk
+                        .vm_pk
+                        .fri_params
+                        .log_blowup as u64,
+                );
+                metrics::counter!("num_segments_or_nodes").absolute(1u64);
+                if self.profile {
+                    let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
+                    vm_config.system.collect_metrics = true;
+                    let vm = SingleSegmentVmExecutor::new(vm_config);
+                    let exe = self
+                        .root_prover
+                        .root_verifier_pk
+                        .root_committed_exe
+                        .exe
+                        .clone();
+                    vm.execute(exe, input.clone()).unwrap();
+                }
             }
             SingleSegmentVmProver::prove(&self.root_prover, input)
         })
@@ -221,13 +227,16 @@ impl LeafProver {
     }
     pub fn generate_proof(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
         info_span!("leaf verifier", group = "leaf_verifier").in_scope(|| {
-            #[cfg(feature = "bench-metrics")]
-            metrics::counter!("fri.log_blowup")
-                .absolute(self.prover.pk.fri_params.log_blowup as u64);
             let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(
                 app_proofs,
                 self.num_children_leaf,
             );
+            #[cfg(feature = "bench-metrics")]
+            {
+                metrics::counter!("fri.log_blowup")
+                    .absolute(self.prover.pk.fri_params.log_blowup as u64);
+                metrics::counter!("num_segments_or_nodes").absolute(leaf_inputs.len() as u64);
+            }
             leaf_inputs
                 .into_iter()
                 .enumerate()
