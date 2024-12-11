@@ -14,7 +14,7 @@ pub const VERIFIER_PATH: &str = "~/.axvm/verifier.sol";
 #[derive(Parser)]
 #[command(
     name = "evm-proving-setup",
-    about = "Generate default aggregation proving key and SNARK verifier contract"
+    about = "Set up for generating EVM proofs. ATTENTION: this requires large amounts of computation and memory. "
 )]
 pub struct EvmProvingSetupCmd {}
 
