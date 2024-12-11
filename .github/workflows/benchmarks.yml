@@ -129,6 +129,10 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref }}
 
+      - name: Use results
+        run: |
+          echo "Result from benchmark: ${{ needs.benchmark.outputs.some_result }}"
+
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
         run: |

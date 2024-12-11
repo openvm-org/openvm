@@ -231,6 +231,9 @@ jobs:
         run: |
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
+          s3_md_file="${current_sha}-${METRIC_NAME}.md"
+          s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
+          echo "result_md_file=${s3_md_file}" >> $GITHUB_OUTPUT
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
