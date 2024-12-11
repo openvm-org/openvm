@@ -23,6 +23,7 @@ pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
 pub mod pal_abi;
 pub mod process;
+pub mod serde;
 
 #[cfg(not(target_os = "zkvm"))]
 pub mod utils;

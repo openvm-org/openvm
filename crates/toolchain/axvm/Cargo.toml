@@ -15,6 +15,7 @@ axvm-platform = { workspace = true, features = [
 axvm-rv32im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 hex-literal.workspace = true
+bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint-dig.workspace = true

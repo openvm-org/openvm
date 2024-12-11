@@ -523,6 +523,7 @@ version = "0.1.0"
 dependencies = [
  "axvm-platform",
  "axvm-rv32im-guest",
+ "bytemuck",
  "chrono",
  "hex-literal",
  "num-bigint-dig",
