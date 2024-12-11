@@ -27,7 +27,7 @@ use axvm_sdk::{
     commit::{commit_app_exe, generate_leaf_committed_exe},
     config::AppConfig,
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{AggStarkProver, AppProver},
+    prover::{AggStarkProver, AppProver, LeafProver},
     Sdk, StdIn,
 };
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -92,9 +92,8 @@ fn main() -> Result<()> {
         #[cfg(all(feature = "aggregation", feature = "bench-metrics"))]
         {
             let leaf_vm_pk = leaf_keygen(leaf_fri_params);
-            let stark_prover =
-                AggStarkProver::leaf_agg_only(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
-            stark_prover.generate_leaf_proof(&app_proof);
+            let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
+            leaf_prover.generate_proof(&app_proof);
         }
 
         Ok(())

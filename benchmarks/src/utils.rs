@@ -12,7 +12,7 @@ use axvm_sdk::{
     commit::commit_app_exe,
     config::AppConfig,
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{AggStarkProver, AppProver},
+    prover::{AppProver, LeafProver},
     StdIn,
 };
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
@@ -117,9 +117,8 @@ where
         .expect("Verification failed");
     if bench_leaf {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
-        let stark_prover =
-            AggStarkProver::leaf_agg_only(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
-        stark_prover.generate_leaf_proof(&app_proofs);
+        let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
+        leaf_prover.generate_proof(&app_proofs);
     }
     Ok(())
 }
