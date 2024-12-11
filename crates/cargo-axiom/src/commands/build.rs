@@ -1,19 +1,14 @@
 use std::{
-    fs::{read, File},
-    io::Write,
-    path::PathBuf,
+    fs::read,
+    path::{Path, PathBuf},
 };
 
 use axvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
-use axvm_sdk::Sdk;
-use axvm_transpiler::{
-    axvm_platform::{bincode, memory::MEM_SIZE},
-    elf::Elf,
-    transpiler::Transpiler,
-};
+use axvm_sdk::{fs::write_exe_to_file, Sdk};
+use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
 use clap::Parser;
 use eyre::Result;
 
@@ -31,7 +26,7 @@ impl BuildCmd {
     }
 }
 
-#[derive(Parser)]
+#[derive(Clone, Parser)]
 pub struct BuildArgs {
     /// Location of the directory containing the Cargo.toml for the guest code.
     ///
@@ -63,7 +58,15 @@ pub struct BuildArgs {
     pub profile: String,
 }
 
-#[derive(clap::Args)]
+impl BuildArgs {
+    pub fn exe_path(&self, elf_path: &Path) -> PathBuf {
+        self.transpile_path
+            .clone()
+            .unwrap_or_else(|| elf_path.with_extension("axvmexe"))
+    }
+}
+
+#[derive(Clone, clap::Args)]
 #[group(required = false, multiple = false)]
 pub struct BinTypeFilter {
     /// Specify that the target should be a binary kind
@@ -75,8 +78,8 @@ pub struct BinTypeFilter {
     pub example: bool,
 }
 
-// Returns elf_path for now
-pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
+// Returns the path to the ELF file if it is unique.
+pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
     println!("[axiom] Building the package...");
     let target_filter = TargetFilter {
         name_substr: build_args.name.clone(),
@@ -98,8 +101,9 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
     };
 
     let pkg = get_package(&pkg_dir);
+    // We support builds of libraries with 0 or >1 executables.
     let elf_path = match build_guest_package(&pkg, &guest_options, None) {
-        Ok(target_dir) => find_unique_executable(&pkg_dir, &target_dir, &target_filter)?,
+        Ok(target_dir) => find_unique_executable(&pkg_dir, &target_dir, &target_filter),
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
         }
@@ -109,23 +113,24 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
     };
 
     if build_args.transpile {
+        let elf_path = elf_path?;
         println!("[axiom] Transpiling the package...");
-        let output_path = build_args
-            .transpile_path
-            .clone()
-            .unwrap_or_else(|| elf_path.with_extension("axvmexe"));
+        let output_path = build_args.exe_path(&elf_path);
         transpile(elf_path.clone(), output_path.clone())?;
         println!(
             "[axiom] Successfully transpiled to {}",
             output_path.display()
         );
-        Ok(output_path)
-    } else {
+        Ok(Some(elf_path))
+    } else if let Ok(elf_path) = elf_path {
         println!(
             "[axiom] Successfully built the package: {}",
             elf_path.display()
         );
-        Ok(elf_path)
+        Ok(Some(elf_path))
+    } else {
+        println!("[axiom] Successfully built the package");
+        Ok(None)
     }
 }
 
@@ -138,8 +143,7 @@ fn transpile(elf_path: PathBuf, output_path: PathBuf) -> Result<()> {
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension),
     )?;
-    let data = bincode::serde::encode_to_vec(&exe, bincode::config::standard())?;
-    File::create(output_path.clone())?.write_all(&data)?;
+    write_exe_to_file(exe, &output_path)?;
     eprintln!("Successfully transpiled to {}", output_path.display());
     Ok(())
 }

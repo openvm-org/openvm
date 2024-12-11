@@ -41,6 +41,7 @@ regex = "1.5.4"
 prettytable-rs = "0.10"
 textwrap = "0.16.0"
 ctrlc = "3.4.2"
+bincode = { workspace = true, features = ["serde", "std"] }
 toml = { workspace = true }
 
 [features]

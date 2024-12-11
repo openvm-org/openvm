@@ -28,7 +28,7 @@ ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
 axvm-circuit = { workspace = true }
 
-bincode = { workspace = true }
+bincode = { workspace = true, features = ["serde", "std"] }
 bon = { workspace = true }
 bson = { workspace = true }
 derivative = { workspace = true }
