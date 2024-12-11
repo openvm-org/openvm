@@ -224,3 +224,6 @@ jobs:
               echo "PUSH_FAILED"
               exit 1
           fi
+      - name: Path to result
+        run: |
+          echo "https://github.com/axiom-crypto/afs-prototype/blob/gh-pages/${GH_PAGES_PATH}/${METRIC_NAME}.md"
