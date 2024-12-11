@@ -136,13 +136,13 @@ jobs:
           MODE=${{ inputs.mode }}
           BLOCK_NUMBER=${{ inputs.block_number }}
           OPTIONAL_ARGS=""
-          PROFILE="--release"
+          PROFILE="release"
           if [[ "${{ inputs.collect_metrics }}" == "true" ]]; then
             OPTIONAL_ARGS="--collect-metrics"
-            PROFILE="--profile=profiling"
+            PROFILE="profiling"
           fi
-          cargo build --bin rsp $PROFILE
-          OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp \
+          cargo build --bin --profile=$PROFILE
+          OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/$PROFILE/rsp \
             --$MODE --block-number $BLOCK_NUMBER --rpc-url $RPC_1 --cache-dir rpc-cache \
             --app-log-blowup ${{ inputs.app_log_blowup }} \
             --agg-log-blowup ${{ inputs.agg_log_blowup }} \
@@ -199,26 +199,26 @@ jobs:
           mkdir -p ${GH_PAGES_PATH}
           s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" "${GH_PAGES_PATH}/${METRIC_NAME}.md"
 
-          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md	
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"	
-          MAX_RETRIES=10	
-          RETRY_DELAY=5	
-          ATTEMPT=0	
-          SUCCESS=false	
-          while [ $ATTEMPT -lt $MAX_RETRIES ]; do	
-              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."	
-              git fetch origin gh-pages	
-              git merge origin/gh-pages --no-edit	
-              if git push origin gh-pages; then	
-                  SUCCESS=true	
-                  break	
-              else	
-                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."	
-                  sleep $RETRY_DELAY	
-                  ATTEMPT=$((ATTEMPT + 1))	
-              fi	
+          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          ATTEMPT=0
+          SUCCESS=false
+          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
+              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
+              git fetch origin gh-pages
+              git merge origin/gh-pages --no-edit
+              if git push origin gh-pages; then
+                  SUCCESS=true
+                  break
+              else
+                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."
+                  sleep $RETRY_DELAY
+                  ATTEMPT=$((ATTEMPT + 1))
+              fi
           done
           if [ "$SUCCESS" = false ]; then
               echo "PUSH_FAILED"
-              exit 1	
+              exit 1
           fi
