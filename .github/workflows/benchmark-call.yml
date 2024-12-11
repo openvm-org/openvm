@@ -216,7 +216,7 @@ jobs:
           s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
           source ci/scripts/utils.sh
-          generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }} "."
+          generate_markdown $METRIC_PATH $METRIC_NAME ${{ env.S3_METRICS_PATH }} "."
 
       - name: Install inferno-flamegraph
         run: cargo install inferno

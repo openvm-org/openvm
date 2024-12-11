@@ -1,9 +1,8 @@
 generate_markdown() {
     local metric_path="$1"
     local metric_name="$2"
-    local current_sha="$3"
-    local s3_metrics_path="$4"
-    local afs_root="$5"
+    local s3_metrics_path="$3"
+    local afs_root="$4"
 
     if [[ -f $metric_path ]]; then
         prev_path="${s3_metrics_path}/main-${metric_name}.json"
