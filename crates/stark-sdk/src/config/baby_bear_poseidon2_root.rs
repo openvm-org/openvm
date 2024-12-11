@@ -46,27 +46,27 @@ type Challenger<P> = MultiField32Challenger<Val, Bn254Fr, P, WIDTH, 2>;
 type Pcs<P> = TwoAdicFriPcs<Val, Dft, ValMmcs<P>, ChallengeMmcs<P>>;
 type RapPhase<P> = StarkLogUpPhase<Val, Challenge, Challenger<P>>;
 
-pub type BabyBearPermutationOuterConfig<P> =
+pub type BabyBearPermutationRootConfig<P> =
     StarkConfig<Pcs<P>, RapPhase<P>, Challenge, Challenger<P>>;
-pub type BabyBearPoseidon2OuterConfig = BabyBearPermutationOuterConfig<Perm>;
-pub type BabyBearPoseidon2OuterEngine = BabyBearPermutationOuterEngine<Perm>;
+pub type BabyBearPoseidon2RootConfig = BabyBearPermutationRootConfig<Perm>;
+pub type BabyBearPoseidon2RootEngine = BabyBearPermutationRootEngine<Perm>;
 
-assert_sc_compatible_with_serde!(BabyBearPoseidon2OuterConfig);
+assert_sc_compatible_with_serde!(BabyBearPoseidon2RootConfig);
 
-pub struct BabyBearPermutationOuterEngine<P>
+pub struct BabyBearPermutationRootEngine<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
     pub fri_params: FriParameters,
-    pub config: BabyBearPermutationOuterConfig<P>,
+    pub config: BabyBearPermutationRootConfig<P>,
     pub perm: P,
 }
 
-impl<P> StarkEngine<BabyBearPermutationOuterConfig<P>> for BabyBearPermutationOuterEngine<P>
+impl<P> StarkEngine<BabyBearPermutationRootConfig<P>> for BabyBearPermutationRootEngine<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
-    fn config(&self) -> &BabyBearPermutationOuterConfig<P> {
+    fn config(&self) -> &BabyBearPermutationRootConfig<P> {
         &self.config
     }
 
@@ -75,8 +75,8 @@ where
     }
 }
 
-impl<P> StarkEngineWithHashInstrumentation<BabyBearPermutationOuterConfig<Instrumented<P>>>
-    for BabyBearPermutationOuterEngine<Instrumented<P>>
+impl<P> StarkEngineWithHashInstrumentation<BabyBearPermutationRootConfig<Instrumented<P>>>
+    for BabyBearPermutationRootEngine<Instrumented<P>>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
@@ -105,35 +105,35 @@ where
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_engine() -> BabyBearPoseidon2OuterEngine {
+pub fn default_engine() -> BabyBearPoseidon2RootEngine {
     default_engine_impl(FriParameters::standard_fast())
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-fn default_engine_impl(fri_params: FriParameters) -> BabyBearPoseidon2OuterEngine {
-    let perm = outer_perm();
+fn default_engine_impl(fri_params: FriParameters) -> BabyBearPoseidon2RootEngine {
+    let perm = root_perm();
     engine_from_perm(perm, fri_params)
 }
 
 /// `pcs_log_degree` is the upper bound on the log_2(PCS polynomial degree).
-pub fn default_config(perm: &Perm) -> BabyBearPoseidon2OuterConfig {
+pub fn default_config(perm: &Perm) -> BabyBearPoseidon2RootConfig {
     let fri_params = FriParameters::standard_fast();
     config_from_perm(perm, fri_params)
 }
 
-pub fn engine_from_perm<P>(perm: P, fri_params: FriParameters) -> BabyBearPermutationOuterEngine<P>
+pub fn engine_from_perm<P>(perm: P, fri_params: FriParameters) -> BabyBearPermutationRootEngine<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
     let config = config_from_perm(&perm, fri_params);
-    BabyBearPermutationOuterEngine {
+    BabyBearPermutationRootEngine {
         config,
         perm,
         fri_params,
     }
 }
 
-pub fn config_from_perm<P>(perm: &P, fri_params: FriParameters) -> BabyBearPermutationOuterConfig<P>
+pub fn config_from_perm<P>(perm: &P, fri_params: FriParameters) -> BabyBearPermutationRootConfig<P>
 where
     P: CryptographicPermutation<[Bn254Fr; WIDTH]> + Clone,
 {
@@ -150,11 +150,11 @@ where
     };
     let pcs = Pcs::new(dft, val_mmcs, fri_config);
     let rap_phase = StarkLogUpPhase::new();
-    BabyBearPermutationOuterConfig::new(pcs, rap_phase)
+    BabyBearPermutationRootConfig::new(pcs, rap_phase)
 }
 
 /// The permutation for outer recursion.
-pub fn outer_perm() -> Perm {
+pub fn root_perm() -> Perm {
     const ROUNDS_F: usize = 8;
     const ROUNDS_P: usize = 56;
     let mut round_constants = bn254_poseidon2_rc3();
@@ -238,7 +238,7 @@ pub fn print_hash_counts(hash_counter: &InstrumentCounter, compress_counter: &In
     println!("Total Count: {total_count}");
 }
 
-impl StarkFriEngine<BabyBearPoseidon2OuterConfig> for BabyBearPoseidon2OuterEngine {
+impl StarkFriEngine<BabyBearPoseidon2RootConfig> for BabyBearPoseidon2RootEngine {
     fn new(fri_params: FriParameters) -> Self {
         default_engine_impl(fri_params)
     }

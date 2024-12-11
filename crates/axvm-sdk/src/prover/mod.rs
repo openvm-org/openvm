@@ -4,7 +4,7 @@ use ax_stark_sdk::ax_stark_backend::Chip;
 use axvm_circuit::arch::VmConfig;
 use axvm_native_recursion::halo2::EvmProof;
 
-use crate::{io::StdIn, keygen::AppProvingKey, NonRootCommittedExe, F, SC};
+use crate::{keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC};
 
 mod agg;
 pub use agg::*;
@@ -16,6 +16,8 @@ pub use halo2::*;
 mod root;
 pub use root::*;
 mod stark;
+pub mod vm;
+
 #[allow(unused_imports)]
 pub use stark::*;
 

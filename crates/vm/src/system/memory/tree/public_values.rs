@@ -105,7 +105,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     proof
 }
 
-fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
+pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
     memory_dimensions: &MemoryDimensions,
     num_public_values: usize,
     final_memory: &Equipartition<F, CHUNK>,

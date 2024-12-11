@@ -1,0 +1,68 @@
+name: axVM CLI Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
+      - "crates/axvm-sdk/**"
+      - "crates/cargo-axiom/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  AXIOM_FAST_TEST: "1"
+
+# TODO: E2E build, transpile, run, keygen, prove, contract, verify on large machine
+jobs:
+  app-level-cli:
+    runs-on:
+      - runs-on
+      - run-id=${{ github.run_id }}
+      - family=m7
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+      - name: Install solc # svm should support arm64 linux
+        run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      - name: Install architecture specific tools
+        run: |
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
+
+      - name: Setup halo2
+        working-directory: crates/axvm-sdk
+        run: |
+          bash ../../extensions/native/recursion/trusted_setup_s3.sh
+
+      # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
+      - name: Run app-level CLI commands
+        working-directory: crates/cargo-axiom
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build
+          cargo run --bin cargo-axiom -- axiom keygen --config ./example/app_config.toml --output app.pk

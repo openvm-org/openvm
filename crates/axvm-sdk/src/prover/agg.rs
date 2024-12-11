@@ -6,22 +6,22 @@ use ax_stark_sdk::{
 };
 #[cfg(feature = "bench-metrics")]
 use axvm_circuit::arch::SingleSegmentVmExecutor;
-use axvm_circuit::{
-    arch::Streams,
-    prover::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
-};
+use axvm_circuit::arch::Streams;
 use axvm_native_circuit::NativeConfig;
 use axvm_native_recursion::hints::Hintable;
 use tracing::info_span;
 
 use crate::{
     keygen::AggProvingKey,
-    prover::RootVerifierLocalProver,
+    prover::{
+        vm::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
+        RootVerifierLocalProver,
+    },
     verifier::{
         internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
         root::types::RootVmVerifierInput,
     },
-    NonRootCommittedExe, OuterSC, F, SC,
+    NonRootCommittedExe, RootSC, F, SC,
 };
 
 const DEFAULT_NUM_CHILDREN_LEAF: usize = 2;
@@ -73,7 +73,7 @@ impl AggStarkProver {
     }
 
     /// Generate a proof to aggregate app proofs.
-    pub fn generate_agg_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<OuterSC> {
+    pub fn generate_agg_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
         let leaf_proofs = info_span!("leaf verifier", group = "leaf_verifier").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
@@ -173,7 +173,7 @@ impl AggStarkProver {
         proofs.pop().unwrap()
     }
 
-    fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<OuterSC> {
+    fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
         let input = root_input.write();
         let root_prover = &self.root_prover;
         #[cfg(feature = "bench-metrics")]
