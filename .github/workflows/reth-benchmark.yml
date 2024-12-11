@@ -113,7 +113,7 @@ jobs:
 
       - name: Set metric name
         run: |
-          input_json=${{ toJSON(github.event.inputs) }}
+          input_json="${{ toJSON(github.event.inputs) }}"
           echo $input_json
           e2e=${{ inputs.mode == 'prove-e2e' }}
           source ci/scripts/utils.sh
