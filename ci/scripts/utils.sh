@@ -6,8 +6,6 @@ generate_markdown() {
     local afs_root="$5"
 
     if [[ -f $metric_path ]]; then
-        s5cmd cp $metric_path $s3_metrics_path/${current_sha}-${metric_name}.json
-
         prev_path="${s3_metrics_path}/main-${metric_name}.json"
         count=`s5cmd ls $prev_path | wc -l`
 

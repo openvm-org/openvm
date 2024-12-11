@@ -207,11 +207,13 @@ jobs:
       ##########################################################################
       # Generate result .md files and flamegraphs, store them in S3            #
       ##########################################################################
-      - name: Store metric json and compute diff with previous
+      - name: Upload metric json and compute diff with previous to generate markdown
         run: |
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
+
+          s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
           source ci/scripts/utils.sh
           generate_markdown $METRIC_PATH $METRIC_NAME $current_sha ${{ env.S3_METRICS_PATH }} "."
