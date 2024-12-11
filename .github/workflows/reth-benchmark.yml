@@ -141,7 +141,7 @@ jobs:
           if [[ "${{ inputs.collect_metrics }}" == "true" ]]; then
             OPTIONAL_ARGS="--collect-metrics"
             PROFILE="profiling"
-            FEATURES="${FEATURES},profiling"
+            FEATURES="${FEATURES},profiling,function-span"
           fi
           cargo build --bin rsp --profile=$PROFILE --no-default-features --features=$FEATURES
           OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/$PROFILE/rsp \
