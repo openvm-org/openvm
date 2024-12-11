@@ -1,0 +1,43 @@
+[package]
+name = "openvm-sha256-circuit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "OpenVM circuit extension for sha256"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-sha256-transpiler = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-sha256-air = { workspace = true }
+
+derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+rand.workspace = true
+serde.workspace = true
+sha2 = { version = "0.10", default-features = false }
+strum = { workspace = true }
+
+[dev-dependencies]
+openvm-stark-sdk = { workspace = true }
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+hex.workspace = true
+
+[features]
+default = ["parallel", "mimalloc"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]
+# performance features:
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

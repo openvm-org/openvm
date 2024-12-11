@@ -86,13 +86,13 @@ impl Encoder {
         flag_idx: usize,
         vars: &[AB::Var],
     ) -> AB::Expr {
-        assert!(flag_idx < self.flag_cnt, "flag index out of range");
-        self.expression_for_point::<AB>(&self.pts[flag_idx + 1], vars)
+        assert!(flag_idx <= self.flag_cnt, "flag index out of range");
+        self.expression_for_point::<AB>(&self.pts[flag_idx], vars)
     }
 
     pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
-        assert!(flag_idx < self.flag_cnt, "flag index out of range");
-        self.pts[flag_idx + 1].clone()
+        assert!(flag_idx <= self.flag_cnt, "flag index out of range");
+        self.pts[flag_idx].clone()
     }
 
     pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {

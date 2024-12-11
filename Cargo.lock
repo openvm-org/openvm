@@ -3442,6 +3442,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-sha256-air"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.4.2",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-monty-31",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "rand",
+ "test-case",
+ "zkhash",
+]
+
+[[package]]
+name = "openvm-sha256-circuit"
+version = "0.1.0"
+dependencies = [
+ "derive-new",
+ "derive_more 1.0.0",
+ "hex",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "openvm-sha256-air",
+ "openvm-sha256-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand",
+ "serde",
+ "sha2",
+ "strum",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "openvm-sha256-guest"
+version = "0.1.0"
+dependencies = [
+ "openvm",
+ "openvm-platform",
+ "serde",
+ "sha2",
+]
+
+[[package]]
+name = "openvm-sha256-transpiler"
+version = "0.1.0"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-sha256-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
 name = "openvm-stark-backend"
 version = "0.1.0-alpha"
 source = "git+ssh://git@github.com/openvm-org/stark-backend#79fcdbe321c21f2b146e1b4d58a88662c2abd6b4"

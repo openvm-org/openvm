@@ -28,7 +28,7 @@ We start with the instructions using _custom-0_ opcode[6:0] prefix **0001011**..
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
 | ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | keccak256   | R   | 0001011     | 100    | 0x0    | `[rd:32]_2 = keccak256([rs1..rs1 + rs2]_2)` |
-
+| sha256      | R   | 0001011     | 111    | 0x0    | `[rd:32]_2 = sha256([rs1..rs1 + rs2]_2)` |
 ## 256-bit Integers
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                              |
@@ -203,6 +203,7 @@ The transpilation will only be valid for programs where:
 | hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
 | printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
 | keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| sha256         | SHA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
 | xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
