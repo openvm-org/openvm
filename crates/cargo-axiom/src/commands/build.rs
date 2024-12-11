@@ -108,7 +108,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
         }
     };
 
-    if !build_args.transpile {
+    if build_args.transpile {
         println!("[axiom] Transpiling the package...");
         let output_path = build_args
             .transpile_path
