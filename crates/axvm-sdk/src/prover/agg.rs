@@ -87,6 +87,7 @@ impl AggStarkProver {
         self.leaf_prover.profile = profile;
         self
     }
+
     pub fn with_profiling(mut self) -> Self {
         self.set_profile(true);
         self

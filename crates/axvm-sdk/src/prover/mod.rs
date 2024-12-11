@@ -58,8 +58,18 @@ impl<VC> ContinuationProver<VC> {
         self
     }
 
+    pub fn with_profile(mut self, profile: bool) -> Self {
+        self.set_profile(profile);
+        self
+    }
+
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.stark_prover.set_program_name(program_name);
+        self
+    }
+
+    pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+        self.set_program_name(program_name);
         self
     }
 

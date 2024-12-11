@@ -14,6 +14,7 @@ use axvm_rv32im_transpiler::{
 use axvm_sdk::{
     commit::commit_app_exe,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
+    prover::ContinuationProver,
     Sdk, StdIn,
 };
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -85,8 +86,10 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        Sdk.generate_evm_proof(app_pk, app_committed_exe, full_agg_pk, stdin)
-            .unwrap();
+        let prover = ContinuationProver::new(app_pk, app_committed_exe, full_agg_pk)
+            .with_profile(true)
+            .with_program_name("fib_e2e");
+        prover.generate_proof_for_evm(stdin);
     });
 
     Ok(())

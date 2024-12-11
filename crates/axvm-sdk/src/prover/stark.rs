@@ -42,10 +42,12 @@ impl<VC> StarkProver<VC> {
         self.agg_prover.set_profile(profile);
         self
     }
+
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.app_prover.set_program_name(program_name);
         self
     }
+
     pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
         VC: VmConfig<F>,
