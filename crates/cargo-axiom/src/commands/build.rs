@@ -5,7 +5,7 @@ use std::{
 };
 
 use axvm_build::{
-    find_unique_executable, get_dir_with_profile, get_target_dir, GuestOptions, TargetFilter,
+    build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::Sdk;
@@ -52,7 +52,7 @@ pub struct BuildArgs {
 
     /// Transpile the program after building
     #[arg(long, default_value = "false")]
-    pub do_not_transpile: bool,
+    pub transpile: bool,
 
     /// Output path for the transpiled program (default: <ELF base path>.axvmexe)
     #[arg(long)]
@@ -96,11 +96,19 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<PathBuf> {
         features: build_args.features.clone(),
         ..Default::default()
     };
-    let _elf = Sdk.build(guest_options, &pkg_dir, &target_filter)?;
 
-    let target_dir = get_dir_with_profile(get_target_dir(&pkg_dir), &build_args.profile);
-    let elf_path = find_unique_executable(&pkg_dir, &target_dir, &target_filter)?;
-    if !build_args.do_not_transpile {
+    let pkg = get_package(&pkg_dir);
+    let elf_path = match build_guest_package(&pkg, &guest_options, None) {
+        Ok(target_dir) => find_unique_executable(&pkg_dir, &target_dir, &target_filter)?,
+        Err(None) => {
+            return Err(eyre::eyre!("Failed to build guest"));
+        }
+        Err(Some(code)) => {
+            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+        }
+    };
+
+    if !build_args.transpile {
         println!("[axiom] Transpiling the package...");
         let output_path = build_args
             .transpile_path
