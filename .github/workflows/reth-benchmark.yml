@@ -92,6 +92,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - name: Display workflow inputs
+        run: echo "${{ toJSON(github.event.inputs) }}"
       - name: Setup CLI
         working-directory: crates/cargo-axiom
         run: |
@@ -109,7 +111,6 @@ jobs:
         if: ${{ github.event.inputs.mode == 'prove-e2e' }}
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
-          ln -s params rsp/params
 
       - name: Set metric name
         run: |
@@ -126,17 +127,21 @@ jobs:
           cargo axiom build
           mkdir -p ../host/elf
           cp target/riscv32im-risc0-zkvm-elf/release/rsp-client-eth ../host/elf/
+
           cd ../..
+          ln -s ../params
           mkdir -p rpc-cache
           mkdir -p .bench_metrics # TODO: remove this
           RPC_1=${{ secrets.RPC_URL_1 }}
           MODE=${{ inputs.mode }}
           BLOCK_NUMBER=${{ inputs.block_number }}
           OPTIONAL_ARGS=""
+          PROFILE="--release"
           if [[ "${{ inputs.collect_metrics }}" == "true" ]]; then
             OPTIONAL_ARGS="--collect-metrics"
+            PROFILE="--profile=profiling"
           fi
-          cargo build --bin rsp --release
+          cargo build --bin rsp $PROFILE
           OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/release/rsp \
             --$MODE --block-number $BLOCK_NUMBER --rpc-url $RPC_1 --cache-dir rpc-cache \
             --app-log-blowup ${{ inputs.app_log_blowup }} \
