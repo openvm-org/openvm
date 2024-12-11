@@ -1,15 +1,19 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
 use ax_stark_sdk::{
-    ax_stark_backend::{engine::VerificationData, Chip},
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
+    ax_stark_backend::Chip,
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
 use axvm_sdk::{
-    commit::commit_app_exe, config::AppConfig, keygen::AppProvingKey, prover::AppProver, StdIn,
+    commit::commit_app_exe,
+    config::AppConfig,
+    keygen::{leaf_keygen, AppProvingKey},
+    prover::{AggStarkProver, AppProver},
+    StdIn,
 };
 use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
@@ -73,27 +77,21 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<E, VC>(
-    engine: E,
-    config: VC,
+pub fn bench_from_exe<VC>(
+    bench_name: impl ToString,
+    app_config: AppConfig<VC>,
     exe: impl Into<AxVmExe<F>>,
     input_stream: StdIn,
-) -> Result<Vec<VerificationDataWithFriParams<SC>>>
+    bench_leaf: bool,
+) -> Result<()>
 where
-    E: StarkFriEngine<SC>,
     VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
-    let app_config = AppConfig {
-        app_vm_config: config.clone(),
-        app_fri_params: engine.fri_params(),
-        // leaf_fri_params/compiler_options don't matter for this benchmark.
-        leaf_fri_params: engine.fri_params().into(),
-        compiler_options: Default::default(),
-    };
-    let vm = VirtualMachine::new(engine, config);
+    counter!("fri.log_blowup").absolute(app_config.app_fri_params.log_blowup as u64);
+    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params);
+    let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = time(gauge!("keygen_time_ms"), || {
         AppProvingKey::keygen(app_config.clone())
@@ -110,22 +108,20 @@ where
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
-    let mut prover = AppProver::new(app_pk.app_vm_pk, committed_exe);
-    prover.profile = true;
-    let proofs = prover.generate_app_proof(input_stream).per_segment;
+    let prover = AppProver::new(app_pk.app_vm_pk, committed_exe)
+        .with_profile()
+        .with_program_name(bench_name.to_string());
+    let app_proofs = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs.
-    vm.verify(&vk, proofs.clone()).expect("Verification failed");
-    let vdata = proofs
-        .into_iter()
-        .map(|proof| VerificationDataWithFriParams {
-            data: VerificationData {
-                vk: vk.clone(),
-                proof,
-            },
-            fri_params: vm.engine.fri_params(),
-        })
-        .collect();
-    Ok(vdata)
+    vm.verify(&vk, app_proofs.per_segment.clone())
+        .expect("Verification failed");
+    if bench_leaf {
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
+        let stark_prover =
+            AggStarkProver::leaf_agg_only(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
+        stark_prover.generate_leaf_proof(&app_proofs);
+    }
+    Ok(())
 }
 
 pub fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {

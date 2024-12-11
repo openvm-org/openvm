@@ -39,6 +39,7 @@ use axvm_rv32im_circuit::{
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use axvm_sdk::{config::AppConfig, StdIn};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use derive_more::derive::From;
@@ -119,10 +120,16 @@ fn main() -> Result<()> {
             .with_extension(EccTranspilerExtension),
     )?;
     // TODO: update sw_setup macros and read it from elf.
-    let vm_config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
+    let vm_config = AppConfig {
+        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+        app_vm_config: Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
+        leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
+            .into(),
+        compiler_options: CompilerOptions::default().with_cycle_tracker(),
+    };
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata = info_span!("ECDSA Recover Program").in_scope(|| {
+        info_span!("ECDSA Recover Program").in_scope(|| {
             let mut rng = ChaCha8Rng::seed_from_u64(12345);
             let signing_key: SigningKey = SigningKey::random(&mut rng);
             let verifying_key = VerifyingKey::from(&signing_key);
@@ -146,11 +153,13 @@ fn main() -> Result<()> {
                     .map(|s| make_input(&signing_key, s.as_bytes()))
                     .collect::<Vec<_>>(),
             );
-
-            let engine = BabyBearPoseidon2Engine::new(
-                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-            );
-            bench_from_exe(engine, vm_config, exe, input_stream.into())
+            bench_from_exe(
+                "ecrecover_program",
+                vm_config,
+                exe,
+                input_stream.into(),
+                false,
+            )
         })?;
 
         Ok(())
