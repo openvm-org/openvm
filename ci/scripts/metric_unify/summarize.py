@@ -154,7 +154,7 @@ def main():
     md_files = args.metrics_md_files.split(',')
     outputs = []
     for md_file in md_files:
-        outputs.append(generate_row(md_file, ["leaf_aggregation"], {}, args.gh_pages_link))
+        outputs.append(generate_row(md_file, ["leaf_verifier"], {}, args.gh_pages_link))
     write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
     if args.e2e_md_files and args.e2e_md_files.strip():
