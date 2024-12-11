@@ -50,6 +50,12 @@ impl<VC> ContinuationProver<VC> {
             halo2_prover: Halo2Prover::new(halo2_pk),
         }
     }
+
+    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
+        self.stark_prover.set_program_name(program_name);
+        self
+    }
+
     pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmProof
     where
         VC: VmConfig<F>,

@@ -45,8 +45,13 @@ impl<VC> AppProver<VC> {
         self
     }
 
-    pub fn with_program_name(mut self, program_name: String) -> Self {
-        self.program_name = Some(program_name);
+    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
+        self.program_name = Some(program_name.as_ref().to_string());
+        self
+    }
+
+    pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+        self.set_program_name(program_name);
         self
     }
 

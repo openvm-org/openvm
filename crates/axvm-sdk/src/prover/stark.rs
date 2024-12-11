@@ -37,6 +37,10 @@ impl<VC> StarkProver<VC> {
             agg_prover: AggStarkProver::new(agg_stark_pk, app_pk.leaf_committed_exe.clone()),
         }
     }
+    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
+        self.app_prover.set_program_name(program_name);
+        self
+    }
     pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
         VC: VmConfig<F>,
