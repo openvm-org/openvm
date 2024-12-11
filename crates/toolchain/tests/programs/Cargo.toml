@@ -16,7 +16,7 @@ axvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features =
 axvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
 axvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
 axvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
-ruint = { git = "https://github.com/axiom-crypto/uint.git", branch = "axiom", default-features = false }
+ruint = { git = "ssh://git@github.com/axiom-crypto/uint.git", branch = "axiom", default-features = false }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
