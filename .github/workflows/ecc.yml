@@ -60,4 +60,4 @@ jobs:
       - name: Build axvm-ecc-guest crate for axvm
         working-directory: extensions/ecc/guest
         run: |
-          cargo axiom build --do-not-transpile
+          cargo axiom build
