@@ -1,5 +1,6 @@
 use std::{
     fs::{create_dir_all, write, File},
+    io::Write,
     path::Path,
 };
 
@@ -15,11 +16,15 @@ use crate::{
 };
 
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<AxVmExe<F>> {
-    read_from_file_bson(path)
+    let data = std::fs::read(path)?;
+    let exe = bincode::serde::decode_from_slice(&data, bincode::config::standard())?.0;
+    Ok(exe)
 }
 
 pub fn write_exe_to_file<P: AsRef<Path>>(exe: AxVmExe<F>, path: P) -> Result<()> {
-    write_to_file_bson(path, exe)
+    let data = bincode::serde::encode_to_vec(&exe, bincode::config::standard())?;
+    File::create(path)?.write_all(&data)?;
+    Ok(())
 }
 
 pub fn read_app_pk_from_file<VC: VmConfig<F>, P: AsRef<Path>>(
