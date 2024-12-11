@@ -1,26 +1,3 @@
-
-get_metric_name() {
-    local is_e2e="$1"
-    local bin_name="$2"
-    local app_log_blowup="$3"
-    local agg_log_blowup="$4"
-    local root_log_blowup="$5"
-    local internal_log_blowup="$6"
-    local max_segment_length="$7"
-    local instance_type="$8"
-    local memory_allocator="$9"
-
-    local metric_name="${bin_name}-${app_log_blowup}-${agg_log_blowup}"
-    
-    if [[ "$is_e2e" == "true" ]]; then
-        metric_name="${metric_name}-${root_log_blowup}-${internal_log_blowup}"
-    fi
-    
-    metric_name="${metric_name}-${max_segment_length}-${instance_type}-${memory_allocator}"
-    
-    echo "$metric_name"
-}
-
 generate_markdown() {
     local metric_path="$1"
     local metric_name="$2"

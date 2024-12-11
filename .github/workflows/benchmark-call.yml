@@ -165,15 +165,6 @@ jobs:
           echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
 
-      - name: Set application and aggregation level log blowup
-        run: |
-          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
-          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
-          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
-          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
-          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${INPUT_ARGS}" >> $GITHUB_ENV
-
       - name: Set working directory
         id: set-working-dir
         run: |
@@ -188,19 +179,29 @@ jobs:
 
       - name: Set metric name
         run: |
-          source ci/scripts/utils.sh
-          METRIC_NAME=$(get_metric_name ${{ env.E2E_BENCH }} ${{ env.BIN_NAME }} ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} ${{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }})
+          input_json_str="${{ toJSON(github.event.inputs) }}"
+          input_hash=$(echo $input_json_str | sha256sum | cut -d' ' -f1)
+          METRIC_NAME=${BIN_NAME}-${input_hash}
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
+
+      - name: Set input args
+        run: |
+          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
+          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
+          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
+          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
+          OUTPUT_PATH="--output_path $METRIC_PATH"
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
       ##########################################################################
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
-        run:
-          | # bench.py should take in metric_name from above step to avoid duplicating logic
+        run: |
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
       ##########################################################################

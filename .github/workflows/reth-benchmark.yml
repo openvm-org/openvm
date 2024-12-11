@@ -115,14 +115,10 @@ jobs:
         run: |
           input_json_str="${{ toJSON(github.event.inputs) }}"
           input_hash=$(echo $input_json_str | sha256sum | cut -d' ' -f1)
-          echo $input_hash
-          e2e=${{ inputs.mode == 'prove-e2e' }}
-          source ci/scripts/utils.sh
-          METRIC_NAME=$(get_metric_name $e2e reth ${{ inputs.app_log_blowup }} ${{ inputs.agg_log_blowup }} ${{ inputs.root_log_blowup }} {{ inputs.internal_log_blowup }} ${{ inputs.max_segment_length }} ${{ inputs.instance_family }} ${{ inputs.memory_allocator }})
+          METRIC_NAME=reth-${input_hash}
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
-        # input_hash=$(jq -n ${{ toJSON(github.event.inputs) }} | sha256sum | cut -d' ' -f)
 
       - name: Run Reth
         run: |
