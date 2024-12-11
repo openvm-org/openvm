@@ -37,10 +37,8 @@ fn main() -> Result<()> {
         AxVmCliCommands::Build(cmd) => cmd.run(),
         AxVmCliCommands::Contract(cmd) => cmd.run(),
         AxVmCliCommands::Keygen(cmd) => cmd.run(),
-        // AxVmCliCommands::New(cmd) => cmd.run(),
         AxVmCliCommands::Prove(cmd) => cmd.run(),
         AxVmCliCommands::Run(cmd) => cmd.run(),
-        // AxVmCliCommands::Transpile(cmd) => cmd.run(),
         AxVmCliCommands::Verify(cmd) => cmd.run(),
     }
 }

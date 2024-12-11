@@ -282,7 +282,7 @@ pub fn build_guest_package(
     let profile = if let Some(profile) = &guest_opts.profile {
         profile
     } else if is_debug() {
-        "debug"
+        "dev"
     } else {
         "release"
     };
