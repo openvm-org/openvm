@@ -39,17 +39,18 @@ impl<VC> AppProver<VC> {
             ),
         }
     }
-
-    pub fn with_profile(mut self) -> Self {
-        self.profile = true;
+    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
+        self.profile = profile;
         self
     }
-
+    pub fn with_profiling(mut self) -> Self {
+        self.set_profile(true);
+        self
+    }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.program_name = Some(program_name.as_ref().to_string());
         self
     }
-
     pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
         self.set_program_name(program_name);
         self

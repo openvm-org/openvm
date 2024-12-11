@@ -82,9 +82,13 @@ impl AggStarkProver {
         self
     }
 
-    pub fn with_profile(mut self) -> Self {
-        self.profile = true;
-        self.leaf_prover.profile = true;
+    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
+        self.profile = profile;
+        self.leaf_prover.profile = profile;
+        self
+    }
+    pub fn with_profiling(mut self) -> Self {
+        self.set_profile(true);
         self
     }
 

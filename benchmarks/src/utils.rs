@@ -109,7 +109,7 @@ where
     // generate_app_proof will emit metrics for proof time of each
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
     let prover = AppProver::new(app_pk.app_vm_pk, committed_exe)
-        .with_profile()
+        .with_profiling()
         .with_program_name(bench_name.to_string());
     let app_proofs = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs.
