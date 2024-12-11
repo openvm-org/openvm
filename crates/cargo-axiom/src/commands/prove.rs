@@ -13,7 +13,10 @@ use axvm_sdk::{
 use clap::Parser;
 use eyre::Result;
 
-use crate::util::{read_to_stdin, Input};
+use crate::{
+    commands::AGG_PK_PATH,
+    util::{read_to_stdin, Input},
+};
 
 #[derive(Parser)]
 #[command(name = "prove", about = "Generate a program proof")]
@@ -44,9 +47,6 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to axVM executable")]
         exe: PathBuf,
 
-        #[clap(long, action, help = "Path to aggregation proving key")]
-        agg_pk: PathBuf,
-
         #[clap(long, value_parser, help = "Input to axVM program")]
         input: Option<Input>,
 
@@ -71,13 +71,14 @@ impl ProveCmd {
             ProveSubCommand::Evm {
                 app_pk,
                 exe,
-                agg_pk,
                 input,
                 output,
             } => {
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let agg_pk = read_agg_pk_from_file(agg_pk)?;
+                let agg_pk = read_agg_pk_from_file(AGG_PK_PATH).map_err(|e| {
+                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo axiom evm-proving-setup' first", e)
+                })?;
                 let evm_proof = Sdk.generate_evm_proof(app_pk, committed_exe, agg_pk, input)?;
                 write_evm_proof_to_file(evm_proof, output)?;
             }

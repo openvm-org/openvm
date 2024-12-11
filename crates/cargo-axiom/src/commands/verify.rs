@@ -2,13 +2,15 @@ use std::path::PathBuf;
 
 use axvm_sdk::{
     fs::{
-        read_agg_pk_from_file, read_app_proof_from_file, read_app_vk_from_file,
-        read_evm_proof_from_file, read_evm_verifier_from_file,
+        read_app_proof_from_file, read_app_vk_from_file, read_evm_proof_from_file,
+        read_evm_verifier_from_file,
     },
     Sdk,
 };
 use clap::Parser;
 use eyre::{eyre, Result};
+
+use crate::commands::VERIFIER_PATH;
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -27,14 +29,8 @@ enum VerifySubCommand {
         proof: PathBuf,
     },
     Evm {
-        #[clap(long, action, help = "Path to EVM verifier")]
-        verifier: Option<PathBuf>,
-
         #[clap(long, action, help = "Path to EVM proof")]
         proof: PathBuf,
-
-        #[clap(long, action, help = "Path to aggregation proving key")]
-        agg_pk: Option<PathBuf>,
     },
 }
 
@@ -46,17 +42,10 @@ impl VerifyCmd {
                 let app_proof = read_app_proof_from_file(proof)?;
                 Sdk.verify_app_proof(&app_vk, &app_proof)?;
             }
-            VerifySubCommand::Evm {
-                verifier,
-                agg_pk,
-                proof,
-            } => {
-                let evm_verifier = if let Some(path) = verifier {
-                    read_evm_verifier_from_file(path)?
-                } else {
-                    let agg_pk = read_agg_pk_from_file(agg_pk.as_ref().unwrap())?;
-                    Sdk.generate_snark_verifier_contract(&agg_pk)?
-                };
+            VerifySubCommand::Evm { proof } => {
+                let evm_verifier = read_evm_verifier_from_file(VERIFIER_PATH).map_err(|e| {
+                    eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo axiom evm-proving-setup' first", e)
+                })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;
                 if !Sdk.verify_evm_proof(&evm_verifier, &evm_proof) {
                     return Err(eyre!("EVM proof verification failed"));

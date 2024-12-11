@@ -4,9 +4,6 @@ pub use bench::*;
 mod build;
 pub use build::*;
 
-mod init;
-pub use init::*;
-
 mod keygen;
 pub use keygen::*;
 
@@ -18,6 +15,9 @@ pub use prove::*;
 
 mod run;
 pub use run::*;
+
+mod setup;
+pub use setup::*;
 
 mod verify;
 pub use verify::*;

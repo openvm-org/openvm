@@ -1,5 +1,5 @@
 use cargo_axiom::{
-    commands::{BenchCmd, BuildCmd, InitCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
+    commands::{BenchCmd, BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
     AXVM_VERSION_MESSAGE,
 };
 use clap::{Parser, Subcommand};
@@ -22,10 +22,10 @@ pub struct AxVmCli {
 pub enum AxVmCliCommands {
     Bench(BenchCmd),
     Build(BuildCmd),
-    Init(InitCmd),
     Keygen(KeygenCmd),
     Prove(ProveCmd),
     Run(RunCmd),
+    Setup(EvmProvingSetupCmd),
     Verify(VerifyCmd),
 }
 
@@ -36,9 +36,9 @@ fn main() -> Result<()> {
         AxVmCliCommands::Bench(cmd) => cmd.run(),
         AxVmCliCommands::Build(cmd) => cmd.run(),
         AxVmCliCommands::Run(cmd) => cmd.run(),
-        AxVmCliCommands::Init(cmd) => cmd.run(),
         AxVmCliCommands::Keygen(cmd) => cmd.run(),
         AxVmCliCommands::Prove(cmd) => cmd.run(),
+        AxVmCliCommands::Setup(cmd) => cmd.run(),
         AxVmCliCommands::Verify(cmd) => cmd.run(),
     }
 }
