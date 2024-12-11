@@ -26,12 +26,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Give GitHub Actions access to axiom-crypto github org
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: taiki-e/install-action@nextest
 
       - name: Run toolchain tests
