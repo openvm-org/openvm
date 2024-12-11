@@ -45,7 +45,7 @@ impl VerifyCmd {
             let app_pk: AppProvingKey<SdkVmConfig> =
                 read_app_pk_from_file(self.pk.as_ref().unwrap())?;
             let app_proof = read_app_proof_from_file(&self.proof)?;
-            Sdk.verify_app_proof(&app_pk, &app_proof)?;
+            Sdk.verify_app_proof(&app_pk.get_vk(), &app_proof)?;
         }
         Ok(())
     }

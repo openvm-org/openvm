@@ -13,7 +13,7 @@ use axvm_rv32im_transpiler::{
 };
 use axvm_sdk::{
     commit::commit_app_exe,
-    config::{AggConfig, AppConfig, FullAggConfig, Halo2Config},
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
     Sdk, StdIn,
 };
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -55,8 +55,8 @@ async fn main() -> Result<()> {
         leaf_fri_params: leaf_fri_params.into(),
         compiler_options,
     };
-    let full_agg_config = FullAggConfig {
-        agg_config: AggConfig {
+    let agg_config = AggConfig {
+        agg_stark_config: AggStarkConfig {
             max_num_user_public_values: NUM_PUBLIC_VALUES,
             leaf_fri_params,
             internal_fri_params,
@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
     };
 
     let app_pk = Arc::new(Sdk.app_keygen(app_config)?);
-    let full_agg_pk = Sdk.agg_keygen(full_agg_config)?;
+    let full_agg_pk = Sdk.agg_keygen(agg_config)?;
     let elf = build_bench_program("fibonacci")?;
     let exe = AxVmExe::from_elf(
         elf,

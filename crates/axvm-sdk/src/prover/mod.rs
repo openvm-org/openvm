@@ -22,7 +22,7 @@ pub mod vm;
 pub use stark::*;
 
 use crate::{
-    keygen::FullAggProvingKey,
+    keygen::AggProvingKey,
     prover::{halo2::Halo2Prover, stark::StarkProver},
 };
 
@@ -35,16 +35,16 @@ impl<VC> ContinuationProver<VC> {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
-        full_agg_pk: FullAggProvingKey,
+        agg_pk: AggProvingKey,
     ) -> Self
     where
         VC: VmConfig<F>,
     {
-        let FullAggProvingKey {
-            agg_vm_pk,
+        let AggProvingKey {
+            agg_stark_pk,
             halo2_pk,
-        } = full_agg_pk;
-        let stark_prover = StarkProver::new(app_pk, app_committed_exe, agg_vm_pk);
+        } = agg_pk;
+        let stark_prover = StarkProver::new(app_pk, app_committed_exe, agg_stark_pk);
         Self {
             stark_prover,
             halo2_prover: Halo2Prover::new(halo2_pk),

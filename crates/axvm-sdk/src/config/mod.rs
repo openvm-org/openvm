@@ -21,8 +21,16 @@ pub struct AppConfig<VC> {
     pub compiler_options: CompilerOptions,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AggConfig {
+    /// STARK aggregation config
+    pub agg_stark_config: AggStarkConfig,
+    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
+    pub halo2_config: Halo2Config,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct AggStarkConfig {
     pub max_num_user_public_values: usize,
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
@@ -37,14 +45,6 @@ pub struct Halo2Config {
     pub verifier_k: usize,
     /// If not specified, keygen will tune wrapper_k automatically.
     pub wrapper_k: Option<usize>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct FullAggConfig {
-    /// STARK aggregation config
-    pub agg_config: AggConfig,
-    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
-    pub halo2_config: Halo2Config,
 }
 
 impl<VC> AppConfig<VC> {
@@ -73,7 +73,7 @@ impl<VC> AppConfig<VC> {
     }
 }
 
-impl Default for AggConfig {
+impl Default for AggStarkConfig {
     fn default() -> Self {
         Self {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
@@ -91,10 +91,10 @@ impl Default for AggConfig {
     }
 }
 
-impl Default for FullAggConfig {
+impl Default for AggConfig {
     fn default() -> Self {
         Self {
-            agg_config: AggConfig::default(),
+            agg_stark_config: AggStarkConfig::default(),
             halo2_config: Halo2Config {
                 verifier_k: 24,
                 wrapper_k: None,

@@ -14,7 +14,7 @@ use tracing::info_span;
 // #[cfg(feature = "bench-metrics")]
 use super::vm::types::VmProvingKey;
 use crate::{
-    keygen::AggProvingKey,
+    keygen::AggStarkProvingKey,
     prover::{
         vm::{local::VmLocalProver, ContinuationVmProof, SingleSegmentVmProver},
         RootVerifierLocalProver,
@@ -47,13 +47,16 @@ pub struct LeafProver {
 }
 
 impl AggStarkProver {
-    pub fn new(agg_pk: AggProvingKey, leaf_committed_exe: Arc<NonRootCommittedExe>) -> Self {
-        let leaf_prover = LeafProver::new(agg_pk.leaf_vm_pk, leaf_committed_exe);
+    pub fn new(
+        agg_stark_pk: AggStarkProvingKey,
+        leaf_committed_exe: Arc<NonRootCommittedExe>,
+    ) -> Self {
+        let leaf_prover = LeafProver::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe);
         let internal_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
-            agg_pk.internal_vm_pk,
-            agg_pk.internal_committed_exe,
+            agg_stark_pk.internal_vm_pk,
+            agg_stark_pk.internal_committed_exe,
         );
-        let root_prover = RootVerifierLocalProver::new(agg_pk.root_verifier_pk);
+        let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk);
         Self {
             leaf_prover,
             internal_prover,

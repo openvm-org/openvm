@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use axvm_sdk::{
-    config::FullAggConfig,
+    config::AggConfig,
     fs::{write_agg_pk_to_file, write_evm_verifier_to_file},
     Sdk,
 };
@@ -23,7 +23,7 @@ pub struct InitCmd {
 
 impl InitCmd {
     pub fn run(&self) -> Result<()> {
-        let agg_config = FullAggConfig::default();
+        let agg_config = AggConfig::default();
         let agg_pk = Sdk.agg_keygen(agg_config)?;
         let verifier = Sdk.generate_snark_verifier_contract(&agg_pk)?;
         write_agg_pk_to_file(agg_pk, &self.agg_pk)?;

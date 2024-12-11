@@ -2,7 +2,7 @@ use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use internal::types::InternalVmVerifierPvs;
 
-use crate::{config::AggConfig, verifier::common::types::VmVerifierPvs};
+use crate::{config::AggStarkConfig, verifier::common::types::VmVerifierPvs};
 
 pub mod common;
 pub mod internal;
@@ -12,7 +12,7 @@ pub(crate) mod utils;
 
 const SBOX_SIZE: usize = 7;
 
-impl AggConfig {
+impl AggStarkConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {
         NativeConfig::aggregation(
             VmVerifierPvs::<u8>::width(),
