@@ -100,7 +100,6 @@ on:
         description: Whether to run the e2e benchmark
     outputs:
       result_md_file:
-        type: string
         description: The filename (without path) of the result .md file stored in S3
         value: ${{ jobs.bench-new.outputs.result_md_file }}
 
