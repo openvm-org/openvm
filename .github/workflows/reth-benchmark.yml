@@ -141,7 +141,7 @@ jobs:
             OPTIONAL_ARGS="--collect-metrics"
             PROFILE="profiling"
           fi
-          cargo build --bin --profile=$PROFILE
+          cargo build --bin rsp --profile=$PROFILE
           OUTPUT_PATH=${METRIC_PATH} RUSTFLAGS="-Ctarget-cpu=native" ./target/$PROFILE/rsp \
             --$MODE --block-number $BLOCK_NUMBER --rpc-url $RPC_1 --cache-dir rpc-cache \
             --app-log-blowup ${{ inputs.app_log_blowup }} \
