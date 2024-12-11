@@ -9,7 +9,7 @@ use eyre::Result;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    keygen::{AggProvingKey, AppProvingKey},
+    keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
     prover::vm::ContinuationVmProof,
     F, SC,
 };
@@ -33,6 +33,14 @@ pub fn write_app_pk_to_file<VC: VmConfig<F>, P: AsRef<Path>>(
     path: P,
 ) -> Result<()> {
     write_to_file_bson(path, app_pk)
+}
+
+pub fn read_app_vk_from_file<P: AsRef<Path>>(path: P) -> Result<AppVerifyingKey> {
+    read_from_file_bson(path)
+}
+
+pub fn write_app_vk_to_file<P: AsRef<Path>>(app_vk: AppVerifyingKey, path: P) -> Result<()> {
+    write_to_file_bson(path, app_vk)
 }
 
 pub fn read_app_proof_from_file<P: AsRef<Path>>(path: P) -> Result<ContinuationVmProof<SC>> {
