@@ -305,7 +305,6 @@ impl FullAggProvingKey {
     }
 }
 
-// #[cfg(feature = "bench-metrics")]
 pub fn leaf_keygen(fri_params: FriParameters) -> VmProvingKey<SC, NativeConfig> {
     let agg_config = AggConfig {
         leaf_fri_params: fri_params,

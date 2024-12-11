@@ -67,7 +67,6 @@ impl AggStarkProver {
         }
     }
 
-    // #[cfg(feature = "bench-metrics")]
     pub fn leaf_agg_only(
         leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
