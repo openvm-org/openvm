@@ -66,36 +66,19 @@ fn main() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
 
-    let engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    let n = 100_000u64;
-    let mut stdin = StdIn::default();
-    stdin.write(&n);
-
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vm = VirtualMachine::new(engine, Rv32ImConfig::default());
-        let app_pk = time(gauge!("keygen_time_ms"), || {
-            AppProvingKey::keygen(app_config.clone())
-        });
-        let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-            commit_app_exe(app_config.app_fri_params, exe)
-        });
-        time(gauge!("execute_and_trace_gen_time_ms"), || {
-            vm.execute_and_generate_with_cached_program(committed_exe.clone(), stdin.clone())
-        })?;
-
-        let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), committed_exe)
-            .with_profile()
-            .with_program_name("fibonacci_program".to_string());
-        let app_proof = app_prover.generate_app_proof(stdin);
-        Sdk.verify_app_proof(&app_pk, &app_proof)?;
-
-        #[cfg(all(feature = "aggregation", feature = "bench-metrics"))]
-        {
-            let leaf_vm_pk = leaf_keygen(leaf_fri_params);
-            let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
-            leaf_prover.generate_proof(&app_proof);
-        }
-
-        Ok(())
+        let n = 100_000u64;
+        let mut stdin = StdIn::default();
+        stdin.write(&n);
+        bench_from_exe(
+            "fibonacci_program",
+            app_config,
+            exe,
+            stdin,
+            #[cfg(feature = "aggregation")]
+            true,
+            #[cfg(not(feature = "aggregation"))]
+            false,
+        )
     })
 }

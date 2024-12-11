@@ -23,7 +23,10 @@ pub struct AppProver<VC> {
 }
 
 impl<VC> AppProver<VC> {
-    pub fn new(app_vm_pk: VmProvingKey<SC, VC>, app_committed_exe: Arc<NonRootCommittedExe>) -> Self
+    pub fn new(
+        app_vm_pk: Arc<VmProvingKey<SC, VC>>,
+        app_committed_exe: Arc<NonRootCommittedExe>,
+    ) -> Self
     where
         VC: VmConfig<F>,
     {

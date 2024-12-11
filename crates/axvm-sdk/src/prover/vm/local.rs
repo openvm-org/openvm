@@ -24,7 +24,7 @@ use crate::prover::vm::{
 };
 
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
-    pub pk: VmProvingKey<SC, VC>,
+    pub pk: Arc<VmProvingKey<SC, VC>>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<E>,
@@ -34,7 +34,7 @@ impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLoc
 where
     Val<SC>: PrimeField32,
 {
-    pub fn new(pk: VmProvingKey<SC, VC>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
+    pub fn new(pk: Arc<VmProvingKey<SC, VC>>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
         Self {
             pk,
             committed_exe,
@@ -44,7 +44,7 @@ where
     }
 
     pub fn new_with_overridden_trace_heights(
-        pk: VmProvingKey<SC, VC>,
+        pk: Arc<VmProvingKey<SC, VC>>,
         committed_exe: Arc<AxVmCommittedExe<SC>>,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {

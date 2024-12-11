@@ -263,7 +263,7 @@ fn test_e2e_proof_generation_and_verification() {
 
     let evm_proof = Sdk
         .generate_evm_proof(
-            app_pk,
+            Arc::new(app_pk),
             app_committed_exe_for_test(app_log_blowup),
             agg_pk,
             StdIn::default(),

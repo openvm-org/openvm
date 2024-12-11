@@ -33,7 +33,7 @@ pub struct ContinuationProver<VC> {
 
 impl<VC> ContinuationProver<VC> {
     pub fn new(
-        app_pk: AppProvingKey<VC>,
+        app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         full_agg_pk: FullAggProvingKey,
     ) -> Self

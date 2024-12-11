@@ -140,7 +140,7 @@ impl Sdk {
 
     pub fn generate_app_proof<VC: VmConfig<F>>(
         &self,
-        app_vm_pk: AppProvingKey<VC>,
+        app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         inputs: StdIn,
     ) -> Result<ContinuationVmProof<SC>>
@@ -148,7 +148,7 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let app_prover = AppProver::new(app_vm_pk.app_vm_pk, app_committed_exe);
+        let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe);
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
@@ -173,7 +173,7 @@ impl Sdk {
 
     pub fn generate_evm_proof<VC: VmConfig<F>>(
         &self,
-        app_pk: AppProvingKey<VC>,
+        app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: FullAggProvingKey,
         inputs: StdIn,

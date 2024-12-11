@@ -191,7 +191,7 @@ impl AggStarkProver {
 
 impl LeafProver {
     pub fn new(
-        leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
+        leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
     ) -> Self {
         let prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(

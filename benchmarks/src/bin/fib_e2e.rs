@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
@@ -67,7 +69,7 @@ async fn main() -> Result<()> {
         },
     };
 
-    let app_pk = Sdk.app_keygen(app_config)?;
+    let app_pk = Arc::new(Sdk.app_keygen(app_config)?);
     let full_agg_pk = Sdk.agg_keygen(full_agg_config)?;
     let elf = build_bench_program("fibonacci")?;
     let exe = AxVmExe::from_elf(

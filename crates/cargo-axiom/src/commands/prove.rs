@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use axvm_sdk::{
     commit::AppExecutionCommit,
@@ -43,7 +43,8 @@ pub struct ProveCmd {
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
-        let app_pk: AppProvingKey<SdkVmConfig> = read_app_pk_from_file(&self.app_pk)?;
+        let app_pk: Arc<AppProvingKey<SdkVmConfig>> =
+            Arc::new(read_app_pk_from_file(&self.app_pk)?);
         let app_exe = read_exe_from_file(&self.exe)?;
         let committed_exe = Sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
 

@@ -51,14 +51,14 @@ pub struct FullAggProvingKey {
 pub struct AppProvingKey<VC> {
     pub leaf_committed_exe: Arc<NonRootCommittedExe>,
     pub leaf_fri_params: FriParameters,
-    pub app_vm_pk: VmProvingKey<SC, VC>,
+    pub app_vm_pk: Arc<VmProvingKey<SC, VC>>,
 }
 pub type AppVerifyingKey = MultiStarkVerifyingKey<SC>;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
-    pub leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    pub internal_vm_pk: VmProvingKey<SC, NativeConfig>,
+    pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     pub internal_committed_exe: Arc<NonRootCommittedExe>,
     pub root_verifier_pk: RootVerifierProvingKey,
 }
@@ -106,7 +106,7 @@ where
         Self {
             leaf_committed_exe,
             leaf_fri_params: config.leaf_fri_params.fri_params,
-            app_vm_pk,
+            app_vm_pk: Arc::new(app_vm_pk),
         }
     }
 
@@ -139,7 +139,7 @@ impl AggProvingKey {
         let root_vm_config = config.root_verifier_vm_config();
 
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
-        let leaf_vm_pk = {
+        let leaf_vm_pk = Arc::new({
             let vm = VirtualMachine::new(leaf_engine, leaf_vm_config.clone());
             let vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
@@ -148,12 +148,12 @@ impl AggProvingKey {
                 vm_config: leaf_vm_config,
                 vm_pk,
             }
-        };
+        });
         let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
 
         let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
         let internal_vm = VirtualMachine::new(internal_engine, internal_vm_config.clone());
-        let internal_vm_pk = {
+        let internal_vm_pk = Arc::new({
             let vm_pk = internal_vm.keygen();
             assert!(
                 vm_pk.max_constraint_degree <= config.internal_fri_params.max_constraint_degree()
@@ -163,7 +163,7 @@ impl AggProvingKey {
                 vm_config: internal_vm_config,
                 vm_pk,
             }
-        };
+        });
         let internal_vm_vk = internal_vm_pk.vm_pk.get_vk();
 
         let internal_program = InternalVmVerifierConfig {
@@ -212,11 +212,11 @@ impl AggProvingKey {
             root_air_perm.permute(&mut vm_pk.per_air);
 
             RootVerifierProvingKey {
-                vm_pk: VmProvingKey {
+                vm_pk: Arc::new(VmProvingKey {
                     fri_params: config.root_fri_params,
                     vm_config: root_vm_config,
                     vm_pk,
-                },
+                }),
                 root_committed_exe,
                 air_heights,
             }
@@ -258,7 +258,7 @@ pub struct RootVerifierProvingKey {
     /// - AIR proving key in `MultiStarkProvingKey` is ordered by trace height.
     /// - `VmConfig.overridden_executor_heights` is specified and is in the original AIR order.
     /// - `VmConfig.memory_config.boundary_air_height` is specified.
-    pub vm_pk: VmProvingKey<RootSC, NativeConfig>,
+    pub vm_pk: Arc<VmProvingKey<RootSC, NativeConfig>>,
     /// Committed executable for the root VM.
     pub root_committed_exe: Arc<AxVmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
@@ -305,7 +305,7 @@ impl FullAggProvingKey {
     }
 }
 
-pub fn leaf_keygen(fri_params: FriParameters) -> VmProvingKey<SC, NativeConfig> {
+pub fn leaf_keygen(fri_params: FriParameters) -> Arc<VmProvingKey<SC, NativeConfig>> {
     let agg_config = AggConfig {
         leaf_fri_params: fri_params,
         ..Default::default()
@@ -313,9 +313,9 @@ pub fn leaf_keygen(fri_params: FriParameters) -> VmProvingKey<SC, NativeConfig> 
     let vm_config = agg_config.leaf_vm_config();
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
     let leaf_vm_pk = VirtualMachine::new(leaf_engine, vm_config.clone()).keygen();
-    VmProvingKey {
+    Arc::new(VmProvingKey {
         fri_params,
         vm_config,
         vm_pk: leaf_vm_pk,
-    }
+    })
 }

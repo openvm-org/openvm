@@ -67,7 +67,7 @@ pub(super) fn compute_root_proof_heights(
 }
 
 pub(super) fn dummy_internal_proof(
-    internal_vm_pk: VmProvingKey<SC, NativeConfig>,
+    internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     internal_exe: Arc<NonRootCommittedExe>,
     leaf_proof: Proof<SC>,
 ) -> Proof<SC> {
@@ -85,8 +85,8 @@ pub(super) fn dummy_internal_proof(
 }
 
 pub(super) fn dummy_internal_proof_riscv_app_vm(
-    leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    internal_vm_pk: VmProvingKey<SC, NativeConfig>,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     internal_exe: Arc<NonRootCommittedExe>,
     num_public_values: usize,
 ) -> Proof<SC> {
@@ -97,8 +97,8 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
 
 #[allow(dead_code)]
 pub fn dummy_leaf_proof<VC: VmConfig<F>>(
-    leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    app_vm_pk: &VmProvingKey<SC, VC>,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
@@ -110,18 +110,18 @@ where
 }
 
 pub(super) fn dummy_leaf_proof_riscv_app_vm(
-    leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     num_public_values: usize,
     app_fri_params: FriParameters,
 ) -> Proof<SC> {
-    let app_vm_pk = dummy_riscv_app_vm_pk(num_public_values, app_fri_params);
+    let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params));
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), None);
-    dummy_leaf_proof_impl(leaf_vm_pk, &app_vm_pk, &app_proof)
+    dummy_leaf_proof_impl(leaf_vm_pk, app_vm_pk, &app_proof)
 }
 
 fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
-    leaf_vm_pk: VmProvingKey<SC, NativeConfig>,
-    app_vm_pk: &VmProvingKey<SC, VC>,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     app_proof: &ContinuationVmProof<SC>,
 ) -> Proof<SC> {
     let leaf_program = LeafVmVerifierConfig {
@@ -162,7 +162,7 @@ fn dummy_riscv_app_vm_pk(
 }
 
 fn dummy_app_proof_impl<VC: VmConfig<F>>(
-    app_vm_pk: VmProvingKey<SC, VC>,
+    app_vm_pk: Arc<VmProvingKey<SC, VC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
