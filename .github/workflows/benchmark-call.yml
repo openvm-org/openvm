@@ -178,7 +178,7 @@ jobs:
 
       - name: Set metric name
         run: |
-          input_json_str="${{ toJSON(github.event.inputs) }}"
+          input_json_str="${{ toJSON(inputs) }}"
           input_hash=$(echo $input_json_str | sha256sum | cut -d' ' -f1)
           METRIC_NAME=${BIN_NAME}-${input_hash}
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV

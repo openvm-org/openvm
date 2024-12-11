@@ -80,8 +80,8 @@ def read_first_markdown_table(md_file):
         else:
             cols = [col.strip() for col in line.split('|') if col.strip()]
             name = cols[0]
-            log_blowup = md_to_cell(cols[1])
-            cells = [md_to_cell(col) for col in cols[2:]]
+            log_blowup = md_to_cell(cols[4])
+            cells = [md_to_cell(col) for col in cols[5:]]
             table.append(MdTableRow(name, log_blowup, cells))
 
     other_info = []
@@ -146,7 +146,7 @@ def main():
     args = argparser.parse_args()
 
     aggregations = read_aggregations(args.aggregation_json)
-    aggregations = sorted([agg.name.replace("fri.", "") for agg in aggregations])
+    aggregations = sorted([agg.name.replace("fri.", "") for agg in aggregations if not agg.name.startswith("average")])
     headers = ["group"] + ["app_" + agg for agg in aggregations] + ["leaf_" + agg for agg in aggregations]
     e2e_headers = headers + ["root_" + agg for agg in aggregations] + ["internal_" + agg for agg in aggregations] + ["max_segment_length", "instance", "alloc"]
     headers += ["max_segment_length", "instance", "alloc"]

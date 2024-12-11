@@ -191,7 +191,6 @@ def apply_aggregations(db: MetricDb, aggregations):
 
             if aggregation.operation == "average":
                 if not divisor:
-                    print(f"Divisor is required for average operation: {aggregation.name}")
                     continue
                 for group_by_values in group_by_dict.keys():
                     group_by_dict[group_by_values] /= divisor
