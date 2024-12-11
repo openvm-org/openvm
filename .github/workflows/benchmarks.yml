@@ -129,10 +129,6 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref }}
 
-      - name: Use results
-        run: |
-          echo "Result from benchmark: ${{ needs.benchmark.outputs.some_result }}"
-
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
         run: |
@@ -147,17 +143,20 @@ jobs:
 
       - name: Load all metadata files from S3
         run: |
+          current_sha=$(git rev-parse HEAD)
           md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench != true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-"' |
+            sed "s/$/${current_sha}.md/" |
             sort)
           md_file_list=$(echo -n "$md_files" | paste -sd "," -)
 
           e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench == true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-"' |
+            sed "s/$/${current_sha}.md/" |
             sort)
           e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 

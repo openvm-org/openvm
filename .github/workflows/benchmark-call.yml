@@ -98,10 +98,6 @@ on:
         type: boolean
         required: true
         description: Whether to run the e2e benchmark
-    outputs:
-      result_md_file:
-        description: The filename (without path) of the result .md file stored in S3
-        value: ${{ jobs.bench-new.outputs.result_md_file }}
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -121,8 +117,6 @@ jobs:
       - run-id=${{ github.run_id }}
       - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
-    outputs:
-      result_md_file: ${{ steps.add_metadata.outputs.result_md_file }}
     steps:
       ##########################################################################
       # Environment setup                                                      #
@@ -238,9 +232,8 @@ jobs:
         run: |
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
-          s3_md_file="${current_sha}-${METRIC_NAME}.md"
+          s3_md_file="${BIN_NAME}-${current_sha}.md"
           s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
-          echo "result_md_file=${s3_md_file}" >> $GITHUB_OUTPUT
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
@@ -285,7 +278,8 @@ jobs:
       - name: Update PR github pages with new bench results
         run: |
           mkdir -p ${GH_PAGES_PATH}
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          s3_md_file="${BIN_NAME}-${current_sha}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
 
