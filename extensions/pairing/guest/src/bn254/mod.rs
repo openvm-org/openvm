@@ -98,10 +98,6 @@ axvm_ecc_sw_setup::sw_declare! {
 
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
-/// Affine point representation of `Fp` points of BN254.
-/// **Note**: an instance of this type may be constructed that lies
-/// on the curve but not necessarily in the prime order subgroup
-/// because the group has cofactors.
 pub type G1Affine = Bn254G1Affine;
 
 impl Field for Fp {
