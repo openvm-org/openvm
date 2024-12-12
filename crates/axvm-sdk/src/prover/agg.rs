@@ -142,8 +142,7 @@ impl AggStarkProver {
                 &proofs,
                 self.num_children_internal,
             );
-            let group = format!("internal_{}", internal_node_height);
-            proofs = info_span!("internal verifier", group = group).in_scope(|| {
+            proofs = info_span!("internal verifier", group = "internal").in_scope(|| {
                 #[cfg(feature = "bench-metrics")]
                 metrics::counter!("fri.log_blowup")
                     .absolute(self.internal_prover.pk.fri_params.log_blowup as u64);
