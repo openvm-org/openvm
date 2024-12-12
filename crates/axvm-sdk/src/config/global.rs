@@ -170,11 +170,25 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
             complex = complex.extend(&Native)?;
         }
 
-        if let Some(ref rv32m) = self.rv32m {
-            complex = complex.extend(rv32m)?;
+        if let Some(rv32m) = self.rv32m {
+            let mut rv32m = rv32m;
+            if let Some(ref bigint) = self.bigint {
+                rv32m.range_tuple_checker_sizes[0] =
+                    rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+                rv32m.range_tuple_checker_sizes[1] =
+                    rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+            }
+            complex = complex.extend(&rv32m)?;
         }
-        if let Some(ref bigint) = self.bigint {
-            complex = complex.extend(bigint)?;
+        if let Some(bigint) = self.bigint {
+            let mut bigint = bigint;
+            if let Some(ref rv32m) = self.rv32m {
+                bigint.range_tuple_checker_sizes[0] =
+                    rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+                bigint.range_tuple_checker_sizes[1] =
+                    rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+            }
+            complex = complex.extend(&bigint)?;
         }
         if let Some(ref modular) = self.modular {
             complex = complex.extend(modular)?;
