@@ -129,7 +129,7 @@ unsafe extern "C" fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool {
 
 #[no_mangle]
 unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering {
-    let mut cmp_result = MaybeUninit::<[u8; 4]>::uninit();
+    let mut cmp_result = MaybeUninit::<crate::U256>::uninit();
     custom_insn_r!(
         OPCODE,
         INT256_FUNCT3,
@@ -139,18 +139,18 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
         b as *const u8
     );
     let mut cmp_result = cmp_result.assume_init();
-    if cmp_result[0] != 0 {
+    if cmp_result.limbs[0] != 0 {
         return Ordering::Less;
     }
     custom_insn_r!(
         OPCODE,
         INT256_FUNCT3,
         Int256Funct7::Sltu as u8,
-        &mut cmp_result as *mut [u8; 4],
+        &mut cmp_result as *mut _,
         b as *const u8,
         a as *const u8
     );
-    if cmp_result[0] != 0 {
+    if cmp_result.limbs[0] != 0 {
         return Ordering::Greater;
     }
     return Ordering::Equal;
