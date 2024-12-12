@@ -46,6 +46,7 @@ jobs:
             echo "Error: ./ci/benchmark-config.json not found"
             exit 1
           fi
+          cat ./ci/benchmark-config.json
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             LABELS='${{ toJson(github.event.pull_request.labels) }}'
