@@ -1,4 +1,4 @@
-use cargo_axiom::{
+use cargo_openvm::{
     commands::{BenchCmd, BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
     OPENVM_VERSION_MESSAGE,
 };
@@ -8,7 +8,7 @@ use eyre::Result;
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
 pub enum Cargo {
-    Axiom(VmCli),
+    OpenVm(VmCli),
 }
 
 #[derive(clap::Args)]
@@ -30,7 +30,7 @@ pub enum VmCliCommands {
 }
 
 fn main() -> Result<()> {
-    let Cargo::Axiom(args) = Cargo::parse();
+    let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
     match command {
         VmCliCommands::Bench(cmd) => cmd.run(),

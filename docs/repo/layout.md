@@ -35,7 +35,7 @@ Scripts for CI use and metrics post-processing are in [`ci`](../../ci).
 
 ### CLI
 
-Command-line binary to compile, execute, and prove guest programs is in [`cargo-axiom`](../../crates/cargo-axiom).
+Command-line binary to compile, execute, and prove guest programs is in [`cli`](../../crates/cli).
 
 ### VM SDK
 

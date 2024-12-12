@@ -10,7 +10,7 @@ repository = "https://github.com/axiom-crypto/"
 members = [
     "benchmarks",
     "crates/sdk",
-    "crates/cargo-axiom",
+    "crates/cli",
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
@@ -91,9 +91,9 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-# Axiom
+# OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
-cargo-axiom = { path = "crates/cargo-axiom", default-features = false }
+cargo-openvm = { path = "crates/cli", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }

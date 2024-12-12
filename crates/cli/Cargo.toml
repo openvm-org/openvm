@@ -1,5 +1,5 @@
 [package]
-name = "cargo-axiom"
+name = "cargo-openvm"
 description = "OpenVm CLI tools"
 readme = "README.md"
 version.workspace = true

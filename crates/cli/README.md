@@ -1,13 +1,13 @@
-# Cargo Axiom CLI
+# Cargo OpenVM CLI
 
-The `cargo axiom` CLI is useful for various tasks related to OpenVm, such as compiling programs, benching proofs of programs, and more.
+The `cargo openvm` CLI is useful for various tasks related to OpenVM, such as compiling programs, benching proofs of programs, and more.
 
 ## Development
 
 To run the CLI locally, you can use the following command:
 
 ```bash
-cargo run --bin cargo-axiom -- --help
+cargo run --bin cargo-openvm -- --help
 ```
 
 ### Installing the CLI locally from source
@@ -15,7 +15,7 @@ cargo run --bin cargo-axiom -- --help
 You can install the CLI locally from source by running the following command:
 
 ```bash
-cd cargo-axiom
+cd cli
 cargo install --force --locked --path .
 ```
 
@@ -24,5 +24,5 @@ cargo install --force --locked --path .
 After installing the CLI, you can run it by simply running the following command:
 
 ```bash
-cargo axiom
+cargo openvm
 ```

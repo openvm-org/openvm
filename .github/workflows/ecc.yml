@@ -9,7 +9,7 @@ on:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "crates/cargo-axiom/**"
+      - "crates/cli/**"
       - "extensions/ecc/**"
       - "extensions/native/compiler/**"
       - "extensions/pairing/**"
@@ -51,8 +51,8 @@ jobs:
         run: |
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
 
-      - name: Install cargo-axiom
-        working-directory: crates/cargo-axiom
+      - name: Install cargo-openvm
+        working-directory: crates/cli
         run: |
           rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .

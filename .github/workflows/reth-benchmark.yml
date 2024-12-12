@@ -95,7 +95,7 @@ jobs:
       - name: Display workflow inputs
         run: echo "${{ toJSON(github.event.inputs) }}"
       - name: Setup CLI
-        working-directory: crates/cargo-axiom
+        working-directory: crates/cli
         run: |
           cargo install --force --path .
       - name: Install architecture specific tools
