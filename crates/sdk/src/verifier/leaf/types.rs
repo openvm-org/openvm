@@ -1,5 +1,5 @@
-use ax_stark_sdk::{
-    ax_stark_backend::{
+use openvm_stark_sdk::{
+    openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         prover::types::Proof,
     },

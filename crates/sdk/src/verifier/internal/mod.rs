@@ -1,5 +1,5 @@
-use ax_stark_sdk::{
-    ax_stark_backend::keygen::types::MultiStarkVerifyingKey,
+use openvm_stark_sdk::{
+    openvm_stark_backend::keygen::types::MultiStarkVerifyingKey,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
 use openvm_circuit::arch::instructions::program::Program;

@@ -1,6 +1,6 @@
 use std::array;
 
-use ax_stark_sdk::ax_stark_backend::{
+use openvm_stark_sdk::openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::AbstractField,
     prover::types::Proof,

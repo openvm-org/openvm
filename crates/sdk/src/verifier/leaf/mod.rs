@@ -1,5 +1,5 @@
-use ax_stark_sdk::{
-    ax_stark_backend::{
+use openvm_stark_sdk::{
+    openvm_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, p3_util::log2_strict_usize,
         prover::types::Proof,
     },
