@@ -4,7 +4,7 @@ use eyre::Result;
 use tempfile::tempdir;
 
 #[test]
-fn test_cli_e2e() -> Result<()> {
+fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
     let package_dir = env::current_dir()?;
     let prefix = "[test cli e2e]";

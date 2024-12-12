@@ -34,37 +34,41 @@ impl BuildCmd {
 
 #[derive(Clone, Parser)]
 pub struct BuildArgs {
-    /// Location of the directory containing the Cargo.toml for the guest code.
-    ///
-    /// This path is relative to the current directory.
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Path to the Cargo.toml file for the guest code (relative to the current directory)"
+    )]
     pub manifest_dir: Option<PathBuf>,
 
-    /// Feature flags passed to cargo.
-    #[arg(long, value_delimiter = ',')]
+    #[arg(long, value_delimiter = ',', help = "Feature flags passed to cargo")]
     pub features: Vec<String>,
 
-    #[clap(flatten)]
+    #[clap(flatten, help = "Filter the target to build")]
     pub bin_type_filter: BinTypeFilter,
 
-    /// Target name substring filter
-    #[arg(long)]
+    #[arg(long, help = "Target name substring filter")]
     pub name: Option<String>,
 
-    /// Transpile the program after building
-    #[arg(long, default_value = "false")]
+    #[arg(
+        long,
+        default_value = "false",
+        help = "Transpiles the program after building when set"
+    )]
     pub transpile: bool,
 
-    /// Path to the SDK config .toml file that specifies the transpiler extensions
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Path to the SDK config .toml file that specifies the transpiler extensions"
+    )]
     pub transpiler_config: Option<PathBuf>,
 
-    /// Output path for the transpiled program (default: <ELF base path>.openvmexe)
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Output path for the transpiled program (default: <ELF base path>.openvmexe)"
+    )]
     pub transpile_to: Option<PathBuf>,
 
-    /// Build profile
-    #[arg(long, default_value = "release")]
+    #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
 }
 
@@ -79,12 +83,16 @@ impl BuildArgs {
 #[derive(Clone, clap::Args)]
 #[group(required = false, multiple = false)]
 pub struct BinTypeFilter {
-    /// Specify that the target should be a binary kind
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Specifies that the target should be a binary kind when set"
+    )]
     pub bin: bool,
 
-    /// Specify that the target should be an example kind
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Specifies that the target should be an example kind when set"
+    )]
     pub example: bool,
 }
 
