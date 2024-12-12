@@ -219,7 +219,7 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
 
 #[test]
 fn test_ruint_runtime() -> Result<()> {
-    let elf = build_example_program("ruint")?;
+    let elf = build_example_program_with_features("ruint", ["ruint"])?;
     let axvm_exe = AxVmExe::from_elf(
         elf,
         Transpiler::<F>::default()
