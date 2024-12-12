@@ -80,7 +80,7 @@ impl ProveCmd {
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_agg_pk_from_file(AGG_PK_PATH).map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo axiom evm-proving-setup' first", e)
+                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;
                 let evm_proof =
                     Sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;

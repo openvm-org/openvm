@@ -124,7 +124,7 @@ jobs:
       - name: Run Reth
         run: |
           cd rsp/bin/client-eth
-          cargo axiom build
+          cargo openvm build
           mkdir -p ../host/elf
           cp target/riscv32im-risc0-zkvm-elf/release/rsp-client-eth ../host/elf/
 

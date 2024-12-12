@@ -60,4 +60,4 @@ jobs:
       - name: Build openvm-ecc-guest crate for openvm
         working-directory: extensions/ecc/guest
         run: |
-          cargo axiom build
+          cargo openvm build
