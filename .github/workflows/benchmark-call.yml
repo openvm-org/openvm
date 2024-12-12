@@ -144,6 +144,8 @@ jobs:
           source ci/scripts/utils.sh
           install_s5cmd
 
+      - name: Display workflow inputs
+        run: echo "${{ toJSON(github.event.inputs) }}"
       - name: Feature flags
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
