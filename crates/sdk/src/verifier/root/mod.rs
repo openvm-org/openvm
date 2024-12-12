@@ -1,7 +1,7 @@
 use std::array;
 
-use ax_stark_sdk::{
-    ax_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
+use openvm_stark_sdk::{
+    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
     config::FriParameters,
 };
 use axvm_circuit::arch::instructions::program::Program;

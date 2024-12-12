@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,

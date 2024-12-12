@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, ops::Add};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     keygen::types::StarkVerifyingKey,
     p3_field::AbstractExtensionField,

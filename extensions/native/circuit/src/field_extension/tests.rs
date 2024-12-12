@@ -3,13 +3,13 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField},
     utils::disable_debug_builder,
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,

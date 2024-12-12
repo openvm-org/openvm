@@ -1,7 +1,7 @@
 use alloc::{collections::BTreeMap, format};
 use core::{fmt, fmt::Display};
 
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField32};
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32};
 use openvm_circuit::arch::instructions::instruction::DebugInfo;
 
 use super::AsmInstruction;

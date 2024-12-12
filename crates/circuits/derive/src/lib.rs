@@ -86,7 +86,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let mut new_generics = generics.clone();
             new_generics
                 .params
-                .push(syn::parse_quote! { SC: ax_stark_backend::config::StarkGenericConfig });
+                .push(syn::parse_quote! { SC: openvm_stark_backend::config::StarkGenericConfig });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Check if the struct has only one unnamed field
@@ -103,16 +103,16 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ax_stark_backend::Chip<SC> });
+                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<SC> });
             quote! {
-                impl #impl_generics ax_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> std::sync::Arc<dyn ax_stark_backend::rap::AnyRap<SC>> {
+                impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
+                    fn air(&self) -> std::sync::Arc<dyn openvm_stark_backend::rap::AnyRap<SC>> {
                         self.0.air()
                     }
-                    fn generate_air_proof_input(self) -> ax_stark_backend::prover::types::AirProofInput<SC> {
+                    fn generate_air_proof_input(self) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
                         self.0.generate_air_proof_input()
                     }
-                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, ax_stark_backend::prover::types::AirProofInput<SC>) {
+                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
                         self.0.generate_air_proof_input_with_id(air_id)
                     }
                 }
@@ -136,13 +136,13 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let air_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ax_stark_backend::Chip<SC>>::air(x)
+                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::air(x)
                 };
                 let generate_air_proof_input_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ax_stark_backend::Chip<SC>>::generate_air_proof_input(x)
+                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input(x)
                 };
                 let generate_air_proof_input_with_id_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ax_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
+                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
                 };
                 (air_arm, generate_air_proof_input_arm, generate_air_proof_input_with_id_arm)
             }));
@@ -152,28 +152,28 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let mut new_generics = generics.clone();
             new_generics
                 .params
-                .push(syn::parse_quote! { SC: ax_stark_backend::config::StarkGenericConfig });
+                .push(syn::parse_quote! { SC: openvm_stark_backend::config::StarkGenericConfig });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Implement Chip whenever the inner type implements Chip
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause.predicates.push(syn::parse_quote! { ax_stark_backend::config::Domain<SC>: ax_stark_backend::p3_commit::PolynomialSpace<Val = F>
+            where_clause.predicates.push(syn::parse_quote! { openvm_stark_backend::config::Domain<SC>: openvm_stark_backend::p3_commit::PolynomialSpace<Val = F>
             });
 
             quote! {
-                impl #impl_generics ax_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> std::sync::Arc<dyn ax_stark_backend::rap::AnyRap<SC>> {
+                impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
+                    fn air(&self) -> std::sync::Arc<dyn openvm_stark_backend::rap::AnyRap<SC>> {
                         match self {
                             #(#air_arms,)*
                         }
                     }
-                    fn generate_air_proof_input(self) -> ax_stark_backend::prover::types::AirProofInput<SC> {
+                    fn generate_air_proof_input(self) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
                         match self {
                             #(#generate_air_proof_input_arms,)*
                         }
                     }
-                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, ax_stark_backend::prover::types::AirProofInput<SC>) {
+                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
                         match self {
                             #(#generate_air_proof_input_with_id_arms,)*
                         }
@@ -210,9 +210,9 @@ pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ax_stark_backend::ChipUsageGetter });
+                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::ChipUsageGetter });
             quote! {
-                impl #impl_generics ax_stark_backend::ChipUsageGetter for #name #ty_generics #where_clause {
+                impl #impl_generics openvm_stark_backend::ChipUsageGetter for #name #ty_generics #where_clause {
                     fn air_name(&self) -> String {
                         self.0.air_name()
                     }
@@ -234,22 +234,22 @@ pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
                 multiunzip(e.variants.iter().map(|variant| {
                     let variant_name = &variant.ident;
                     let air_name_arm = quote! {
-                    #name::#variant_name(x) => ax_stark_backend::ChipUsageGetter::air_name(x)
+                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::air_name(x)
                 };
                     let constant_trace_height_arm = quote! {
-                    #name::#variant_name(x) => ax_stark_backend::ChipUsageGetter::constant_trace_height(x)
+                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::constant_trace_height(x)
                 };
                     let current_trace_height_arm = quote! {
-                    #name::#variant_name(x) => ax_stark_backend::ChipUsageGetter::current_trace_height(x)
+                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::current_trace_height(x)
                 };
                     let trace_width_arm = quote! {
-                    #name::#variant_name(x) => ax_stark_backend::ChipUsageGetter::trace_width(x)
+                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::trace_width(x)
                 };
                     (air_name_arm, constant_trace_height_arm, current_trace_height_arm, trace_width_arm)
                 }));
 
             quote! {
-                impl #impl_generics ax_stark_backend::ChipUsageGetter for #name #ty_generics {
+                impl #impl_generics openvm_stark_backend::ChipUsageGetter for #name #ty_generics {
                     fn air_name(&self) -> String {
                         match self {
                             #(#air_name_arms,)*

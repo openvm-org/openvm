@@ -8,7 +8,8 @@ use std::{
     sync::atomic::AtomicU32,
 };
 
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
@@ -16,7 +17,6 @@ use ax_stark_backend::{
     p3_util::indices_arr,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
 
 pub use crate::range::RangeCheckBus;
 

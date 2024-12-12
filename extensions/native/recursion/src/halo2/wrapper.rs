@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_util::log2_ceil_usize;
+use openvm_stark_backend::p3_util::log2_ceil_usize;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::{

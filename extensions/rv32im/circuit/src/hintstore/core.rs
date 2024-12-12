@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},

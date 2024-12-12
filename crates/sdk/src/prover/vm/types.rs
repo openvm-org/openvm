@@ -1,8 +1,8 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Com, StarkGenericConfig},
     keygen::types::MultiStarkProvingKey,
 };
-use ax_stark_sdk::config::FriParameters;
+use openvm_stark_sdk::config::FriParameters;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 

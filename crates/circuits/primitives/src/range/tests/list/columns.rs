@@ -1,6 +1,6 @@
 use core::mem::{size_of, transmute};
 
-use ax_stark_backend::p3_util::indices_arr;
+use openvm_stark_backend::p3_util::indices_arr;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
 #[derive(Default, AlignedBorrow)]

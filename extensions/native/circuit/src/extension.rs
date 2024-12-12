@@ -1,6 +1,6 @@
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
@@ -214,7 +214,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 }
 
 pub(crate) mod phantom {
-    use ax_stark_backend::p3_field::{Field, PrimeField32};
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,

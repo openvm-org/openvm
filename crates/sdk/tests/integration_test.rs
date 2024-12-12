@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
-use ax_stark_sdk::{
-    ax_stark_backend::{p3_field::AbstractField, Chip},
+use openvm_stark_sdk::{
+    openvm_stark_backend::{p3_field::AbstractField, Chip},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

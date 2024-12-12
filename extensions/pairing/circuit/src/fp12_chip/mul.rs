@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
@@ -69,8 +69,8 @@ pub fn fp12_mul_expr(
 mod tests {
     use std::sync::Arc;
 
-    use ax_stark_backend::p3_field::AbstractField;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};

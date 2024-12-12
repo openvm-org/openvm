@@ -107,8 +107,8 @@ openvm-platform = { path = "crates/toolchain/platform", default-features = false
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
-ax-stark-backend = { path = "crates/stark-backend", default-features = false }
-ax-stark-sdk = { path = "crates/stark-sdk", default-features = false }
+openvm-stark-backend = { path = "crates/stark-backend", default-features = false }
+openvm-stark-sdk = { path = "crates/stark-sdk", default-features = false }
 
 # Extensions
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }

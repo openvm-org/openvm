@@ -1,6 +1,6 @@
 use std::{array, borrow::Borrow};
 
-use ax_stark_sdk::ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::arch::PUBLIC_VALUES_AIR_ID;
 use openvm_native_compiler::ir::{Array, Builder, Config, Felt, RVar, Usize, DIGEST_SIZE};
 use openvm_native_recursion::{

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
     p3_field::PrimeField32,

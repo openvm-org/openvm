@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::fib_triples_air::columns::NUM_FIBONACCI_COLS;

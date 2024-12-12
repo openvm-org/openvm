@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, TwoAdicField};
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, TwoAdicField};
 use openvm_circuit::arch::instructions::program::Program;
 
 use super::{config::AsmConfig, AsmCompiler};

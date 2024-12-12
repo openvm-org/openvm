@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut};
 
-use ax_stark_sdk::ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::{
     circuit_derive::AlignedBorrow,
     system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},

@@ -6,8 +6,8 @@ pub mod trace;
 #[cfg(test)]
 pub mod tests;
 
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
 use lazy_static::lazy_static;
 use p3_monty_31::InternalLayerBaseParameters;
 

@@ -1,7 +1,7 @@
 use std::{array::from_fn, sync::Arc};
 
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;

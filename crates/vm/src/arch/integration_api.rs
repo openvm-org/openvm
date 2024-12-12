@@ -2,7 +2,7 @@ use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sy
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },

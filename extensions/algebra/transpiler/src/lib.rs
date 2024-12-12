@@ -1,4 +1,3 @@
-use ax_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_guest::{
     ComplexExtFieldBaseFunct7, ModArithBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3,
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
@@ -7,6 +6,7 @@ use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode, VmOpcode,
 };
 use openvm_instructions_derive::UsizeOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};

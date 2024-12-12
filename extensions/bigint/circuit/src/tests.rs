@@ -4,8 +4,8 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,

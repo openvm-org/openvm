@@ -9,12 +9,12 @@ edition = "2021"
 [dependencies]
 zkhash = { workspace = true }
 
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-native-compiler-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-instructions-derive = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 # disable jemalloc to be compatible with afs-starkbackend
@@ -40,7 +40,7 @@ p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-native-circuit = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 hex.workspace = true
 rand.workspace = true
 test-case.workspace = true

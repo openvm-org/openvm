@@ -6,8 +6,8 @@ edition.workspace = true
 description = "OpenVm circuit extension for RISC-V 32-bit IM instruction set"
 
 [dependencies]
-ax-stark-backend = { workspace = true }
-ax-stark-sdk = { workspace = true, optional = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -29,7 +29,7 @@ num-integer.workspace = true
 serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
@@ -38,7 +38,7 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["openvm-circuit/parallel"]
-test-utils = ["openvm-circuit/test-utils", "dep:ax-stark-sdk"]
+test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

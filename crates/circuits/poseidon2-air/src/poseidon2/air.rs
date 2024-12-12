@@ -1,13 +1,13 @@
 use std::borrow::Borrow;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _,
     fields::babybear::FpBabyBear as HorizenBabyBear,

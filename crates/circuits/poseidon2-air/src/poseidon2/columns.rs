@@ -1,4 +1,4 @@
-use ax_stark_backend::{p3_air::AirBuilder, p3_field::Field};
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 
 use super::air::SBOX_DEGREE;
 use crate::poseidon2::Poseidon2Air;

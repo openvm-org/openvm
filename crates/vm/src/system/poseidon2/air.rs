@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use ax_poseidon2_air::poseidon2::Poseidon2Air;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},

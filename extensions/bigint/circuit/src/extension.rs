@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,

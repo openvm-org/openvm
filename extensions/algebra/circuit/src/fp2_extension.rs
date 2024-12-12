@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;

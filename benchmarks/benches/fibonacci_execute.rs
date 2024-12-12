@@ -1,4 +1,4 @@
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_benchmarks::utils::build_bench_program;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;

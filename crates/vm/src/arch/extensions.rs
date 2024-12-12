@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::{AbstractField, PrimeField32},

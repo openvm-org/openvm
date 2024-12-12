@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
-use ax_stark_backend::{p3_air::BaseAir, p3_field::Field, p3_matrix::dense::RowMajorMatrix};
-use ax_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
+use openvm_stark_backend::{p3_air::BaseAir, p3_field::Field, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 
 use crate::arch::{
     hasher::{Hasher, HasherChip},

@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::AbstractField;
 use itertools::Itertools;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
@@ -40,7 +40,7 @@ pub fn to_field_vec<F: AbstractField>(v: Vec<u32>) -> Vec<F> {
 macro_rules! any_rap_arc_vec {
     [$($e:expr),*] => {
         {
-            let chips: Vec<std::sync::Arc<dyn ax_stark_backend::rap::AnyRap<_>>> = vec![$(std::sync::Arc::new($e)),*];
+            let chips: Vec<std::sync::Arc<dyn openvm_stark_backend::rap::AnyRap<_>>> = vec![$(std::sync::Arc::new($e)),*];
             chips
         }
     };
@@ -49,8 +49,8 @@ macro_rules! any_rap_arc_vec {
 #[macro_export]
 macro_rules! assert_sc_compatible_with_serde {
     ($sc:ty) => {
-        static_assertions::assert_impl_all!(ax_stark_backend::keygen::types::MultiStarkProvingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
-        static_assertions::assert_impl_all!(ax_stark_backend::keygen::types::MultiStarkVerifyingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
-        static_assertions::assert_impl_all!(ax_stark_backend::prover::types::Proof<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_impl_all!(openvm_stark_backend::keygen::types::MultiStarkProvingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_impl_all!(openvm_stark_backend::keygen::types::MultiStarkVerifyingKey<$sc>: serde::Serialize, serde::de::DeserializeOwned);
+        static_assertions::assert_impl_all!(openvm_stark_backend::prover::types::Proof<$sc>: serde::Serialize, serde::de::DeserializeOwned);
     };
 }

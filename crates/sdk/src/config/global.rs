@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,

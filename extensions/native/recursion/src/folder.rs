@@ -1,4 +1,4 @@
-use ax_stark_backend::air_builders::verifier::GenericVerifierConstraintFolder;
+use openvm_stark_backend::air_builders::verifier::GenericVerifierConstraintFolder;
 use openvm_native_compiler::ir::{Config, Ext, Felt, SymbolicExt};
 
 type Var<C> = Ext<<C as Config>::F, <C as Config>::EF>;

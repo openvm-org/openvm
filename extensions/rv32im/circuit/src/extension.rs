@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -509,7 +509,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 
 /// Phantom sub-executors
 mod phantom {
-    use ax_stark_backend::p3_field::{Field, PrimeField32};
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},

@@ -203,10 +203,10 @@ impl Fp12 {
 #[cfg(test)]
 mod tests {
     use openvm_circuit_primitives::TraceSubRowGenerator;
-    use ax_stark_backend::{
+    use openvm_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
     };
-    use ax_stark_sdk::{
+    use openvm_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         p3_baby_bear::BabyBear, utils::create_seeded_rng,
     };

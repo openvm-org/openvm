@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
 pub use builder::*;
 pub use collections::*;
 pub use instructions::*;

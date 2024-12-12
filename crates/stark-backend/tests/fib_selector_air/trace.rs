@@ -1,5 +1,5 @@
-use ax_stark_backend::p3_field::PrimeField32;
-use ax_stark_sdk::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::dummy_airs::fib_air::columns::NUM_FIBONACCI_COLS;
 use p3_matrix::dense::RowMajorMatrix;
 
 /// sels contain boolean selectors to enable the fibonacci gate

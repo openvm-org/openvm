@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap};
-use ax_stark_sdk::{
+use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap};
+use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };

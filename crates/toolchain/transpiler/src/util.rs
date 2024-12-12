@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_instructions::{
     exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
     utils::isize_to_field, SystemOpcode, VmOpcode,

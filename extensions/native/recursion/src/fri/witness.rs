@@ -1,5 +1,5 @@
-use ax_stark_sdk::p3_bn254_fr::Bn254Fr;
 use openvm_native_compiler::ir::{Builder, Witness};
+use openvm_stark_sdk::p3_bn254_fr::Bn254Fr;
 
 use super::types::BatchOpeningVariable;
 use crate::{

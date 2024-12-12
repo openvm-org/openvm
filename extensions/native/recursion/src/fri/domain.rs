@@ -1,4 +1,4 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset},
     p3_field::{AbstractField, Field, TwoAdicField},
 };
@@ -167,12 +167,12 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use ax_stark_backend::{
+    use openvm_stark_backend::{
         config::{Domain, StarkGenericConfig, Val},
         p3_commit::{Pcs, PolynomialSpace},
         p3_field::PrimeField,
     };
-    use ax_stark_sdk::config::{
+    use openvm_stark_sdk::config::{
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };

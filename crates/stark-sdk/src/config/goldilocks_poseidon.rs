@@ -1,6 +1,6 @@
 use std::any::type_name;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::StarkConfig,
     interaction::stark_log_up::StarkLogUpPhase,
     p3_challenger::DuplexChallenger,

@@ -15,4 +15,4 @@ proc-macro2 = "1.0"
 [dev-dependencies]
 openvm-native-compiler = { workspace = true }
 openvm-native-recursion = { workspace = true }
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }

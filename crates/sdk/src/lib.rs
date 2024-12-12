@@ -2,9 +2,9 @@ extern crate core;
 
 use std::{fs::read, panic::catch_unwind, path::Path, sync::Arc};
 
-use ax_stark_backend::engine::StarkEngine;
-use ax_stark_sdk::{
-    ax_stark_backend::{verifier::VerificationError, Chip},
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::{
+    openvm_stark_backend::{verifier::VerificationError, Chip},
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,

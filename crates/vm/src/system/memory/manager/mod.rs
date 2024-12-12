@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
@@ -841,8 +841,8 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-    use ax_stark_backend::p3_field::AbstractField;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;

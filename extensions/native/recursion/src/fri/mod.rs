@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
+use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 use openvm_native_compiler::{
     ir::{
         Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,

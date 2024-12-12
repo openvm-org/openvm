@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-pub use ax_stark_backend::engine::StarkEngine;
-use ax_stark_backend::{
+pub use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     p3_matrix::dense::DenseMatrix,

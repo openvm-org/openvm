@@ -6,8 +6,8 @@ edition.workspace = true
 description = "OpenVm circuit extension for native VM"
 
 [dependencies]
-ax-stark-backend = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 ax-poseidon2-air = { workspace = true }
@@ -28,7 +28,7 @@ eyre.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true

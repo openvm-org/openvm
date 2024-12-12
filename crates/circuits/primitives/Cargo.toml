@@ -6,7 +6,7 @@ edition.workspace = true
 description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
 
 [dependencies]
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 
 rand.workspace = true
@@ -24,8 +24,8 @@ p3-merkle-tree = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-symmetric = { workspace = true }
 test-case.workspace = true
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 
 [features]
 default = ["parallel"]
-parallel = ["ax-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel"]

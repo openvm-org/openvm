@@ -1,4 +1,4 @@
-use ax_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{columns::NUM_LIST_COLS, ListChip};
 

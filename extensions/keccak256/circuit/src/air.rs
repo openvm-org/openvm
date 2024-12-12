@@ -4,7 +4,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not, select},
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},

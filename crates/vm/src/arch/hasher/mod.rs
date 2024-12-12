@@ -1,6 +1,6 @@
 pub mod poseidon2;
 
-use ax_stark_backend::p3_field::Field;
+use openvm_stark_backend::p3_field::Field;
 
 pub trait Hasher<const CHUNK: usize, F: Field> {
     /// Statelessly compresses two chunks of data into a single chunk.

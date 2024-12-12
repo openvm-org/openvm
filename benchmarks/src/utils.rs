@@ -1,7 +1,7 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
-use ax_stark_sdk::{
-    ax_stark_backend::Chip,
+use openvm_stark_sdk::{
+    openvm_stark_backend::Chip,
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,

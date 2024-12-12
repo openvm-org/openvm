@@ -1,10 +1,10 @@
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::{AbstractField, PrimeField64},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

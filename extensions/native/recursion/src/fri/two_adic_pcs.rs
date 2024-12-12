@@ -1,4 +1,4 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
     p3_field::{AbstractField, TwoAdicField},
 };
@@ -314,13 +314,13 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use ax_stark_backend::{
+    use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, FieldChallenger},
         p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
         p3_matrix::dense::RowMajorMatrix,
     };
-    use ax_stark_sdk::{
+    use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         p3_baby_bear::BabyBear,
     };

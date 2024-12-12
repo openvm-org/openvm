@@ -1,10 +1,10 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
     p3_challenger::MultiField32Challenger,
     p3_commit::ExtensionMmcs,
     p3_field::extension::BinomialExtensionField,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
     p3_baby_bear::BabyBear,
     p3_bn254_fr::{Bn254Fr, Poseidon2Bn254},

@@ -1,7 +1,7 @@
 use alloc::rc::Rc;
 use std::cell::RefCell;
 
-use ax_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::AbstractField;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 

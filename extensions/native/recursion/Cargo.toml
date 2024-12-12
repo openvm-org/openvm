@@ -5,10 +5,10 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-native-circuit = { workspace = true }
 openvm-native-compiler = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 
 p3-dft = { workspace = true }
@@ -36,7 +36,7 @@ bson.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["ax-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel"]
 static-verifier = [
     "openvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
@@ -44,6 +44,6 @@ static-verifier = [
 ]
 test-utils = ["openvm-circuit/test-utils"]
 bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
-mimalloc = ["ax-stark-backend/mimalloc"]
-jemalloc = ["ax-stark-backend/jemalloc"]
+mimalloc = ["openvm-stark-backend/mimalloc"]
+jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]

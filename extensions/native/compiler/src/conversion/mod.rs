@@ -1,4 +1,3 @@
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use openvm_circuit::arch::instructions::program::Program;
 use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
@@ -7,6 +6,7 @@ use openvm_instructions::{
     VmOpcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use serde::{Deserialize, Serialize};
 
 use crate::{

@@ -1,8 +1,8 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, prover::USE_DEBUG_BUILDER,
     verifier::VerificationError, Chip,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
     engine::StarkFriEngine,

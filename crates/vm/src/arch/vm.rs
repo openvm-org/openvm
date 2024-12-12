@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},

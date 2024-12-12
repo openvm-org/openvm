@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-ax-stark-backend.workspace = true
+openvm-stark-backend.workspace = true
 openvm-platform.workspace = true
 openvm-instructions.workspace = true
 
@@ -24,7 +24,7 @@ derive_more = { workspace = true, features = ["from"] }
 test-case.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-build.workspace = true
-ax-stark-sdk.workspace = true
+openvm-stark-sdk.workspace = true
 tempfile.workspace = true
 serde = { workspace = true, features = ["alloc"] }
 openvm-algebra-transpiler = { workspace = true }

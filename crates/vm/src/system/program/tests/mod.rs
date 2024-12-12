@@ -1,11 +1,11 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::AbstractField,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,

@@ -1,6 +1,6 @@
 use cargo_axiom::{
     commands::{BenchCmd, BuildCmd, EvmProvingSetupCmd, KeygenCmd, ProveCmd, RunCmd, VerifyCmd},
-    AXVM_VERSION_MESSAGE,
+    OPENVM_VERSION_MESSAGE,
 };
 use clap::{Parser, Subcommand};
 use eyre::Result;
@@ -12,7 +12,7 @@ pub enum Cargo {
 }
 
 #[derive(clap::Args)]
-#[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = AXVM_VERSION_MESSAGE)]
+#[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = OPENVM_VERSION_MESSAGE)]
 pub struct VmCli {
     #[clap(subcommand)]
     pub command: VmCliCommands,

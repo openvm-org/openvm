@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
 
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
     p3_field::{AbstractField, PrimeField32},

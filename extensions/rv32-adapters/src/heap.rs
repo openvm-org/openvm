@@ -3,7 +3,7 @@ use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sy
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeField32},

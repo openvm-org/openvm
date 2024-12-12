@@ -3,10 +3,10 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };

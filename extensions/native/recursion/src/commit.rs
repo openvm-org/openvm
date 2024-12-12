@@ -1,5 +1,5 @@
-use ax_stark_backend::p3_commit::{LagrangeSelectors, PolynomialSpace};
 use openvm_native_compiler::ir::{Array, Builder, Config, Ext, FromConstant, RVar};
+use openvm_stark_backend::p3_commit::{LagrangeSelectors, PolynomialSpace};
 
 use crate::{
     challenger::ChallengerVariable,

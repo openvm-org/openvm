@@ -1,8 +1,8 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::{
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,

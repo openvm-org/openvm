@@ -1,6 +1,6 @@
 use std::array;
 
-use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::openvm_stark_backend::p3_field::AbstractField;
 use openvm_circuit::{
     arch::{
         CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,

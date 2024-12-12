@@ -6,8 +6,8 @@ edition.workspace = true
 description = "OpenVm adapters for rv32 intrinsics"
 
 [dependencies]
-ax-stark-backend = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -20,7 +20,7 @@ derive-new.workspace = true
 rand.workspace = true
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true

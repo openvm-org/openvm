@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     prover::types::Proof,
 };

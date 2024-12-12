@@ -1,11 +1,11 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,

@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,

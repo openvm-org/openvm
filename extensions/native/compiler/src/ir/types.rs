@@ -2,7 +2,7 @@ use alloc::{format, rc::Rc};
 use core::marker::PhantomData;
 use std::{cell::RefCell, collections::HashMap, hash::Hash};
 
-use ax_stark_backend::p3_field::{
+use openvm_stark_backend::p3_field::{
     AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField,
 };
 use serde::{Deserialize, Serialize};

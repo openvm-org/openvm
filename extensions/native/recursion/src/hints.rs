@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
     p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field},
@@ -10,7 +10,7 @@ use ax_stark_backend::{
         types::{AirProofData, Commitments, Proof},
     },
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     p3_baby_bear::{BabyBear, Poseidon2BabyBear},
 };
@@ -470,7 +470,7 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
 
 #[cfg(test)]
 mod test {
-    use ax_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::AbstractField;
     use openvm_native_circuit::execute_program;
     use openvm_native_compiler::{
         asm::AsmBuilder,

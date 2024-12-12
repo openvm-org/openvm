@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_sdk::ax_stark_backend::prover::types::Proof;
+use openvm_stark_sdk::openvm_stark_backend::prover::types::Proof;
 use openvm_native_compiler::prelude::Witness;
 use openvm_native_recursion::{
     halo2::{utils::Halo2ParamsReader, EvmProof, Halo2Params},

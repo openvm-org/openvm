@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     utils::{not, select},
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},

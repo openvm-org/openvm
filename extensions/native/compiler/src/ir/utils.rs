@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, MulAssign};
 
-use ax_stark_backend::p3_field::{AbstractExtensionField, AbstractField, PrimeField};
+use openvm_stark_backend::p3_field::{AbstractExtensionField, AbstractField, PrimeField};
 
 use super::{
     Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,

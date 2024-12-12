@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
@@ -13,7 +13,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{self, BabyBearBlake3Config},
         baby_bear_poseidon2::{self, BabyBearPoseidon2Config},

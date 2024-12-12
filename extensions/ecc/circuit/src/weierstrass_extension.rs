@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -197,7 +197,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 pub(crate) mod phantom {
     use std::iter::repeat;
 
-    use ax_stark_backend::p3_field::PrimeField32;
+    use openvm_stark_backend::p3_field::PrimeField32;
     use eyre::bail;
     use num_bigint_dig::BigUint;
     use num_integer::Integer;

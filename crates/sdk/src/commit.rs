@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use ax_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
-use ax_stark_sdk::{
-    ax_stark_backend::p3_field::AbstractField,
+use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
+use openvm_stark_sdk::{
+    openvm_stark_backend::p3_field::AbstractField,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,

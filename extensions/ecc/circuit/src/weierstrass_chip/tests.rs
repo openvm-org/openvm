@@ -4,8 +4,8 @@ use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};

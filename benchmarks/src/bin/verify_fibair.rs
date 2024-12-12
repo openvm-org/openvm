@@ -2,8 +2,8 @@
 /// Proofs:
 /// 1. Prove Fibonacci AIR.
 /// 2. Verify the proof of 1. by execution VM program in STARK VM.
-use ax_stark_sdk::{
-    ax_stark_backend::Chip,
+use openvm_stark_sdk::{
+    openvm_stark_backend::Chip,
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::fib_air::chip::FibonacciChip,

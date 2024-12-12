@@ -3,7 +3,7 @@
 //!
 //! Constrains x == a_0 + ... + a_w
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder,
     p3_field::AbstractField,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

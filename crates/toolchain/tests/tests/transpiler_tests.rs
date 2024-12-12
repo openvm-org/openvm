@@ -3,8 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ax_stark_backend::p3_field::PrimeField32;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;

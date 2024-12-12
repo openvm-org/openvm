@@ -1,11 +1,11 @@
 #![feature(trait_upcasting)]
 #![allow(incomplete_features)]
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::StarkGenericConfig, p3_field::AbstractField, utils::disable_debug_builder, Chip,
 };
 /// Test utils
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     any_rap_arc_vec, config,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::{
@@ -25,7 +25,7 @@ mod partitioned_sum_air;
 
 #[test]
 fn test_single_fib_stark() {
-    use ax_stark_sdk::dummy_airs::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
+    use openvm_stark_sdk::dummy_airs::fib_air::{air::FibonacciAir, trace::generate_trace_rows};
 
     let log_trace_degree = 3;
 
@@ -97,7 +97,7 @@ fn test_single_fib_selector_stark() {
 
 #[test]
 fn test_double_fib_starks() {
-    use ax_stark_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
+    use openvm_stark_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
     use fib_selector_air::air::FibonacciSelectorAir;
 
     let log_n1 = 3;
@@ -134,7 +134,7 @@ fn test_double_fib_starks() {
 
 #[test]
 fn test_optional_air() {
-    use ax_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
+    use openvm_stark_backend::{engine::StarkEngine, prover::types::ProofInput};
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let fib_chip = FibonacciChip::new(0, 1, 8);

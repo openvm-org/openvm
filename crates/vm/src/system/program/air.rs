@@ -1,4 +1,4 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use num_bigint_dig::BigUint;
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{

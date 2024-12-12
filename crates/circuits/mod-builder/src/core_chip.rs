@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},

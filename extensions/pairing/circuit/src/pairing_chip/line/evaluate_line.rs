@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;

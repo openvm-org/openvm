@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField, TwoAdicField};
 
 use crate::prelude::Config;
 

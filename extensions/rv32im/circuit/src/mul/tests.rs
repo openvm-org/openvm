@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::AbstractField,
     p3_matrix::{
@@ -11,7 +11,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder},

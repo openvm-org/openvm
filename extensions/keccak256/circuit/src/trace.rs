@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},

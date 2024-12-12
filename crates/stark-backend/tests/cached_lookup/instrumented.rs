@@ -1,10 +1,10 @@
 use std::fs::{self, File};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::StarkGenericConfig, keygen::types::MultiStarkVerifyingKey, prover::types::Proof,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{self, engine_from_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

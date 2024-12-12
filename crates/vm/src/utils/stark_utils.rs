@@ -1,12 +1,12 @@
 use std::borrow::Borrow;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{AbstractField, PrimeField32},
     verifier::VerificationError,
     Chip,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,

@@ -1,6 +1,6 @@
 //! A transpiler from custom RISC-V ELFs to OpenVm executable binaries.
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},

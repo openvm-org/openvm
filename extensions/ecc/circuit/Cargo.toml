@@ -11,7 +11,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
@@ -28,7 +28,7 @@ num-integer = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }

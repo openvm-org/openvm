@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{AbstractField, Field, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,

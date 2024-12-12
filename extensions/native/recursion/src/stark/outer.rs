@@ -1,5 +1,5 @@
-use ax_stark_backend::prover::types::Proof;
-use ax_stark_sdk::config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters};
+use openvm_stark_backend::prover::types::Proof;
+use openvm_stark_sdk::config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters};
 use openvm_native_compiler::ir::Builder;
 
 use crate::{

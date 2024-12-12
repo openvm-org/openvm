@@ -2,7 +2,7 @@
 //! variable length inputs read from VM memory.
 use std::{array::from_fn, cmp::min, sync::Arc};
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;

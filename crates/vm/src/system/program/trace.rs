@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
     p3_field::{Field, PrimeField64},

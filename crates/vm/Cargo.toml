@@ -10,12 +10,12 @@ p3-symmetric = { workspace = true }
 p3-baby-bear = { workspace = true }
 
 ax-poseidon2-air = { workspace = true }
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
-ax-stark-sdk = { workspace = true, optional = true }
+openvm-stark-sdk = { workspace = true, optional = true }
 
 parking_lot.workspace = true
 itertools.workspace = true
@@ -52,7 +52,7 @@ lazy_static.workspace = true
 openvm-ecc-guest = { workspace = true, features = ["halo2curves", "k256"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
-ax-stark-sdk.workspace = true
+openvm-stark-sdk.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-bigint-circuit.workspace = true
@@ -69,12 +69,16 @@ hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["ax-stark-backend/parallel"]
-test-utils = ["openvm-ecc-guest/halo2curves", "dep:ax-stark-sdk"]
-bench-metrics = ["dep:metrics", "dep:inferno", "ax-stark-backend/bench-metrics"]
+parallel = ["openvm-stark-backend/parallel"]
+test-utils = ["openvm-ecc-guest/halo2curves", "dep:openvm-stark-sdk"]
+bench-metrics = [
+    "dep:metrics",
+    "dep:inferno",
+    "openvm-stark-backend/bench-metrics",
+]
 function-span = []
 # performance features:
-mimalloc = ["ax-stark-backend/mimalloc"]
-jemalloc = ["ax-stark-backend/jemalloc"]
-jemalloc-prof = ["ax-stark-backend/jemalloc-prof"]
-nightly-features = ["ax-stark-sdk/nightly-features"]
+mimalloc = ["openvm-stark-backend/mimalloc"]
+jemalloc = ["openvm-stark-backend/jemalloc"]
+jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
+nightly-features = ["openvm-stark-sdk/nightly-features"]

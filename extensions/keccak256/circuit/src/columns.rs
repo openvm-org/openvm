@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use ax_stark_backend::p3_air::AirBuilder;
+use openvm_stark_backend::p3_air::AirBuilder;
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_circuit_primitives_derive::AlignedBorrow;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::{prover::types::Proof, Chip};
+use openvm_stark_backend::{prover::types::Proof, Chip};
 use openvm_circuit::arch::VmConfig;
 
 use crate::{

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use ax_stark_backend::p3_field::PrimeField32;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, *};
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::util::{
     from_b_type, from_i_type, from_i_type_shamt, from_j_type, from_load, from_r_type, from_s_type,
     from_u_type, nop,

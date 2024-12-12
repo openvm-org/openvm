@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use openvm_circuit::system::memory::{MemoryController, MemoryReadRecord};
 
 mod alu;

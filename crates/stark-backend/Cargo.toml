@@ -1,5 +1,5 @@
 [package]
-name = "ax-stark-backend"
+name = "openvm-stark-backend"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -36,7 +36,7 @@ mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
 openvm-circuit-primitives-derive = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }

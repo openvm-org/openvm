@@ -1,8 +1,8 @@
 use std::{path::PathBuf, time::Instant};
 
 use anstyle::*;
-use ax_stark_sdk::{
-    ax_stark_backend::{
+use openvm_stark_sdk::{
+    openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_field::PrimeField32,
         Chip,

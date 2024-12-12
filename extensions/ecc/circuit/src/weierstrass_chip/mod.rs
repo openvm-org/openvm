@@ -8,7 +8,7 @@ pub use double::*;
 mod tests;
 
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use num_bigint_dig::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;

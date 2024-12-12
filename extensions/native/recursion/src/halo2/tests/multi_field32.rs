@@ -1,11 +1,11 @@
-use ax_stark_backend::{
+use openvm_native_compiler::ir::{Builder, SymbolicExt, Witness};
+use openvm_stark_backend::{
     p3_challenger::{CanObserve, CanSample, FieldChallenger},
     p3_field::{extension::BinomialExtensionField, AbstractField},
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
-use openvm_native_compiler::ir::{Builder, SymbolicExt, Witness};
 use p3_symmetric::Hash;
 
 use crate::{

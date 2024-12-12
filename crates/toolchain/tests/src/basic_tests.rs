@@ -1,4 +1,4 @@
-use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_bigint_circuit::Int256Rv32Config;
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{

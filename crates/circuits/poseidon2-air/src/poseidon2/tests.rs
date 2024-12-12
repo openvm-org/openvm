@@ -1,11 +1,11 @@
 use ark_ff::PrimeField as _;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     any_rap_arc_vec,
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},

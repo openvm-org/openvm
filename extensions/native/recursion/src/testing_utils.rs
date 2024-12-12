@@ -1,10 +1,10 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig},
     engine::VerificationData,
     p3_commit::PolynomialSpace,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
@@ -19,7 +19,7 @@ use crate::hints::InnerVal;
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
-    use ax_stark_sdk::{
+    use openvm_stark_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
             FriParameters,

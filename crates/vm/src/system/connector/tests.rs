@@ -3,11 +3,11 @@ use std::{
     sync::Arc,
 };
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::AbstractField,
     prover::types::AirProofInput, utils::disable_debug_builder,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,

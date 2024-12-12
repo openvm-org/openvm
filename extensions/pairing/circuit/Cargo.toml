@@ -17,7 +17,7 @@ openvm-pairing-guest = { workspace = true, features = [
 ] }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
@@ -39,7 +39,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 openvm-pairing-guest = { workspace = true }
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }

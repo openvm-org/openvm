@@ -203,7 +203,7 @@ pub type RoundIndex = usize;
 
 #[cfg(test)]
 mod tests {
-    use ax_stark_sdk::{
+    use openvm_stark_sdk::{
         config::baby_bear_blake3::default_engine, engine::StarkEngine, utils::create_seeded_rng,
     };
     use p3_baby_bear::BabyBear;

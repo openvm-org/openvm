@@ -1,4 +1,4 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_air::{AirBuilder, VirtualPairCol},
     p3_field::{AbstractField, Field},
 };

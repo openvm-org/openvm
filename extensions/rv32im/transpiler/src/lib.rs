@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
     VmOpcode,

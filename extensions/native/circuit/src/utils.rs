@@ -1,4 +1,4 @@
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::arch::{Streams, SystemConfig, VmExecutor};
 use openvm_instructions::program::Program;
 

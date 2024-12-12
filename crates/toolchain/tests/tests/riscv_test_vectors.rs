@@ -1,6 +1,6 @@
 use std::{fs::read_dir, path::PathBuf};
 
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmExecutor},
     utils::new_air_test_with_min_segments,

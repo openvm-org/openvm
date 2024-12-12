@@ -2,8 +2,8 @@
 #![allow(unused_imports)]
 use std::rc::Rc;
 
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::{
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,

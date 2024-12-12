@@ -1,4 +1,4 @@
-pub use ax_stark_backend;
+pub use openvm_stark_backend;
 pub use p3_baby_bear;
 pub use p3_blake3;
 pub use p3_bn254_fr;

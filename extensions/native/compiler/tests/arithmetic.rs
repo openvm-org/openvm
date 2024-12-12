@@ -1,7 +1,7 @@
-use ax_stark_backend::p3_field::{
+use openvm_stark_backend::p3_field::{
     extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field,
 };
-use ax_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::arch::{ExecutionError, VmExecutor};
 use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{

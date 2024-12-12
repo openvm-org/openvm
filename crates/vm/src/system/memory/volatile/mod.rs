@@ -5,7 +5,7 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},

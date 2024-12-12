@@ -65,8 +65,8 @@ Command-line binary to compile, execute, and prove guest programs is in [`cargo-
 
 ### Proof System
 
-- [`ax-stark-backend`](../../crates/stark-backend): General purpose STARK proving system with multi-trace and logup support, built on top of plonky3.
-- [`ax-stark-sdk`](../../crates/stark-sdk): Low-level SDK for use with STARK backend to generate proofs for specific STARK configurations.
+- [`openvm-stark-backend`](../../crates/stark-backend): General purpose STARK proving system with multi-trace and logup support, built on top of plonky3.
+- [`openvm-stark-sdk`](../../crates/stark-sdk): Low-level SDK for use with STARK backend to generate proofs for specific STARK configurations.
 
 ### Extensions
 

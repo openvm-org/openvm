@@ -1,4 +1,4 @@
-use ax_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
+use openvm_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
 use openvm_native_compiler::{
     ir::{Builder, Config},
     prelude::*,

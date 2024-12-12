@@ -40,7 +40,7 @@ pub trait BaseAirWithPublicValues<F>: BaseAir<F> {
 impl<F> BaseAirWithPublicValues<F> for MyAir {}
 ```
 
-#### From `ax-stark-backend`
+#### From `openvm-stark-backend`
 
 For cached trace support:
 

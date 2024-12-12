@@ -8,7 +8,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir, PairBuilder},

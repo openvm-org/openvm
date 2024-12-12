@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::{AbstractField, Field};
+use openvm_stark_backend::p3_field::{AbstractField, Field};
 use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
@@ -212,12 +212,12 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use ax_stark_backend::{
+    use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, CanSample},
         p3_field::AbstractField,
     };
-    use ax_stark_sdk::{
+    use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
         p3_baby_bear::BabyBear,

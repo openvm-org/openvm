@@ -1,6 +1,6 @@
 use std::array;
 
-use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{hints::Hintable, types::InnerConfig};
 

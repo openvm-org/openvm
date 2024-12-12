@@ -1,23 +1,23 @@
 // use openvm_native_compiler::util::execute_program;
 // use openvm_native_recursion::testing_utils::inner::build_verification_program;
-// use ax_stark_backend::{
+// use openvm_stark_backend::{
 //     air_builders::PartitionedAirBuilder,
 //     engine::VerificationData,
 //     prover::trace::TraceCommitmentBuilder,
 //     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 //     verifier::VerificationError,
 // };
-// use ax_stark_sdk::{
+// use openvm_stark_sdk::{
 //     config::baby_bear_poseidon2::default_engine,
 //     engine::{StarkEngine, VerificationDataWithFriParams},
 //     utils::generate_random_matrix,
 // };
 // use itertools::Itertools;
-// use ax_stark_backend::p3_air::{Air, BaseAir};
-// use ax_stark_sdk::p3_baby_bear::BabyBear;
-// use ax_stark_backend::p3_field::AbstractField;
-// use ax_stark_backend::p3_matrix::{dense::RowMajorMatrix, Matrix};
-// use ax_stark_backend::p3_util::log2_ceil_usize;
+// use openvm_stark_backend::p3_air::{Air, BaseAir};
+// use openvm_stark_sdk::p3_baby_bear::BabyBear;
+// use openvm_stark_backend::p3_field::AbstractField;
+// use openvm_stark_backend::p3_matrix::{dense::RowMajorMatrix, Matrix};
+// use openvm_stark_backend::p3_util::log2_ceil_usize;
 // use rand::{rngs::StdRng, SeedableRng};
 //
 // /// Inner value is width of y-submatrix

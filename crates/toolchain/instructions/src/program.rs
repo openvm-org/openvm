@@ -1,6 +1,6 @@
 use std::{fmt, fmt::Display};
 
-use ax_stark_backend::p3_field::Field;
+use openvm_stark_backend::p3_field::Field;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 

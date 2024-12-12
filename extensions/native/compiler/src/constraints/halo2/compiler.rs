@@ -6,8 +6,8 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-use ax_stark_backend::p3_field::{ExtensionField, PrimeField};
-use ax_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use snark_verifier_sdk::snark_verifier::{

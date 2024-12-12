@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_backend::Chip;
-use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use openvm_stark_backend::Chip;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
 use openvm_circuit::arch::VmConfig;
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};

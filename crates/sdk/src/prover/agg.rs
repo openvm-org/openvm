@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_sdk::{
-    ax_stark_backend::prover::types::Proof, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+use openvm_stark_sdk::{
+    openvm_stark_backend::prover::types::Proof, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::StarkFriEngine,
 };
 #[cfg(feature = "bench-metrics")]

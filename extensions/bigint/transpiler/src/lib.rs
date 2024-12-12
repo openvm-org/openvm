@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, UsizeOpcode,

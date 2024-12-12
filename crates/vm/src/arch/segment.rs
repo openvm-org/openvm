@@ -1,4 +1,4 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,

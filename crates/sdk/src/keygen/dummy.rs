@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_sdk::{
-    ax_stark_backend::{
+use openvm_stark_sdk::{
+    openvm_stark_backend::{
         config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof, Chip,
     },
     config::{

@@ -11,8 +11,8 @@ openvm-build.workspace = true
 openvm-circuit.workspace = true
 openvm-circuit-primitives-derive.workspace = true
 openvm-sdk.workspace = true
-ax-stark-backend.workspace = true
-ax-stark-sdk.workspace = true
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
 
 openvm-algebra-circuit.workspace = true

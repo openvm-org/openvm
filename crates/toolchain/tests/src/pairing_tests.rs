@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, SystemConfig},

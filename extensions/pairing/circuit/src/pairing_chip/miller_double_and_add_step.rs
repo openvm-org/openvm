@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
@@ -101,8 +101,8 @@ pub fn miller_double_and_add_step_expr(
 mod tests {
     use std::sync::Arc;
 
-    use ax_stark_backend::p3_field::AbstractField;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use halo2curves_axiom::bn256::G2Affine;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{

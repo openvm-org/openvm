@@ -374,93 +374,16 @@ name = "ax-poseidon2-air"
 version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
- "ax-stark-backend",
- "ax-stark-sdk",
  "itertools 0.13.0",
  "lazy_static",
  "openvm-circuit-primitives",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
  "rand",
  "test-case",
- "zkhash",
-]
-
-[[package]]
-name = "ax-stark-backend"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "ax-stark-sdk",
- "cfg-if",
- "csv",
- "derivative",
- "eyre",
- "itertools 0.13.0",
- "metrics",
- "mimalloc",
- "openvm-circuit-primitives-derive",
- "p3-air",
- "p3-baby-bear",
- "p3-challenger",
- "p3-commit",
- "p3-dft",
- "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-mds",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "p3-uni-stark",
- "p3-util",
- "rand",
- "rayon",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tikv-jemallocator",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "ax-stark-sdk"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "derive_more 0.99.18",
- "ff 0.13.0",
- "itertools 0.13.0",
- "metrics",
- "metrics-tracing-context",
- "metrics-util",
- "openvm-circuit-primitives-derive",
- "openvm-instructions",
- "p3-baby-bear",
- "p3-blake3",
- "p3-bn254-fr",
- "p3-dft",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
- "p3-merkle-tree",
- "p3-poseidon",
- "p3-poseidon2",
- "p3-symmetric",
- "rand",
- "serde",
- "serde_json",
- "static_assertions",
- "toml",
- "tracing",
- "tracing-forest",
- "tracing-subscriber",
  "zkhash",
 ]
 
@@ -747,7 +670,6 @@ name = "cargo-axiom"
 version = "0.1.0"
 dependencies = [
  "anstyle",
- "ax-stark-sdk",
  "bincode 2.0.0-rc.3",
  "capstone",
  "cargo_metadata",
@@ -764,6 +686,7 @@ dependencies = [
  "openvm-native-recursion",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
+ "openvm-stark-sdk",
  "openvm-transpiler",
  "prettytable-rs",
  "rand",
@@ -2723,8 +2646,6 @@ dependencies = [
 name = "openvm-algebra-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "halo2curves-axiom 0.7.0",
@@ -2741,6 +2662,8 @@ dependencies = [
  "openvm-pairing-guest",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "serde",
  "strum",
@@ -2783,10 +2706,10 @@ dependencies = [
 name = "openvm-algebra-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-algebra-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -2797,8 +2720,6 @@ dependencies = [
 name = "openvm-benchmarks"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "clap",
  "criterion",
  "derive-new",
@@ -2824,6 +2745,8 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "openvm-transpiler",
  "pprof",
  "rand_chacha",
@@ -2838,8 +2761,6 @@ dependencies = [
 name = "openvm-bigint-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "hex",
@@ -2853,6 +2774,8 @@ dependencies = [
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "serde",
  "test-case",
@@ -2875,11 +2798,11 @@ dependencies = [
 name = "openvm-bigint-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-bigint-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -2906,8 +2829,6 @@ dependencies = [
  "ark-ff 0.4.2",
  "async-trait",
  "ax-poseidon2-air",
- "ax-stark-backend",
- "ax-stark-sdk",
  "backtrace",
  "cfg-if",
  "derivative",
@@ -2938,6 +2859,8 @@ dependencies = [
  "openvm-pairing-circuit",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-baby-bear",
  "p3-dft",
  "p3-fri",
@@ -2971,14 +2894,14 @@ dependencies = [
 name = "openvm-circuit-primitives"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
  "num-traits",
  "openvm-circuit-primitives-derive",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-dft",
  "p3-fri",
  "p3-merkle-tree",
@@ -3003,8 +2926,6 @@ dependencies = [
 name = "openvm-ecc-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3024,6 +2945,8 @@ dependencies = [
  "openvm-mod-circuit-builder",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "serde",
  "strum",
 ]
@@ -3067,10 +2990,10 @@ dependencies = [
 name = "openvm-ecc-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -3080,13 +3003,13 @@ dependencies = [
 name = "openvm-instructions"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "backtrace",
  "derive-new",
  "itertools 0.13.0",
  "num-bigint-dig",
  "num-traits",
  "openvm-instructions-derive",
+ "openvm-stark-backend",
  "serde",
  "strum",
  "strum_macros",
@@ -3109,8 +3032,6 @@ dependencies = [
 name = "openvm-keccak256-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3125,6 +3046,8 @@ dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-keccak-air",
  "rand",
  "serde",
@@ -3148,10 +3071,10 @@ dependencies = [
 name = "openvm-keccak256-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-keccak256-guest",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -3168,8 +3091,6 @@ dependencies = [
 name = "openvm-mod-circuit-builder"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
@@ -3180,6 +3101,8 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-instructions",
  "openvm-pairing-guest",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "sha3",
  "tracing",
@@ -3190,8 +3113,6 @@ name = "openvm-native-circuit"
 version = "0.1.0"
 dependencies = [
  "ax-poseidon2-air",
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3205,6 +3126,8 @@ dependencies = [
  "openvm-instructions",
  "openvm-native-compiler",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "parking_lot",
  "rand",
  "serde",
@@ -3218,8 +3141,6 @@ dependencies = [
 name = "openvm-native-compiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "backtrace",
  "cfg-if",
  "hex",
@@ -3237,6 +3158,8 @@ dependencies = [
  "openvm-native-circuit",
  "openvm-native-compiler-derive",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-dft",
  "p3-merkle-tree",
  "p3-symmetric",
@@ -3256,9 +3179,9 @@ dependencies = [
 name = "openvm-native-compiler-derive"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-native-compiler",
  "openvm-native-recursion",
+ "openvm-stark-backend",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
@@ -3268,8 +3191,6 @@ dependencies = [
 name = "openvm-native-recursion"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "bson",
  "cfg-if",
  "itertools 0.13.0",
@@ -3280,6 +3201,8 @@ dependencies = [
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "p3-dft",
  "p3-fri",
  "p3-merkle-tree",
@@ -3296,8 +3219,6 @@ dependencies = [
 name = "openvm-pairing-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3319,6 +3240,8 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "serde",
  "strum",
@@ -3354,10 +3277,10 @@ dependencies = [
 name = "openvm-pairing-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-pairing-guest",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -3380,8 +3303,6 @@ dependencies = [
 name = "openvm-rv32-adapters"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "hex",
  "itertools 0.13.0",
@@ -3391,6 +3312,8 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "test-case",
  "test-log",
@@ -3401,8 +3324,6 @@ dependencies = [
 name = "openvm-rv32im-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3416,6 +3337,8 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "parking_lot",
  "rand",
  "serde",
@@ -3437,10 +3360,10 @@ dependencies = [
 name = "openvm-rv32im-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-guest",
+ "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
  "strum",
@@ -3452,8 +3375,6 @@ name = "openvm-sdk"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ax-stark-backend",
- "ax-stark-sdk",
  "bincode 2.0.0-rc.3",
  "bon",
  "bson",
@@ -3481,6 +3402,8 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-sdk-example-test",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "openvm-transpiler",
  "serde",
  "static_assertions",
@@ -3495,11 +3418,86 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-stark-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "cfg-if",
+ "csv",
+ "derivative",
+ "eyre",
+ "itertools 0.13.0",
+ "metrics",
+ "mimalloc",
+ "openvm-circuit-primitives-derive",
+ "openvm-stark-sdk",
+ "p3-air",
+ "p3-baby-bear",
+ "p3-challenger",
+ "p3-commit",
+ "p3-dft",
+ "p3-field",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-mds",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "p3-uni-stark",
+ "p3-util",
+ "rand",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tikv-jemallocator",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "openvm-stark-sdk"
+version = "0.1.0"
+dependencies = [
+ "derive_more 0.99.18",
+ "ff 0.13.0",
+ "itertools 0.13.0",
+ "metrics",
+ "metrics-tracing-context",
+ "metrics-util",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-stark-backend",
+ "p3-baby-bear",
+ "p3-blake3",
+ "p3-bn254-fr",
+ "p3-dft",
+ "p3-fri",
+ "p3-goldilocks",
+ "p3-keccak",
+ "p3-merkle-tree",
+ "p3-poseidon",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "rand",
+ "serde",
+ "serde_json",
+ "static_assertions",
+ "toml",
+ "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
+ "zkhash",
+]
+
+[[package]]
 name = "openvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive_more 1.0.0",
  "eyre",
  "num-bigint-dig",
@@ -3523,6 +3521,8 @@ dependencies = [
  "openvm-platform",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "openvm-transpiler",
  "rand",
  "serde",
@@ -3534,8 +3534,6 @@ dependencies = [
 name = "openvm-transpiler"
 version = "0.1.0"
 dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
  "derive_more 1.0.0",
  "elf",
  "eyre",
@@ -3546,6 +3544,8 @@ dependencies = [
  "openvm-instructions",
  "openvm-platform",
  "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rrs-lib",
  "serde",
  "strum",

@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use ax_stark_sdk::{
-    bench::run_with_metric_collection,
-    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-};
+use clap::Parser;
+use eyre::Result;
 use openvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
 use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -17,9 +15,11 @@ use openvm_sdk::{
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
     Sdk, StdIn,
 };
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use clap::Parser;
-use eyre::Result;
 
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
 

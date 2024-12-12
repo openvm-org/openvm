@@ -7,7 +7,7 @@ use std::{
 use openvm_circuit_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse, OverflowInt,
 };
-use ax_stark_backend::{p3_air::AirBuilder, p3_field::AbstractField, p3_util::log2_ceil_usize};
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::AbstractField, p3_util::log2_ceil_usize};
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::{FromPrimitive, One, Zero};
 

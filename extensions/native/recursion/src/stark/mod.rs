@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
         verifier::GenericVerifierConstraintFolder,
@@ -10,7 +10,7 @@ use ax_stark_backend::{
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     p3_baby_bear::BabyBear,
 };
@@ -102,7 +102,7 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
-    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    /// Reference: [openvm_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -124,7 +124,7 @@ where
         }
     }
 
-    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
+    /// Reference: [openvm_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -701,7 +701,7 @@ where
         builder.cycle_tracker_end("stage-e-verify-constraints");
     }
 
-    /// Reference: [ax_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    /// Reference: [openvm_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints(

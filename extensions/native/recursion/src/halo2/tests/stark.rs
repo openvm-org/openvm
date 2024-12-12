@@ -1,4 +1,4 @@
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         setup_tracing_with_log_level,

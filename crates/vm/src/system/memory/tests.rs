@@ -7,7 +7,7 @@ use std::{
 };
 
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{AbstractField, PrimeField32},
@@ -16,7 +16,7 @@ use ax_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };

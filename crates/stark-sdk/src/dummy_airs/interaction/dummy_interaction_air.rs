@@ -6,7 +6,7 @@
 
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder,
     config::{StarkGenericConfig, Val},
     interaction::{InteractionBuilder, InteractionType},

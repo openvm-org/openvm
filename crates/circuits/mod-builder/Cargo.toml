@@ -5,9 +5,9 @@ edition = "2021"
 description = "Modular arithmetic framework for building OpenVm circuits."
 
 [dependencies]
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
-ax-stark-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
@@ -30,5 +30,5 @@ halo2curves-axiom = { workspace = true }
 
 [features]
 default = []
-parallel = ["ax-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel"]
 test-utils = ["dep:halo2curves-axiom", "dep:openvm-pairing-guest"]

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use ax_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::AbstractField;
 use openvm_circuit::arch::Streams;
 use serde::{Deserialize, Serialize};
 

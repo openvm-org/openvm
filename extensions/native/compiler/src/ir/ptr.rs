@@ -1,6 +1,6 @@
 use core::ops::{Add, Sub};
 
-use ax_stark_backend::p3_field::{Field, PrimeField};
+use openvm_stark_backend::p3_field::{Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{Builder, Config, DslIr, MemIndex, MemVariable, RVar, SymbolicVar, Var, Variable};

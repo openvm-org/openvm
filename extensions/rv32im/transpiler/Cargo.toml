@@ -6,7 +6,7 @@ edition.workspace = true
 description = "Transpiler extension for RISC-V32IM"
 
 [dependencies]
-ax-stark-backend = { workspace = true }
+openvm-stark-backend = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }

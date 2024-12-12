@@ -7,7 +7,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-ax-stark-backend.workspace = true
+openvm-stark-backend.workspace = true
 openvm-instructions-derive.workspace = true
 
 backtrace = { workspace = true, features = ["serde"] }

@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::AbstractField,

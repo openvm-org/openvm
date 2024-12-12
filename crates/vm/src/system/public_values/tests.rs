@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilderWithPublicValues},
     p3_field::{AbstractField, Field},
@@ -10,7 +10,7 @@ use ax_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{
+use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::to_field_vec,
 };

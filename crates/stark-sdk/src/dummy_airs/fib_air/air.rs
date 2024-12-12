@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

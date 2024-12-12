@@ -1,9 +1,9 @@
-use ax_stark_backend::{
+use openvm_stark_backend::{
     p3_field::{AbstractField, Field},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};

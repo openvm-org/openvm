@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use ax_stark_sdk::{
-    ax_stark_backend::prover::types::Proof,
+use openvm_stark_sdk::{
+    openvm_stark_backend::prover::types::Proof,
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
     engine::{StarkEngine, StarkFriEngine},
 };

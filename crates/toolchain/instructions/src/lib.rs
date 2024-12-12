@@ -2,8 +2,8 @@
 
 #![allow(non_camel_case_types)]
 
-use ax_stark_backend::p3_field::Field;
 use openvm_instructions_derive::UsizeOpcode;
+use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 

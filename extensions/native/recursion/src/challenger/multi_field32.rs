@@ -1,4 +1,4 @@
-use ax_stark_backend::p3_field::{AbstractField, Field};
+use openvm_stark_backend::p3_field::{AbstractField, Field};
 use openvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
 
 use crate::{
