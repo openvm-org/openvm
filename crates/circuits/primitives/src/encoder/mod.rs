@@ -13,6 +13,7 @@ pub struct Encoder {
     /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is, `max_flag_degree + 1`.
     max_flag_degree: u32,
     pts: Vec<Vec<u32>>,
+    reserve_invalid: bool,
 }
 
 impl Encoder {
@@ -21,7 +22,7 @@ impl Encoder {
     /// The zero point is reserved for the dummy row.
     /// `max_degree` is the upper bound for the flag expressions, but the `eval` function
     /// of the encoder itself will use some constraints of degree `max_degree + 1`.
-    pub fn new(cnt: usize, max_degree: u32) -> Self {
+    pub fn new(cnt: usize, max_degree: u32, reserve_invalid: bool) -> Self {
         let binomial = |x: u32| {
             let mut res = 1;
             for i in 1..=max_degree {
@@ -52,6 +53,7 @@ impl Encoder {
             flag_cnt: cnt,
             max_flag_degree: max_degree,
             pts,
+            reserve_invalid,
         }
     }
 
@@ -86,13 +88,19 @@ impl Encoder {
         flag_idx: usize,
         vars: &[AB::Var],
     ) -> AB::Expr {
-        assert!(flag_idx <= self.flag_cnt, "flag index out of range");
-        self.expression_for_point::<AB>(&self.pts[flag_idx], vars)
+        assert!(
+            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
+            "flag index out of range"
+        );
+        self.expression_for_point::<AB>(&self.pts[flag_idx + self.reserve_invalid as usize], vars)
     }
 
     pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
-        assert!(flag_idx <= self.flag_cnt, "flag index out of range");
-        self.pts[flag_idx].clone()
+        assert!(
+            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
+            "flag index out of range"
+        );
+        self.pts[flag_idx + self.reserve_invalid as usize].clone()
     }
 
     pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
