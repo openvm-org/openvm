@@ -1,0 +1,35 @@
+[package]
+name = "openvm-algebra-circuit"
+version = "0.1.0"
+edition = "2021"
+description = "Modular arithmetic circuits."
+
+[dependencies]
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-rv32-adapters = { workspace = true }
+openvm-algebra-transpiler = { workspace = true }
+
+itertools = { workspace = true }
+num-bigint-dig = { workspace = true, features = ["serde"] }
+num-traits = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+derive_more = { workspace = true, features = ["from"] }
+strum = { workspace = true }
+derive-new = { workspace = true }
+serde.workspace = true
+
+[dev-dependencies]
+halo2curves-axiom = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

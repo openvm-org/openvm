@@ -1,0 +1,15 @@
+[package]
+name = "openvm-pairing-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for pairing"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+strum = { workspace = true }
+openvm-pairing-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }

@@ -6,10 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "vm/**"
-      - "toolchain/riscv/**"
-      - "toolchain/instructions/**"
-      - "toolchain/tests/**"
+      - "crates/vm/**"
+      - "extensions/**"
+      - "crates/toolchain/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -17,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  AXIOM_FAST_TEST: "1"
+  OPENVM_FAST_TEST: "1"
 
 jobs:
   tests:
@@ -33,19 +32,8 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run axvm-instructions tests
-        working-directory: toolchain/instructions
-        run: |
-          cargo nextest run
-
-      - name: Run transpiler tests
-        working-directory: toolchain/riscv/transpiler
-        run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
-          cargo nextest run --cargo-profile=fast
-
       - name: Run toolchain tests
-        working-directory: toolchain/tests
+        working-directory: crates/toolchain/tests
         run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
-          cargo nextest run --cargo-profile=fast
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast

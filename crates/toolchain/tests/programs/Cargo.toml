@@ -1,0 +1,61 @@
+[workspace]
+[package]
+name = "openvm-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../openvm" }
+openvm-platform = { path = "../../platform" }
+
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
+openvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
+openvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
+openvm-bigint-guest = { path = "../../../../extensions/bigint/guest" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
+openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
+openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
+openvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex-literal = { version = "0.4.1", default-features = false }
+k256 = { version = "0.13.3", default-features = false, features = [
+    "ecdsa-core",
+    "ecdsa",
+], optional = true }
+
+[features]
+default = []
+std = [
+    "serde/std",
+    "openvm/std",
+    "openvm-algebra-guest/std",
+    "openvm-bigint-guest/std",
+    "openvm-ecc-guest/std",
+    "openvm-keccak256-guest/std",
+    "openvm-pairing-guest/std",
+]
+bn254 = ["openvm-pairing-guest/bn254"]
+bls12_381 = ["openvm-pairing-guest/bls12_381"]
+k256 = ["openvm-ecc-guest/k256", "dep:k256"]
+heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"
+
+[[example]]
+name = "ec"
+required-features = ["k256"]
+
+[[example]]
+name = "ecdsa"
+required-features = ["k256"]
+
+[[example]]
+name = "final_exp_hint"
+required-features = ["bls12_381"]

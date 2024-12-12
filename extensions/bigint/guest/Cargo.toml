@@ -1,0 +1,22 @@
+[package]
+name = "openvm-bigint-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Guest extension for Int256"
+
+[dependencies]
+openvm = { workspace = true }
+openvm-platform = { workspace = true }
+strum_macros = { workspace = true }
+
+serde = { workspace = true, features = ["alloc"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+
+[features]
+default = []
+std = ["serde/std"]
+export-intrinsics = [] # export extern no_mangle functions for external linkage

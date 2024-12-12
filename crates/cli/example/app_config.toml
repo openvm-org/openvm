@@ -1,0 +1,8 @@
+[app_fri_params]
+log_blowup = 2
+num_queries = 42
+proof_of_work_bits = 16
+
+[app_vm_config.rv32i]
+[app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 2048]

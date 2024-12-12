@@ -1,0 +1,52 @@
+[package]
+name = "openvm-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-algebra-circuit = { workspace = true }
+openvm-algebra-transpiler = { workspace = true }
+openvm-bigint-circuit = { workspace = true }
+openvm-bigint-transpiler = { workspace = true }
+openvm-build = { workspace = true }
+openvm-ecc-circuit = { workspace = true }
+openvm-ecc-transpiler = { workspace = true }
+openvm-keccak256-circuit = { workspace = true }
+openvm-keccak256-transpiler = { workspace = true }
+openvm-pairing-circuit = { workspace = true }
+openvm-pairing-transpiler = { workspace = true }
+openvm-native-circuit = { workspace = true }
+openvm-native-compiler = { workspace = true }
+openvm-native-recursion = { workspace = true, features = ["static-verifier"] }
+openvm-rv32im-circuit = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }
+openvm-transpiler = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm = { workspace = true }
+
+bincode = { workspace = true, features = ["serde", "std"] }
+bon = { workspace = true }
+bson = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true }
+serde = { workspace = true }
+static_assertions.workspace = true
+eyre.workspace = true
+async-trait.workspace = true
+metrics.workspace = true
+tracing.workspace = true
+itertools.workspace = true
+
+[dev-dependencies]
+openvm-sdk-example-test = { path = "example" }
+
+[features]
+default = ["parallel"]
+bench-metrics = ["openvm-native-recursion/bench-metrics"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]

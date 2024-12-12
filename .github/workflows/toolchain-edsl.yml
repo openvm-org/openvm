@@ -6,8 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "vm/**"
-      - "toolchain/native-compiler/**"
+      - "crates/vm/**"
+      - "extensions/native/circuit/**"
+      - "extensions/native/compiler/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -15,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  AXIOM_FAST_TEST: "1"
+  OPENVM_FAST_TEST: "1"
 
 jobs:
   tests:
@@ -31,7 +32,7 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run compiler tests
-        working-directory: toolchain/native-compiler
+      - name: Run circuit and compiler tests
+        working-directory: extensions/native/compiler
         run: |
           cargo nextest run --cargo-profile=fast --features parallel

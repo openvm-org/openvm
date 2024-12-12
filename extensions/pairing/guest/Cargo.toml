@@ -1,0 +1,47 @@
+[package]
+name = "openvm-pairing-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "OpenVM guest library for elliptic curve pairings."
+
+[dependencies]
+openvm = { workspace = true }
+openvm-platform = { workspace = true }
+serde = { workspace = true }
+itertools = { workspace = true, features = ["use_alloc"] }
+rand.workspace = true
+strum_macros.workspace = true
+hex-literal = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-algebra-moduli-setup = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+openvm-ecc-sw-setup = { workspace = true }
+openvm-algebra-complex-macros = { workspace = true }
+openvm-rv32im-guest = { workspace = true }
+
+# Used for `halo2curves` feature
+# TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves
+halo2curves-axiom = { workspace = true, optional = true }
+# halo2curves = { version = "0.7.0", optional = true }
+group = "0.13.0"
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint-dig.workspace = true
+num-bigint.workspace = true
+num-traits.workspace = true
+lazy_static.workspace = true
+openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+subtle = "2.6.1"
+
+[features]
+default = []
+std = ["openvm/std"]
+# TODO[yj]: Switch to `halo2curves`
+halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
+# features to enable specific curves in guest programs
+# only enable for the curves you use as it affects the init! macro
+bn254 = []
+bls12_381 = []

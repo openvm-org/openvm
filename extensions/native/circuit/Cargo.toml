@@ -1,0 +1,41 @@
+[package]
+name = "openvm-native-circuit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "OpenVM circuit extension for native VM"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-poseidon2-air = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-native-compiler = { workspace = true }
+
+parking_lot.workspace = true
+strum.workspace = true
+itertools.workspace = true
+tracing.workspace = true
+derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+rand.workspace = true
+eyre.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+openvm-stark-sdk = { workspace = true }
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+hex.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]

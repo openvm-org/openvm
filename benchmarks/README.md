@@ -5,20 +5,20 @@
 1. Add a new crate to the [programs](./programs) directory.
 2. Add the [benchmark to CI](#adding-a-benchmark-to-ci).
 
-This is called a "guest program" because it is intended to be run on the axVM architecture and
+This is called a "guest program" because it is intended to be run on the OpenVM architecture and
 not on the machine doing the compilation (the "host machine"), although we will discuss shortly how you can still test it locally on the host machine.
 
 ### Writing the Guest Program
 
 The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
-`no_std` crates and write Rust as you normally would. Import the `axvm` library crate to use `axvm` intrinsic functions (for example `axvm::io::*, axvm::intrinsics::*`).
+`no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
 
-The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `axvm::entry!` macro. You should still create a `main` function, and then add `axvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
+The guest program also needs `#![no_main]` because `no_std` does not have certain default handlers. These are provided by the `openvm::entry!` macro. You should still create a `main` function, and then add `openvm::entry!(main)` for the macro to set up the function to run as a normal `main` function. While the function can be named anything when `target_os = "zkvm"`, for compatibility with testing when `std` feature is enabled (see below), you should still name it `main`.
 
 To support host machine execution, the top of your guest program should have:
 
 ```rust
-#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
@@ -29,18 +29,18 @@ lint or use rust-analyzer on the crate while in the workspace, so the recommende
 
 ### Adding the Benchmark
 
-Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](./src/bin) by following the [fibonacci example](./bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](./src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `axvm` and reads the output RISC-V ELF file.
-This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any any other `AxVmExe`) from a given `VmConfig`.
+Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](./src/bin) by following the [fibonacci example](./bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](./src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
+This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any other `VmExe`) from a given `VmConfig`.
 
 #### Providing Inputs
 
-Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `axvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `AbstractField::from_canonical_u8`.
+Inputs must be directly provided to the `bench_from_exe` function: the `input_stream: Vec<Vec<F>>` is a vector of vectors, where `input_stream[i]` will be what is provided to the guest program on the `i`-th call of `openvm::io::read_vec()`. Currently you must manually convert from `u8` to `F` using `AbstractField::from_canonical_u8`.
 
 You can find an example of passing in a single `Vec<u8>` input in [base64_json](./src/bin/base64_json.rs).
 
 #### Testing the Guest Program
 
-You can test by directly running `cargo run --bin <bench_name>` which will run the program in the axVM runtime. For a more convenient dev experience, we created the `axvm` crate such that it will still build and run normally on the host machine. From the guest program root directory, you can run
+You can test by directly running `cargo run --bin <bench_name>` which will run the program in the OpenVM runtime. For a more convenient dev experience, we created the `openvm` crate such that it will still build and run normally on the host machine. From the guest program root directory, you can run
 
 ```bash
 cargo run --features std
@@ -48,7 +48,7 @@ cargo run --features std
 
 To run the program on host (in normal rust runtime). This requires the std library, which is enabled by the `std` feature. To ensure that your guest program is still `no_std`, you should not make `std` the default feature.
 
-The behavior of `axvm::io::read_vec` and `axvm::io::read` differs when run on axVM or the host machine. As mentioned above, when running on axVM, the inputs must be provided in the `bench_from_exe` function.
+The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run on OpenVM or the host machine. As mentioned above, when running on OpenVM, the inputs must be provided in the `bench_from_exe` function.
 On the host machine, when you run `cargo run --features std`, each `read_vec` call will read bytes to end from stdin. For example here is how you would run the fibonacci guest program:
 
 ```bash
@@ -61,17 +61,15 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 #### Local Builds
 
 By default, if you run `cargo build` or `cargo run` from the guest program root directory, it will
-build with target set to your **host** machine, while running `bench_from_exe` in the bench script will build with target set to `axvm`. If you want to directly build for `axvm` (more specifically a special RISC-V target), copy the `.cargo` folder from [here](./programs/revm_contract_deployment/.cargo) to the guest program root directory and uncomment the `.cargo/config.toml` file. (This config is equivalent to what the `build_bench_program` function does behind the scenes.) You can then `cargo build` or `cargo build --release` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
+build with target set to your **host** machine, while running `bench_from_exe` in the bench script will build with target set to `openvm`. If you want to directly build for `openvm` (more specifically a special RISC-V target), copy the `.cargo` folder from [here](./programs/revm_contract_deployment/.cargo) to the guest program root directory and uncomment the `.cargo/config.toml` file. (This config is equivalent to what the `build_bench_program` function does behind the scenes.) You can then `cargo build` or `cargo build --release` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
 
 ```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/axvm-fibonacci-program
+rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/openvm-fibonacci-program
 ```
 
 ## Adding a Benchmark to CI
 
-To add the benchmark to CI, update the [.github/workflows/benchmark-config.json](../.github/workflows/benchmark-config.json) file and set it's configuration parameters. If you want the benchmark to run on every PR, follow the existing format.
-
-TODO[stephenh]: Allow selectively run benchmarks via labels. Tracked in INT-2602.
+To add the benchmark to CI, update the [ci/benchmark-config.json](../ci/benchmark-config.json) file and set it's configuration parameters. To make the benchmark run on every PR, follow the existing format with `e2e_bench = false`. To make the benchmark run only when label `run_benchmark_e2e` is present, set `e2e_bench = true` and specify values for `root_log_blowup` and `internal_log_blowup`.
 
 The `benchmarks.yml` file reads this JSON and generates a matrix of inputs for the [.github/workflows/benchmark-call.yml](../.github/workflows/benchmark-call.yml) file, a reusable workflow for running the benchmark, collecting metrics, and storing and displaying results.
 

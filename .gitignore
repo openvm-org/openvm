@@ -8,13 +8,6 @@ Cargo.lock
 **/*.rs.bk
 **/.env
 .DS_Store
-**/root
-**/leaf
-**/internal
-
-!axiom-vm/src/verifier/leaf
-!axiom-vm/src/verifier/internal
-!axiom-vm/src/verifier/root
 
 .cache/
 rustc-*
@@ -26,9 +19,12 @@ rustc-*
 .vscode/
 .zed/
 
-# Axiom intermediate files
-.axiom/
-
 # Bench metrics
 .bench_metrics/
 __pycache__/
+
+# KZG trusted setup
+**/params
+
+# Javascript
+**/node_modules/

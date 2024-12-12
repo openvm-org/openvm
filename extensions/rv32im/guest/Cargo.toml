@@ -1,0 +1,13 @@
+[package]
+name = "openvm-rv32im-guest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Guest extension for RISC-V 32IM"
+
+[dependencies]
+openvm-platform = { workspace = true }
+strum_macros = { workspace = true }
+
+[features]
+default = []

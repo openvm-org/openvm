@@ -1,5 +1,5 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_main)]
 
 mod generate;
 mod types;
@@ -7,7 +7,7 @@ mod types;
 use rkyv::{access, rancor::Panic, Archive};
 use types::Players;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 fn main() {
     // nothing up our sleeves, state and stream are first 20 digits of pi
@@ -27,7 +27,7 @@ fn main() {
     // let mut file = File::create("minecraft_savedata.bin").expect("Failed to create file");
     // file.write_all(&ser).expect("Failed to write to file");
 
-    let data = axvm::io::read_vec();
+    let data = openvm::io::read_vec();
 
     access::<<Players as Archive>::Archived, Panic>(&data).expect("Failed to deserialize");
 }

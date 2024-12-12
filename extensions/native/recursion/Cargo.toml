@@ -1,0 +1,49 @@
+[package]
+name = "openvm-native-recursion"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-native-circuit = { workspace = true }
+openvm-native-compiler = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-circuit = { workspace = true }
+
+p3-dft = { workspace = true }
+p3-fri = { workspace = true }
+p3-symmetric = { workspace = true }
+p3-merkle-tree = { workspace = true }
+snark-verifier-sdk = { workspace = true, features = [
+    "loader_evm",
+    "revm",
+], optional = true }
+itertools.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+lazy_static.workspace = true
+once_cell = { workspace = true, optional = true }
+metrics = { workspace = true, optional = true }
+cfg-if = { workspace = true }
+
+[dev-dependencies]
+openvm-native-recursion = { workspace = true, features = ["test-utils"] }
+tempfile = "3.14.0"
+bson.workspace = true
+
+[features]
+default = ["parallel", "mimalloc"]
+parallel = ["openvm-stark-backend/parallel"]
+static-verifier = [
+    "openvm-native-compiler/halo2-compiler",
+    "dep:snark-verifier-sdk",
+    "dep:once_cell",
+]
+test-utils = ["openvm-circuit/test-utils"]
+bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
+mimalloc = ["openvm-stark-backend/mimalloc"]
+jemalloc = ["openvm-stark-backend/jemalloc"]
+nightly-features = ["openvm-circuit/nightly-features"]

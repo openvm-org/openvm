@@ -1,5 +1,5 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_main)]
 
 mod generate;
 mod types;
@@ -7,7 +7,7 @@ mod types;
 use bincode::{config::standard, decode_from_slice};
 use types::Players;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 fn main() {
     // nothing up our sleeves, state and stream are first 20 digits of pi
@@ -29,8 +29,7 @@ fn main() {
 
     let config = standard();
 
-    let data = axvm::io::read_vec();
+    let data = openvm::io::read_vec();
 
-    let deser: (Players, usize) =
-        decode_from_slice(&data, config).expect("Failed to deserialize");
+    let deser: (Players, usize) = decode_from_slice(&data, config).expect("Failed to deserialize");
 }

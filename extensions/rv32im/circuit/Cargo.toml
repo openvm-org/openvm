@@ -1,0 +1,46 @@
+[package]
+name = "openvm-rv32im-circuit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "OpenVM circuit extension for RISC-V 32-bit IM instruction set"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, optional = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }
+
+parking_lot.workspace = true
+strum.workspace = true
+itertools.workspace = true
+tracing.workspace = true
+derive-new.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+rand.workspace = true
+eyre.workspace = true
+# for div_rem:
+num-bigint.workspace = true
+num-integer.workspace = true
+serde = { workspace = true, features = ["derive", "std"] }
+
+[dev-dependencies]
+openvm-stark-sdk = { workspace = true }
+test-case.workspace = true
+test-log.workspace = true
+lazy_static.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+
+[features]
+default = ["parallel", "mimalloc"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
+# performance features:
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

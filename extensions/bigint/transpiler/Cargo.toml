@@ -1,0 +1,16 @@
+[package]
+name = "openvm-bigint-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for bigint"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+openvm-bigint-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }

@@ -1,0 +1,16 @@
+[package]
+name = "openvm-rv32im-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for RISC-V32IM"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+tracing = { workspace = true }
+openvm-rv32im-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }

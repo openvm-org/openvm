@@ -1,0 +1,31 @@
+[package]
+name = "openvm-circuit-primitives"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+
+rand.workspace = true
+derive-new.workspace = true
+itertools.workspace = true
+num-bigint-dig.workspace = true
+num-traits.workspace = true
+lazy_static.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+p3-dft = { workspace = true }
+p3-fri = { workspace = true }
+p3-merkle-tree = { workspace = true }
+p3-poseidon2 = { workspace = true }
+p3-symmetric = { workspace = true }
+test-case.workspace = true
+openvm-stark-sdk = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-stark-backend/parallel"]

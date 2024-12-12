@@ -1,0 +1,38 @@
+[package]
+name = "openvm-ecc-circuit"
+version = "0.1.0"
+edition = "2021"
+description = "Elliptic curve circuits."
+
+[dependencies]
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-algebra-circuit = { workspace = true }
+openvm-rv32-adapters = { workspace = true }
+openvm-ecc-transpiler = { workspace = true }
+
+num-bigint-dig = { workspace = true }
+num-traits = { workspace = true }
+strum = { workspace = true }
+derive_more = { workspace = true }
+derive-new = { workspace = true }
+once_cell = { workspace = true }
+eyre = { workspace = true }
+num-integer = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+openvm-stark-sdk = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+lazy_static = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+openvm-ecc-guest = { workspace = true, features = ["halo2curves", "k256"] }

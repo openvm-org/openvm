@@ -6,14 +6,13 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "stark-backend/**"
-      - "circuits/primitives/**"
-      - "vm/**"
-      - "toolchain/native-compiler/**"
-      - "circuits/ecc/**"
-      - "lib/ecc/**"
-      - "lib/ecc-execution/**"
-      - "cargo-axiom/**"
+      - "crates/stark-backend/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
+      - "crates/cli/**"
+      - "extensions/ecc/**"
+      - "extensions/native/compiler/**"
+      - "extensions/pairing/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -21,7 +20,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  AXIOM_FAST_TEST: "1"
+  OPENVM_FAST_TEST: "1"
 
 jobs:
   tests:
@@ -37,23 +36,28 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ecc-execution crate tests
-        working-directory: lib/ecc-execution
+      - name: Run pairing-guest crate tests
+        working-directory: extensions/pairing/guest
+        run: |
+          cargo nextest run --cargo-profile=fast --features=bn254,bls12_381,halo2curves
+
+      - name: Run ecc-circuits crate tests
+        working-directory: extensions/ecc/circuit
         run: |
           cargo nextest run --cargo-profile=fast
 
-      - name: Run ecc-circuits crate tests
-        working-directory: circuits/ecc
+      - name: Run pairing-circuits crate tests
+        working-directory: extensions/pairing/circuit
         run: |
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast --features parallel,test-utils
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
 
-      - name: Install cargo-axiom
-        working-directory: cargo-axiom
+      - name: Install cargo-openvm
+        working-directory: crates/cli
         run: |
-          rustup component add rust-src --toolchain nightly-aarch64-unknown-linux-gnu
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .
 
-      - name: Build axvm-ecc crate
-        working-directory: lib/ecc
+      - name: Build openvm-ecc-guest crate for openvm
+        working-directory: extensions/ecc/guest
         run: |
-          cargo axiom build
+          cargo openvm build

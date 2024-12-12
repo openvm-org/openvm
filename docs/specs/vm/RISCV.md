@@ -1,6 +1,6 @@
 # RISC-V Custom Instructions
 
-axVM intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
+OpenVM intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
 For these instructions, we will use the standard 32-bit RISC-V encoding unless otherwise specified.
 We follow Chapter 21 of the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) on how to extend the ISA, aiming to avoid collisions with existing standard instruction formats. As suggested by Chapter 19, for instructions which fit into 32-bits, we will use the _custom-0_ opcode[6:0] prefix **0001011** and _custom-1_ opcode[6:0] prefix **0101011**. Note that instructions are parsed from right to left, and opcode[1:0] = 11 is typical for standard 32-bit instructions (opcode[1:0]=00 is used for compressed 16-bit instructions). We will use _custom-0_ for intrinsics that don’t require additional configuration parameters, and _custom-1_ for ones that do (e.g., prime field arithmetic and elliptic curve arithmetic).
 
@@ -55,30 +55,31 @@ We support a single branch instruction, `beq256`, which is B-type.
 
 We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **0101011**..
 
-Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.axiom` section of the ELF file in the serialized format. This is achieved by the `setup_moduli!` macro: for example, the following code
+Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro: for example, the following code
 
 ```rust
-setup_moduli! {
-    Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
-    Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
+moduli_declare! {
+    Bls12381 { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
+    Bn254 { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 }
 ```
 
-generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields, and saves the list of moduli in the static `AXIOM_SERIALIZED_MODULI` variable in the `.axiom` section. Hexadecimal and decimal formats are supported.
+generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields. Hexadecimal and decimal formats are supported.
 
-**NB:** we need to use the `AXIOM_SERIALIZED_MODULI` variable for the linker not to optimize it away at the moment. This can be done, for example, by putting `core::hint::black_box(AXIOM_SERIALIZED_MODULI)` anywhere in the main function.
+For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
 **Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See [above](#modular-arithmetic) for more details.
 
-| RISC-V Inst  | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                          |
-| ------------ | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| addmod\<N\>  | R   | 0101011     | 000    | `idx*8`   | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 + [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                        |
-| submod\<N\>  | R   | 0101011     | 000    | `idx*8+1` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 - [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                        |
-| mulmod\<N\>  | R   | 0101011     | 000    | `idx*8+2` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 * [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                        |
-| divmod\<N\>  | R   | 0101011     | 000    | `idx*8+3` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 / [rs2: N::NUM_LIMBS]_2 (mod N)` (undefined when `gcd([rs2: N::NUM_LIMBS]_2, N) != 1`)                                                                                  |
-| iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value. |
+| RISC-V Inst  | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                    |
+| ------------ | --- | ----------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| addmod\<N\>  | R   | 0101011     | 000    | `idx*8`   | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 + [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                                                                                                                                  |
+| submod\<N\>  | R   | 0101011     | 000    | `idx*8+1` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 - [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                                                                                                                                  |
+| mulmod\<N\>  | R   | 0101011     | 000    | `idx*8+2` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 * [rs2: N::NUM_LIMBS]_2 (mod N)`                                                                                                                                                                                                                                                  |
+| divmod\<N\>  | R   | 0101011     | 000    | `idx*8+3` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 / [rs2: N::NUM_LIMBS]_2 (mod N)` (undefined when `gcd([rs2: N::NUM_LIMBS]_2, N) != 1`)                                                                                                                                                                                            |
+| iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value.                                                                                                           |
+| setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rs1: N::NUM_LIMBS]_2 == N)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes something (can be anything) into `[rd: N::NUM_LIMBS]_2` if `ind(rs2) = 0,1` (for add_sub, mul_div) or it overwrites the register value of `rd` if `ind(rs2) = 2` (for iseq). |
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -86,10 +87,12 @@ Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We us
 
 Short Weierstrass elliptic curve arithmetic depends on elliptic curve `C`. The instruction set and VM can be simultaneously configured _ahead of time_ to support a fixed ordered list of supported curves. We use `config.curve_idx(C)` to denote the index of `C` in this list. In the list below, `idx` denotes `config.curve_idx(C)`.
 
-| RISC-V Inst    | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                  |
-| -------------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| sw_add_ne\<C\> | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate. |
-| sw_double\<C\> | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::COORD_SIZE]_2) = 2 * EcPoint([rs1:2*C::COORD_SIZE]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                           |
+| RISC-V Inst     | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------- | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sw_add_ne\<C\>  | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate.                                                                                                                                                                                                                                                                                                                                                                                           |
+| sw_double\<C\>  | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::COORD_SIZE]_2) = 2 * EcPoint([rs1:2*C::COORD_SIZE]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | `assert([rs1: C::COORD_SIZE]_2 == C::MODULUS)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes something (can be anything) into `[rd: 2*C::COORD_SIZE]_2`. It is required for proper functionality that `[rs1 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO`. If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. When `ind(rs2) != 0`, it is required that `[rs2: C::COORD_SIZE]_2 != C::MODULUS` and `[rs2 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO`. |
+| hint_decompress | R   | 0101011     | 001    | `idx*8+3` | Read `x: C::Fp` from `[rs1: C::COORD_SIZE]_2` and `rec_id: u8` from `[rs2]_2`. Reset the hint stream to equal the unique `y: C::Fp` such that `(x, y)` is a point on `C` and `y` has the same parity as `rec_id`, if it exists. Otherwise reset hint stream to arbitrary `C::Fp`. `rd` should be `x0`.                                                                                                                                                                                                                                                                                  |
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -120,11 +123,11 @@ Instruction for accelerating optimal Ate pairing depend on a pairing friend elli
 | mul_023_by_023             | R   | 0101011     | 011    | `idx*16 + 7`  | Read `line_0: EvaluatedLine<Fp2>` from `[rs1..]_2` and `line_1: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_023_by_023(line_0, line_1): [Fp2; 5]` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**. |
 | mul_by_023                 | R   | 0101011     | 011    | `idx*16 + 8`  | Read `f: Fp12` from `[rs1..]_2` and `line: EvaluatedLine<Fp2>` from `[rs2..]_2`. Write `mul_by_023(f, line): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                     |
 | mul_by_02345               | R   | 0101011     | 011    | `idx*16 + 9`  | Read `f: Fp12` from `[rs1..]_2` and `x: [Fp2; 5]` from `[rs2..]_2`. Write `mul_by_02345(f, x): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                   |
-| hint_final_exp             | R   | 0101011     | 011    | `idx*16 + 10` | Read `f: Fp12` from `[rs1..]_2` and reset hint stream to equal `hint_final_exp(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` flattened into bytes. `rd, rs2` should be zero.                                         |
+| hint_final_exp             | R   | 0101011     | 011    | `idx*16 + 10` | Read `f: Fp12` from `[rs1..]_2` and reset hint stream to equal `hint_final_exp(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` flattened into bytes. `rd, rs2` should be `x0`.                                         |
 
-# RISC-V to axVM Transpilation
+# RISC-V to OpenVM Transpilation
 
-We describe the transpilation of the RV32IM instruction set and our [custom RISC-V instructions](#risc-v-custom-instructions) to the axVM instruction set.
+We describe the transpilation of the RV32IM instruction set and our [custom RISC-V instructions](#risc-v-custom-instructions) to the OpenVM instruction set.
 
 We use the following notation for the transpilation:
 
@@ -142,7 +145,7 @@ The transpilation will only be valid for programs where:
 
 ## RV32IM Transpilation
 
-| RISC-V Inst | axVM Instruction                                                           |
+| RISC-V Inst | OpenVM Instruction                                                         |
 | ----------- | -------------------------------------------------------------------------- |
 | add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
 | sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
@@ -192,31 +195,32 @@ The transpilation will only be valid for programs where:
 
 ## Custom Instruction Transpilation
 
-| RISC-V Inst    | axVM Instruction                                              |
-| -------------- | ------------------------------------------------------------- |
-| terminate      | TERMINATE `_, _, utof(imm)`                                   |
-| hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2` |
-| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`     |
-| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                          |
-| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`              |
-| keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
-| add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| or256          | OR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                |
-| and256         | AND256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| sll256         | SLL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| srl256         | SRL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| sra256         | SRA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| slt256         | SLT256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| sltu256        | SLTU256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`              |
-| mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
-| beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`             |
-| addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
-| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`         |
-| sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`       |
-| sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`              |
-| hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`          |
+| RISC-V Inst    | OpenVM Instruction                                               |
+| -------------- | ---------------------------------------------------------------- |
+| terminate      | TERMINATE `_, _, utof(imm)`                                      |
+| hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |
+| reveal         | REVEAL_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 3`        |
+| hintinput      | PHANTOM `_, _, HintInputRv32 as u16`                             |
+| printstr       | PHANTOM `ind(rd), ind(rs1), PrintStrRv32 as u16`                 |
+| keccak256      | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`               |
+| add256         | ADD256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| sub256         | SUB256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| xor256         | XOR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| or256          | OR256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                   |
+| and256         | AND256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| sll256         | SLL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| srl256         | SRL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| sra256         | SRA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| slt256         | SLT256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| sltu256        | SLTU256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                 |
+| mul256         | MUL256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2`                  |
+| beq256         | BEQ256_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 2`                |
+| addmod\<N\>    | ADDMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
+| submod\<N\>    | SUBMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
+| mulmod\<N\>    | MULMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
+| divmod\<N\>    | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`             |
+| iseqmod\<N\>   | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`            |
+| setup\<N\>     | SETUP_ADDSUB,MULDIV,ISEQ_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` |
+| sw_add_ne\<C\> | SW_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| sw_double\<C\> | SW_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                 |
+| hint_final_exp | PHANTOM `ind(rs1), pairing_idx, HintFinalExp as u16`             |

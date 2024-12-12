@@ -1,0 +1,16 @@
+[package]
+name = "openvm-algebra-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for modular arithmetic"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
