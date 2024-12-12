@@ -33,5 +33,5 @@ pub enum Int256Funct7 {
     Mul,
 }
 
-#[cfg(target_os = "zkvm")]
+#[cfg(all(feature = "export-intrinsics", target_os = "zkvm"))]
 pub mod externs;

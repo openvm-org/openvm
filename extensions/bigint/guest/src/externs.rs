@@ -157,13 +157,14 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
 }
 
 #[no_mangle]
-unsafe extern "C" fn zkvm_u256_clone_impl(result: *mut u8, a: *const u8, zero: *const u8) {
+unsafe extern "C" fn zkvm_u256_clone_impl(result: *mut u8, a: *const u8) {
+    let zero = &crate::U256::ZERO as *const _ as *const u8;
     custom_insn_r!(
         OPCODE,
         INT256_FUNCT3,
         Int256Funct7::Add as u8,
         result as *mut u8,
         a as *const u8,
-        zero as *const u8
+        zero
     );
 }
