@@ -9,7 +9,7 @@ on:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "crates/openvm-sdk/**"
+      - "crates/sdk/**"
       - "crates/cli/**"
 
 concurrency:
@@ -55,9 +55,8 @@ jobs:
           esac
 
       - name: Setup halo2
-        working-directory: crates/openvm-sdk
         run: |
-          bash ../../extensions/native/recursion/trusted_setup_s3.sh
+          bash ./extensions/native/recursion/trusted_setup_s3.sh
 
       # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
       - name: Run app-level CLI commands
