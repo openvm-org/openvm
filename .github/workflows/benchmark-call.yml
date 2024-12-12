@@ -281,9 +281,9 @@ jobs:
         run: |
           mkdir -p ${GH_PAGES_PATH}
           s3_md_file="${BIN_NAME}-${current_sha}.md"
-          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${s3_md_file}
+          git add ${GH_PAGES_PATH}/${s3_md_file}
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${s3_md_file}"
 
           MAX_RETRIES=10
           RETRY_DELAY=5
