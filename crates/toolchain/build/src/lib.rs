@@ -19,6 +19,7 @@ pub use self::config::GuestOptions;
 
 mod config;
 
+#[allow(dead_code)]
 const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
@@ -142,7 +143,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = sanitized_cmd("rustup")
-        .args([RUSTUP_TOOLCHAIN_NAME, "which", "rustc"])
+        .args(["+nightly-2024-10-30", "which", "rustc"]) // TODO: switch +nightly to +openvm once we make a toolchain
         .output()
         .expect("rustup failed to find nightly toolchain")
         .stdout;
@@ -288,7 +289,16 @@ pub fn build_guest_package(
     cmd.args(["--profile", profile]);
 
     cmd.args(&guest_opts.options);
-    tty_println(&format!("cargo command: {:?}", cmd));
+
+    let command_string = format!(
+        "{} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    tty_println(&format!("cargo command: {command_string}"));
 
     let mut child = cmd
         .stderr(Stdio::piped())
