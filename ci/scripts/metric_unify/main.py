@@ -168,7 +168,7 @@ def apply_aggregations(db: MetricDb, aggregations):
         # group_by_values => aggregation metric
         group_by_dict = {}
         if aggregation.operation == "sum" or aggregation.operation == "unique" or aggregation.operation == "average":
-            divisor = None
+            divisor = {}
             for tuple_keys, metrics_dict in db.dict_by_label_types.items():
                 if not set(aggregation.group_by).issubset(set(tuple_keys)):
                     continue
@@ -187,13 +187,13 @@ def apply_aggregations(db: MetricDb, aggregations):
                                 else:
                                     assert group_by_dict[group_by_values] == metric.value
                         if metric.name == aggregation.divisor:
-                            divisor = metric.value
+                            divisor[group_by_values] = metric.value
 
             if aggregation.operation == "average":
                 if not divisor:
                     continue
                 for group_by_values in group_by_dict.keys():
-                    group_by_dict[group_by_values] /= divisor
+                    group_by_dict[group_by_values] /= divisor[group_by_values]
 
             for group_by_values, agg_value in group_by_dict.items():
                 aggregation_label = labels_to_tuple([(k,v) for k,v in zip(aggregation.group_by, group_by_values)])
