@@ -5,8 +5,8 @@ use ax_stark_sdk::ax_stark_backend::{
     p3_field::AbstractField,
     prover::types::Proof,
 };
-use axvm_native_compiler::prelude::*;
-use axvm_native_recursion::hints::Hintable;
+use openvm_native_compiler::prelude::*;
+use openvm_native_recursion::hints::Hintable;
 
 use crate::{
     verifier::{

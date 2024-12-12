@@ -8,8 +8,8 @@ use ax_stark_sdk::{
     },
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
-use axvm_circuit::circuit_derive::AlignedBorrow;
-use axvm_native_compiler::{
+use openvm_circuit::circuit_derive::AlignedBorrow;
+use openvm_native_compiler::{
     ir::{Builder, Config, Felt},
     prelude::DIGEST_SIZE,
 };

@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     },
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
-use axvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
+use openvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;

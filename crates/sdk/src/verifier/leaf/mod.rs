@@ -5,12 +5,12 @@ use ax_stark_sdk::{
     },
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{instructions::program::Program, SystemConfig},
     system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
-use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_native_recursion::{
+use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
+use openvm_native_recursion::{
     challenger::duplex::DuplexChallengerVariable, fri::TwoAdicFriPcsVariable, hints::Hintable,
     stark::StarkVerifier, types::new_from_inner_multi_vk, utils::const_fri_config,
     vars::StarkProofVariable,
@@ -105,7 +105,7 @@ impl LeafVmVerifierConfig {
     }
 
     /// Read the public values root proof from the input stream and verify it.
-    /// This verification must be consistent `axvm-circuit::system::memory::tree::public_values`.
+    /// This verification must be consistent `openvm_circuit::system::memory::tree::public_values`.
     /// Returns the public values commit and the corresponding memory state root.
     fn verify_user_public_values_root(
         &self,

@@ -6,8 +6,8 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     p3_baby_bear::BabyBear,
 };
-use axvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
-use axvm_native_compiler::ir::DIGEST_SIZE;
+use openvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
+use openvm_native_compiler::ir::DIGEST_SIZE;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
@@ -28,7 +28,7 @@ pub struct LeafVmVerifierInput<SC: StarkGenericConfig> {
 assert_impl_all!(LeafVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 /// Proof that the merkle root of public values is in the memory state. Can be extracted from
-/// `axvm-circuit::system::memory::public_values::UserPublicValuesProof`.
+/// `openvm_circuit::system::memory::public_values::UserPublicValuesProof`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserPublicValuesRootProof<F> {
     /// Sibling hashes for proving the merkle root of public values. For a specific VM, the path

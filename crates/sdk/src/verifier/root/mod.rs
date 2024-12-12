@@ -4,9 +4,9 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
     config::FriParameters,
 };
-use axvm_circuit::arch::instructions::program::Program;
-use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_native_recursion::{
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
+use openvm_native_recursion::{
     fri::TwoAdicFriPcsVariable, hints::Hintable, types::new_from_inner_multi_vk,
     utils::const_fri_config,
 };
