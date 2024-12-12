@@ -5,14 +5,12 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-# This cannot be local path because we need openvm version to be consistent with revm's openvm.
-openvm = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-openvm-platform = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-openvm-algebra-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-openvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false, features = [
-    "k256",
-] }
 k256 = { version = "0.13.3", default-features = false, features = ["ecdsa"] }
+openvm = { path = "../../../crates/toolchain/openvm", default-features = false }
+openvm-platform = { path = "../../../crates/toolchain/platform", default-features = false }
+openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
 # We do not patch revm-precompile so that the benchmark only depends on this repo.
 revm-precompile = { version = "14.0.0", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [
@@ -22,13 +20,6 @@ alloy-primitives = { version = "0.8.10", default-features = false, features = [
 [features]
 default = []
 std = ["openvm/std", "k256/std", "revm-precompile/std", "alloy-primitives/std"]
-
-[patch."ssh://git@github.com/axiom-crypto/afs-prototype.git"]
-openvm = { path = "../../../crates/toolchain/openvm" }
-openvm-platform = { path = "../../../crates/toolchain/platform" }
-openvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
-openvm-ecc-guest = { path = "../../../extensions/ecc/guest" }
-openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 
 [profile.release]
 panic = "abort"

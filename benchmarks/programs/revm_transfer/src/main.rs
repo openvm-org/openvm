@@ -6,6 +6,8 @@
 extern crate alloc;
 
 use alloy_primitives::{address, TxKind, U256};
+#[allow(unused_imports)]
+use openvm_keccak256_guest; // export native keccak
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
 openvm::entry!(main);
