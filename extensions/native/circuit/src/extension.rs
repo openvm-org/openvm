@@ -1,6 +1,8 @@
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
-use openvm_stark_backend::p3_field::PrimeField32;
+use branch_native_adapter::BranchNativeAdapterChip;
+use derive_more::derive::From;
+use jal_native_adapter::JalNativeAdapterChip;
+use loadstore_native_adapter::NativeLoadStoreAdapterChip;
+use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
         vm_poseidon2_config, MemoryConfig, SystemConfig, SystemExecutor, SystemPeriphery,
@@ -10,6 +12,7 @@ use openvm_circuit::{
     system::{native_adapter::NativeAdapterChip, phantom::PhantomChip, poseidon2::Poseidon2Chip},
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     program::DEFAULT_PC_STEP, PhantomDiscriminant, Poseidon2Opcode, UsizeOpcode, VmOpcode,
 };
@@ -17,12 +20,9 @@ use openvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
 };
+use openvm_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
-use branch_native_adapter::BranchNativeAdapterChip;
-use derive_more::derive::From;
-use jal_native_adapter::JalNativeAdapterChip;
-use loadstore_native_adapter::NativeLoadStoreAdapterChip;
-use native_vectorized_adapter::NativeVectorizedAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -214,13 +214,13 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 }
 
 pub(crate) mod phantom {
-    use openvm_stark_backend::p3_field::{Field, PrimeField32};
+    use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
     use openvm_instructions::PhantomDiscriminant;
-    use eyre::bail;
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
     pub struct NativeHintInputSubEx;
     pub struct NativePrintSubEx;

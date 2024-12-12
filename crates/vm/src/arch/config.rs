@@ -1,8 +1,8 @@
-use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use derive_new::new;
+use openvm_poseidon2_air::poseidon2::Poseidon2Config;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{

@@ -1,4 +1,4 @@
-use ax_poseidon2_air::poseidon2::columns::Poseidon2IoCols;
+use openvm_poseidon2_air::poseidon2::columns::Poseidon2IoCols;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_field::{AbstractField, Field},

@@ -1,6 +1,6 @@
 use std::array;
 
-use ax_poseidon2_air::poseidon2::columns::Poseidon2Cols;
+use openvm_poseidon2_air::poseidon2::columns::Poseidon2Cols;
 use openvm_stark_backend::p3_field::Field;
 
 use super::air::Poseidon2VmAir;

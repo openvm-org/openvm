@@ -6,7 +6,10 @@ use std::{
     sync::Arc,
 };
 
-use ax_poseidon2_air::poseidon2::Poseidon2Config;
+use itertools::Itertools;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_poseidon2_air::poseidon2::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -20,9 +23,6 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
-use itertools::Itertools;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_circuit_primitives_derive::AlignedBorrow;
 use rand::{
     prelude::{SliceRandom, StdRng},
     Rng,

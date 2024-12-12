@@ -370,24 +370,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
-name = "ax-poseidon2-air"
-version = "0.1.0"
-dependencies = [
- "ark-ff 0.4.2",
- "itertools 0.13.0",
- "lazy_static",
- "openvm-circuit-primitives",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-monty-31",
- "p3-poseidon2",
- "p3-symmetric",
- "rand",
- "test-case",
- "zkhash",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2828,7 +2810,6 @@ version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
  "async-trait",
- "ax-poseidon2-air",
  "backtrace",
  "cfg-if",
  "derivative",
@@ -2857,6 +2838,7 @@ dependencies = [
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-pairing-circuit",
+ "openvm-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
@@ -3112,7 +3094,6 @@ dependencies = [
 name = "openvm-native-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-poseidon2-air",
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
@@ -3125,6 +3106,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-native-compiler",
+ "openvm-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -3297,6 +3279,24 @@ dependencies = [
  "libm",
  "stability",
  "strum_macros",
+]
+
+[[package]]
+name = "openvm-poseidon2-air"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.4.2",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit-primitives",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-monty-31",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "rand",
+ "test-case",
+ "zkhash",
 ]
 
 [[package]]

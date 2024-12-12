@@ -1,11 +1,18 @@
 use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use derive_more::derive::From;
+use getset::Getters;
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::{
+    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode, VmOpcode,
+};
+use openvm_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -15,13 +22,6 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use openvm_instructions::{
-    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode, VmOpcode,
-};
-use derive_more::derive::From;
-use getset::Getters;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};

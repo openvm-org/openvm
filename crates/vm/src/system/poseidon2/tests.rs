@@ -1,4 +1,5 @@
-use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Config};
 use openvm_stark_backend::{
     p3_field::{AbstractField, PrimeField64},
     utils::disable_debug_builder,
@@ -13,7 +14,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use openvm_instructions::{instruction::Instruction, VmOpcode};
 use rand::Rng;
 
 use super::{Poseidon2Chip, Poseidon2VmIoCols, CHUNK, WIDTH};
