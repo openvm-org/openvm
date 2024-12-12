@@ -141,7 +141,7 @@ where
 
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
-        tracing::info_span!("agg_keygen", group = "agg_keygen")
+        tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
             .in_scope(|| Self::dummy_proof_and_keygen(config).0)
     }
 
@@ -290,6 +290,7 @@ impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
+    #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
     pub fn keygen(config: AggConfig, reader: &impl Halo2ParamsReader) -> Self {
         let AggConfig {
             agg_stark_config,
