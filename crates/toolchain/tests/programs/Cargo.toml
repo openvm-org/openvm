@@ -16,7 +16,6 @@ openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features
 openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
 openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
 openvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
-ruint = { git = "ssh://git@github.com/axiom-crypto/uint.git", branch = "axiom", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
@@ -43,7 +42,6 @@ bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
-ruint = ["dep:ruint", "openvm-bigint-guest/export-intrinsics"]
 
 [profile.release]
 panic = "abort"
