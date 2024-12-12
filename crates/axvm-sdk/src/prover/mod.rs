@@ -10,6 +10,8 @@ mod agg;
 pub use agg::*;
 mod app;
 pub use app::*;
+use axvm_native_recursion::halo2::utils::Halo2ParamsReader;
+
 mod halo2;
 #[allow(unused_imports)]
 pub use halo2::*;
@@ -33,6 +35,7 @@ pub struct ContinuationProver<VC> {
 
 impl<VC> ContinuationProver<VC> {
     pub fn new(
+        reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
@@ -47,7 +50,7 @@ impl<VC> ContinuationProver<VC> {
         let stark_prover = StarkProver::new(app_pk, app_committed_exe, agg_stark_pk);
         Self {
             stark_prover,
-            halo2_prover: Halo2Prover::new(halo2_pk),
+            halo2_prover: Halo2Prover::new(reader, halo2_pk),
         }
     }
 

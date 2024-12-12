@@ -1601,6 +1601,7 @@ dependencies = [
  "axvm-circuit",
  "axvm-keccak256-circuit",
  "axvm-keccak256-transpiler",
+ "axvm-native-recursion",
  "axvm-rv32im-transpiler",
  "axvm-sdk",
  "axvm-transpiler",

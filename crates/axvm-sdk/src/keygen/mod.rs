@@ -21,7 +21,7 @@ use axvm_circuit::{
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
 use axvm_native_recursion::halo2::{
-    verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
+    utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
@@ -289,7 +289,7 @@ impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
-    pub fn keygen(config: AggConfig) -> Self {
+    pub fn keygen(config: AggConfig, reader: &impl Halo2ParamsReader) -> Self {
         let AggConfig {
             agg_stark_config,
             halo2_config,
@@ -300,14 +300,15 @@ impl AggProvingKey {
             .root_verifier_pk
             .generate_dummy_root_proof(dummy_internal_proof);
         // FIXME: Halo2VerifierProvingKey is not Send + Sync because Array/Usize use Rc<RefCell>.
-        let verifier = agg_stark_pk
-            .root_verifier_pk
-            .keygen_static_verifier(halo2_config.verifier_k, dummy_root_proof);
-        let dummy_snark = verifier.generate_dummy_snark();
+        let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
+            &reader.read_params(halo2_config.verifier_k),
+            dummy_root_proof,
+        );
+        let dummy_snark = verifier.generate_dummy_snark(reader);
         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
-            Halo2WrapperProvingKey::keygen(wrapper_k, dummy_snark)
+            Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
         } else {
-            Halo2WrapperProvingKey::keygen_auto_tune(dummy_snark)
+            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
         };
         let halo2_pk = Halo2ProvingKey { verifier, wrapper };
         Self {

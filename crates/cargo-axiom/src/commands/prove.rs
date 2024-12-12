@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use axvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use axvm_sdk::{
     commit::AppExecutionCommit,
     config::SdkVmConfig,
@@ -74,12 +75,15 @@ impl ProveCmd {
                 input,
                 output,
             } => {
+                // FIXME: read path from config.
+                let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_agg_pk_from_file(AGG_PK_PATH).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo axiom evm-proving-setup' first", e)
                 })?;
-                let evm_proof = Sdk.generate_evm_proof(app_pk, committed_exe, agg_pk, input)?;
+                let evm_proof =
+                    Sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;
                 write_evm_proof_to_file(evm_proof, output)?;
             }
         }

@@ -32,14 +32,14 @@ use snark_verifier_sdk::{
             dev::MockProver,
             halo2curves::bn256::{Bn256, Fr, G1Affine},
             plonk::{keygen_pk2, ProvingKey},
-            poly::kzg::commitment::ParamsKZG,
+            poly::{commitment::Params, kzg::commitment::ParamsKZG},
             SerdeFormat,
         },
     },
     CircuitExt, Snark, SHPLONK,
 };
 
-use crate::halo2::utils::read_params;
+use crate::halo2::utils::Halo2ParamsReader;
 
 pub type Halo2Params = ParamsKZG<Bn256>;
 
@@ -76,9 +76,9 @@ pub struct Halo2ProvingMetadata {
 }
 
 impl Halo2ProvingPinning {
-    pub fn generate_dummy_snark(&self) -> Snark {
+    pub fn generate_dummy_snark(&self, reader: &impl Halo2ParamsReader) -> Snark {
         let k = self.metadata.config_params.k;
-        let params = read_params(k as u32);
+        let params = reader.read_params(k);
         gen_dummy_snark_from_vk::<SHPLONK>(
             &params,
             self.pk.get_vk(),
@@ -150,15 +150,15 @@ impl Halo2Prover {
     pub fn keygen<
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
-        k: usize,
+        params: &Halo2Params,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
     ) -> Halo2ProvingPinning {
+        let k = params.k() as usize;
         let builder = Self::builder(CircuitBuilderStage::Keygen, k);
         let mut builder = Self::populate(builder, dsl_operations, witness, true);
         builder.calculate_params(Some(20));
 
-        let params = read_params(k as u32);
         // let break_points;
         // // if pk already exists, read break points from file
         // let pk = if Path::new("halo2_final.pk").exists() {
@@ -171,7 +171,7 @@ impl Halo2Prover {
         // };
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let pk = keygen_pk2(params.as_ref(), &builder, false).unwrap();
+        let pk = keygen_pk2(params, &builder, false).unwrap();
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("halo2_keygen_time_ms").set(start.elapsed().as_millis() as f64);
         let break_points = builder.break_points();
@@ -196,27 +196,6 @@ impl Halo2Prover {
     }
 
     pub fn prove<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
-    >(
-        config_params: BaseCircuitParams,
-        break_points: MultiPhaseThreadBreakPoints,
-        pk: &ProvingKey<G1Affine>,
-        dsl_operations: DslOperations<C>,
-        witness: Witness<C>,
-    ) -> Snark {
-        let k = config_params.k;
-        let params = read_params(k as u32);
-        Self::prove_with_loaded_params(
-            &params,
-            config_params,
-            break_points,
-            pk,
-            dsl_operations,
-            witness,
-        )
-    }
-
-    pub fn prove_with_loaded_params<
         C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
     >(
         params: &Halo2Params,
@@ -247,24 +226,6 @@ impl Halo2Prover {
         metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
         snark
-    }
-
-    pub fn full_prove<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
-    >(
-        k: usize,
-        dsl_operations: DslOperations<C>,
-        witness: Witness<C>,
-    ) -> Snark {
-        let Halo2ProvingPinning { pk, metadata } =
-            Self::keygen(k, dsl_operations.clone(), witness.clone());
-        Self::prove(
-            metadata.config_params,
-            metadata.break_points,
-            &pk,
-            dsl_operations,
-            witness,
-        )
     }
 }
 

@@ -21,7 +21,7 @@ use axvm_circuit::{
 };
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_native_recursion::types::InnerConfig;
+use axvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::InnerConfig};
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
@@ -258,11 +258,17 @@ fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Sdk.app_keygen(app_config).unwrap();
-    let agg_pk = Sdk.agg_keygen(agg_config_for_test()).unwrap();
-    let evm_verifier = Sdk.generate_snark_verifier_contract(&agg_pk).unwrap();
+    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+    let agg_pk = Sdk
+        .agg_keygen(agg_config_for_test(), &params_reader)
+        .unwrap();
+    let evm_verifier = Sdk
+        .generate_snark_verifier_contract(&params_reader, &agg_pk)
+        .unwrap();
 
     let evm_proof = Sdk
         .generate_evm_proof(
+            &params_reader,
             Arc::new(app_pk),
             app_committed_exe_for_test(app_log_blowup),
             agg_pk,

@@ -24,6 +24,7 @@ use axvm_circuit::{
 };
 use axvm_native_recursion::{
     halo2::{
+        utils::Halo2ParamsReader,
         wrapper::{EvmVerifier, Halo2WrapperProvingKey},
         EvmProof,
     },
@@ -166,13 +167,18 @@ impl Sdk {
         Ok(())
     }
 
-    pub fn agg_keygen(&self, config: AggConfig) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config);
+    pub fn agg_keygen(
+        &self,
+        config: AggConfig,
+        reader: &impl Halo2ParamsReader,
+    ) -> Result<AggProvingKey> {
+        let agg_pk = AggProvingKey::keygen(config, reader);
         Ok(agg_pk)
     }
 
     pub fn generate_evm_proof<VC: VmConfig<F>>(
         &self,
+        reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
@@ -182,13 +188,18 @@ impl Sdk {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let e2e_prover = ContinuationProver::new(app_pk, app_exe, agg_pk);
+        let e2e_prover = ContinuationProver::new(reader, app_pk, app_exe, agg_pk);
         let proof = e2e_prover.generate_proof_for_evm(inputs);
         Ok(proof)
     }
 
-    pub fn generate_snark_verifier_contract(&self, agg_pk: &AggProvingKey) -> Result<EvmVerifier> {
-        let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier();
+    pub fn generate_snark_verifier_contract(
+        &self,
+        reader: &impl Halo2ParamsReader,
+        agg_pk: &AggProvingKey,
+    ) -> Result<EvmVerifier> {
+        let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
+        let evm_verifier = agg_pk.halo2_pk.wrapper.generate_evm_verifier(&params);
         Ok(evm_verifier)
     }
 

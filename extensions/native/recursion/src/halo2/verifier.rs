@@ -6,7 +6,9 @@ use snark_verifier_sdk::Snark;
 
 use crate::{
     config::outer::OuterConfig,
-    halo2::{DslOperations, Halo2Params, Halo2Prover, Halo2ProvingPinning},
+    halo2::{
+        utils::Halo2ParamsReader, DslOperations, Halo2Params, Halo2Prover, Halo2ProvingPinning,
+    },
     stark::outer::build_circuit_verify_operations,
     types::MultiStarkVerificationAdvice,
     witness::Witnessable,
@@ -20,7 +22,7 @@ pub struct Halo2VerifierProvingKey {
 
 /// Generate a Halo2 verifier circuit for a given stark.
 pub fn generate_halo2_verifier_proving_key(
-    halo2_k: usize,
+    params: &Halo2Params,
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
     proof: &Proof<BabyBearPoseidon2RootConfig>,
@@ -29,27 +31,14 @@ pub fn generate_halo2_verifier_proving_key(
     proof.write(&mut witness);
     let dsl_operations = build_circuit_verify_operations(advice, fri_params, proof);
     Halo2VerifierProvingKey {
-        pinning: Halo2Prover::keygen(halo2_k, dsl_operations.clone(), witness),
+        pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
         dsl_ops: dsl_operations,
     }
 }
 
 impl Halo2VerifierProvingKey {
-    pub fn prove(&self, witness: Witness<OuterConfig>) -> Snark {
+    pub fn prove(&self, params: &Halo2Params, witness: Witness<OuterConfig>) -> Snark {
         Halo2Prover::prove(
-            self.pinning.metadata.config_params.clone(),
-            self.pinning.metadata.break_points.clone(),
-            &self.pinning.pk,
-            self.dsl_ops.clone(),
-            witness,
-        )
-    }
-    pub fn prove_with_loaded_params(
-        &self,
-        params: &Halo2Params,
-        witness: Witness<OuterConfig>,
-    ) -> Snark {
-        Halo2Prover::prove_with_loaded_params(
             params,
             self.pinning.metadata.config_params.clone(),
             self.pinning.metadata.break_points.clone(),
@@ -61,7 +50,7 @@ impl Halo2VerifierProvingKey {
     // TODO: Add verify method
 
     /// Generate a dummy snark for wrapper keygen.
-    pub fn generate_dummy_snark(&self) -> Snark {
-        self.pinning.generate_dummy_snark()
+    pub fn generate_dummy_snark(&self, reader: &impl Halo2ParamsReader) -> Snark {
+        self.pinning.generate_dummy_snark(reader)
     }
 }
