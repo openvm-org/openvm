@@ -245,21 +245,8 @@ where
                 .into_iter()
                 .enumerate()
                 .map(|(seg_idx, seg)| {
-                    #[cfg(feature = "bench-metrics")]
-                    let start = std::time::Instant::now();
-                    let ret = seg.generate_proof_input(committed_program.clone());
-                    #[cfg(feature = "bench-metrics")]
-                    {
-                        metrics::gauge!("trace_gen_time_ms", "segment" => seg_idx.to_string())
-                            .set(start.elapsed().as_millis() as f64);
-                        tracing::info!(
-                            "trace_gen_time: {:?} [segment {}]",
-                            start.elapsed(),
-                            seg_idx
-                        );
-                    }
-
-                    ret
+                    tracing::info_span!("trace_gen", segment = seg_idx)
+                        .in_scope(|| seg.generate_proof_input(committed_program.clone()))
                 })
                 .collect(),
             final_memory,
@@ -345,7 +332,10 @@ where
         VC::Periphery: Chip<SC>,
     {
         let segment = self.execute_impl(commited_exe.exe.clone(), input)?;
-        Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
+        let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
+            segment.generate_proof_input(Some(commited_exe.committed_program.clone()))
+        });
+        Ok(proof_input)
     }
 
     fn execute_impl(
@@ -353,6 +343,8 @@ where
         exe: AxVmExe<F>,
         input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -365,6 +357,12 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
         segment.execute_from_pc(pc_start)?;
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
+        #[cfg(feature = "bench-metrics")]
+        tracing::info!("execute_time [single]: {:?}", start.elapsed());
+
         Ok(segment)
     }
 }

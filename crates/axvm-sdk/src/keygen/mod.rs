@@ -141,7 +141,8 @@ where
 
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
-        Self::dummy_proof_and_keygen(config).0
+        tracing::info_span!("agg_keygen", group = "agg_keygen")
+            .in_scope(|| Self::dummy_proof_and_keygen(config).0)
     }
 
     pub fn dummy_proof_and_keygen(config: AggStarkConfig) -> (Self, Proof<SC>) {

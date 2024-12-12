@@ -302,7 +302,15 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        self.chip_complex.generate_proof_input(cached_program)
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
+        let proof_input = self.chip_complex.generate_proof_input(cached_program);
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
+
+        proof_input
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.
