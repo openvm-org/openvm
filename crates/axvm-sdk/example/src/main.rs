@@ -1,5 +1,5 @@
-#![no_main]
-#![no_std]
+#![cfg_attr(target_os = "zkvm", no_main)]
+#![cfg_attr(target_os = "zkvm", no_std)]
 
 axvm::entry!(main);
 

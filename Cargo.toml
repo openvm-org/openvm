@@ -52,6 +52,7 @@ members = [
     "extensions/pairing/guest",
     "extensions/rv32-adapters",
 ]
+exclude = ["crates/axvm-sdk/example"]
 resolver = "2"
 
 # Fastest runtime configuration
