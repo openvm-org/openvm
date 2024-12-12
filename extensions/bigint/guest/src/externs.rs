@@ -139,7 +139,7 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
         b as *const u8
     );
     let mut cmp_result = cmp_result.assume_init();
-    if cmp_result.limbs[0] != 0 {
+    if cmp_result.as_le_bytes()[0] != 0 {
         return Ordering::Less;
     }
     custom_insn_r!(
@@ -150,7 +150,7 @@ unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering 
         b as *const u8,
         a as *const u8
     );
-    if cmp_result.limbs[0] != 0 {
+    if cmp_result.as_le_bytes()[0] != 0 {
         return Ordering::Greater;
     }
     return Ordering::Equal;

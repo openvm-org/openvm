@@ -70,6 +70,11 @@ impl U256 {
         limbs[..8].copy_from_slice(&value.to_le_bytes());
         Self { limbs }
     }
+
+    /// The little-endian byte representation of this U256.
+    pub fn as_le_bytes(&self) -> &[u8; 32] {
+        &self.limbs
+    }
 }
 
 impl_bin_op!(
