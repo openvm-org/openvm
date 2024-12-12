@@ -19,7 +19,6 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-#[allow(dead_code)]
 const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
@@ -143,7 +142,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = sanitized_cmd("rustup")
-        .args(["+nightly-2024-10-30", "which", "rustc"]) // TODO: switch +nightly to +axiom
+        .args([RUSTUP_TOOLCHAIN_NAME, "which", "rustc"])
         .output()
         .expect("rustup failed to find nightly toolchain")
         .stdout;

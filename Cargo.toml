@@ -3,8 +3,8 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 authors = ["Intrinsic Technologies"]
-homepage = "https://axiom.xyz"
-repository = "https://github.com/axiom-crypto/"
+homepage = "https://openvm.dev"
+repository = "https://github.com/openvm-org/"
 
 [workspace]
 members = [

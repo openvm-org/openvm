@@ -55,7 +55,7 @@ We support a single branch instruction, `beq256`, which is B-type.
 
 We next proceed to the instructions using _custom-1_ opcode[6:0] prefix **0101011**..
 
-Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.axiom` section of the ELF file in the serialized format. This is achieved by the `setup_moduli!` macro: for example, the following code
+Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro: for example, the following code
 
 ```rust
 moduli_declare! {
@@ -66,7 +66,7 @@ moduli_declare! {
 
 generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields. Hexadecimal and decimal formats are supported.
 
-For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_Bls12381()` and `setup_Bn254()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
+For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 

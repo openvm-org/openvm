@@ -7,9 +7,6 @@ pub use build::*;
 mod keygen;
 pub use keygen::*;
 
-// mod new;
-// pub use new::*;
-
 mod prove;
 pub use prove::*;
 

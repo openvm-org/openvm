@@ -56,7 +56,7 @@ impl<
     }
 }
 
-// Ref: https://github.com/axiom-crypto/afs-prototype/blob/043968891d596acdc82c8e3a9126a555fe178d43/lib/ecc-execution/src/common/miller_step.rs#L72
+// Ref: openvm_pairing_guest::miller_step
 pub fn miller_double_and_add_step_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
