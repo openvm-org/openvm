@@ -408,15 +408,15 @@ dependencies = [
  "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
- "axvm-circuit",
- "axvm-instructions",
- "axvm-pairing-guest",
  "halo2curves-axiom 0.7.0",
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
  "num-bigint-dig",
  "num-traits",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-pairing-guest",
  "rand",
  "sha3",
  "tracing",
@@ -488,13 +488,13 @@ version = "0.1.0"
 dependencies = [
  "ax-circuit-derive",
  "ax-stark-backend",
- "axvm-instructions",
  "derive_more 0.99.18",
  "ff 0.13.0",
  "itertools 0.13.0",
  "metrics",
  "metrics-tracing-context",
  "metrics-util",
+ "openvm-instructions",
  "p3-baby-bear",
  "p3-blake3",
  "p3-bn254-fr",
@@ -515,803 +515,6 @@ dependencies = [
  "tracing-forest",
  "tracing-subscriber",
  "zkhash",
-]
-
-[[package]]
-name = "axvm"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "axvm-rv32im-guest",
- "bytemuck",
- "chrono",
- "hex-literal",
- "num-bigint-dig",
- "num-traits",
- "serde",
-]
-
-[[package]]
-name = "axvm-algebra-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-transpiler",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-instructions",
- "axvm-pairing-guest",
- "axvm-rv32-adapters",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "halo2curves-axiom 0.7.0",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "rand",
- "serde",
- "strum",
- "tracing",
-]
-
-[[package]]
-name = "axvm-algebra-complex-macros"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-algebra-guest"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-algebra-moduli-setup",
- "axvm-platform",
- "halo2curves-axiom 0.7.0",
- "num-bigint-dig",
- "serde",
- "serde-big-array",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-algebra-moduli-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-algebra-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-algebra-guest",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-benchmarks"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-circuit",
- "axvm-algebra-transpiler",
- "axvm-build",
- "axvm-circuit",
- "axvm-ecc-circuit",
- "axvm-ecc-transpiler",
- "axvm-keccak256-circuit",
- "axvm-keccak256-guest",
- "axvm-keccak256-transpiler",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-native-recursion",
- "axvm-rv32im-circuit",
- "axvm-rv32im-transpiler",
- "axvm-sdk",
- "axvm-transpiler",
- "clap",
- "criterion",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "hex",
- "k256",
- "metrics",
- "num-bigint-dig",
- "pprof",
- "rand_chacha",
- "serde",
- "tempfile",
- "tiny-keccak",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "axvm-bigint-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-bigint-transpiler",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-instructions",
- "axvm-rv32-adapters",
- "axvm-rv32im-circuit",
- "axvm-rv32im-transpiler",
- "derive-new",
- "derive_more 1.0.0",
- "hex",
- "lazy_static",
- "rand",
- "serde",
- "test-case",
- "test-log",
-]
-
-[[package]]
-name = "axvm-bigint-guest"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-platform",
- "num-bigint-dig",
- "num-traits",
- "serde",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-bigint-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-bigint-guest",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-rv32im-transpiler",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
-]
-
-[[package]]
-name = "axvm-build"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "cargo_metadata",
- "dirs",
- "eyre",
- "hex",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "axvm-circuit"
-version = "0.1.0"
-dependencies = [
- "ark-ff 0.4.2",
- "async-trait",
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-poseidon2-air",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-circuit",
- "axvm-bigint-circuit",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-circuit",
- "axvm-ecc-guest",
- "axvm-instructions",
- "axvm-keccak256-circuit",
- "axvm-keccak256-transpiler",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-pairing-circuit",
- "axvm-rv32im-circuit",
- "axvm-rv32im-transpiler",
- "backtrace",
- "cfg-if",
- "derivative",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "getset",
- "halo2curves-axiom 0.7.0",
- "hex",
- "inferno",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "once_cell",
- "p3-baby-bear",
- "p3-dft",
- "p3-fri",
- "p3-merkle-tree",
- "p3-symmetric",
- "parking_lot",
- "rand",
- "rand_xoshiro",
- "rustc-hash 2.1.0",
- "serde",
- "static_assertions",
- "test-case",
- "test-log",
- "thiserror 1.0.69",
- "toml",
- "tracing",
- "zkhash",
-]
-
-[[package]]
-name = "axvm-circuit-derive"
-version = "0.1.0"
-dependencies = [
- "itertools 0.13.0",
- "proc-macro2",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-ecc-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-circuit",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-guest",
- "axvm-ecc-transpiler",
- "axvm-instructions",
- "axvm-rv32-adapters",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "lazy_static",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "once_cell",
- "serde",
- "strum",
-]
-
-[[package]]
-name = "axvm-ecc-guest"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-algebra-guest",
- "axvm-algebra-moduli-setup",
- "axvm-ecc-sw-setup",
- "axvm-platform",
- "axvm-rv32im-guest",
- "ecdsa",
- "elliptic-curve",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "k256",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-traits",
- "rand",
- "serde",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-ecc-sw-setup"
-version = "0.1.0"
-dependencies = [
- "axvm-macros-common",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-ecc-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-ecc-guest",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
-]
-
-[[package]]
-name = "axvm-instructions"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-instructions-derive",
- "backtrace",
- "derive-new",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "serde",
- "strum",
- "strum_macros",
- "toml",
-]
-
-[[package]]
-name = "axvm-instructions-derive"
-version = "0.1.0"
-dependencies = [
- "axvm-instructions",
- "proc-macro2",
- "quote",
- "strum",
- "strum_macros",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-keccak256-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-instructions",
- "axvm-keccak256-transpiler",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "hex",
- "hex-literal",
- "itertools 0.13.0",
- "lazy_static",
- "p3-keccak-air",
- "rand",
- "serde",
- "strum",
- "test-case",
- "test-log",
- "tiny-keccak",
- "tracing",
-]
-
-[[package]]
-name = "axvm-keccak256-guest"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "serde",
- "tiny-keccak",
-]
-
-[[package]]
-name = "axvm-keccak256-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-keccak256-guest",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
-]
-
-[[package]]
-name = "axvm-macros-common"
-version = "0.1.0"
-dependencies = [
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-native-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-poseidon2-air",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-instructions",
- "axvm-native-compiler",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "hex",
- "itertools 0.13.0",
- "lazy_static",
- "parking_lot",
- "rand",
- "serde",
- "strum",
- "test-case",
- "test-log",
- "tracing",
-]
-
-[[package]]
-name = "axvm-native-compiler"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-native-circuit",
- "axvm-native-compiler-derive",
- "axvm-rv32im-transpiler",
- "backtrace",
- "cfg-if",
- "hex",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-integer",
- "num-traits",
- "p3-dft",
- "p3-merkle-tree",
- "p3-symmetric",
- "rand",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "strum",
- "strum_macros",
- "test-case",
- "test-log",
- "tracing",
- "zkhash",
-]
-
-[[package]]
-name = "axvm-native-compiler-derive"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-native-compiler",
- "axvm-native-recursion",
- "proc-macro2",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "axvm-native-recursion"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-native-recursion",
- "bson",
- "cfg-if",
- "itertools 0.13.0",
- "lazy_static",
- "metrics",
- "once_cell",
- "p3-dft",
- "p3-fri",
- "p3-merkle-tree",
- "p3-symmetric",
- "rand",
- "serde",
- "serde_json",
- "snark-verifier-sdk",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "axvm-pairing-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-circuit",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-ecc-circuit",
- "axvm-ecc-guest",
- "axvm-instructions",
- "axvm-pairing-guest",
- "axvm-pairing-transpiler",
- "axvm-rv32-adapters",
- "axvm-rv32im-circuit",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "halo2curves-axiom 0.7.0",
- "itertools 0.13.0",
- "num-bigint-dig",
- "num-traits",
- "once_cell",
- "rand",
- "serde",
- "strum",
-]
-
-[[package]]
-name = "axvm-pairing-guest"
-version = "0.1.0"
-dependencies = [
- "axvm",
- "axvm-algebra-complex-macros",
- "axvm-algebra-guest",
- "axvm-algebra-moduli-setup",
- "axvm-ecc-guest",
- "axvm-ecc-sw-setup",
- "axvm-platform",
- "axvm-rv32im-guest",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-bigint-dig",
- "num-traits",
- "rand",
- "serde",
- "strum_macros",
- "subtle",
-]
-
-[[package]]
-name = "axvm-pairing-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-pairing-guest",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
-]
-
-[[package]]
-name = "axvm-platform"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "critical-section",
- "embedded-alloc",
- "getrandom",
- "libm",
- "stability",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-rv32-adapters"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-instructions",
- "axvm-rv32im-circuit",
- "derive-new",
- "hex",
- "itertools 0.13.0",
- "lazy_static",
- "rand",
- "test-case",
- "test-log",
- "tracing",
-]
-
-[[package]]
-name = "axvm-rv32im-circuit"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-circuit",
- "axvm-circuit-derive",
- "axvm-instructions",
- "axvm-rv32im-transpiler",
- "derive-new",
- "derive_more 1.0.0",
- "eyre",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-integer",
- "parking_lot",
- "rand",
- "serde",
- "strum",
- "test-case",
- "test-log",
- "tracing",
-]
-
-[[package]]
-name = "axvm-rv32im-guest"
-version = "0.1.0"
-dependencies = [
- "axvm-platform",
- "strum_macros",
-]
-
-[[package]]
-name = "axvm-rv32im-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "axvm-instructions",
- "axvm-instructions-derive",
- "axvm-rv32im-guest",
- "axvm-transpiler",
- "rrs-lib",
- "strum",
- "tracing",
-]
-
-[[package]]
-name = "axvm-sdk"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm",
- "axvm-algebra-circuit",
- "axvm-algebra-transpiler",
- "axvm-bigint-circuit",
- "axvm-bigint-transpiler",
- "axvm-build",
- "axvm-circuit",
- "axvm-ecc-circuit",
- "axvm-ecc-transpiler",
- "axvm-keccak256-circuit",
- "axvm-keccak256-transpiler",
- "axvm-native-circuit",
- "axvm-native-compiler",
- "axvm-native-recursion",
- "axvm-pairing-circuit",
- "axvm-pairing-transpiler",
- "axvm-rv32im-circuit",
- "axvm-rv32im-transpiler",
- "axvm-sdk-example-test",
- "axvm-transpiler",
- "bincode 2.0.0-rc.3",
- "bon",
- "bson",
- "derivative",
- "derive_more 1.0.0",
- "eyre",
- "itertools 0.13.0",
- "metrics",
- "serde",
- "static_assertions",
- "tracing",
-]
-
-[[package]]
-name = "axvm-sdk-example-test"
-version = "0.0.0"
-dependencies = [
- "axvm",
-]
-
-[[package]]
-name = "axvm-toolchain-tests"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm",
- "axvm-algebra-circuit",
- "axvm-algebra-transpiler",
- "axvm-bigint-circuit",
- "axvm-bigint-transpiler",
- "axvm-build",
- "axvm-circuit",
- "axvm-ecc-circuit",
- "axvm-ecc-guest",
- "axvm-ecc-transpiler",
- "axvm-instructions",
- "axvm-keccak256-circuit",
- "axvm-keccak256-transpiler",
- "axvm-pairing-circuit",
- "axvm-pairing-guest",
- "axvm-pairing-transpiler",
- "axvm-platform",
- "axvm-rv32im-circuit",
- "axvm-rv32im-transpiler",
- "axvm-transpiler",
- "derive_more 1.0.0",
- "eyre",
- "num-bigint-dig",
- "rand",
- "serde",
- "tempfile",
- "test-case",
-]
-
-[[package]]
-name = "axvm-transpiler"
-version = "0.1.0"
-dependencies = [
- "ax-stark-backend",
- "ax-stark-sdk",
- "axvm-algebra-transpiler",
- "axvm-build",
- "axvm-circuit",
- "axvm-instructions",
- "axvm-platform",
- "axvm-rv32im-transpiler",
- "derive_more 1.0.0",
- "elf",
- "eyre",
- "num-bigint-dig",
- "rrs-lib",
- "serde",
- "strum",
- "tempfile",
- "test-case",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -1598,14 +801,6 @@ version = "0.1.0"
 dependencies = [
  "anstyle",
  "ax-stark-sdk",
- "axvm-build",
- "axvm-circuit",
- "axvm-keccak256-circuit",
- "axvm-keccak256-transpiler",
- "axvm-native-recursion",
- "axvm-rv32im-transpiler",
- "axvm-sdk",
- "axvm-transpiler",
  "bincode 2.0.0-rc.3",
  "capstone",
  "cargo_metadata",
@@ -1615,6 +810,14 @@ dependencies = [
  "eyre",
  "goblin",
  "hex",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-recursion",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-transpiler",
  "prettytable-rs",
  "rand",
  "regex",
@@ -3554,6 +2757,803 @@ name = "oorandom"
 version = "11.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b410bbe7e14ab526a0e86877eb47c6996a2bd7746f027ba551028c925390e4e9"
+
+[[package]]
+name = "openvm"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "chrono",
+ "hex-literal",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm-platform",
+ "openvm-rv32im-guest",
+ "serde",
+]
+
+[[package]]
+name = "openvm-algebra-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm-algebra-transpiler",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-instructions",
+ "openvm-pairing-guest",
+ "openvm-rv32-adapters",
+ "openvm-rv32im-circuit",
+ "rand",
+ "serde",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-algebra-complex-macros"
+version = "0.1.0"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-algebra-guest"
+version = "0.1.0"
+dependencies = [
+ "halo2curves-axiom 0.7.0",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-moduli-setup",
+ "openvm-platform",
+ "serde",
+ "serde-big-array",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-algebra-moduli-setup"
+version = "0.1.0"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-algebra-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-algebra-guest",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-benchmarks"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "clap",
+ "criterion",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "k256",
+ "metrics",
+ "num-bigint-dig",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-guest",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-transpiler",
+ "pprof",
+ "rand_chacha",
+ "serde",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-bigint-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "hex",
+ "lazy_static",
+ "openvm-bigint-transpiler",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-instructions",
+ "openvm-rv32-adapters",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "rand",
+ "serde",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "openvm-bigint-guest"
+version = "0.1.0"
+dependencies = [
+ "num-bigint-dig",
+ "num-traits",
+ "openvm",
+ "openvm-platform",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-bigint-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-bigint-guest",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-rv32im-transpiler",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
+name = "openvm-build"
+version = "0.1.0"
+dependencies = [
+ "cargo_metadata",
+ "dirs",
+ "eyre",
+ "hex",
+ "openvm-platform",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "openvm-circuit"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.4.2",
+ "async-trait",
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-poseidon2-air",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "backtrace",
+ "cfg-if",
+ "derivative",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "getset",
+ "halo2curves-axiom 0.7.0",
+ "hex",
+ "inferno",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "once_cell",
+ "openvm-algebra-circuit",
+ "openvm-bigint-circuit",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-pairing-circuit",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "p3-baby-bear",
+ "p3-dft",
+ "p3-fri",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "parking_lot",
+ "rand",
+ "rand_xoshiro",
+ "rustc-hash 2.1.0",
+ "serde",
+ "static_assertions",
+ "test-case",
+ "test-log",
+ "thiserror 1.0.69",
+ "toml",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
+name = "openvm-circuit-derive"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-ecc-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "once_cell",
+ "openvm-algebra-circuit",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-rv32-adapters",
+ "openvm-rv32im-circuit",
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "openvm-ecc-guest"
+version = "0.1.0"
+dependencies = [
+ "ecdsa",
+ "elliptic-curve",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "k256",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm",
+ "openvm-algebra-guest",
+ "openvm-algebra-moduli-setup",
+ "openvm-ecc-sw-setup",
+ "openvm-platform",
+ "openvm-rv32im-guest",
+ "rand",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-ecc-sw-setup"
+version = "0.1.0"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-ecc-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
+name = "openvm-instructions"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "backtrace",
+ "derive-new",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm-instructions-derive",
+ "serde",
+ "strum",
+ "strum_macros",
+ "toml",
+]
+
+[[package]]
+name = "openvm-instructions-derive"
+version = "0.1.0"
+dependencies = [
+ "openvm-instructions",
+ "proc-macro2",
+ "quote",
+ "strum",
+ "strum_macros",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-keccak256-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-instructions",
+ "openvm-keccak256-transpiler",
+ "openvm-rv32im-circuit",
+ "p3-keccak-air",
+ "rand",
+ "serde",
+ "strum",
+ "test-case",
+ "test-log",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-keccak256-guest"
+version = "0.1.0"
+dependencies = [
+ "openvm-platform",
+ "serde",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "openvm-keccak256-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-keccak256-guest",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
+name = "openvm-macros-common"
+version = "0.1.0"
+dependencies = [
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-native-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-poseidon2-air",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "hex",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-instructions",
+ "openvm-native-compiler",
+ "openvm-rv32im-circuit",
+ "parking_lot",
+ "rand",
+ "serde",
+ "strum",
+ "test-case",
+ "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-native-compiler"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "backtrace",
+ "cfg-if",
+ "hex",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-integer",
+ "num-traits",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-native-circuit",
+ "openvm-native-compiler-derive",
+ "openvm-rv32im-transpiler",
+ "p3-dft",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "rand",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "strum",
+ "strum_macros",
+ "test-case",
+ "test-log",
+ "tracing",
+ "zkhash",
+]
+
+[[package]]
+name = "openvm-native-compiler-derive"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "openvm-native-recursion"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "bson",
+ "cfg-if",
+ "itertools 0.13.0",
+ "lazy_static",
+ "metrics",
+ "once_cell",
+ "openvm-circuit",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "p3-dft",
+ "p3-fri",
+ "p3-merkle-tree",
+ "p3-symmetric",
+ "rand",
+ "serde",
+ "serde_json",
+ "snark-verifier-sdk",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-pairing-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-mod-circuit-builder",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "num-bigint-dig",
+ "num-traits",
+ "once_cell",
+ "openvm-algebra-circuit",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-rv32-adapters",
+ "openvm-rv32im-circuit",
+ "rand",
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "openvm-pairing-guest"
+version = "0.1.0"
+dependencies = [
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm",
+ "openvm-algebra-complex-macros",
+ "openvm-algebra-guest",
+ "openvm-algebra-moduli-setup",
+ "openvm-ecc-guest",
+ "openvm-ecc-sw-setup",
+ "openvm-platform",
+ "openvm-rv32im-guest",
+ "rand",
+ "serde",
+ "strum_macros",
+ "subtle",
+]
+
+[[package]]
+name = "openvm-pairing-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-pairing-guest",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
+name = "openvm-platform"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "critical-section",
+ "embedded-alloc",
+ "getrandom",
+ "libm",
+ "stability",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-rv32-adapters"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "hex",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "rand",
+ "test-case",
+ "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-rv32im-circuit"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-circuit-primitives",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "derive_more 1.0.0",
+ "eyre",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-instructions",
+ "openvm-rv32im-transpiler",
+ "parking_lot",
+ "rand",
+ "serde",
+ "strum",
+ "test-case",
+ "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-rv32im-guest"
+version = "0.1.0"
+dependencies = [
+ "openvm-platform",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-rv32im-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-rv32im-guest",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "bincode 2.0.0-rc.3",
+ "bon",
+ "bson",
+ "derivative",
+ "derive_more 1.0.0",
+ "eyre",
+ "itertools 0.13.0",
+ "metrics",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-transpiler",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-pairing-circuit",
+ "openvm-pairing-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk-example-test",
+ "openvm-transpiler",
+ "serde",
+ "static_assertions",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-sdk-example-test"
+version = "0.0.0"
+dependencies = [
+ "openvm",
+]
+
+[[package]]
+name = "openvm-toolchain-tests"
+version = "0.1.0"
+dependencies = [
+ "ax-circuit-derive",
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive_more 1.0.0",
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-transpiler",
+ "rand",
+ "serde",
+ "tempfile",
+ "test-case",
+]
+
+[[package]]
+name = "openvm-transpiler"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive_more 1.0.0",
+ "elf",
+ "eyre",
+ "num-bigint-dig",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "rrs-lib",
+ "serde",
+ "strum",
+ "tempfile",
+ "test-case",
+ "thiserror 1.0.69",
+ "tracing",
+]
 
 [[package]]
 name = "option-ext"
