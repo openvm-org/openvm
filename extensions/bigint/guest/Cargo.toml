@@ -19,3 +19,4 @@ num-traits.workspace = true
 [features]
 default = []
 std = ["serde/std"]
+export-intrinsics = [] # export extern no_mangle functions for external linkage

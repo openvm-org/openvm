@@ -59,6 +59,10 @@ on:
         type: string
         required: true
         description: The name of the benchmark to run
+      benchmark_id:
+        type: string
+        required: true
+        description: The id of the benchmark to run, must be unique within matrix
       instance_type:
         type: string
         required: false
@@ -140,6 +144,8 @@ jobs:
           source ci/scripts/utils.sh
           install_s5cmd
 
+      - name: Display workflow inputs
+        run: echo "${{ toJSON(inputs) }}"
       - name: Feature flags
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
@@ -177,11 +183,11 @@ jobs:
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
+      # Metric name is unique within a run (matrix)
+      # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
       - name: Set metric name
         run: |
-          input_json_str="${{ toJSON(github.event.inputs) }}"
-          input_hash=$(echo $input_json_str | sha256sum | cut -d' ' -f1)
-          METRIC_NAME=${BIN_NAME}-${input_hash}
+          METRIC_NAME=${{ inputs.benchmark_id }}
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
@@ -213,7 +219,7 @@ jobs:
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
-          s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+          s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
 
           source ci/scripts/utils.sh
           generate_markdown $METRIC_PATH $METRIC_NAME ${{ env.S3_METRICS_PATH }} "."
@@ -229,12 +235,12 @@ jobs:
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
 
-      - name: Add benchmark metadata
+      - name: Add benchmark metadata and upload markdown
         id: add_metadata
         run: |
           source ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
-          s3_md_file="${BIN_NAME}-${current_sha}.md"
+          s3_md_file="${METRIC_NAME}-${current_sha}.md"
           s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
 
       ##########################################################################
@@ -243,7 +249,7 @@ jobs:
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${METRIC_NAME}-${{ env.current_sha }}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
@@ -280,10 +286,10 @@ jobs:
       - name: Update PR github pages with new bench results
         run: |
           mkdir -p ${GH_PAGES_PATH}
-          s3_md_file="${BIN_NAME}-${current_sha}.md"
-          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          s3_md_file="${METRIC_NAME}-${current_sha}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${s3_md_file}
+          git add ${GH_PAGES_PATH}/${s3_md_file}
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${s3_md_file}"
 
           MAX_RETRIES=10
           RETRY_DELAY=5

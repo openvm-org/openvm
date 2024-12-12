@@ -2,6 +2,7 @@
   "benchmarks": [
     {
       "name": "verify_fibair",
+      "id": "verify_fibair",
       "working_directory": "benchmarks",
       "e2e_bench": false,
       "run_params": [
@@ -15,25 +16,13 @@
     },
     {
       "name": "fibonacci",
+      "id": "fibonacci",
       "working_directory": "benchmarks",
       "e2e_bench": false,
       "run_params": [
         {
           "instance_type": "64cpu-linux-arm64",
           "memory_allocator": "mimalloc",
-          "app_log_blowup": 2,
-          "agg_log_blowup": 2
-        }
-      ]
-    },
-    {
-      "name": "fibonacci",
-      "working_directory": "benchmarks",
-      "e2e_bench": false,
-      "run_params": [
-        {
-          "instance_type": "64cpu-linux-x64",
-          "memory_allocator": "jemalloc",
           "app_log_blowup": 2,
           "agg_log_blowup": 2
         }
@@ -41,6 +30,7 @@
     },
     {
       "name": "regex",
+      "id": "regex",
       "working_directory": "benchmarks",
       "e2e_bench": false,
       "run_params": [
@@ -54,6 +44,7 @@
     },
     {
       "name": "base64_json",
+      "id": "base64_json",
       "working_directory": "benchmarks",
       "e2e_bench": false,
       "run_params": [
@@ -67,6 +58,7 @@
     },
     {
       "name": "fib_e2e",
+      "id": "fib_e2e",
       "working_directory": "benchmarks",
       "e2e_bench": true,
       "run_params": [
@@ -83,6 +75,7 @@
     },
     {
       "name": "ecrecover",
+      "id": "ecrecover",
       "working_directory": "benchmarks",
       "e2e_bench": false,
       "run_params": [

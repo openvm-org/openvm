@@ -52,7 +52,6 @@ add_metadata() {
     echo "Memory Allocator: $memory_allocator" >> $result_path
     echo "" >> $result_path
     echo "[Benchmark Workflow](https://github.com/${repo}/actions/runs/${run_id})" >> $result_path
-    s5cmd cp $result_path "${S3_PATH}/${current_sha}-${METRIC_NAME}.md"
 }
 
 commit_and_push_gh_pages() {

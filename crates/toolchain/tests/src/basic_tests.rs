@@ -212,6 +212,23 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
 }
 
 #[test]
+fn test_ruint_runtime() -> Result<()> {
+    let elf = build_example_program_with_features("ruint", ["ruint"])?;
+    let axvm_exe = AxVmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Int256TranspilerExtension),
+    )?;
+    let config = Int256Rv32Config::default();
+    let executor = VmExecutor::<F, _>::new(config);
+    executor.execute(axvm_exe, vec![])?;
+    Ok(())
+}
+
+#[test]
 fn test_tiny_mem_test_runtime() -> Result<()> {
     let elf = build_example_program_with_features("tiny-mem-test", ["heap-embedded-alloc"])?;
     let exe = AxVmExe::from_elf(

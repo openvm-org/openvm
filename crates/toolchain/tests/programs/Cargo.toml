@@ -16,7 +16,7 @@ axvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features =
 axvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
 axvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
 axvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
-
+ruint = { git = "ssh://git@github.com/axiom-crypto/uint.git", branch = "axiom", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
@@ -43,6 +43,7 @@ bn254 = ["axvm-pairing-guest/bn254"]
 bls12_381 = ["axvm-pairing-guest/bls12_381"]
 k256 = ["axvm-ecc-guest/k256", "dep:k256"]
 heap-embedded-alloc = ["axvm/heap-embedded-alloc"]
+ruint = ["dep:ruint", "axvm-bigint-guest/export-intrinsics"]
 
 [profile.release]
 panic = "abort"
@@ -60,3 +61,7 @@ required-features = ["k256"]
 [[example]]
 name = "final_exp_hint"
 required-features = ["bls12_381"]
+
+[[example]]
+name = "ruint"
+required-features = ["ruint"]
