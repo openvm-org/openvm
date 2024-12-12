@@ -59,7 +59,3 @@ required-features = ["k256"]
 [[example]]
 name = "final_exp_hint"
 required-features = ["bls12_381"]
-
-[[example]]
-name = "ruint"
-required-features = ["ruint"]
