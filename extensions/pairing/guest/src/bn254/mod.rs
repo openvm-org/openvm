@@ -1,5 +1,8 @@
+use core::ops::{Add, AddAssign, Neg};
+
 use axvm_algebra_guest::{Field, IntMod};
 use axvm_algebra_moduli_setup::moduli_declare;
+use axvm_ecc_guest::Group;
 
 mod fp12;
 mod fp2;
@@ -85,8 +88,17 @@ moduli_declare! {
     Bn254Scalar { modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617" },
 }
 
+const CURVE_B: Bn254Fp = Bn254Fp::from_const_bytes(hex!(
+    "0300000000000000000000000000000000000000000000000000000000000000"
+));
+
+axvm_ecc_sw_setup::sw_declare! {
+    Bn254Point { mod_type = Bn254Fp, b = CURVE_B },
+}
+
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
+pub type Point = Bn254Point;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
