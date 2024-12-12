@@ -484,8 +484,7 @@ where
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
     ) -> Proof<SC> {
-        tracing::info_span!("prove_segment", segment = 0)
-            .in_scope(|| self.engine.prove(pk, proof_input))
+        self.engine.prove(pk, proof_input)
     }
 
     pub fn prove(

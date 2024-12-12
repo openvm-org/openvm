@@ -34,12 +34,12 @@ impl Halo2Prover {
     pub fn prove_for_evm(&self, root_proof: &Proof<RootSC>) -> EvmProof {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
-        let snark = info_span!("halo2 verifier", group = "halo2_verifier").in_scope(|| {
+        let snark = info_span!("halo2 outer recursion", group = "outer").in_scope(|| {
             self.halo2_pk
                 .verifier
                 .prove_with_loaded_params(&self.verifier_srs, witness)
         });
-        info_span!("halo2 wrapper", group = "halo2_wrapper").in_scope(|| {
+        info_span!("halo2 wrapper", group = "wrapper").in_scope(|| {
             self.halo2_pk
                 .wrapper
                 .prove_for_evm_with_loaded_params(&self.wrapper_srs, snark)

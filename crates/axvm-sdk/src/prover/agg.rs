@@ -142,7 +142,7 @@ impl AggStarkProver {
                 &proofs,
                 self.num_children_internal,
             );
-            let group = format!("internal_verifier_height_{}", internal_node_height);
+            let group = format!("internal_{}", internal_node_height);
             proofs = info_span!("internal verifier", group = group).in_scope(|| {
                 #[cfg(feature = "bench-metrics")]
                 metrics::counter!("fri.log_blowup")
@@ -153,8 +153,8 @@ impl AggStarkProver {
                         internal_node_idx += 1;
                         info_span!(
                             "Internal verifier proof",
-                            index = internal_node_idx,
-                            height = internal_node_height
+                            idx = internal_node_idx,
+                            hgt = internal_node_height
                         )
                         .in_scope(|| {
                             single_segment_prove(&self.internal_prover, input.write(), self.profile)
@@ -168,7 +168,7 @@ impl AggStarkProver {
     }
 
     fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
-        info_span!("root verifier", group = "root_verifier").in_scope(|| {
+        info_span!("root verifier", group = "root").in_scope(|| {
             let input = root_input.write();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup").absolute(
@@ -220,7 +220,7 @@ impl LeafProver {
         self
     }
     pub fn generate_proof(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
-        info_span!("leaf verifier", group = "leaf_verifier").in_scope(|| {
+        info_span!("leaf verifier", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.prover.pk.fri_params.log_blowup as u64);
@@ -232,7 +232,7 @@ impl LeafProver {
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
-                    info_span!("leaf verifier proof", index = leaf_node_idx).in_scope(|| {
+                    info_span!("leaf verifier proof", idx = leaf_node_idx).in_scope(|| {
                         single_segment_prove(&self.prover, input.write_to_stream(), self.profile)
                     })
                 })
