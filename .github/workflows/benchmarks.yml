@@ -59,13 +59,14 @@ jobs:
             [
               .benchmarks[] |
               .name as $name |
+              .id as $id |
               .e2e_bench as $e2e_bench |
               select($run_e2e or .e2e_bench != true) |
               .run_params[] |
               {
                 name: $name,
                 e2e_bench: $e2e_bench,
-                id: .id,
+                id: $id,
                 instance_type: .instance_type,
                 memory_allocator: .memory_allocator,
                 app_log_blowup: .app_log_blowup,
