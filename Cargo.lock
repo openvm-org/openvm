@@ -1092,6 +1092,7 @@ dependencies = [
  "axvm-algebra-guest",
  "axvm-algebra-moduli-setup",
  "axvm-ecc-guest",
+ "axvm-ecc-sw-setup",
  "axvm-platform",
  "axvm-rv32im-guest",
  "group 0.13.0",

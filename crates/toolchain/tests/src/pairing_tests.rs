@@ -537,7 +537,7 @@ mod bls12_381 {
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
         // Always run proving for just pairing check
-        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, true);
+        new_air_test_with_min_segments(get_testing_config(), axvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 

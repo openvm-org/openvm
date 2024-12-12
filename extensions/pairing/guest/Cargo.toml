@@ -16,6 +16,7 @@ hex-literal = { workspace = true }
 axvm-algebra-guest = { workspace = true }
 axvm-algebra-moduli-setup = { workspace = true }
 axvm-ecc-guest = { workspace = true }
+axvm-ecc-sw-setup = { workspace = true }
 axvm-algebra-complex-macros = { workspace = true }
 axvm-rv32im-guest = { workspace = true }
 
