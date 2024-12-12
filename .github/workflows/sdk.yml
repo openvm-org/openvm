@@ -67,7 +67,7 @@ jobs:
           fi
 
       - name: Setup halo2
-        working-directory: crates/openvm-sdk
+        working-directory: crates/sdk
         run: |
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 

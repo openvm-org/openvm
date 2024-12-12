@@ -32,7 +32,7 @@ fn test_cli_e2e() -> Result<()> {
             "axiom",
             "build",
             "--manifest-dir",
-            "../openvm-sdk/example",
+            "../sdk/example",
             "--transpile",
             "--transpiler-config",
             "example/app_config.toml",

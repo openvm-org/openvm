@@ -39,7 +39,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### VM SDK
 
-- [`openvm-sdk`](../../crates/openvm-sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
+- [`sdk`](../../crates/sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
 
 ### Rust Toolchain
 
