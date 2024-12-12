@@ -90,7 +90,7 @@ pub struct BinTypeFilter {
 
 // Returns the path to the ELF file if it is unique.
 pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
-    println!("[axiom] Building the package...");
+    println!("[openvm] Building the package...");
     let target_filter = TargetFilter {
         name_substr: build_args.name.clone(),
         kind: if build_args.bin_type_filter.bin {
@@ -124,7 +124,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
 
     if build_args.transpile {
         let elf_path = elf_path?;
-        println!("[axiom] Transpiling the package...");
+        println!("[openvm] Transpiling the package...");
         let output_path = build_args.exe_path(&elf_path);
         let transpiler = if let Some(transpiler_config) = build_args.transpiler_config.clone() {
             let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&transpiler_config)?;
@@ -141,18 +141,18 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         write_exe_to_file(exe, &output_path)?;
 
         println!(
-            "[axiom] Successfully transpiled to {}",
+            "[openvm] Successfully transpiled to {}",
             output_path.display()
         );
         Ok(Some(elf_path))
     } else if let Ok(elf_path) = elf_path {
         println!(
-            "[axiom] Successfully built the package: {}",
+            "[openvm] Successfully built the package: {}",
             elf_path.display()
         );
         Ok(Some(elf_path))
     } else {
-        println!("[axiom] Successfully built the package");
+        println!("[openvm] Successfully built the package");
         Ok(None)
     }
 }

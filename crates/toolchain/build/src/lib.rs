@@ -167,7 +167,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     // let rust_src = get_env_var("OPENVM_RUST_SRC");
     // if !rust_src.is_empty() {
-    // TODO[jpw]: only do this for custom src once we make axiom toolchain
+    // TODO[jpw]: only do this for custom src once we make openvm toolchain
     args.push("-Z");
     args.push("build-std=alloc,core,proc_macro,panic_abort,std");
     args.push("-Z");

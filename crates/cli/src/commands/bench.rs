@@ -49,7 +49,7 @@ impl BenchCmd {
         let exe_path = build_args.exe_path(&elf_path);
         let exe = read_exe_from_file(&exe_path)?;
 
-        // TODO: read from axiom.toml
+        // TODO: read from openvm.toml
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(
             FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
