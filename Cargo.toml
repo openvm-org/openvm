@@ -14,7 +14,7 @@ members = [
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
-    "crates/circuits/derive",
+    "crates/circuits/primitives/derive",
     "crates/stark-backend",
     "crates/stark-sdk",
     "crates/toolchain/transpiler",
