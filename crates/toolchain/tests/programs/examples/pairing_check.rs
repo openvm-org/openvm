@@ -28,6 +28,10 @@ mod bn254 {
         Fp2 { mod_idx = 0 },
     }
 
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
+    }
+
     pub fn test_pairing_check(io: &[u8]) {
         setup_0();
         setup_all_complex_extensions();
@@ -66,6 +70,10 @@ mod bls12_381 {
 
     axvm_algebra_complex_macros::complex_init! {
         Fp2 { mod_idx = 0 },
+    }
+
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
     }
 
     pub fn test_pairing_check(io: &[u8]) {

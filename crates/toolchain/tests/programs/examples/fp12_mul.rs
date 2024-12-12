@@ -9,13 +9,17 @@ axvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
-    use axvm_pairing_guest::bn254::Fp12;
+    use axvm_pairing_guest::bn254::{Fp, Fp12};
 
     use super::*;
 
     axvm_algebra_moduli_setup::moduli_init! {
         "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
         "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+    }
+
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
     }
 
     pub fn test_fp12_mul(io: &[u8]) {
@@ -43,13 +47,17 @@ mod bn254 {
 
 #[cfg(feature = "bls12_381")]
 mod bls12_381 {
-    use axvm_pairing_guest::bls12_381::Fp12;
+    use axvm_pairing_guest::bls12_381::{Fp, Fp12};
 
     use super::*;
 
     axvm_algebra_moduli_setup::moduli_init! {
         "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    }
+
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
     }
 
     pub fn test_fp12_mul(io: &[u8]) {

@@ -93,12 +93,16 @@ const CURVE_B: Bn254Fp = Bn254Fp::from_const_bytes(hex!(
 ));
 
 axvm_ecc_sw_setup::sw_declare! {
-    Bn254Point { mod_type = Bn254Fp, b = CURVE_B },
+    Bn254G1Affine { mod_type = Bn254Fp, b = CURVE_B },
 }
 
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
-pub type Point = Bn254Point;
+/// Affine point representation of `Fp` points of BN254.
+/// **Note**: an instance of this type may be constructed that lies
+/// on the curve but not necessarily in the prime order subgroup
+/// because the group has cofactors.
+pub type G1Affine = Bn254G1Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;

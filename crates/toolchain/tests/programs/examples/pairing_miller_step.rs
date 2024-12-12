@@ -25,6 +25,10 @@ mod bn254 {
         Fp2 { mod_idx = 0 },
     }
 
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
+    }
+
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 32 * 12);
         let s = &io[..32 * 4];
@@ -101,6 +105,10 @@ mod bls12_381 {
 
     axvm_algebra_complex_macros::complex_init! {
         Fp2 { mod_idx = 0 },
+    }
+
+    axvm_ecc_sw_setup::sw_init! {
+        Fp,
     }
 
     pub fn test_miller_step(io: &[u8]) {

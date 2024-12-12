@@ -19,6 +19,10 @@ axvm_algebra_moduli_setup::moduli_init! {
     "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
 }
 
+axvm_ecc_sw_setup::sw_init! {
+    Fp,
+}
+
 pub fn main() {
     let (p, q, expected): (Vec<AffinePoint<Fp>>, Vec<AffinePoint<Fp2>>, (Fp12, Fp12)) = read();
     let actual = Bls12_381::pairing_check_hint(&p, &q);

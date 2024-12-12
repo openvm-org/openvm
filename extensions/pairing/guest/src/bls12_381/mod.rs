@@ -59,9 +59,9 @@ axvm_ecc_sw_setup::sw_declare! {
 
 pub type Fp = Bls12_381Fp;
 pub type Scalar = Bls12_381Scalar;
-/// Affine point representation of `Fp` points of BLS12-381. 
+/// Affine point representation of `Fp` points of BLS12-381.
 /// **Note**: an instance of this type may be constructed that lies
-/// on the curve but not necessarily in the prime order subgroup 
+/// on the curve but not necessarily in the prime order subgroup
 /// because the group has cofactors.
 pub type G1Affine = Bls12_381G1Affine;
 
