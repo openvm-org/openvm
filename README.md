@@ -2,12 +2,8 @@
 
 **Install**
 | User Book
-| [Developer Docs](./docs)
+| [Contributor Docs](./docs)
 | Crate Docs
-
-## Introduction to Plonky3
-
-For a guide on plonky3, see [Getting Started](https://hackmd.io/@axiom/HJks1ZLGR).
 
 ## Benchmarks
 
