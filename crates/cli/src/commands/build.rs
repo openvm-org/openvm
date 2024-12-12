@@ -36,7 +36,7 @@ impl BuildCmd {
 pub struct BuildArgs {
     #[arg(
         long,
-        help = "Path to the Cargo.toml file for the guest code (relative to the current directory)"
+        help = "Path to the directory containing the Cargo.toml file for the guest code (relative to the current directory)"
     )]
     pub manifest_dir: Option<PathBuf>,
 
@@ -64,7 +64,7 @@ pub struct BuildArgs {
 
     #[arg(
         long,
-        help = "Output path for the transpiled program (default: <ELF base path>.openvmexe)"
+        help = "Output path for the transpiled program (default: <ELF base path>.vmexe)"
     )]
     pub transpile_to: Option<PathBuf>,
 
@@ -76,7 +76,7 @@ impl BuildArgs {
     pub fn exe_path(&self, elf_path: &Path) -> PathBuf {
         self.transpile_to
             .clone()
-            .unwrap_or_else(|| elf_path.with_extension("openvmexe"))
+            .unwrap_or_else(|| elf_path.with_extension("vmexe"))
     }
 }
 
