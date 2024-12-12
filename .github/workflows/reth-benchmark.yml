@@ -182,7 +182,8 @@ jobs:
         run: |
           source ../ci/scripts/utils.sh
           add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_family }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
+          s3_md_file="{METRIC_NAME}.md"
+          s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
 
       ### Update gh-pages
       - uses: actions/checkout@v4
@@ -199,10 +200,11 @@ jobs:
           GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
           echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
           mkdir -p ${GH_PAGES_PATH}
-          s5cmd cp "${{ env.S3_PATH }}/main-${METRIC_NAME}.md" "${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          s3_md_file="${METRIC_NAME}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" "${GH_PAGES_PATH}/${s3_md_file}"
 
-          git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
+          git add ${GH_PAGES_PATH}/${s3_md_file}
+          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${s3_md_file}"
           MAX_RETRIES=10
           RETRY_DELAY=5
           ATTEMPT=0
