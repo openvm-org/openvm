@@ -8,6 +8,7 @@ use eyre::Result;
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
 pub enum Cargo {
+    #[command(name = "openvm")]
     OpenVm(VmCli),
 }
 
