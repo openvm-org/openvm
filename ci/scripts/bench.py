@@ -18,9 +18,9 @@ def run_cargo_command(
     memory_allocator,
     output_path,
 ):
-    # Command to run
+    # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", "maxperf", "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", "release", "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:

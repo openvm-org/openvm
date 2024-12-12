@@ -25,4 +25,5 @@ std = ["openvm/std", "k256/std", "revm-precompile/std", "alloy-primitives/std"]
 
 [profile.release]
 panic = "abort"
-lto = "fat"     # decrease binary size
+lto = "thin"    # faster compile time
+debug = 2       # for flamegraph
