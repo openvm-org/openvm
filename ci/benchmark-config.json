@@ -86,6 +86,34 @@
           "agg_log_blowup": 2
         }
       ]
+    },
+    {
+      "name": "rkyv",
+      "id": "rkyv",
+      "working_directory": "benchmarks",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "mimalloc",
+          "app_log_blowup": 2,
+          "agg_log_blowup": 2
+        }
+      ]
+    },
+    {
+      "name": "bincode",
+      "id": "bincode",
+      "working_directory": "benchmarks",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "64cpu-linux-arm64",
+          "memory_allocator": "mimalloc",
+          "app_log_blowup": 2,
+          "agg_log_blowup": 2
+        }
+      ]
     }
   ]
 }
