@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
-use axvm_algebra_guest::{IntMod, Reduce};
+use openvm_algebra_guest::{IntMod, Reduce};
 
 use super::group::{CyclicGroup, Group};
 
@@ -80,8 +80,8 @@ pub trait WeierstrassPoint: Group {
     fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate;
 }
 
-/// A trait for elliptic curves that bridges the axvm types and external types with CurveArithmetic etc.
-/// Implement this for external curves with corresponding axvm point and scalar types.
+/// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
+/// Implement this for external curves with corresponding openvm point and scalar types.
 pub trait IntrinsicCurve {
     type Scalar: IntMod + Reduce;
     type Point: WeierstrassPoint + CyclicGroup;

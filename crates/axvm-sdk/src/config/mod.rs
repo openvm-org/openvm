@@ -1,6 +1,6 @@
 use ax_stark_sdk::config::FriParameters;
-use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use axvm_native_compiler::conversion::CompilerOptions;
+use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_native_compiler::conversion::CompilerOptions;
 use serde::{Deserialize, Serialize};
 
 mod global;

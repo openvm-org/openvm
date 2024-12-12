@@ -10,7 +10,7 @@ use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -25,7 +25,7 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.

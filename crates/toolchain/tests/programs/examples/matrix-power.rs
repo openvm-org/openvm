@@ -1,11 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-axvm::entry!(main);
+openvm::entry!(main);
 use core::array;
 
-use axvm::io::print;
-use axvm_bigint_guest::U256;
+use openvm::io::print;
+use openvm_bigint_guest::U256;
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];

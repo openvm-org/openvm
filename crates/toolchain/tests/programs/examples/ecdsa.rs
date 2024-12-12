@@ -3,25 +3,25 @@
 
 use core::{hint::black_box, ptr::slice_from_raw_parts};
 
-use axvm_ecc_guest::{
+use openvm_ecc_guest::{
     algebra::IntMod,
     ecdsa::VerifyingKey,
     k256::{Secp256k1Coord, Secp256k1Point},
     weierstrass::WeierstrassPoint,
 };
-use axvm_keccak256_guest::keccak256;
+use openvm_keccak256_guest::keccak256;
 use hex_literal::hex;
 use k256::{
     ecdsa::{self, RecoveryId},
     Secp256k1,
 };
-axvm::entry!(main);
+openvm::entry!(main);
 
-axvm_algebra_moduli_setup::moduli_init! {
+openvm_algebra_moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
-axvm_ecc_sw_setup::sw_init! {
+openvm_ecc_sw_setup::sw_init! {
     Secp256k1Coord,
 }
 

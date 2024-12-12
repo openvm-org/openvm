@@ -1,4 +1,4 @@
-use axvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::{Field, IntMod};
 
 pub(crate) fn fp2_invert_assign<F: Field + IntMod>(c: &mut [F; 2]) {
     let mut t1 = c[1].clone();

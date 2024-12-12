@@ -11,12 +11,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
-use axvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::BranchEqualOpcode;
 use strum::IntoEnumIterator;
 
 #[repr(C)]

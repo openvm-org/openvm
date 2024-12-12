@@ -1,5 +1,5 @@
 use ax_stark_backend::{p3_field::PrimeField64, ChipUsageGetter};
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };

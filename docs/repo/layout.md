@@ -27,7 +27,7 @@ Contributor documentation is in [`docs`](../../docs) and end-user documentation 
 
 ### Benchmarks
 
-Benchmark guest programs and benchmark scripts are in [`axvm-benchmarks`](../../benchmarks).
+Benchmark guest programs and benchmark scripts are in [`openvm-benchmarks`](../../benchmarks).
 
 ### CI
 
@@ -39,22 +39,22 @@ Command-line binary to compile, execute, and prove guest programs is in [`cargo-
 
 ### VM SDK
 
-- [`axvm-sdk`](../../crates/axvm-sdk): The developer SDK for the VM. It includes the axVM aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
+- [`openvm-sdk`](../../crates/openvm-sdk): The developer SDK for the VM. It includes the OpenVm aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
 
 ### Rust Toolchain
 
-- [`axvm`](../../crates/toolchain/axvm): The axVM standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
-- [`axvm-platform`](../../crates/toolchain/platform): Rust runtime for RV32IM target using axVM intrinsic for system termination.
-- [`axvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into axVM executable with axVM instructions.
-- [`axvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
-- [`axvm-toolchain-tests`](../../crates/toolchain/tests): Testing of Rust toolchain including all official RISC-V 32-bit IM test vectors.
+- [`openvm`](../../crates/toolchain/openvm): The OpenVm standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
+- [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV32IM target using OpenVm intrinsic for system termination.
+- [`openvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into OpenVm executable with OpenVm instructions.
+- [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
+- [`openvm-toolchain-tests`](../../crates/toolchain/tests): Testing of Rust toolchain including all official RISC-V 32-bit IM test vectors.
 
 ### VM Framework
 
-- [`axvm-circuit`](../../crates/vm): The VM circuit framework. It includes the struct and trait definitions used throughout the architecture, as well as the system chips.
-- [`axvm-circuit-derive`](../../crates/vm/derive): Procedural macros to derive traits in the VM circuit framework.
-- [`axvm-instructions`](../../crates/toolchain/instructions): axVM instruction struct and trait definitions.
-- [`axvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for axVM instructions.
+- [`openvm-circuit`](../../crates/vm): The VM circuit framework. It includes the struct and trait definitions used throughout the architecture, as well as the system chips.
+- [`openvm-circuit-derive`](../../crates/vm/derive): Procedural macros to derive traits in the VM circuit framework.
+- [`openvm-instructions`](../../crates/toolchain/instructions): OpenVm instruction struct and trait definitions.
+- [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVm instructions.
 
 ### Circuit Foundations
 
@@ -74,44 +74,44 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 
 #### RV32IM
 
-- [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit): VM circuit extension for RV32IM instructions, including IO operations.
-- [`axvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions.
-- [`axvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions.
+- [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit): VM circuit extension for RV32IM instructions, including IO operations.
+- [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions.
+- [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions.
 
 #### Native Recursion
 
-- [`axvm-native-circuit`](../../extensions/native/circuit/): VM circuit extension for native instructions operating on field elements.
-- [`axvm-native-compiler`](../../extensions/native/compiler/): Implementation of compiler from a Rust embedded DSL to axVM assembly targeting the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
-- [`axvm-native-recursion`](../../extensions/native/recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. Library supports compilation to Halo2 circuit.
+- [`openvm-native-circuit`](../../extensions/native/circuit/): VM circuit extension for native instructions operating on field elements.
+- [`openvm-native-compiler`](../../extensions/native/compiler/): Implementation of compiler from a Rust embedded DSL to OpenVm assembly targeting the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
+- [`openvm-native-recursion`](../../extensions/native/recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. Library supports compilation to Halo2 circuit.
 
 #### Keccak256
 
-- [`axvm-keccak256-circuit`](../../extensions/keccak256/circuit): VM circuit extension for `keccak256` hash function.
-- [`axvm-keccak256-transpiler`](../../extensions/keccak256/transpiler): Transpiler extension for `keccak256` hash function.
-- [`axvm-keccak256-guest`](../../extensions/keccak256/guest): Guest library with intrinsic function for `keccak256` hash function.
+- [`openvm-keccak256-circuit`](../../extensions/keccak256/circuit): VM circuit extension for `keccak256` hash function.
+- [`openvm-keccak256-transpiler`](../../extensions/keccak256/transpiler): Transpiler extension for `keccak256` hash function.
+- [`openvm-keccak256-guest`](../../extensions/keccak256/guest): Guest library with intrinsic function for `keccak256` hash function.
 
 #### Big Integers
 
-- [`axvm-bigint-circuit`](../../extensions/bigint/circuit): VM circuit extension for `I256` and `U256` big integer operations.
-- [`axvm-bigint-transpiler`](../../extensions/bigint/transpiler): Transpiler extension for `I256` and `U256` big integer operations.
-- [`axvm-bigint-guest`](../../extensions/bigint/guest): Guest library with `I256` and `U256` big integers operations using intrinsics for underlying operations.
+- [`openvm-bigint-circuit`](../../extensions/bigint/circuit): VM circuit extension for `I256` and `U256` big integer operations.
+- [`openvm-bigint-transpiler`](../../extensions/bigint/transpiler): Transpiler extension for `I256` and `U256` big integer operations.
+- [`openvm-bigint-guest`](../../extensions/bigint/guest): Guest library with `I256` and `U256` big integers operations using intrinsics for underlying operations.
 
 #### Modular Arithmetic
 
-- [`axvm-algebra-circuit`](../../extensions/algebra/circuit): VM circuit extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and Fp2 operations.
-- [`axvm-algebra-transpiler`](../../extensions/algebra/transpiler): Transpiler extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and Fp2 operations.
-- [`axvm-algebra-guest`](../../extensions/algebra/guest): Guest library with traits for modular arithmetic and Fp2 operations.
-- [`axvm-algebra-moduli-setup`](../../extensions/algebra/moduli-setup): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
+- [`openvm-algebra-circuit`](../../extensions/algebra/circuit): VM circuit extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and Fp2 operations.
+- [`openvm-algebra-transpiler`](../../extensions/algebra/transpiler): Transpiler extension for modular arithmetic for arbitrary compile-time modulus. Supports modular arithmetic and Fp2 operations.
+- [`openvm-algebra-guest`](../../extensions/algebra/guest): Guest library with traits for modular arithmetic and Fp2 operations.
+- [`openvm-algebra-moduli-setup`](../../extensions/algebra/moduli-setup): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
 
 #### Elliptic Curve Cryptography
 
-- [`axvm-ecc-circuit`](../../extensions/ecc/circuit): VM circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`axvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`axvm-ecc-guest`](../../extensions/ecc/guest): Guest library with elliptic curve constants for Secp256k1 and functions using custom intrinsics, including ECDSA.
-- [`axvm-ecc-sw-setup`](../../extensions/ecc/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
+- [`openvm-ecc-circuit`](../../extensions/ecc/circuit): VM circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with elliptic curve constants for Secp256k1 and functions using custom intrinsics, including ECDSA.
+- [`openvm-ecc-sw-setup`](../../extensions/ecc/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 
 #### Pairing
 
-- [`axvm-pairing-circuit`](../../extensions/pairing/circuit): VM circuit extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
-- [`axvm-pairing-transpiler`](../../extensions/pairing/transpiler): Transpiler extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
-- [`axvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on elliptic curves, including BN254 and BLS12-381 and associated constants. Also includes elliptic curve operations for VM runtime with the `halo2curves` feature gate.
+- [`openvm-pairing-circuit`](../../extensions/pairing/circuit): VM circuit extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
+- [`openvm-pairing-transpiler`](../../extensions/pairing/transpiler): Transpiler extension for optimal Ate pairing on arbitrary compile-time elliptic curves, including BN254 and BLS12-381.
+- [`openvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on elliptic curves, including BN254 and BLS12-381 and associated constants. Also includes elliptic curve operations for VM runtime with the `halo2curves` feature gate.

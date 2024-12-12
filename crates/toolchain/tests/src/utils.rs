@@ -3,8 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use axvm_build::{build_guest_package, get_package, is_debug, GuestOptions};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
+use openvm_build::{build_guest_package, get_package, is_debug, GuestOptions};
+use openvm_transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf};
 use eyre::Result;
 use tempfile::tempdir;
 

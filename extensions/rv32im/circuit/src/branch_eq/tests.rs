@@ -12,13 +12,13 @@ use ax_stark_backend::{
     ChipUsageGetter,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
     BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
     VmChipWrapper, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
-use axvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::BranchEqualOpcode;
 use rand::{rngs::StdRng, Rng};
 
 use super::{

@@ -11,12 +11,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
-use axvm_native_compiler::FieldExtensionOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use itertools::izip;
 
 pub const BETA: usize = 11;

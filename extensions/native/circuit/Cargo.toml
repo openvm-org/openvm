@@ -1,9 +1,9 @@
 [package]
-name = "axvm-native-circuit"
+name = "openvm-native-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM circuit extension for native VM"
+description = "OpenVm circuit extension for native VM"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
@@ -11,11 +11,11 @@ ax-stark-sdk = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
 ax-poseidon2-air = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-rv32im-circuit = { workspace = true }
-axvm-native-compiler = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-native-compiler = { workspace = true }
 
 parking_lot.workspace = true
 strum.workspace = true
@@ -32,10 +32,10 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["axvm-circuit/parallel"]
-test-utils = ["axvm-circuit/test-utils"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]

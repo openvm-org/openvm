@@ -3,12 +3,12 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use axvm_algebra_guest::field::Field;
+use openvm_algebra_guest::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    axvm_platform::custom_insn_r,
+    openvm_platform::custom_insn_r,
 };
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 - \xi`.

@@ -1,13 +1,13 @@
 [package]
-name = "axvm-bigint-guest"
+name = "openvm-bigint-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "Guest extension for Int256"
 
 [dependencies]
-axvm = { workspace = true }
-axvm-platform = { workspace = true }
+openvm = { workspace = true }
+openvm-platform = { workspace = true }
 strum_macros = { workspace = true }
 
 serde = { workspace = true, features = ["alloc"] }

@@ -1,5 +1,5 @@
 #![no_std]
-extern crate self as axvm_algebra_guest;
+extern crate self as openvm_algebra_guest;
 
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
@@ -39,7 +39,7 @@ impl ComplexExtFieldBaseFunct7 {
     pub const COMPLEX_EXT_FIELD_MAX_KINDS: u8 = 8;
 }
 
-/// Modular arithmetic traits for use with axVM intrinsics.
+/// Modular arithmetic traits for use with OpenVm intrinsics.
 extern crate alloc;
 
 use alloc::vec::Vec;
@@ -49,7 +49,7 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-pub use axvm_algebra_moduli_setup as moduli_setup;
+pub use openvm_algebra_moduli_setup as moduli_setup;
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
@@ -83,7 +83,7 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
-/// Trait definition for axVM modular integers, where each operation
+/// Trait definition for OpenVm modular integers, where each operation
 /// is done modulo MODULUS.
 ///
 /// Division is only defined over the group of units in the ring of integers modulo MODULUS.

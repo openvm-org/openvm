@@ -1,6 +1,6 @@
 use ax_stark_backend::prover::types::Proof;
 use ax_stark_sdk::config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters};
-use axvm_native_compiler::ir::Builder;
+use openvm_native_compiler::ir::Builder;
 
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable, config::outer::OuterConfig,

@@ -14,13 +14,13 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_bn254_fr::Bn254Fr,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     system::program::trace::VmCommittedExe,
 };
-use axvm_native_circuit::NativeConfig;
-use axvm_native_compiler::ir::DIGEST_SIZE;
-use axvm_native_recursion::halo2::{
+use openvm_native_circuit::NativeConfig;
+use openvm_native_compiler::ir::DIGEST_SIZE;
+use openvm_native_recursion::halo2::{
     utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
 use derivative::Derivative;

@@ -1,6 +1,6 @@
 # Cargo Axiom CLI
 
-The `cargo axiom` CLI is useful for various tasks related to axVM, such as compiling programs, benching proofs of programs, and more.
+The `cargo axiom` CLI is useful for various tasks related to OpenVm, such as compiling programs, benching proofs of programs, and more.
 
 ## Development
 

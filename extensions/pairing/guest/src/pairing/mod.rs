@@ -5,11 +5,11 @@ mod miller_step;
 mod operations;
 mod sextic_ext_field;
 
-use axvm_algebra_guest::{
+use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
 };
-use axvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::AffinePoint;
 pub use final_exp::*;
 pub use line::*;
 pub use miller_loop::*;

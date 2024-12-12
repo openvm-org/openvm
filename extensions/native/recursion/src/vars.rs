@@ -1,4 +1,4 @@
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     ir::{Array, Config, Ext, Felt, Usize},
     prelude::*,
 };

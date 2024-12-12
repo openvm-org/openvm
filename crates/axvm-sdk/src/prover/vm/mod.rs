@@ -3,7 +3,7 @@ use ax_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     prover::types::Proof,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::Streams,
     system::memory::{tree::public_values::UserPublicValuesProof, CHUNK},
 };

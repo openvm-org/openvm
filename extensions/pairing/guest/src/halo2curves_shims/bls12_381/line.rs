@@ -2,7 +2,7 @@ extern crate std;
 
 use std::ops::{Add, Mul, Neg, Sub};
 
-use axvm_ecc_guest::{
+use openvm_ecc_guest::{
     algebra::{field::FieldExtension, Field},
     AffinePoint,
 };

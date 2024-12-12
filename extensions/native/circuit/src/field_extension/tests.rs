@@ -10,12 +10,12 @@ use ax_stark_backend::{
     ChipUsageGetter,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::testing::{
+use openvm_circuit::arch::testing::{
     memory::{gen_address_space, gen_pointer},
     VmChipTestBuilder,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use axvm_native_compiler::FieldExtensionOpcode;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::FieldExtensionOpcode;
 use rand::Rng;
 use strum::EnumCount;
 

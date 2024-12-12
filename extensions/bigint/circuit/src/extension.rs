@@ -6,20 +6,20 @@ use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_bigint_transpiler::{
+use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, UsizeOpcode};
-use axvm_rv32im_circuit::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, UsizeOpcode};
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };

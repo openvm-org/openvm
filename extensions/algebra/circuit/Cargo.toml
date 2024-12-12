@@ -1,5 +1,5 @@
 [package]
-name = "axvm-algebra-circuit"
+name = "openvm-algebra-circuit"
 version = "0.1.0"
 edition = "2021"
 description = "Modular arithmetic circuits."
@@ -7,15 +7,15 @@ description = "Modular arithmetic circuits."
 [dependencies]
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-circuit = { workspace = true }
 ax-stark-backend = { workspace = true }
 ax-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
-axvm-rv32im-circuit = { workspace = true }
-axvm-rv32-adapters = { workspace = true }
-axvm-algebra-transpiler = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-rv32-adapters = { workspace = true }
+openvm-algebra-transpiler = { workspace = true }
 
 itertools = { workspace = true }
 num-bigint-dig = { workspace = true, features = ["serde"] }
@@ -30,6 +30,6 @@ serde.workspace = true
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }
 ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
-axvm-circuit = { workspace = true, features = ["test-utils"] }
-axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
-axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

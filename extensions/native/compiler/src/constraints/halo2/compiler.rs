@@ -8,7 +8,7 @@ use std::{
 
 use ax_stark_backend::p3_field::{ExtensionField, PrimeField};
 use ax_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
-use axvm_circuit::metrics::cycle_tracker::CycleTracker;
+use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
@@ -427,7 +427,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
             if res.is_err() {
                 if let Some(mut backtrace) = backtrace {
                     backtrace.resolve();
-                    eprintln!("axvm circuit failure; backtrace:\n{:?}", backtrace);
+                    eprintln!("openvm circuit failure; backtrace:\n{:?}", backtrace);
                 }
                 res.unwrap();
             }

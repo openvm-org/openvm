@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ax_stark_sdk::ax_stark_backend::prover::types::Proof;
-use axvm_native_compiler::prelude::Witness;
-use axvm_native_recursion::{
+use openvm_native_compiler::prelude::Witness;
+use openvm_native_recursion::{
     halo2::{utils::Halo2ParamsReader, EvmProof, Halo2Params},
     witness::Witnessable,
 };

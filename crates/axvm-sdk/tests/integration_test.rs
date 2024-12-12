@@ -9,19 +9,19 @@ use ax_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     p3_baby_bear::BabyBear,
 };
-use axvm_build::GuestOptions;
-use axvm_circuit::{
+use openvm_build::GuestOptions;
+use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
         SystemConfig, VmConfig, VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
-use axvm_native_circuit::{Native, NativeConfig};
-use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::InnerConfig};
-use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
-use axvm_sdk::{
+use openvm_native_circuit::{Native, NativeConfig};
+use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
+use openvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::InnerConfig};
+use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
+use openvm_sdk::{
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
     keygen::AppProvingKey,
     verifier::{
@@ -30,7 +30,7 @@ use axvm_sdk::{
     },
     Sdk, StdIn,
 };
-use axvm_transpiler::transpiler::Transpiler;
+use openvm_transpiler::transpiler::Transpiler;
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;

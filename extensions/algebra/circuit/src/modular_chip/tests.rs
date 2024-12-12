@@ -12,16 +12,16 @@ use ax_mod_circuit_builder::{
 };
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use axvm_circuit::arch::{
+use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_circuit::arch::{
     instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
 };
-use axvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
-use axvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
-use axvm_rv32_adapters::{
+use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
+use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
+use openvm_rv32_adapters::{
     rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
 };
-use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use rand::Rng;

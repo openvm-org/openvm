@@ -1,13 +1,13 @@
 [package]
-name = "axvm-ecc-guest"
+name = "openvm-ecc-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM guest elliptic curve cryptography library."
+description = "OpenVm guest elliptic curve cryptography library."
 
 [dependencies]
-axvm = { workspace = true }
-axvm-platform = { workspace = true }
+openvm = { workspace = true }
+openvm-platform = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
@@ -16,10 +16,10 @@ ecdsa = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true, optional = true }
 hex-literal = { workspace = true }
-axvm-rv32im-guest = { workspace = true }
-axvm-algebra-guest = { workspace = true }
-axvm-ecc-sw-setup = { workspace = true }
-axvm-algebra-moduli-setup = { workspace = true }
+openvm-rv32im-guest = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-ecc-sw-setup = { workspace = true }
+openvm-algebra-moduli-setup = { workspace = true }
 
 # Used for `halo2curves` feature
 # TODO[yj]: Integrate with halo2curves-axiom first before transitioning to PSE halo2curves
@@ -35,9 +35,9 @@ lazy_static.workspace = true
 
 [features]
 default = []
-std = ["axvm/std"]
+std = ["openvm/std"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro
 k256 = ["dep:k256"]
 # TODO[yj]: Switch to `halo2curves`
-halo2curves = ["dep:halo2curves-axiom", "axvm-algebra-guest/halo2curves"]
+halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]

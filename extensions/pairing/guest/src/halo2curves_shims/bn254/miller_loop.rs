@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use axvm_ecc_guest::{
+use openvm_ecc_guest::{
     algebra::{field::FieldExtension, DivUnsafe, Field},
     AffinePoint,
 };

@@ -1,13 +1,13 @@
 use alloc::vec::Vec;
 
-use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
-use axvm_ecc_guest::AffinePoint;
+use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
+use openvm_ecc_guest::AffinePoint;
 use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    axvm_platform::custom_insn_r,
+    openvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
 
@@ -327,7 +327,7 @@ impl PairingCheck for Bn254 {
                 let mut ptr = hint.as_ptr() as *const u8;
                 // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
                 for _ in (0..32 * 12 * 2).step_by(4) {
-                    axvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
                     ptr = ptr.add(4);
                 }
                 hint.assume_init()

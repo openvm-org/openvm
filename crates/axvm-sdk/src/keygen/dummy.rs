@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     },
     engine::StarkFriEngine,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         instructions::{
             exe::VmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
@@ -21,10 +21,10 @@ use axvm_circuit::{
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
 };
-use axvm_native_circuit::NativeConfig;
-use axvm_native_compiler::ir::DIGEST_SIZE;
-use axvm_native_recursion::hints::Hintable;
-use axvm_rv32im_circuit::Rv32ImConfig;
+use openvm_native_circuit::NativeConfig;
+use openvm_native_compiler::ir::DIGEST_SIZE;
+use openvm_native_recursion::hints::Hintable;
+use openvm_rv32im_circuit::Rv32ImConfig;
 
 use crate::{
     prover::vm::{

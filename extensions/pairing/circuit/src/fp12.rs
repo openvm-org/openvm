@@ -1,7 +1,7 @@
 use std::{array::from_fn, cell::RefCell, rc::Rc};
 
 use ax_mod_circuit_builder::{ExprBuilder, FieldVariable};
-use axvm_algebra_circuit::Fp2;
+use openvm_algebra_circuit::Fp2;
 
 /// Field extension Fp12 defined with coefficients in Fp2.
 /// Represents the element `c0 + c1 w + ... + c5 w^5` in Fp12.
@@ -211,8 +211,8 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         p3_baby_bear::BabyBear, utils::create_seeded_rng,
     };
-    use axvm_ecc_guest::algebra::field::FieldExtension;
-    use axvm_pairing_guest::bn254::BN254_MODULUS;
+    use openvm_ecc_guest::algebra::field::FieldExtension;
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
 
     use super::*;

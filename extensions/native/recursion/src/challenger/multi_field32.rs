@@ -1,5 +1,5 @@
 use ax_stark_backend::p3_field::{AbstractField, Field};
-use axvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
+use openvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
 
 use crate::{
     challenger::{

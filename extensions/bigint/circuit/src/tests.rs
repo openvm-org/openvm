@@ -6,24 +6,24 @@ use ax_circuit_primitives::{
 };
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
         RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
-use axvm_rv32_adapters::{
+use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterChip,
     Rv32HeapBranchAdapterChip,
 };
-use axvm_rv32im_circuit::{
+use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
     BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
     MultiplicationCoreChip, ShiftCoreChip,
 };
-use axvm_rv32im_transpiler::{
+use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use rand::Rng;

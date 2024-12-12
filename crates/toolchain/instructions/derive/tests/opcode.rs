@@ -1,5 +1,5 @@
-use axvm_instructions::UsizeOpcode;
-use axvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::UsizeOpcode;
+use openvm_instructions_derive::UsizeOpcode;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 #[derive(

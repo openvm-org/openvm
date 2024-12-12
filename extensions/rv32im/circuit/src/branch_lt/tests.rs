@@ -15,7 +15,7 @@ use ax_stark_backend::{
     ChipUsageGetter,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
         BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
@@ -23,8 +23,8 @@ use axvm_circuit::{
     },
     utils::{generate_long_number, i32_to_f},
 };
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
-use axvm_rv32im_transpiler::BranchLessThanOpcode;
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use rand::{rngs::StdRng, Rng};
 
 use super::{

@@ -11,7 +11,7 @@ use ax_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
         ExecutionBus, ExecutionState, Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -25,8 +25,8 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use axvm_native_compiler::NativeLoadStoreOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,

@@ -1,4 +1,4 @@
-name: "axVM Benchmarks: Coordinate Runner & Reporting"
+name: "OpenVm Benchmarks: Coordinate Runner & Reporting"
 
 on:
   push:

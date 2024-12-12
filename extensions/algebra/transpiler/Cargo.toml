@@ -1,5 +1,5 @@
 [package]
-name = "axvm-algebra-transpiler"
+name = "openvm-algebra-transpiler"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,10 +7,10 @@ description = "Transpiler extension for modular arithmetic"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-transpiler = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-axvm-algebra-guest = { workspace = true }
-axvm-instructions-derive = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }

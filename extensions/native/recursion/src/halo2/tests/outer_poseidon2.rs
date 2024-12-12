@@ -2,7 +2,7 @@ use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::{
     config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
-use axvm_native_compiler::ir::{Builder, Felt, Var, Witness};
+use openvm_native_compiler::ir::{Builder, Felt, Var, Witness};
 use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 
 use crate::{

@@ -3,9 +3,9 @@
 
 use core::array;
 
-use axvm::io::print;
-use axvm_bigint_guest::I256;
-axvm::entry!(main);
+use openvm::io::print;
+use openvm_bigint_guest::I256;
+openvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[I256; N]; N];

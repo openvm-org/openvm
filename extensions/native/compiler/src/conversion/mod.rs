@@ -1,12 +1,12 @@
 use ax_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
-use axvm_circuit::arch::instructions::program::Program;
-use axvm_instructions::{
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
     PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
     VmOpcode,
 };
-use axvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_rv32im_transpiler::BranchEqualOpcode;
 use serde::{Deserialize, Serialize};
 
 use crate::{

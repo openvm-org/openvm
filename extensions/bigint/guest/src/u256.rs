@@ -9,11 +9,11 @@ use core::{
 #[cfg(target_os = "zkvm")]
 use {
     super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE},
-    axvm_platform::custom_insn_r,
+    openvm_platform::custom_insn_r,
     core::{arch::asm, mem::MaybeUninit},
 };
 #[cfg(not(target_os = "zkvm"))]
-use {axvm::utils::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
+use {openvm::utils::biguint_to_limbs, num_bigint_dig::BigUint, num_traits::One};
 
 use crate::impl_bin_op;
 

@@ -1,6 +1,6 @@
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::arch::{Streams, SystemConfig, VmExecutor};
-use axvm_instructions::program::Program;
+use openvm_circuit::arch::{Streams, SystemConfig, VmExecutor};
+use openvm_instructions::program::Program;
 
 use crate::{Native, NativeConfig};
 

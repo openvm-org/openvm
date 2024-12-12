@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
-use axvm::io::read;
+use openvm::io::read;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 #[derive(serde::Deserialize)]
 struct Foo {
@@ -14,9 +14,9 @@ struct Foo {
 pub fn main() {
     let foo: Foo = read();
     if foo.baz.len() != 4 {
-        axvm::process::panic();
+        openvm::process::panic();
     }
     if foo.bar != 42 {
-        axvm::process::panic();
+        openvm::process::panic();
     }
 }

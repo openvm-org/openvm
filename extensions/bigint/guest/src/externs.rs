@@ -1,6 +1,6 @@
 use core::{arch::asm, cmp::Ordering, mem::MaybeUninit};
 
-use axvm_platform::custom_insn_r;
+use openvm_platform::custom_insn_r;
 
 use super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
 

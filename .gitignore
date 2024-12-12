@@ -11,9 +11,9 @@ Cargo.lock
 **/root
 **/leaf
 **/internal
-!axvm-sdk/src/verifier/leaf
-!axvm-sdk/src/verifier/internal
-!axvm-sdk/src/verifier/root
+!openvm-sdk/src/verifier/leaf
+!openvm-sdk/src/verifier/internal
+!openvm-sdk/src/verifier/root
 
 .cache/
 rustc-*

@@ -1,18 +1,18 @@
 use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
-use axvm_bigint_circuit::Int256Rv32Config;
-use axvm_bigint_transpiler::Int256TranspilerExtension;
-use axvm_circuit::{
+use openvm_bigint_circuit::Int256Rv32Config;
+use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, VmExecutor},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
-use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use axvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
-use axvm_rv32im_transpiler::{
+use openvm_keccak256_circuit::Keccak256Rv32Config;
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_transpiler::{elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf};
+use openvm_transpiler::{elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf};
 use eyre::Result;
 use test_case::test_case;
 
@@ -104,7 +104,7 @@ fn test_read_runtime() -> Result<()> {
         bar: 42,
         baz: vec![0, 1, 2, 3],
     };
-    let serialized_foo = axvm::serde::to_vec(&foo).unwrap();
+    let serialized_foo = openvm::serde::to_vec(&foo).unwrap();
     let input = serialized_foo
         .into_iter()
         .flat_map(|w| w.to_le_bytes())
@@ -148,7 +148,7 @@ fn test_reveal_runtime() -> Result<()> {
 #[test]
 fn test_keccak256_runtime() -> Result<()> {
     let elf = build_example_program("keccak")?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Keccak256TranspilerExtension)
@@ -157,7 +157,7 @@ fn test_keccak256_runtime() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
-    executor.execute(axvm_exe, vec![])?;
+    executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
 
@@ -180,7 +180,7 @@ fn test_print_runtime() -> Result<()> {
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -190,14 +190,14 @@ fn test_matrix_power_runtime() -> Result<()> {
     )?;
     let config = Int256Rv32Config::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(axvm_exe, vec![])?;
+    executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -207,14 +207,14 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
     )?;
     let config = Int256Rv32Config::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(axvm_exe, vec![])?;
+    executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
 
 #[test]
 fn test_ruint_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ruint", ["ruint"])?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -224,7 +224,7 @@ fn test_ruint_runtime() -> Result<()> {
     )?;
     let config = Int256Rv32Config::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(axvm_exe, vec![])?;
+    executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
 

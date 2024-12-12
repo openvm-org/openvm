@@ -1,4 +1,4 @@
-use axvm_ecc_guest::algebra::{field::FieldExtension, Field};
+use openvm_ecc_guest::algebra::{field::FieldExtension, Field};
 use halo2curves_axiom::bls12_381::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;

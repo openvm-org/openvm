@@ -13,14 +13,14 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_build::{
+use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{instructions::exe::VmExe, ExecutionError, VmConfig, VmExecutor},
     system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
 };
-use axvm_native_recursion::{
+use openvm_native_recursion::{
     halo2::{
         utils::Halo2ParamsReader,
         wrapper::{EvmVerifier, Halo2WrapperProvingKey},
@@ -28,8 +28,8 @@ use axvm_native_recursion::{
     },
     types::InnerConfig,
 };
-use axvm_transpiler::{
-    axvm_platform::memory::MEM_SIZE,
+use openvm_transpiler::{
+    openvm_platform::memory::MEM_SIZE,
     elf::Elf,
     transpiler::{Transpiler, TranspilerError},
     FromElf,

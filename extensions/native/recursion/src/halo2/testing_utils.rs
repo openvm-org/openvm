@@ -5,7 +5,7 @@ use ax_stark_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
-use axvm_native_compiler::prelude::Witness;
+use openvm_native_compiler::prelude::Witness;
 use snark_verifier_sdk::Snark;
 
 use crate::{

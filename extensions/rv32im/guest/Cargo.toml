@@ -1,12 +1,12 @@
 [package]
-name = "axvm-rv32im-guest"
+name = "openvm-rv32im-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "Guest extension for RISC-V 32IM"
 
 [dependencies]
-axvm-platform = { workspace = true }
+openvm-platform = { workspace = true }
 strum_macros = { workspace = true }
 
 [features]

@@ -3,7 +3,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let mut v = Vec::new();

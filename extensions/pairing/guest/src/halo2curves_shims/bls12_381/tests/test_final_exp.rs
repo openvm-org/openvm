@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use axvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
+use openvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
 use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num_bigint::BigUint;

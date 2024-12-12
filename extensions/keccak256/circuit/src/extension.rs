@@ -1,16 +1,16 @@
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::*;
-use axvm_rv32im_circuit::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_instructions::*;
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };

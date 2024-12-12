@@ -8,11 +8,11 @@ use ax_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 

@@ -26,7 +26,7 @@ use ax_stark_backend::{
     prover::types::AirProofInput,
     rap::AnyRap,
 };
-use axvm_instructions::exe::MemoryImage;
+use openvm_instructions::exe::MemoryImage;
 use getset::Getters;
 use itertools::{izip, zip_eq, Itertools};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};

@@ -7,12 +7,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
-use axvm_native_compiler::FieldArithmeticOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
 use itertools::izip;
 
 #[repr(C)]

@@ -1,15 +1,15 @@
-//! A transpiler from custom RISC-V ELFs to axVM executable binaries.
+//! A transpiler from custom RISC-V ELFs to OpenVm executable binaries.
 
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_instructions::{
+use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
 };
-pub use axvm_platform;
+pub use openvm_platform;
 use elf::Elf;
 use transpiler::{Transpiler, TranspilerError};
 
-use crate::util::elf_memory_image_to_axvm_memory_image;
+use crate::util::elf_memory_image_to_openvm_memory_image;
 
 pub mod elf;
 pub mod transpiler;
@@ -35,7 +35,7 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
             elf.pc_base,
             elf.max_num_public_values,
         );
-        let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
+        let init_memory = elf_memory_image_to_openvm_memory_image(elf.memory_image);
 
         Ok(VmExe {
             program,

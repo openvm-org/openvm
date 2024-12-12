@@ -1,14 +1,14 @@
 [package]
-name = "axvm-build"
+name = "openvm-build"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "axVM build tool"
+description = "OpenVm build tool"
 
 [dependencies]
-axvm-platform = { workspace = true }
+openvm-platform = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 eyre.workspace = true

@@ -12,7 +12,7 @@ use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VecHeapAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -26,7 +26,7 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use itertools::izip;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.

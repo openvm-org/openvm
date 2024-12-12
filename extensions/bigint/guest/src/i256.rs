@@ -11,7 +11,7 @@ use {super::bigint_to_limbs, num_bigint_dig::BigInt};
 #[cfg(target_os = "zkvm")]
 use {
     super::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE},
-    axvm_platform::custom_insn_r,
+    openvm_platform::custom_insn_r,
     core::{arch::asm, mem::MaybeUninit},
 };
 

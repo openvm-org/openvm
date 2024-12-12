@@ -9,9 +9,9 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
-use axvm_circuit::{arch::instructions::program::Program, utils::execute_and_prove_program};
-use axvm_native_circuit::NativeConfig;
-use axvm_native_compiler::conversion::CompilerOptions;
+use openvm_circuit::{arch::instructions::program::Program, utils::execute_and_prove_program};
+use openvm_native_circuit::NativeConfig;
+use openvm_native_compiler::conversion::CompilerOptions;
 use inner::build_verification_program;
 
 use crate::hints::InnerVal;
@@ -26,8 +26,8 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use axvm_native_circuit::NativeConfig;
-    use axvm_native_compiler::conversion::CompilerOptions;
+    use openvm_native_circuit::NativeConfig;
+    use openvm_native_compiler::conversion::CompilerOptions;
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};

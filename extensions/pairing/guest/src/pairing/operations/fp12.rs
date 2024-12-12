@@ -1,4 +1,4 @@
-use axvm_algebra_guest::{field::FieldExtension, Field, IntMod};
+use openvm_algebra_guest::{field::FieldExtension, Field, IntMod};
 
 use super::{
     fp6_invert_assign, fp6_mul_assign, fp6_mul_by_nonresidue_assign, fp6_square_assign,

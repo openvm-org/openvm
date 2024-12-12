@@ -1,6 +1,6 @@
 [package]
 name = "cargo-axiom"
-description = "axVM CLI tools"
+description = "OpenVm CLI tools"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -13,14 +13,14 @@ vergen = { version = "8", default-features = false, features = [
 ] }
 
 [dependencies]
-axvm-build = { workspace = true }
-axvm-transpiler = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-keccak256-circuit = { workspace = true }
-axvm-native-recursion = { workspace = true, features = ["static-verifier"] }
-axvm-rv32im-transpiler = { workspace = true }
-axvm-sdk = { workspace = true }
-axvm-keccak256-transpiler = { workspace = true }
+openvm-build = { workspace = true }
+openvm-transpiler = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-keccak256-circuit = { workspace = true }
+openvm-native-recursion = { workspace = true, features = ["static-verifier"] }
+openvm-rv32im-transpiler = { workspace = true }
+openvm-sdk = { workspace = true }
+openvm-keccak256-transpiler = { workspace = true }
 ax-stark-sdk.workspace = true
 cargo_metadata = "0.18.1"
 clap = { version = "4.5.9", features = ["derive", "env"] }
@@ -47,8 +47,8 @@ toml = { workspace = true }
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["axvm-circuit/parallel"]
-mimalloc = ["axvm-circuit/mimalloc"]
-jemalloc = ["axvm-circuit/jemalloc"]
-jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
-nightly-features = ["axvm-circuit/nightly-features"]
+parallel = ["openvm-circuit/parallel"]
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

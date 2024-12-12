@@ -3,23 +3,23 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use axvm_build::{
+use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
-use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
-use axvm_sdk::{
+use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
+use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::write_exe_to_file,
     Sdk,
 };
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
+use openvm_transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
 use clap::Parser;
 use eyre::Result;
 
 use crate::util::read_to_struct_toml;
 
 #[derive(Parser)]
-#[command(name = "build", about = "Compile an axVM program")]
+#[command(name = "build", about = "Compile an OpenVm program")]
 pub struct BuildCmd {
     #[clap(flatten)]
     build_args: BuildArgs,
@@ -59,7 +59,7 @@ pub struct BuildArgs {
     #[arg(long)]
     pub transpiler_config: Option<PathBuf>,
 
-    /// Output path for the transpiled program (default: <ELF base path>.axvmexe)
+    /// Output path for the transpiled program (default: <ELF base path>.openvmexe)
     #[arg(long)]
     pub transpile_to: Option<PathBuf>,
 
@@ -72,7 +72,7 @@ impl BuildArgs {
     pub fn exe_path(&self, elf_path: &Path) -> PathBuf {
         self.transpile_to
             .clone()
-            .unwrap_or_else(|| elf_path.with_extension("axvmexe"))
+            .unwrap_or_else(|| elf_path.with_extension("openvmexe"))
     }
 }
 

@@ -1,12 +1,12 @@
 [workspace]
 [package]
-name = "axvm-fibonacci-program"
+name = "openvm-fibonacci-program"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../../crates/toolchain/axvm" }
+openvm = { path = "../../../crates/toolchain/openvm" }
 
 [features]
 default = []
-std = ["axvm/std"]
+std = ["openvm/std"]

@@ -1,6 +1,6 @@
 # Forked from sp1-recursion-compiler under MIT license.
 [package]
-name = "axvm-native-compiler"
+name = "openvm-native-compiler"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,13 +10,13 @@ edition = "2021"
 zkhash = { workspace = true }
 
 ax-stark-backend = { workspace = true }
-axvm-native-compiler-derive = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-instructions-derive = { workspace = true }
+openvm-native-compiler-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-instructions-derive = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-rv32im-transpiler = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }
 # disable jemalloc to be compatible with afs-starkbackend
 snark-verifier-sdk = { workspace = true, optional = true }
 
@@ -38,8 +38,8 @@ strum = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-dft = { workspace = true }
 p3-merkle-tree = { workspace = true }
-axvm-circuit = { workspace = true, features = ["test-utils"] }
-axvm-native-circuit = { workspace = true }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-native-circuit = { workspace = true }
 ax-stark-sdk = { workspace = true }
 hex.workspace = true
 rand.workspace = true
@@ -50,5 +50,5 @@ lazy_static.workspace = true
 [features]
 default = ["parallel", "halo2-compiler"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
-parallel = ["axvm-circuit/parallel"]
-bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
+parallel = ["openvm-circuit/parallel"]
+bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]

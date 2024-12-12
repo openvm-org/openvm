@@ -6,16 +6,16 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
-use axvm_sdk::{
+use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_sdk::{
     commit::commit_app_exe,
     config::AppConfig,
     keygen::{leaf_keygen, AppProvingKey},
     prover::{AppProver, LeafProver},
     StdIn,
 };
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
+use openvm_transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};

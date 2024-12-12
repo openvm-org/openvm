@@ -15,7 +15,7 @@ use ax_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::UsizeOpcode;
+use openvm_instructions::UsizeOpcode;
 
 use crate::{
     arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},

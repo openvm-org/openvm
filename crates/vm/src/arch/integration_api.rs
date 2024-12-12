@@ -15,7 +15,7 @@ use ax_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 
 use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};

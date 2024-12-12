@@ -11,7 +11,7 @@ use ax_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
+use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
 use derivative::Derivative;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};

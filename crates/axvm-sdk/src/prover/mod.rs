@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use ax_stark_sdk::ax_stark_backend::Chip;
-use axvm_circuit::arch::VmConfig;
-use axvm_native_recursion::halo2::EvmProof;
+use openvm_circuit::arch::VmConfig;
+use openvm_native_recursion::halo2::EvmProof;
 
 use crate::{keygen::AppProvingKey, stdin::StdIn, NonRootCommittedExe, F, SC};
 
@@ -10,7 +10,7 @@ mod agg;
 pub use agg::*;
 mod app;
 pub use app::*;
-use axvm_native_recursion::halo2::utils::Halo2ParamsReader;
+use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 
 mod halo2;
 #[allow(unused_imports)]

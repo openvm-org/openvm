@@ -1,4 +1,4 @@
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     ir::{Array, Builder, Config, Ext, Felt, FromConstant, MemIndex, Ptr, Usize, Var, Variable},
     prelude::MemVariable,
 };

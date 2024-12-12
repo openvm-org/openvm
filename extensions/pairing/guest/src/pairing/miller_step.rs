@@ -1,12 +1,12 @@
 use core::ops::{Add, Mul, Neg, Sub};
 
-use axvm_algebra_guest::{DivUnsafe, Field};
-use axvm_ecc_guest::AffinePoint;
+use openvm_algebra_guest::{DivUnsafe, Field};
+use openvm_ecc_guest::AffinePoint;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    axvm_platform::custom_insn_r,
+    openvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
 };
 

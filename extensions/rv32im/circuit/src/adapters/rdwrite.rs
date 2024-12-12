@@ -11,7 +11,7 @@ use ax_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -26,7 +26,7 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 

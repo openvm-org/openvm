@@ -10,12 +10,12 @@ use ax_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, VmChipTester},
     BITWISE_OP_LOOKUP_BUS,
 };
-use axvm_instructions::{instruction::Instruction, VmOpcode};
-use axvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use hex::FromHex;
 use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;

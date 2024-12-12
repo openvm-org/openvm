@@ -1,9 +1,9 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::needless_range_loop)]
 
-use axvm_instructions::UsizeOpcode;
-use axvm_instructions_derive::UsizeOpcode;
-use axvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_instructions::UsizeOpcode;
+use openvm_instructions_derive::UsizeOpcode;
+use openvm_rv32im_transpiler::BranchEqualOpcode;
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 extern crate alloc;
@@ -15,7 +15,7 @@ pub mod conversion;
 pub mod ir;
 
 pub mod prelude {
-    pub use axvm_native_compiler_derive::{DslVariable, Hintable};
+    pub use openvm_native_compiler_derive::{DslVariable, Hintable};
 
     pub use crate::{asm::AsmCompiler, ir::*};
 }

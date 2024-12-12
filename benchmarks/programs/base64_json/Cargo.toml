@@ -1,15 +1,15 @@
 [workspace]
 [package]
 version = "0.1.0"
-name = "axvm-json-program"
+name = "openvm-json-program"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../../crates/toolchain/axvm" }
+openvm = { path = "../../../crates/toolchain/openvm" }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.214", default-features = false, features = ["derive"] }
 serde-json-core = "0.6.0"
 
 [features]
 default = []
-std = ["axvm/std"]
+std = ["openvm/std"]

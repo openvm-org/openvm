@@ -1,5 +1,5 @@
 use ax_stark_backend::p3_field::{AbstractField, Field};
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     ir::{RVar, DIGEST_SIZE, PERMUTATION_WIDTH},
     prelude::{Array, Builder, Config, Ext, Felt, Var},
 };
@@ -222,8 +222,8 @@ mod tests {
         engine::StarkEngine,
         p3_baby_bear::BabyBear,
     };
-    use axvm_native_circuit::execute_program;
-    use axvm_native_compiler::{
+    use openvm_native_circuit::execute_program;
+    use openvm_native_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
     };

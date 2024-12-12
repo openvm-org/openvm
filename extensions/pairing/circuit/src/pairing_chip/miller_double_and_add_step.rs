@@ -4,11 +4,11 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_circuit::Fp2;
-use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_pairing_transpiler::PairingOpcode;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_algebra_circuit::Fp2;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_pairing_transpiler::PairingOpcode;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -105,14 +105,14 @@ mod tests {
     use ax_mod_circuit_builder::test_utils::{biguint_to_limbs, bn254_fq_to_biguint};
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-    use axvm_ecc_guest::AffinePoint;
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::{
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_ecc_guest::AffinePoint;
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_pairing_guest::{
         bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254, pairing::MillerStep,
     };
-    use axvm_pairing_transpiler::PairingOpcode;
-    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_pairing_transpiler::PairingOpcode;
+    use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::bn256::G2Affine;
     use rand::{rngs::StdRng, SeedableRng};
 

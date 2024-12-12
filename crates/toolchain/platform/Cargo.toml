@@ -1,5 +1,5 @@
 [package]
-name = "axvm-platform"
+name = "openvm-platform"
 description = "Axiom VM"
 version = { workspace = true }
 edition = { workspace = true }

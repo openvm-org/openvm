@@ -6,19 +6,19 @@ use ax_circuit_primitives::bitwise_op_lookup::{
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_ecc_circuit::CurveConfig;
-use axvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
-use axvm_pairing_guest::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_ecc_circuit::CurveConfig;
+use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
-use axvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
-use axvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
+use openvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -367,21 +367,21 @@ pub(crate) mod phantom {
     use std::collections::VecDeque;
 
     use ax_stark_backend::p3_field::PrimeField32;
-    use axvm_circuit::{
+    use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use axvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
-    use axvm_instructions::{
+    use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
+    use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
-    use axvm_pairing_guest::{
+    use openvm_pairing_guest::{
         bls12_381::BLS12_381_NUM_LIMBS,
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use axvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
+    use openvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
     use eyre::bail;
 
     use super::PairingCurve;
@@ -432,8 +432,8 @@ pub(crate) mod phantom {
 
         match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
-                use axvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
-                use axvm_pairing_guest::halo2curves_shims::bn254::Bn254;
+                use openvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
+                use openvm_pairing_guest::halo2curves_shims::bn254::Bn254;
                 const N: usize = 32;
                 debug_assert_eq!(BN254_NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {
@@ -475,8 +475,8 @@ pub(crate) mod phantom {
                 );
             }
             Some(PairingCurve::Bls12_381) => {
-                use axvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
-                use axvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
+                use openvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
+                use openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
                 const N: usize = 48;
                 debug_assert_eq!(BLS12_381_NUM_LIMBS, N); // TODO: make this const instead of static
                 if p_len != q_len {

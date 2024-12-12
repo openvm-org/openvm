@@ -14,12 +14,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use axvm_circuit::arch::{
+use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 

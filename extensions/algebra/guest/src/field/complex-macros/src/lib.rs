@@ -2,7 +2,7 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::MacroArgs;
+use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
@@ -92,10 +92,10 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
 
             impl #struct_name {
                 // Zero element (i.e. additive identity)
-                pub const ZERO: Self = Self::new(<#intmod_type as axvm_algebra_guest::IntMod>::ZERO, <#intmod_type as axvm_algebra_guest::IntMod>::ZERO);
+                pub const ZERO: Self = Self::new(<#intmod_type as openvm_algebra_guest::IntMod>::ZERO, <#intmod_type as openvm_algebra_guest::IntMod>::ZERO);
 
                 // One element (i.e. multiplicative identity)
-                pub const ONE: Self = Self::new(<#intmod_type as axvm_algebra_guest::IntMod>::ONE, <#intmod_type as axvm_algebra_guest::IntMod>::ZERO);
+                pub const ONE: Self = Self::new(<#intmod_type as openvm_algebra_guest::IntMod>::ONE, <#intmod_type as openvm_algebra_guest::IntMod>::ZERO);
 
                 pub fn neg_assign(&mut self) {
                     self.c0.neg_assign();
@@ -173,7 +173,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     {
                         let (c0, c1) = (&self.c0, &self.c1);
                         let (d0, d1) = (&other.c0, &other.c1);
-                        let denom = <#intmod_type as axvm_algebra_guest::IntMod>::ONE.div_unsafe(d0.square() + d1.square());
+                        let denom = <#intmod_type as openvm_algebra_guest::IntMod>::ONE.div_unsafe(d0.square() + d1.square());
                         *self = Self::new(
                             denom.clone() * (c0.clone() * d0 + c1.clone() * d1),
                             denom * &(c1.clone() * d0 - c0.clone() * d1),
@@ -285,7 +285,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl axvm_algebra_guest::field::ComplexConjugate for #struct_name {
+            impl openvm_algebra_guest::field::ComplexConjugate for #struct_name {
                 fn conjugate(self) -> Self {
                     Self {
                         c0: self.c0,
@@ -422,21 +422,21 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'a> axvm_algebra_guest::DivAssignUnsafe<&'a #struct_name> for #struct_name {
+            impl<'a> openvm_algebra_guest::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                 #[inline(always)]
                 fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
                     self.div_assign_unsafe_impl(other);
                 }
             }
 
-            impl axvm_algebra_guest::DivAssignUnsafe for #struct_name {
+            impl openvm_algebra_guest::DivAssignUnsafe for #struct_name {
                 #[inline(always)]
                 fn div_assign_unsafe(&mut self, other: Self) {
                     self.div_assign_unsafe_impl(&other);
                 }
             }
 
-            impl axvm_algebra_guest::DivUnsafe for #struct_name {
+            impl openvm_algebra_guest::DivUnsafe for #struct_name {
                 type Output = Self;
                 #[inline(always)]
                 fn div_unsafe(mut self, other: Self) -> Self::Output {
@@ -445,7 +445,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for #struct_name {
+            impl<'a> openvm_algebra_guest::DivUnsafe<&'a #struct_name> for #struct_name {
                 type Output = Self;
                 #[inline(always)]
                 fn div_unsafe(mut self, other: &'a #struct_name) -> Self::Output {
@@ -454,7 +454,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for &#struct_name {
+            impl<'a> openvm_algebra_guest::DivUnsafe<&'a #struct_name> for &#struct_name {
                 type Output = #struct_name;
                 #[inline(always)]
                 fn div_unsafe(self, other: &'a #struct_name) -> Self::Output {
@@ -575,11 +575,11 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             externs.push(quote::quote_spanned! { span.into() =>
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
-                    axvm_platform::custom_insn_r!(
-                        axvm_algebra_guest::OPCODE,
-                        axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        axvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
-                            + #mod_idx * (axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                    openvm_platform::custom_insn_r!(
+                        openvm_algebra_guest::OPCODE,
+                        openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        openvm_algebra_guest::ComplexExtFieldBaseFunct7::#local_opcode as usize
+                            + #mod_idx * (openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         rd,
                         rs1,
                         rs2
@@ -599,27 +599,27 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             pub fn #setup_function() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    let two_modulus_bytes = &axvm_intrinsics_meta_do_not_type_this_by_yourself::two_modular_limbs_list[axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
+                    let two_modulus_bytes = &openvm_intrinsics_meta_do_not_type_this_by_yourself::two_modular_limbs_list[openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]..openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - axvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                    let mut uninit: core::mem::MaybeUninit<[u8; openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx + 1] - openvm_intrinsics_meta_do_not_type_this_by_yourself::limb_list_borders[#mod_idx]]> = core::mem::MaybeUninit::uninit();
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_algebra_guest::OPCODE,
+                        ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
-                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                                * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         two_modulus_bytes.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_algebra_guest::OPCODE,
-                        ::axvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
-                        ::axvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_algebra_guest::OPCODE,
+                        ::openvm_algebra_guest::COMPLEX_EXT_FIELD_FUNCT3,
+                        ::openvm_algebra_guest::ComplexExtFieldBaseFunct7::Setup as usize
                             + #mod_idx
-                                * (::axvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
+                                * (::openvm_algebra_guest::ComplexExtFieldBaseFunct7::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         two_modulus_bytes.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
@@ -632,7 +632,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     TokenStream::from(quote::quote_spanned! { span.into() =>
         // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
-        mod axvm_intrinsics_ffi_complex {
+        mod openvm_intrinsics_ffi_complex {
             #(#externs)*
         }
         #(#setups)*
@@ -682,7 +682,7 @@ pub fn complex_impl_field(input: TokenStream) -> TokenStream {
         let struct_name = syn::Ident::new(&str_path, span.into());
 
         output.push(quote::quote_spanned! { span.into() =>
-            impl axvm_algebra_guest::field::Field for #struct_name {
+            impl openvm_algebra_guest::field::Field for #struct_name {
                 type SelfRef<'a>
                     = &'a Self
                 where
@@ -692,8 +692,8 @@ pub fn complex_impl_field(input: TokenStream) -> TokenStream {
                 const ONE: Self = Self::ONE;
 
                 fn double_assign(&mut self) {
-                    axvm_algebra_guest::field::Field::double_assign(&mut self.c0);
-                    axvm_algebra_guest::field::Field::double_assign(&mut self.c1);
+                    openvm_algebra_guest::field::Field::double_assign(&mut self.c0);
+                    openvm_algebra_guest::field::Field::double_assign(&mut self.c1);
                 }
 
                 fn square_assign(&mut self) {

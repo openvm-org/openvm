@@ -1,5 +1,5 @@
 [package]
-name = "axvm-instructions-derive"
+name = "openvm-instructions-derive"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -17,4 +17,4 @@ proc-macro2 = "1.0"
 [dev-dependencies]
 strum.workspace = true
 strum_macros.workspace = true
-axvm-instructions.workspace = true
+openvm-instructions.workspace = true

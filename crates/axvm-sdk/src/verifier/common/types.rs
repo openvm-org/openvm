@@ -1,11 +1,11 @@
 use std::{array, borrow::BorrowMut};
 
 use ax_stark_sdk::ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use openvm_circuit::{
     circuit_derive::AlignedBorrow,
     system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
 };
-use axvm_native_compiler::prelude::*;
+use openvm_native_compiler::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct SpecialAirIds {

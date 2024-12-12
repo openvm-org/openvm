@@ -15,7 +15,7 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
 };
 

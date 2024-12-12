@@ -1,14 +1,14 @@
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
-use axvm_instructions::{
+use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
+use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, UsizeOpcode,
     VmOpcode,
 };
-use axvm_instructions_derive::UsizeOpcode;
-use axvm_rv32im_transpiler::{
+use openvm_instructions_derive::UsizeOpcode;
+use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use axvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension};
 use rrs_lib::instruction_formats::{BType, RType};
 use strum::IntoEnumIterator;
 

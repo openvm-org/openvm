@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use ax_stark_backend::Chip;
 use ax_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
-use axvm_circuit::arch::VmConfig;
+use openvm_circuit::arch::VmConfig;
 #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use tracing::info_span;
 
 use crate::{

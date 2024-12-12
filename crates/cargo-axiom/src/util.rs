@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use axvm_sdk::StdIn;
+use openvm_sdk::StdIn;
 use eyre::Result;
 use serde::de::DeserializeOwned;
 

@@ -7,7 +7,7 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction, PublishOpcode, PublishOpcode::PUBLISH, UsizeOpcode,
 };
 

@@ -1,20 +1,20 @@
 [package]
-name = "axvm-keccak256-circuit"
+name = "openvm-keccak256-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM circuit extension for keccak256"
+description = "OpenVm circuit extension for keccak256"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-rv32im-circuit = { workspace = true }
-axvm-keccak256-transpiler = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-keccak256-transpiler = { workspace = true }
 
 p3-keccak-air = { workspace = true }
 
@@ -34,15 +34,15 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["axvm-circuit/parallel"]
-test-utils = ["axvm-circuit/test-utils"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]
 # performance features:
-mimalloc = ["axvm-circuit/mimalloc"]
-jemalloc = ["axvm-circuit/jemalloc"]
-jemalloc-prof = ["axvm-circuit/jemalloc-prof"]
-nightly-features = ["axvm-circuit/nightly-features"]
+mimalloc = ["openvm-circuit/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc"]
+jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
+nightly-features = ["openvm-circuit/nightly-features"]

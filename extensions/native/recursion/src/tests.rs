@@ -23,8 +23,8 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
     utils::to_field_vec,
 };
-use axvm_circuit::utils::gen_vm_program_test_proof_input;
-use axvm_native_circuit::NativeConfig;
+use openvm_circuit::utils::gen_vm_program_test_proof_input;
+use openvm_native_circuit::NativeConfig;
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,

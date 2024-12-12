@@ -6,10 +6,10 @@ use ax_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, SymbolicExpr,
 };
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_transpiler::Fp2Opcode;
-use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_algebra_transpiler::Fp2Opcode;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 use crate::Fp2;
 
@@ -131,11 +131,11 @@ mod tests {
     };
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_algebra_transpiler::Fp2Opcode;
-    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::bn254::BN254_MODULUS;
-    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_algebra_transpiler::Fp2Opcode;
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
+    use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
     use rand::{rngs::StdRng, SeedableRng};

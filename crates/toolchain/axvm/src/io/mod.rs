@@ -6,7 +6,7 @@ use core::alloc::Layout;
 use core::fmt::Write;
 
 #[cfg(target_os = "zkvm")]
-use axvm_rv32im_guest::{hint_input, hint_store_u32};
+use openvm_rv32im_guest::{hint_input, hint_store_u32};
 use serde::de::DeserializeOwned;
 
 #[cfg(not(target_os = "zkvm"))]
@@ -88,7 +88,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
 pub fn reveal(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
     #[cfg(target_os = "zkvm")]
-    axvm_rv32im_guest::reveal!(byte_index, x, 0);
+    openvm_rv32im_guest::reveal!(byte_index, x, 0);
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 4);
 }
@@ -99,7 +99,7 @@ pub fn print<S: AsRef<str>>(s: S) {
     #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
     print!("{}", s.as_ref());
     #[cfg(target_os = "zkvm")]
-    axvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes());
+    openvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes());
 }
 
 pub fn println<S: AsRef<str>>(s: S) {

@@ -1,7 +1,7 @@
 use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField, Field};
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_native_circuit::execute_program;
-use axvm_native_compiler::{
+use openvm_native_circuit::execute_program;
+use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Felt, RVar, Var},
 };

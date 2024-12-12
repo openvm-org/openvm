@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 
-use axvm_platform::WORD_SIZE;
+use openvm_platform::WORD_SIZE;
 
 use super::hint_store_word;
 use crate::serde::WordRead;

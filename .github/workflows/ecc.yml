@@ -57,7 +57,7 @@ jobs:
           rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
           cargo install --force --locked --path .
 
-      - name: Build axvm-ecc-guest crate for axvm
+      - name: Build openvm-ecc-guest crate for openvm
         working-directory: extensions/ecc/guest
         run: |
           cargo axiom build

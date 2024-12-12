@@ -4,10 +4,10 @@ use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
 use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_pairing_transpiler::Fp12Opcode;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_pairing_transpiler::Fp12Opcode;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 
 use crate::Fp12;
 // Input: Fp12 * 2
@@ -76,11 +76,11 @@ mod tests {
     };
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-    use axvm_ecc_guest::algebra::field::FieldExtension;
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
-    use axvm_rv32_adapters::rv32_write_heap_default_with_increment;
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_ecc_guest::algebra::field::FieldExtension;
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
+    use openvm_rv32_adapters::rv32_write_heap_default_with_increment;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
     use rand::{rngs::StdRng, SeedableRng};

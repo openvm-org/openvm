@@ -10,7 +10,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
-use axvm_instructions::exe::VmExe;
+use openvm_instructions::exe::VmExe;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};

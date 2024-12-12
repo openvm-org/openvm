@@ -1,7 +1,7 @@
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use rand::{rngs::StdRng, Rng};
 
 use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};

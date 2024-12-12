@@ -164,7 +164,7 @@ TODO: discuss usage
 
 ## Examples
 
-The `extensions/` folder contains extensions implementing all non-system functionality via several extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
+The `extensions/` folder contains extensions implementing all non-system functionality via several extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
 
 # Design Choices
 

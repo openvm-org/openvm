@@ -14,15 +14,15 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     VmOpcode,
 };
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
 };
-use axvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
 

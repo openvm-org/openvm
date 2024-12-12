@@ -11,7 +11,7 @@ use std::array;
 
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode};
 use columns::*;
 
 use self::air::Poseidon2VmAir;

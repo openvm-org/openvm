@@ -6,16 +6,16 @@ use ax_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, PhantomDiscriminant, UsizeOpcode};
-use axvm_rv32im_transpiler::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, PhantomDiscriminant, UsizeOpcode};
+use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
@@ -510,11 +510,11 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 /// Phantom sub-executors
 mod phantom {
     use ax_stark_backend::p3_field::{Field, PrimeField32};
-    use axvm_circuit::{
+    use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use axvm_instructions::PhantomDiscriminant;
+    use openvm_instructions::PhantomDiscriminant;
     use eyre::bail;
 
     use crate::adapters::unsafe_read_rv32_register;

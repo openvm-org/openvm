@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_instructions::{
+use openvm_instructions::{
     exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
     utils::isize_to_field, SystemOpcode, VmOpcode,
 };
@@ -162,7 +162,7 @@ pub fn nop<F: PrimeField32>() -> Instruction<F> {
 }
 
 /// Converts our memory image (u32 -> [u8; 4]) into Vm memory image ((as, address) -> word)
-pub fn elf_memory_image_to_axvm_memory_image<F: PrimeField32>(
+pub fn elf_memory_image_to_openvm_memory_image<F: PrimeField32>(
     memory_image: BTreeMap<u32, u32>,
 ) -> MemoryImage<F> {
     let mut result = MemoryImage::new();

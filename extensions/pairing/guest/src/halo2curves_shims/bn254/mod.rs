@@ -9,7 +9,7 @@ pub use line::*;
 #[cfg(test)]
 mod tests;
 
-use axvm_algebra_guest::field::{Field, FieldExtension};
+use openvm_algebra_guest::field::{Field, FieldExtension};
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine};
 use rand::Rng;
 

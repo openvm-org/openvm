@@ -38,7 +38,7 @@ metrics-tracing-context = "0.16.0"
 metrics-util = "0.17.0"
 
 [dev-dependencies]
-axvm-instructions.workspace = true
+openvm-instructions.workspace = true
 
 [features]
 default = ["parallel"]

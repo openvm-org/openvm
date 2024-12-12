@@ -1,11 +1,11 @@
-extern crate self as axvm_circuit;
+extern crate self as openvm_circuit;
 
 pub use ax_circuit_derive as circuit_derive;
 #[cfg(feature = "test-utils")]
 pub use ax_stark_sdk;
-pub use axvm_circuit_derive as derive;
+pub use openvm_circuit_derive as derive;
 
-/// Traits and constructs for the axVM architecture.
+/// Traits and constructs for the OpenVm architecture.
 pub mod arch;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;

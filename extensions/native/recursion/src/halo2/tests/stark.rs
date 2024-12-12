@@ -5,7 +5,7 @@ use ax_stark_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
-use axvm_native_compiler::ir::Witness;
+use openvm_native_compiler::ir::Witness;
 use tracing::Level;
 
 use crate::{

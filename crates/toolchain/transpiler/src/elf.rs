@@ -3,9 +3,9 @@
 use std::{cmp::min, collections::BTreeMap, fmt::Debug};
 
 #[cfg(feature = "function-span")]
-use axvm_instructions::exe::FnBound;
-use axvm_instructions::exe::FnBounds;
-use axvm_platform::WORD_SIZE;
+use openvm_instructions::exe::FnBound;
+use openvm_instructions::exe::FnBounds;
+use openvm_platform::WORD_SIZE;
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
     endian::LittleEndian,

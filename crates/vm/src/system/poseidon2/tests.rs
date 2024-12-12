@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use axvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use rand::Rng;
 
 use super::{Poseidon2Chip, Poseidon2VmIoCols, CHUNK, WIDTH};

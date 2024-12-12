@@ -8,7 +8,7 @@ use ax_stark_backend::{
     Chip,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, Streams, VirtualMachine, VmComplexTraceHeights,
         VmConfig,

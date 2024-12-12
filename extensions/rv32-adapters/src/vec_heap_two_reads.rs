@@ -16,7 +16,7 @@ use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VecHeapTwoReadsAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -30,11 +30,11 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use axvm_rv32im_circuit::adapters::{
+use openvm_rv32im_circuit::adapters::{
     abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 use itertools::izip;

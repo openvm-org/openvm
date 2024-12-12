@@ -1,4 +1,4 @@
-use axvm_circuit::arch::VmChipWrapper;
+use openvm_circuit::arch::VmChipWrapper;
 
 use crate::adapters::Rv32RdWriteAdapterChip;
 

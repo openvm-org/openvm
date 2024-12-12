@@ -2,16 +2,16 @@
 name = "ax-mod-circuit-builder"
 version = "0.1.0"
 edition = "2021"
-description = "Modular arithmetic framework for building axVM circuits."
+description = "Modular arithmetic framework for building OpenVm circuits."
 
 [dependencies]
 ax-stark-backend = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-instructions = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
-axvm-pairing-guest = { workspace = true, optional = true }
+openvm-pairing-guest = { workspace = true, optional = true }
 
 rand.workspace = true
 num-bigint-dig.workspace = true
@@ -25,10 +25,10 @@ ax-circuit-primitives = { workspace = true }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 lazy_static.workspace = true
-axvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 halo2curves-axiom = { workspace = true }
 
 [features]
 default = []
 parallel = ["ax-stark-backend/parallel"]
-test-utils = ["dep:halo2curves-axiom", "dep:axvm-pairing-guest"]
+test-utils = ["dep:halo2curves-axiom", "dep:openvm-pairing-guest"]

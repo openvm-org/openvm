@@ -10,7 +10,7 @@ use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 
 use crate::{
     arch::{

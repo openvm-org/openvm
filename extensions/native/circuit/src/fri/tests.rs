@@ -4,9 +4,9 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use axvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::FriOpcode::{self, FRI_REDUCED_OPENING};
 use itertools::Itertools;
 use rand::Rng;
 

@@ -5,9 +5,9 @@ use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 #[macro_export]
 macro_rules! hint_store_u32 {
     ($x:expr, $imm:expr) => {
-        axvm_platform::custom_insn_i!(
-            axvm_rv32im_guest::SYSTEM_OPCODE,
-            axvm_rv32im_guest::HINT_STORE_W_FUNCT3,
+        openvm_platform::custom_insn_i!(
+            openvm_rv32im_guest::SYSTEM_OPCODE,
+            openvm_rv32im_guest::HINT_STORE_W_FUNCT3,
             $x,
             "x0",
             $imm
@@ -18,7 +18,7 @@ macro_rules! hint_store_u32 {
 /// Reset the hint stream with the next hint.
 #[inline(always)]
 pub fn hint_input() {
-    axvm_platform::custom_insn_i!(
+    openvm_platform::custom_insn_i!(
         SYSTEM_OPCODE,
         PHANTOM_FUNCT3,
         "x0",
@@ -31,9 +31,9 @@ pub fn hint_input() {
 #[macro_export]
 macro_rules! reveal {
     ($rd:ident, $rs1:ident, $imm:expr) => {
-        axvm_platform::custom_insn_i!(
-            axvm_rv32im_guest::SYSTEM_OPCODE,
-            axvm_rv32im_guest::REVEAL_FUNCT3,
+        openvm_platform::custom_insn_i!(
+            openvm_rv32im_guest::SYSTEM_OPCODE,
+            openvm_rv32im_guest::REVEAL_FUNCT3,
             $rd,
             $rs1,
             $imm
@@ -49,7 +49,7 @@ pub fn print_str_from_bytes(str_as_bytes: &[u8]) {
 
 #[inline(always)]
 pub fn raw_print_str_from_bytes(msg_ptr: *const u8, len: usize) {
-    axvm_platform::custom_insn_i!(
+    openvm_platform::custom_insn_i!(
         SYSTEM_OPCODE,
         PHANTOM_FUNCT3,
         msg_ptr,

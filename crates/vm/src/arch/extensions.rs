@@ -15,8 +15,8 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_instructions::{
     program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
     UsizeOpcode, VmOpcode,
 };

@@ -22,7 +22,7 @@ use ax_stark_sdk::{
     engine::StarkEngine,
     p3_baby_bear::BabyBear,
 };
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 use itertools::izip;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};

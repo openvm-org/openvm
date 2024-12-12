@@ -4,7 +4,7 @@ use ax_stark_backend::p3_field::{
     reduce_32 as reduce_32_gt, split_32 as split_32_gt, AbstractField,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     constraints::halo2::compiler::convert_fr,
     ir::{Builder, Witness},
 };

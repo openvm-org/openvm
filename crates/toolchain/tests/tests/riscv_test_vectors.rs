@@ -1,16 +1,16 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmExecutor},
     utils::new_air_test_with_min_segments,
 };
-use axvm_rv32im_circuit::Rv32ImConfig;
-use axvm_rv32im_transpiler::{
+use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_toolchain_tests::utils::decode_elf;
-use axvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_toolchain_tests::utils::decode_elf;
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
 
 type F = BabyBear;

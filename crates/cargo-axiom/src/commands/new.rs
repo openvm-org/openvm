@@ -5,7 +5,7 @@ use eyre::{eyre, Result};
 use yansi::Paint;
 
 #[derive(Parser)]
-#[command(name = "new", about = "Setup a new axVM project.")]
+#[command(name = "new", about = "Setup a new OpenVm project.")]
 pub struct NewCmd {
     /// The name of the project.
     name: String,
@@ -14,13 +14,13 @@ pub struct NewCmd {
     #[arg(long, action)]
     evm: bool,
 
-    /// Version of axvm-project-template to use (branch or tag).
+    /// Version of openvm-project-template to use (branch or tag).
     #[arg(long, default_value = "main")]
     version: String,
 }
 
 // TODO[jpw]: make this repo
-const TEMPLATE_REPOSITORY_URL: &str = "https://github.com/axiom-crypto/axvm-project-template";
+const TEMPLATE_REPOSITORY_URL: &str = "https://github.com/axiom-crypto/openvm-project-template";
 
 impl NewCmd {
     pub fn run(&self) -> Result<()> {

@@ -14,12 +14,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
-use axvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
 

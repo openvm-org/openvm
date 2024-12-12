@@ -1,5 +1,5 @@
 [package]
-name = "axvm-instructions"
+name = "openvm-instructions"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 ax-stark-backend.workspace = true
-axvm-instructions-derive.workspace = true
+openvm-instructions-derive.workspace = true
 
 backtrace = { workspace = true, features = ["serde"] }
 derive-new.workspace = true

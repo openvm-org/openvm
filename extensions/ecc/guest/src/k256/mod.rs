@@ -1,6 +1,6 @@
 use core::ops::{Add, AddAssign, Neg};
 
-use axvm_algebra_guest::IntMod;
+use openvm_algebra_guest::IntMod;
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use lazy_static::lazy_static;
@@ -30,12 +30,12 @@ const fn seven_le() -> [u8; 32] {
     buf
 }
 
-axvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_setup::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },
     Secp256k1Scalar { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141" },
 }
 
-axvm_ecc_sw_setup::sw_declare! {
+openvm_ecc_sw_setup::sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 

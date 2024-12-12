@@ -6,8 +6,8 @@ use ax_stark_backend::{
     Chip,
 };
 #[cfg(feature = "function-span")]
-use axvm_instructions::exe::FnBound;
-use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
+use openvm_instructions::exe::FnBound;
+use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use backtrace::Backtrace;
 
 use super::{
@@ -164,9 +164,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     Some(SysPhantom::DebugPanic) => {
                         if let Some(mut backtrace) = prev_backtrace {
                             backtrace.resolve();
-                            eprintln!("axvm program failure; backtrace:\n{:?}", backtrace);
+                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
                         } else {
-                            eprintln!("axvm program failure; no backtrace");
+                            eprintln!("openvm program failure; no backtrace");
                         }
                         return Err(ExecutionError::Fail { pc });
                     }

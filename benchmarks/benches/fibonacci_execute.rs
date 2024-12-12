@@ -1,11 +1,11 @@
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_benchmarks::utils::build_bench_program;
-use axvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use axvm_rv32im_circuit::Rv32ImConfig;
-use axvm_rv32im_transpiler::{
+use openvm_benchmarks::utils::build_bench_program;
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 

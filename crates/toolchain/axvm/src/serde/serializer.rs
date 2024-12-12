@@ -14,7 +14,7 @@
 
 use alloc::vec::Vec;
 
-use axvm_platform::WORD_SIZE;
+use openvm_platform::WORD_SIZE;
 
 use super::err::{Error, Result};
 use crate::alloc::string::ToString;

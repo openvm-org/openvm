@@ -1,6 +1,6 @@
 # RISC-V Custom Instructions
 
-axVM intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
+OpenVm intrinsic opcodes are callable from a RISC-V ELF as custom RISC-V instructions.
 For these instructions, we will use the standard 32-bit RISC-V encoding unless otherwise specified.
 We follow Chapter 21 of the [RISC-V spec v2.2](https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf) on how to extend the ISA, aiming to avoid collisions with existing standard instruction formats. As suggested by Chapter 19, for instructions which fit into 32-bits, we will use the _custom-0_ opcode[6:0] prefix **0001011** and _custom-1_ opcode[6:0] prefix **0101011**. Note that instructions are parsed from right to left, and opcode[1:0] = 11 is typical for standard 32-bit instructions (opcode[1:0]=00 is used for compressed 16-bit instructions). We will use _custom-0_ for intrinsics that don’t require additional configuration parameters, and _custom-1_ for ones that do (e.g., prime field arithmetic and elliptic curve arithmetic).
 
@@ -125,9 +125,9 @@ Instruction for accelerating optimal Ate pairing depend on a pairing friend elli
 | mul_by_02345               | R   | 0101011     | 011    | `idx*16 + 9`  | Read `f: Fp12` from `[rs1..]_2` and `x: [Fp2; 5]` from `[rs2..]_2`. Write `mul_by_02345(f, x): Fp12` to `[rd..]_2`. Only enabled if the sextic twist of `C` is **M-type**.                                                   |
 | hint_final_exp             | R   | 0101011     | 011    | `idx*16 + 10` | Read `f: Fp12` from `[rs1..]_2` and reset hint stream to equal `hint_final_exp(f) = (residue_witness, scaling_factor): (Fp12, Fp12)` flattened into bytes. `rd, rs2` should be `x0`.                                         |
 
-# RISC-V to axVM Transpilation
+# RISC-V to OpenVm Transpilation
 
-We describe the transpilation of the RV32IM instruction set and our [custom RISC-V instructions](#risc-v-custom-instructions) to the axVM instruction set.
+We describe the transpilation of the RV32IM instruction set and our [custom RISC-V instructions](#risc-v-custom-instructions) to the OpenVm instruction set.
 
 We use the following notation for the transpilation:
 
@@ -145,7 +145,7 @@ The transpilation will only be valid for programs where:
 
 ## RV32IM Transpilation
 
-| RISC-V Inst | axVM Instruction                                                           |
+| RISC-V Inst | OpenVm Instruction                                                           |
 | ----------- | -------------------------------------------------------------------------- |
 | add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
 | sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1`                               |
@@ -195,7 +195,7 @@ The transpilation will only be valid for programs where:
 
 ## Custom Instruction Transpilation
 
-| RISC-V Inst    | axVM Instruction                                                 |
+| RISC-V Inst    | OpenVm Instruction                                                 |
 | -------------- | ---------------------------------------------------------------- |
 | terminate      | TERMINATE `_, _, utof(imm)`                                      |
 | hintstorew     | HINTSTOREW_RV32 `0, ind(rd), utof(sign_extend_16(imm)), 1, 2`    |

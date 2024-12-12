@@ -19,18 +19,18 @@ pub use extension::*;
 mod tests;
 
 pub use air::KeccakVmAir;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode,
 };
-use axvm_keccak256_transpiler::Rv32KeccakOpcode;
-use axvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_rv32im_circuit::adapters::read_rv32_register;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len

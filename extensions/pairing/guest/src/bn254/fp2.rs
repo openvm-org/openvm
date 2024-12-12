@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 use core::ops::Neg;
 
-use axvm_algebra_complex_macros::{complex_declare, complex_impl_field};
-use axvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field, IntMod};
+use openvm_algebra_complex_macros::{complex_declare, complex_impl_field};
+use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field, IntMod};
 
 use super::Fp;
 

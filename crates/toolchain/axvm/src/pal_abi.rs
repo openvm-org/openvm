@@ -1,11 +1,11 @@
 /// For rust std library compatibility, we need to define the ABI specified in
 /// <https://github.com/rust-lang/rust/blob/3dc1b9f5c00ca5535505c1ec46ccd43b8d9cfa19/library/std/src/sys/pal/zkvm/abi.rs>
 /// while we are using target = "riscv32im-risc0-zkvm-elf".
-/// This will be removed once a dedicated rust toolchain is used because axVM does not handle system
+/// This will be removed once a dedicated rust toolchain is used because OpenVm does not handle system
 /// operations in the same way: there is no operating system and even the standard library should be
 /// directly handled with intrinsics.
-use axvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
-use axvm_rv32im_guest::raw_print_str_from_bytes;
+use openvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
+use openvm_rv32im_guest::raw_print_str_from_bytes;
 
 const DIGEST_WORDS: usize = 8;
 
@@ -234,4 +234,4 @@ pub extern "C" fn sys_alloc_words(nwords: usize) -> *mut u32 {
     unsafe { sys_alloc_aligned(WORD_SIZE * nwords, WORD_SIZE) as *mut u32 }
 }
 
-// sys_alloc_aligned is already extern no_mangle exported from axvm_platform::memory
+// sys_alloc_aligned is already extern no_mangle exported from openvm_platform::memory

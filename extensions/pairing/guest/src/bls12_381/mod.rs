@@ -1,8 +1,8 @@
 use core::ops::{Add, AddAssign, Neg};
 
-use axvm_algebra_guest::{Field, IntMod};
-use axvm_algebra_moduli_setup::moduli_declare;
-use axvm_ecc_guest::Group;
+use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_moduli_setup::moduli_declare;
+use openvm_ecc_guest::Group;
 
 mod fp12;
 mod fp2;
@@ -53,7 +53,7 @@ const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_bytes(hex!(
     "040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 ));
 
-axvm_ecc_sw_setup::sw_declare! {
+openvm_ecc_sw_setup::sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
 }
 

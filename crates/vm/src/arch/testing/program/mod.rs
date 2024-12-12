@@ -9,7 +9,7 @@ use ax_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 
 use crate::{
     arch::ExecutionState,

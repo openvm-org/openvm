@@ -9,12 +9,12 @@ use ax_stark_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
 };
-use axvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
-use axvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use axvm_native_circuit::NativeConfig;
-use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_native_recursion::testing_utils::inner::build_verification_program;
-use axvm_sdk::config::AppConfig;
+use openvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
+use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_native_circuit::NativeConfig;
+use openvm_native_compiler::conversion::CompilerOptions;
+use openvm_native_recursion::testing_utils::inner::build_verification_program;
+use openvm_sdk::config::AppConfig;
 use clap::Parser;
 use eyre::Result;
 use tracing::info_span;

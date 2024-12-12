@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
-use axvm_algebra_guest::Field;
-use axvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_algebra_guest::Field;
+use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 

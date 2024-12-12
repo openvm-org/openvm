@@ -1,15 +1,15 @@
 [package]
-name = "axvm-native-recursion"
+name = "openvm-native-recursion"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-axvm-native-circuit = { workspace = true }
-axvm-native-compiler = { workspace = true }
+openvm-native-circuit = { workspace = true }
+openvm-native-compiler = { workspace = true }
 ax-stark-sdk = { workspace = true }
-axvm-circuit = { workspace = true }
+openvm-circuit = { workspace = true }
 
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
@@ -30,7 +30,7 @@ metrics = { workspace = true, optional = true }
 cfg-if = { workspace = true }
 
 [dev-dependencies]
-axvm-native-recursion = { workspace = true, features = ["test-utils"] }
+openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 tempfile = "3.14.0"
 bson.workspace = true
 
@@ -38,12 +38,12 @@ bson.workspace = true
 default = ["parallel", "mimalloc"]
 parallel = ["ax-stark-backend/parallel"]
 static-verifier = [
-    "axvm-native-compiler/halo2-compiler",
+    "openvm-native-compiler/halo2-compiler",
     "dep:snark-verifier-sdk",
     "dep:once_cell",
 ]
-test-utils = ["axvm-circuit/test-utils"]
-bench-metrics = ["dep:metrics", "axvm-circuit/bench-metrics"]
+test-utils = ["openvm-circuit/test-utils"]
+bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
 mimalloc = ["ax-stark-backend/mimalloc"]
 jemalloc = ["ax-stark-backend/jemalloc"]
-nightly-features = ["axvm-circuit/nightly-features"]
+nightly-features = ["openvm-circuit/nightly-features"]

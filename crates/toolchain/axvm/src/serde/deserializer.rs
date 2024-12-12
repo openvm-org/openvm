@@ -14,7 +14,7 @@
 
 use alloc::{string::String, vec::Vec};
 
-use axvm_platform::{align_up, WORD_SIZE};
+use openvm_platform::{align_up, WORD_SIZE};
 use bytemuck::Pod;
 use serde::de::{DeserializeOwned, DeserializeSeed, IntoDeserializer, Visitor};
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axvm_sdk::{
+use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::read_exe_from_file,
     Sdk,
@@ -11,15 +11,15 @@ use eyre::Result;
 use crate::util::{read_to_stdin, read_to_struct_toml, Input};
 
 #[derive(Parser)]
-#[command(name = "run", about = "Run an axVM program")]
+#[command(name = "run", about = "Run an OpenVm program")]
 pub struct RunCmd {
-    #[clap(long, action, help = "Path to axVM executable")]
+    #[clap(long, action, help = "Path to OpenVm executable")]
     exe: PathBuf,
 
     #[clap(long, action, help = "Path to app config TOML file")]
     config: PathBuf,
 
-    #[clap(long, value_parser, help = "Input to axVM program")]
+    #[clap(long, value_parser, help = "Input to OpenVm program")]
     input: Option<Input>,
 }
 

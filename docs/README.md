@@ -1,4 +1,4 @@
-## axVM Contributor Documentation
+## OpenVm Contributor Documentation
 
 This directory contains documentation for contributors.
 

@@ -1,6 +1,6 @@
 use core::ops::{Add, AddAssign, Mul};
 
-use axvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
+use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
 use elliptic_curve::PrimeCurve;
 

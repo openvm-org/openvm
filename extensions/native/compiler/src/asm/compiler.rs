@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
 use ax_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
-use axvm_circuit::arch::instructions::instruction::DebugInfo;
+use openvm_circuit::arch::instructions::instruction::DebugInfo;
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{

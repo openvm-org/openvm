@@ -11,16 +11,16 @@ use ax_mod_circuit_builder::{
 };
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-use axvm_ecc_guest::AffinePoint;
-use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-use axvm_pairing_guest::{
+use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_ecc_guest::AffinePoint;
+use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_pairing_guest::{
     bn254::{BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
     halo2curves_shims::bn254::{tangent_line_013, Bn254},
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
 };
-use axvm_pairing_transpiler::PairingOpcode;
-use axvm_rv32_adapters::{
+use openvm_pairing_transpiler::PairingOpcode;
+use openvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,
 };

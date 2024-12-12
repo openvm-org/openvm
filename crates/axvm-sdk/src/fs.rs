@@ -4,8 +4,8 @@ use std::{
     path::Path,
 };
 
-use axvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
-use axvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
+use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
+use openvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
 use eyre::Result;
 use serde::{de::DeserializeOwned, Serialize};
 

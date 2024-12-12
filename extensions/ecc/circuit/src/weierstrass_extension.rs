@@ -6,15 +6,15 @@ use ax_circuit_primitives::bitwise_op_lookup::{
 };
 use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
-use axvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
-use axvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
+use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -198,12 +198,12 @@ pub(crate) mod phantom {
     use std::iter::repeat;
 
     use ax_stark_backend::p3_field::PrimeField32;
-    use axvm_circuit::{
+    use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use axvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use axvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
+    use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
+    use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use eyre::bail;
     use num_bigint_dig::BigUint;
     use num_integer::Integer;

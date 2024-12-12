@@ -14,7 +14,7 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     p3_baby_bear::{BabyBear, Poseidon2BabyBear},
 };
-use axvm_native_compiler::ir::{
+use openvm_native_compiler::ir::{
     unsafe_array_transmute, Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, DIGEST_SIZE,
 };
 use itertools::Itertools;
@@ -471,8 +471,8 @@ impl Hintable<InnerConfig> for Commitments<BabyBearPoseidon2Config> {
 #[cfg(test)]
 mod test {
     use ax_stark_backend::p3_field::AbstractField;
-    use axvm_native_circuit::execute_program;
-    use axvm_native_compiler::{
+    use openvm_native_circuit::execute_program;
+    use openvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
     };

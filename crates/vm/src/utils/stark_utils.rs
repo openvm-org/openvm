@@ -14,7 +14,7 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
-use axvm_instructions::{exe::VmExe, program::Program};
+use openvm_instructions::{exe::VmExe, program::Program};
 
 use crate::{
     arch::{

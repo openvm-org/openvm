@@ -5,10 +5,10 @@ use ax_stark_sdk::{
     engine::StarkFriEngine,
 };
 #[cfg(feature = "bench-metrics")]
-use axvm_circuit::arch::SingleSegmentVmExecutor;
-use axvm_circuit::arch::Streams;
-use axvm_native_circuit::NativeConfig;
-use axvm_native_recursion::hints::Hintable;
+use openvm_circuit::arch::SingleSegmentVmExecutor;
+use openvm_circuit::arch::Streams;
+use openvm_native_circuit::NativeConfig;
+use openvm_native_recursion::hints::Hintable;
 use tracing::info_span;
 
 // #[cfg(feature = "bench-metrics")]

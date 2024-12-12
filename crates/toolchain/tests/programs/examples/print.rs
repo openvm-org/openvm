@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::io::print;
+use openvm::io::print;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     print("Hello, world!");

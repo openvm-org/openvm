@@ -1,4 +1,4 @@
-use axvm_ecc_guest::{
+use openvm_ecc_guest::{
     algebra::{ExpBytes, Field},
     AffinePoint,
 };

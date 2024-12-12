@@ -10,7 +10,7 @@ use std::{fmt, fmt::Debug};
 
 use ax_stark_backend::p3_field::extension::BinomialExtensionField;
 use ax_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     constraints::halo2::compiler::{Halo2ConstraintCompiler, Halo2State},
     ir::{Config, DslIr, TracedVec, Witness},
 };

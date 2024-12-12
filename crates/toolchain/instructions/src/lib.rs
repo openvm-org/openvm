@@ -3,7 +3,7 @@
 #![allow(non_camel_case_types)]
 
 use ax_stark_backend::p3_field::Field;
-use axvm_instructions_derive::UsizeOpcode;
+use openvm_instructions_derive::UsizeOpcode;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
@@ -11,7 +11,7 @@ pub mod exe;
 pub mod instruction;
 mod phantom;
 pub mod program;
-/// Module with traits and constants for RISC-V instruction definitions for custom axVM instructions.
+/// Module with traits and constants for RISC-V instruction definitions for custom OpenVm instructions.
 pub mod riscv;
 pub mod utils;
 

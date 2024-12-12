@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let mut x: u32 = core::hint::black_box(837799);
@@ -18,6 +18,6 @@ pub fn main() {
 
     // https://en.wikipedia.org/wiki/Collatz_conjecture#Empirical_data
     if count != 524 {
-        axvm::process::panic();
+        openvm::process::panic();
     }
 }

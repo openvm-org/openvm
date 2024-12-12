@@ -1,18 +1,18 @@
 [package]
-name = "axvm-rv32-adapters"
+name = "openvm-rv32-adapters"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "axVM adapters for rv32 intrinsics"
+description = "OpenVm adapters for rv32 intrinsics"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
 ax-circuit-primitives = { workspace = true }
 ax-circuit-derive = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-rv32im-circuit = { workspace = true }
-axvm-instructions = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -24,10 +24,10 @@ ax-stark-sdk = { workspace = true }
 test-case.workspace = true
 test-log.workspace = true
 lazy_static.workspace = true
-axvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["axvm-circuit/parallel"]
-test-utils = ["axvm-circuit/test-utils"]
+parallel = ["openvm-circuit/parallel"]
+test-utils = ["openvm-circuit/test-utils"]

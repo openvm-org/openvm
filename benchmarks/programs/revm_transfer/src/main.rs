@@ -8,7 +8,7 @@ extern crate alloc;
 use alloy_primitives::{address, TxKind, U256};
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 fn main() {
     let mut evm = Evm::builder()

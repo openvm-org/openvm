@@ -1,6 +1,6 @@
-use axvm_circuit::{self, arch::VmChipWrapper};
-use axvm_rv32_adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip};
-use axvm_rv32im_circuit::{
+use openvm_circuit::{self, arch::VmChipWrapper};
+use openvm_rv32_adapters::{Rv32HeapAdapterChip, Rv32HeapBranchAdapterChip};
+use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
     BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
     MultiplicationCoreChip, ShiftCoreChip,

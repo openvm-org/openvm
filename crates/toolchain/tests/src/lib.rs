@@ -1,4 +1,4 @@
-//! Unit tests for axVM toolchain starting from rust
+//! Unit tests for OpenVm toolchain starting from rust
 
 pub mod utils;
 

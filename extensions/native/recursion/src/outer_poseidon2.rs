@@ -1,5 +1,5 @@
 use ax_stark_backend::p3_field::{AbstractField, Field};
-use axvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
+use openvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
 use itertools::Itertools;
 
 use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};

@@ -1,8 +1,8 @@
 use std::array;
 
 use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
-use axvm_native_compiler::prelude::*;
-use axvm_native_recursion::{hints::Hintable, types::InnerConfig};
+use openvm_native_compiler::prelude::*;
+use openvm_native_recursion::{hints::Hintable, types::InnerConfig};
 
 pub(crate) fn assign_array_to_slice<C: Config>(
     builder: &mut Builder<C>,

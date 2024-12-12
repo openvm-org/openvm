@@ -2,7 +2,7 @@
 
 extern crate proc_macro;
 
-use axvm_macros_common::MacroArgs;
+use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
@@ -17,7 +17,7 @@ use syn::{
 /// }
 /// ```
 ///
-/// For this macro to work, you must import the `elliptic_curve` crate and the `axvm_ecc_guest` crate..
+/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest` crate..
 #[proc_macro]
 pub fn sw_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -93,8 +93,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             impl #struct_name {
                 const fn identity() -> Self {
                     Self {
-                        x: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
-                        y: <#intmod_type as axvm_algebra_guest::IntMod>::ZERO,
+                        x: <#intmod_type as openvm_algebra_guest::IntMod>::ZERO,
+                        y: <#intmod_type as openvm_algebra_guest::IntMod>::ZERO,
                     }
                 }
                 // Below are wrapper functions for the intrinsic instructions.
@@ -103,7 +103,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use axvm_algebra_guest::DivUnsafe;
+                        use openvm_algebra_guest::DivUnsafe;
                         let lambda = (&p2.y - &p1.y).div_unsafe(&p2.x - &p1.x);
                         let x3 = &lambda * &lambda - &p1.x - &p2.x;
                         let y3 = &lambda * &(&p1.x - &x3) - &p1.y;
@@ -127,7 +127,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn add_ne_assign(&mut self, p2: &#struct_name) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use axvm_algebra_guest::DivUnsafe;
+                        use openvm_algebra_guest::DivUnsafe;
                         let lambda = (&p2.y - &self.y).div_unsafe(&p2.x - &self.x);
                         let x3 = &lambda * &lambda - &self.x - &p2.x;
                         let y3 = &lambda * &(&self.x - &x3) - &self.y;
@@ -151,7 +151,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn double_impl(p: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use axvm_algebra_guest::DivUnsafe;
+                        use openvm_algebra_guest::DivUnsafe;
                         let two = #intmod_type::from_u8(2);
                         let lambda = &p.x * &p.x * #intmod_type::from_u8(3).div_unsafe(&p.y * &two);
                         let x3 = &lambda * &lambda - &p.x * &two;
@@ -175,7 +175,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn double_assign_impl(&mut self) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use axvm_algebra_guest::DivUnsafe;
+                        use openvm_algebra_guest::DivUnsafe;
                         let two = #intmod_type::from_u8(2);
                         let lambda = &self.x * &self.x * #intmod_type::from_u8(3).div_unsafe(&self.y * &two);
                         let x3 = &lambda * &lambda - &self.x * &two;
@@ -195,14 +195,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::axvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
+            impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
                 /// such that with repr(C), two coordinates are packed contiguously.
                 fn as_le_bytes(&self) -> &[u8] {
-                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as axvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
+                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
                 }
 
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
@@ -252,15 +252,15 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        use axvm::platform as axvm_platform; // needed for hint_store_u32!
+                        use openvm::platform as openvm_platform; // needed for hint_store_u32!
 
                         let y = core::mem::MaybeUninit::<Self::Coordinate>::uninit();
                         unsafe {
                             #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
                             let mut ptr = y.as_ptr() as *const u8;
                             // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                            for _ in (0..<Self::Coordinate as axvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
-                                axvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                            for _ in (0..<Self::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                openvm_rv32im_guest::hint_store_u32!(ptr, 0);
                                 ptr = ptr.add(4);
                             }
                             y.assume_init()
@@ -275,7 +275,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 const IDENTITY: Self = Self::identity();
 
                 fn is_identity(&self) -> bool {
-                    self.x == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO
+                    self.x == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO
                 }
 
                 fn double(&self) -> Self {
@@ -319,7 +319,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     } else if p2.is_identity() {
                         self.clone()
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
                             #struct_name::identity()
                         } else {
                             #struct_name::double_impl(self)
@@ -337,7 +337,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     } else if p2.is_identity() {
                         // do nothing
                     } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as axvm_algebra_guest::IntMod>::ZERO {
+                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
                             *self = Self::identity();
                         } else {
                             Self::double_assign_impl(self);
@@ -457,7 +457,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
-                axvm_platform::custom_insn_r!(
+                openvm_platform::custom_insn_r!(
                     OPCODE,
                     SW_FUNCT3 as usize,
                     SwBaseFunct7::SwAddNe as usize + #ec_idx
@@ -470,7 +470,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
-                axvm_platform::custom_insn_r!(
+                openvm_platform::custom_insn_r!(
                     OPCODE,
                     SW_FUNCT3 as usize,
                     SwBaseFunct7::SwDouble as usize + #ec_idx
@@ -505,29 +505,29 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 needs to be non-zero to avoid division by zero in double.
-                    let modulus_bytes = <#item as axvm_algebra_guest::IntMod>::MODULUS;
-                    let mut one = [0u8; <#item as axvm_algebra_guest::IntMod>::NUM_LIMBS];
+                    let modulus_bytes = <#item as openvm_algebra_guest::IntMod>::MODULUS;
+                    let mut one = [0u8; <#item as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_ecc_guest::OPCODE,
-                        ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                        ::axvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_ecc_guest::OPCODE,
+                        ::openvm_ecc_guest::SW_FUNCT3 as usize,
+                        ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         p2.as_ptr()
                     );
-                    axvm_platform::custom_insn_r!(
-                        ::axvm_ecc_guest::OPCODE,
-                        ::axvm_ecc_guest::SW_FUNCT3 as usize,
-                        ::axvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_ecc_guest::OPCODE,
+                        ::openvm_ecc_guest::SW_FUNCT3 as usize,
+                        ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (::axvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         p1.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
@@ -544,8 +544,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     TokenStream::from(quote::quote_spanned! { span.into() =>
         // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
-        mod axvm_intrinsics_ffi_2 {
-            use ::axvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+        mod openvm_intrinsics_ffi_2 {
+            use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
         }

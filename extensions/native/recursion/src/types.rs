@@ -5,7 +5,7 @@ use ax_stark_backend::{
     p3_util::log2_strict_usize,
     prover::types::Proof,
 };
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Config, DIGEST_SIZE},
 };

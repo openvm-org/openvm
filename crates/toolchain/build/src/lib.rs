@@ -12,7 +12,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use axvm_platform::memory;
+use openvm_platform::memory;
 use cargo_metadata::{MetadataCommand, Package};
 
 pub use self::config::GuestOptions;

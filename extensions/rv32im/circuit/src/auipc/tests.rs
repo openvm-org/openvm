@@ -12,9 +12,9 @@ use ax_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
-use axvm_instructions::{instruction::Instruction, program::PC_BITS, VmOpcode, UsizeOpcode};
-use axvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, VmOpcode, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};

@@ -10,8 +10,8 @@ use ax_stark_backend::{
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
-use axvm_circuit::system::memory::{MemoryReadRecord, MemoryWriteRecord};
-use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_circuit::system::memory::{MemoryReadRecord, MemoryWriteRecord};
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
 };

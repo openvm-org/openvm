@@ -1,12 +1,12 @@
 use ax_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_native_circuit::execute_program;
-use axvm_native_compiler::{
+use openvm_native_circuit::execute_program;
+use openvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, Config, Ext, Felt, RVar, Usize, Var},
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
-use axvm_native_compiler_derive::DslVariable;
+use openvm_native_compiler_derive::DslVariable;
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {

@@ -14,8 +14,8 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     p3_baby_bear::BabyBear,
 };
-use axvm_circuit::arch::instructions::program::Program;
-use axvm_native_compiler::{
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_native_compiler::{
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,

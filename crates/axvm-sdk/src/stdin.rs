@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::arch::Streams;
+use openvm_circuit::arch::Streams;
 use serde::{Deserialize, Serialize};
 
 use crate::F;
@@ -23,7 +23,7 @@ impl StdIn {
     }
 
     pub fn write<T: Serialize>(&mut self, data: &T) {
-        let words = axvm::serde::to_vec(data).unwrap();
+        let words = openvm::serde::to_vec(data).unwrap();
         let bytes: Vec<u8> = words.into_iter().flat_map(|w| w.to_le_bytes()).collect();
         self.write_bytes(&bytes);
     }

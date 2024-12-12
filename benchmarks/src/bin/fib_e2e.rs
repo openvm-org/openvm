@@ -4,20 +4,20 @@ use ax_stark_sdk::{
     bench::run_with_metric_collection,
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
 };
-use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
-use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
-use axvm_rv32im_circuit::Rv32ImConfig;
-use axvm_rv32im_transpiler::{
+use openvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
+use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_native_compiler::conversion::CompilerOptions;
+use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
+use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_sdk::{
+use openvm_sdk::{
     commit::commit_app_exe,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
     Sdk, StdIn,
 };
-use axvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
 

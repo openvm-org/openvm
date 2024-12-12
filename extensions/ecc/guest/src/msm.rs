@@ -1,7 +1,7 @@
 use alloc::{vec, vec::Vec};
 use core::ops::{Add, Neg};
 
-use axvm_algebra_guest::IntMod;
+use openvm_algebra_guest::IntMod;
 
 use super::Group;
 

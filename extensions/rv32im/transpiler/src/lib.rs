@@ -1,15 +1,15 @@
 use std::marker::PhantomData;
 
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant, SystemOpcode,
     VmOpcode,
 };
-use axvm_rv32im_guest::{
+use openvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_STORE_W_FUNCT3, PHANTOM_FUNCT3, REVEAL_FUNCT3,
     RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
-use axvm_transpiler::{
+use openvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension,
 };

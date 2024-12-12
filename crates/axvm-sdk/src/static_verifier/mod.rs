@@ -6,9 +6,9 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
-use axvm_circuit::arch::PROGRAM_CACHED_TRACE_INDEX;
-use axvm_native_compiler::prelude::*;
-use axvm_native_recursion::{
+use openvm_circuit::arch::PROGRAM_CACHED_TRACE_INDEX;
+use openvm_native_compiler::prelude::*;
+use openvm_native_recursion::{
     challenger::multi_field32::MultiField32ChallengerVariable,
     config::outer::{new_from_outer_multi_vk, OuterConfig},
     digest::DigestVariable,

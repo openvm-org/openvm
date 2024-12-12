@@ -13,15 +13,15 @@ use ax_stark_backend::{
     ChipUsageGetter,
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder},
         ExecutionBridge, VmAdapterChip, VmChipWrapper, RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{instruction::Instruction, VmOpcode};
-use axvm_rv32im_transpiler::MulOpcode;
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_rv32im_transpiler::MulOpcode;
 
 use super::core::run_mul;
 use crate::{

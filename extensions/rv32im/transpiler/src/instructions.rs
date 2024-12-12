@@ -7,8 +7,8 @@
 // specify a different offset.
 // =================================================================================================
 
-use axvm_instructions::UsizeOpcode;
-use axvm_instructions_derive::UsizeOpcode;
+use openvm_instructions::UsizeOpcode;
+use openvm_instructions_derive::UsizeOpcode;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(

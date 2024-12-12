@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axvm_sdk::{
+use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::{write_app_pk_to_file, write_app_vk_to_file},
     Sdk,

@@ -14,15 +14,15 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use ax_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         Streams, VmAdapterChip, BITWISE_OP_LOOKUP_BUS,
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use axvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 

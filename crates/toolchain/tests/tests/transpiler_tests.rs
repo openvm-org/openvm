@@ -6,13 +6,13 @@ use std::{
 use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_algebra_circuit::{
+use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
 };
-use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
-use axvm_circuit::{
+use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExecutor,
         VmInventoryError,
@@ -20,17 +20,17 @@ use axvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
-use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
-use axvm_instructions::exe::VmExe;
-use axvm_platform::memory::MEM_SIZE;
-use axvm_rv32im_circuit::{
+use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_instructions::exe::VmExe;
+use openvm_platform::memory::MEM_SIZE;
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
     Rv32M, Rv32MExecutor, Rv32MPeriphery,
 };
-use axvm_rv32im_transpiler::{
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
+use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
@@ -133,7 +133,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
         vec![SECP256K1_MODULUS.clone()],
     );
     let elf = get_elf(elf_path)?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -143,7 +143,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Fp2TranspilerExtension),
     )?;
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(axvm_exe, vec![])?;
+    executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
 
@@ -151,7 +151,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 fn test_terminate_prove() -> Result<()> {
     let config = Rv32ImConfig::default();
     let elf = get_elf("tests/data/rv32im-terminate-from-as")?;
-    let axvm_exe = VmExe::from_elf(
+    let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -159,6 +159,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    new_air_test_with_min_segments(config, axvm_exe, vec![], 1, true);
+    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, true);
     Ok(())
 }

@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use axvm_ecc_guest::{algebra::Field, AffinePoint};
+use openvm_ecc_guest::{algebra::Field, AffinePoint};
 use halo2curves_axiom::bls12_381::{
     Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
 };

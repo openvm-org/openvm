@@ -1,25 +1,25 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// use axvm_algebra_guest::{field::ComplexConjugate, DivAssignUnsafe, DivUnsafe, IntMod};
-use axvm_algebra_guest::IntMod;
+// use openvm_algebra_guest::{field::ComplexConjugate, DivAssignUnsafe, DivUnsafe, IntMod};
+use openvm_algebra_guest::IntMod;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
-axvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_setup::moduli_declare! {
     Mod1 { modulus = "998244353" },
     Mod2 { modulus = "1000000007" }
 }
-axvm_algebra_moduli_setup::moduli_init! {
+openvm_algebra_moduli_setup::moduli_init! {
     "998244353", "1000000007"
 }
 
-axvm_algebra_complex_macros::complex_declare! {
+openvm_algebra_complex_macros::complex_declare! {
     Complex1 { mod_type = Mod1 },
     Complex2 { mod_type = Mod2 },
 }
 
-axvm_algebra_complex_macros::complex_init! {
+openvm_algebra_complex_macros::complex_init! {
     Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 },
 }
 

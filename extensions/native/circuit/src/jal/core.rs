@@ -7,12 +7,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
-use axvm_native_compiler::NativeJalOpcode;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_native_compiler::NativeJalOpcode;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

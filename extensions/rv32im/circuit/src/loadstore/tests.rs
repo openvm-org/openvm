@@ -11,15 +11,15 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use ax_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         VmAdapterChip,
     },
     utils::{u32_into_limbs, u32_sign_extend},
 };
-use axvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
 use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};

@@ -10,37 +10,37 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_keccak::Keccak256Hash,
 };
-use axvm_algebra_circuit::{
+use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
 };
-use axvm_algebra_transpiler::ModularTranspilerExtension;
-use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::{
+use openvm_algebra_transpiler::ModularTranspilerExtension;
+use openvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
+use openvm_circuit::{
     arch::{
         instructions::exe::VmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
         VmConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
-use axvm_ecc_circuit::{
+use openvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
 };
-use axvm_ecc_transpiler::EccTranspilerExtension;
-use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use axvm_native_compiler::conversion::CompilerOptions;
-use axvm_native_recursion::testing_utils::inner::build_verification_program;
-use axvm_rv32im_circuit::{
+use openvm_ecc_transpiler::EccTranspilerExtension;
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_native_compiler::conversion::CompilerOptions;
+use openvm_native_recursion::testing_utils::inner::build_verification_program;
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use axvm_rv32im_transpiler::{
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_sdk::{config::AppConfig, StdIn};
-use axvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_sdk::{config::AppConfig, StdIn};
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use derive_more::derive::From;
 use eyre::Result;

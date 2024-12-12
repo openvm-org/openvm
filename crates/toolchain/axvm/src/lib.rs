@@ -1,4 +1,4 @@
-//! # axVM standard library
+//! # OpenVm standard library
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(rustdoc::broken_intra_doc_links)]
@@ -13,12 +13,12 @@ extern crate alloc;
 #[cfg(target_os = "zkvm")]
 use core::arch::asm;
 
-pub use axvm_platform as platform;
+pub use openvm_platform as platform;
 #[cfg(target_os = "zkvm")]
 #[allow(unused_imports)]
-use axvm_platform::rust_rt;
+use openvm_platform::rust_rt;
 #[cfg(target_os = "zkvm")]
-pub use axvm_rv32im_guest::*;
+pub use openvm_rv32im_guest::*;
 
 pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
@@ -102,7 +102,7 @@ macro_rules! entry {
 #[no_mangle]
 unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
-    axvm_platform::heap::embedded::init();
+    openvm_platform::heap::embedded::init();
 
     {
         extern "C" {
@@ -116,7 +116,7 @@ unsafe extern "C" fn __start() -> ! {
 }
 
 #[cfg(target_os = "zkvm")]
-static STACK_TOP: u32 = axvm_platform::memory::STACK_TOP;
+static STACK_TOP: u32 = openvm_platform::memory::STACK_TOP;
 
 // Entry point; sets up global pointer and stack pointer and passes
 // to zkvm_start.  TODO: when asm_const is stabilized, use that here
@@ -161,6 +161,6 @@ fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;
     let mut writer = crate::io::Writer;
     let _ = write!(writer, "{}\n", panic_info);
-    axvm_platform::rust_rt::terminate::<1>();
+    openvm_platform::rust_rt::terminate::<1>();
     unreachable!()
 }

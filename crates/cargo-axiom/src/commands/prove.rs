@@ -1,7 +1,9 @@
 use std::{path::PathBuf, sync::Arc};
 
-use axvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
-use axvm_sdk::{
+use clap::Parser;
+use eyre::Result;
+use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
+use openvm_sdk::{
     commit::AppExecutionCommit,
     config::SdkVmConfig,
     fs::{
@@ -11,8 +13,6 @@ use axvm_sdk::{
     keygen::AppProvingKey,
     NonRootCommittedExe, Sdk, StdIn,
 };
-use clap::Parser;
-use eyre::Result;
 
 use crate::{
     commands::AGG_PK_PATH,
@@ -32,10 +32,10 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key")]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to axVM executable")]
+        #[clap(long, action, help = "Path to OpenVm executable")]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to axVM program")]
+        #[clap(long, value_parser, help = "Input to OpenVm program")]
         input: Option<Input>,
 
         #[clap(long, action, help = "Path to output proof")]
@@ -45,10 +45,10 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key")]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to axVM executable")]
+        #[clap(long, action, help = "Path to OpenVm executable")]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to axVM program")]
+        #[clap(long, value_parser, help = "Input to OpenVm program")]
         input: Option<Input>,
 
         #[clap(long, action, help = "Path to output proof")]

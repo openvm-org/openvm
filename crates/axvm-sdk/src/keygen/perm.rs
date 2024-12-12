@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use axvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
+use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 
 use crate::verifier::common::types::SpecialAirIds;
 

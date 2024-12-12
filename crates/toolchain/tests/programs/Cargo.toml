@@ -1,21 +1,21 @@
 [workspace]
 [package]
-name = "axvm-test-programs"
+name = "openvm-test-programs"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../axvm" }
-axvm-platform = { path = "../../platform" }
+openvm = { path = "../../openvm" }
+openvm-platform = { path = "../../platform" }
 
-axvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
-axvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
-axvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
-axvm-bigint-guest = { path = "../../../../extensions/bigint/guest" }
-axvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
-axvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
-axvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
-axvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest", default-features = false }
+openvm-algebra-moduli-setup = { path = "../../../../extensions/algebra/moduli-setup", default-features = false }
+openvm-algebra-complex-macros = { path = "../../../../extensions/algebra/guest/src/field/complex-macros", default-features = false }
+openvm-bigint-guest = { path = "../../../../extensions/bigint/guest" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features = false }
+openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
+openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
+openvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
 ruint = { git = "ssh://git@github.com/axiom-crypto/uint.git", branch = "axiom", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -32,18 +32,18 @@ k256 = { version = "0.13.3", default-features = false, features = [
 default = []
 std = [
     "serde/std",
-    "axvm/std",
-    "axvm-algebra-guest/std",
-    "axvm-bigint-guest/std",
-    "axvm-ecc-guest/std",
-    "axvm-keccak256-guest/std",
-    "axvm-pairing-guest/std",
+    "openvm/std",
+    "openvm-algebra-guest/std",
+    "openvm-bigint-guest/std",
+    "openvm-ecc-guest/std",
+    "openvm-keccak256-guest/std",
+    "openvm-pairing-guest/std",
 ]
-bn254 = ["axvm-pairing-guest/bn254"]
-bls12_381 = ["axvm-pairing-guest/bls12_381"]
-k256 = ["axvm-ecc-guest/k256", "dep:k256"]
-heap-embedded-alloc = ["axvm/heap-embedded-alloc"]
-ruint = ["dep:ruint", "axvm-bigint-guest/export-intrinsics"]
+bn254 = ["openvm-pairing-guest/bn254"]
+bls12_381 = ["openvm-pairing-guest/bls12_381"]
+k256 = ["openvm-ecc-guest/k256", "dep:k256"]
+heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
+ruint = ["dep:ruint", "openvm-bigint-guest/export-intrinsics"]
 
 [profile.release]
 panic = "abort"

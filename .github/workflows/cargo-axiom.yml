@@ -1,4 +1,4 @@
-name: axVM CLI Tests
+name: OpenVm CLI Tests
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "crates/axvm-sdk/**"
+      - "crates/openvm-sdk/**"
       - "crates/cargo-axiom/**"
 
 concurrency:
@@ -55,7 +55,7 @@ jobs:
           esac
 
       - name: Setup halo2
-        working-directory: crates/axvm-sdk
+        working-directory: crates/openvm-sdk
         run: |
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 

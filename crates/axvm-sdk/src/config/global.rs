@@ -1,35 +1,35 @@
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_circuit::{
+use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
 };
-use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use axvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
-use axvm_bigint_transpiler::Int256TranspilerExtension;
-use axvm_circuit::{
+use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InstructionExecutor},
 };
-use axvm_ecc_circuit::{
+use openvm_ecc_circuit::{
     WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
 };
-use axvm_ecc_transpiler::EccTranspilerExtension;
-use axvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use axvm_native_circuit::{Native, NativeExecutor, NativePeriphery};
-use axvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery};
-use axvm_pairing_transpiler::PairingTranspilerExtension;
-use axvm_rv32im_circuit::{
+use openvm_ecc_transpiler::EccTranspilerExtension;
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_native_circuit::{Native, NativeExecutor, NativePeriphery};
+use openvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery};
+use openvm_pairing_transpiler::PairingTranspilerExtension;
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use axvm_rv32im_transpiler::{
+use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_transpiler::transpiler::Transpiler;
+use openvm_transpiler::transpiler::Transpiler;
 use bon::Builder;
 use derive_more::derive::From;
 use serde::{Deserialize, Serialize};

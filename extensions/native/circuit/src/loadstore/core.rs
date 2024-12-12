@@ -11,12 +11,12 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionError, Result,
     Streams, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
-use axvm_instructions::instruction::Instruction;
-use axvm_native_compiler::NativeLoadStoreOpcode;
+use openvm_instructions::instruction::Instruction;
+use openvm_native_compiler::NativeLoadStoreOpcode;
 use parking_lot::Mutex;
 use strum::IntoEnumIterator;
 

@@ -1,4 +1,4 @@
-use axvm_native_compiler::{
+use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, DIGEST_SIZE},
 };

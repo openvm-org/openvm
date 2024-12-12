@@ -8,7 +8,7 @@ use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -22,11 +22,11 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
-use axvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_rv32im_circuit::adapters::read_rv32_register;
 
 use super::{
     vec_heap_generate_trace_row_impl, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols,

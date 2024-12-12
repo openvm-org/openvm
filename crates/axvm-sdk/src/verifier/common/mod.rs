@@ -1,15 +1,15 @@
 use std::array;
 
 use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
         PUBLIC_VALUES_AIR_ID,
     },
     system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
 };
-use axvm_native_compiler::{ir::Config, prelude::*};
-use axvm_native_recursion::{digest::DigestVariable, vars::StarkProofVariable};
+use openvm_native_compiler::{ir::Config, prelude::*};
+use openvm_native_recursion::{digest::DigestVariable, vars::StarkProofVariable};
 
 use crate::verifier::internal::types::InternalVmVerifierPvs;
 

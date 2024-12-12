@@ -16,7 +16,7 @@ use ax_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{
+use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
     SystemOpcode, UsizeOpcode, VmOpcode,
 };

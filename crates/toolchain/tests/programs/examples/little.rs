@@ -1,15 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm_algebra_guest::{DivUnsafe, IntMod};
+use openvm_algebra_guest::{DivUnsafe, IntMod};
 
-axvm::entry!(main);
+openvm::entry!(main);
 
-axvm_algebra_moduli_setup::moduli_declare! {
+openvm_algebra_moduli_setup::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
 
-axvm_algebra_moduli_setup::moduli_init!(
+openvm_algebra_moduli_setup::moduli_init!(
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
 );
 
@@ -40,6 +40,6 @@ pub fn main() {
     assert_eq!(res - &minus_two, inv + &two);
 
     if two == minus_two {
-        axvm::process::panic();
+        openvm::process::panic();
     }
 }

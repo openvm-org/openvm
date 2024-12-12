@@ -1,4 +1,4 @@
-name: axVM SDK Tests
+name: OpenVm SDK Tests
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "crates/axvm-sdk/**"
+      - "crates/openvm-sdk/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -67,12 +67,12 @@ jobs:
           fi
 
       - name: Setup halo2
-        working-directory: crates/axvm-sdk
+        working-directory: crates/openvm-sdk
         run: |
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 
-      - name: Run axvm-sdk crate tests
-        working-directory: crates/axvm-sdk
+      - name: Run openvm-sdk crate tests
+        working-directory: crates/openvm-sdk
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel

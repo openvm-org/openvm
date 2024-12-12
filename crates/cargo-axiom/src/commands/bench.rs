@@ -10,9 +10,9 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
 };
-use axvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
-use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_sdk::fs::read_exe_from_file;
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_keccak256_circuit::Keccak256Rv32Config;
+use openvm_sdk::fs::read_exe_from_file;
 use clap::Parser;
 use eyre::Result;
 

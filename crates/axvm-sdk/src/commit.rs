@@ -8,7 +8,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
@@ -19,7 +19,7 @@ use axvm_circuit::{
         program::trace::VmCommittedExe,
     },
 };
-use axvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
+use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 
 use crate::{
     keygen::AppProvingKey, verifier::leaf::LeafVmVerifierConfig, NonRootCommittedExe, F, SC,

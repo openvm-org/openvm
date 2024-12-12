@@ -3,7 +3,7 @@ use ax_stark_backend::{
     p3_field::{AbstractField, TwoAdicField},
 };
 use ax_stark_sdk::config::FriParameters;
-use axvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
+use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 
 use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 

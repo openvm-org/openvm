@@ -4,9 +4,9 @@ use ax_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
     engine::{StarkEngine, StarkFriEngine},
 };
-use axvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
-use axvm_native_circuit::NativeConfig;
-use axvm_native_recursion::hints::Hintable;
+use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
+use openvm_native_circuit::NativeConfig;
+use openvm_native_recursion::hints::Hintable;
 
 use crate::{
     keygen::RootVerifierProvingKey,

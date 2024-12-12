@@ -1,5 +1,5 @@
 [package]
-name = "axvm-keccak256-transpiler"
+name = "openvm-keccak256-transpiler"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,9 +7,9 @@ description = "Transpiler extension for Keccak256"
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-axvm-instructions = { workspace = true }
-axvm-transpiler = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
-axvm-keccak256-guest = { workspace = true }
-axvm-instructions-derive = { workspace = true }
+openvm-keccak256-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
 strum = { workspace = true }

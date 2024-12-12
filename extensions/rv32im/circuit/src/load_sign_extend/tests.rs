@@ -11,12 +11,12 @@ use ax_stark_backend::{
     verifier::VerificationError,
 };
 use ax_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{
+use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
     VmAdapterChip,
 };
-use axvm_instructions::{instruction::Instruction, VmOpcode, UsizeOpcode};
-use axvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_instructions::{instruction::Instruction, VmOpcode, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
 use super::run_write_data_sign_extend;

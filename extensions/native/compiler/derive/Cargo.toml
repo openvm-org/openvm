@@ -1,8 +1,8 @@
 [package]
-name = "axvm-native-compiler-derive"
+name = "openvm-native-compiler-derive"
 version.workspace = true
 edition.workspace = true
-description = "Procedural macros for axVM native compiler."
+description = "Procedural macros for OpenVm native compiler."
 
 [lib]
 proc-macro = true
@@ -13,6 +13,6 @@ quote = "1.0"
 proc-macro2 = "1.0"
 
 [dev-dependencies]
-axvm-native-compiler = { workspace = true }
-axvm-native-recursion = { workspace = true }
+openvm-native-compiler = { workspace = true }
+openvm-native-recursion = { workspace = true }
 ax-stark-backend = { workspace = true }

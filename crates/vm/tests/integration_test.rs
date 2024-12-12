@@ -16,7 +16,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         ChipId, ExitCode, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemExecutor,
@@ -33,7 +33,7 @@ use axvm_circuit::{
     },
     utils::{air_test, air_test_with_min_segments},
 };
-use axvm_instructions::{
+use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
@@ -44,14 +44,14 @@ use axvm_instructions::{
     SystemOpcode::*,
     VmOpcode,
 };
-use axvm_keccak256_circuit::{utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery};
-use axvm_keccak256_transpiler::Rv32KeccakOpcode::*;
-use axvm_native_circuit::{Native, NativeConfig, NativeExecutor, NativePeriphery};
-use axvm_native_compiler::{
+use openvm_keccak256_circuit::{utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_transpiler::Rv32KeccakOpcode::*;
+use openvm_native_circuit::{Native, NativeConfig, NativeExecutor, NativePeriphery};
+use openvm_native_compiler::{
     FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
     NativeLoadStoreOpcode::*, NativePhantom,
 };
-use axvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use derive_more::derive::From;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
