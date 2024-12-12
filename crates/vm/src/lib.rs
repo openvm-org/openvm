@@ -1,6 +1,6 @@
 extern crate self as openvm_circuit;
 
-pub use ax_circuit_derive as circuit_derive;
+pub use openvm_circuit_primitives_derive as circuit_derive;
 #[cfg(feature = "test-utils")]
 pub use ax_stark_sdk;
 pub use openvm_circuit_derive as derive;

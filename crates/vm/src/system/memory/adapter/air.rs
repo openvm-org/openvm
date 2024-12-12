@@ -1,15 +1,15 @@
 use std::{borrow::Borrow, mem::size_of};
 
-use ax_circuit_primitives::{
-    is_less_than::{IsLessThanIo, IsLtSubAir},
-    SubAir,
-};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::AbstractField,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
+use openvm_circuit_primitives::{
+    is_less_than::{IsLessThanIo, IsLtSubAir},
+    SubAir,
 };
 
 use crate::system::memory::{

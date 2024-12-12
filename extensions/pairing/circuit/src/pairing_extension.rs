@@ -1,27 +1,27 @@
 use std::sync::Arc;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_backend::p3_field::PrimeField32;
+use derive_more::derive::From;
+use num_bigint_dig::BigUint;
+use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
-use derive_more::derive::From;
-use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, FromRepr};
 
@@ -367,6 +367,7 @@ pub(crate) mod phantom {
     use std::collections::VecDeque;
 
     use ax_stark_backend::p3_field::PrimeField32;
+    use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
@@ -382,7 +383,6 @@ pub(crate) mod phantom {
         pairing::{FinalExp, MultiMillerLoop},
     };
     use openvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
-    use eyre::bail;
 
     use super::PairingCurve;
 

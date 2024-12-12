@@ -1,24 +1,24 @@
 use std::sync::Arc;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_mod_circuit_builder::ExprBuilderConfig;
 use ax_stark_backend::p3_field::PrimeField32;
+use derive_more::derive::From;
+use num_bigint_dig::BigUint;
+use num_traits::{FromPrimitive, Zero};
+use once_cell::sync::Lazy;
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
+use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
-use derive_more::derive::From;
-use num_bigint_dig::BigUint;
-use num_traits::{FromPrimitive, Zero};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
@@ -198,16 +198,16 @@ pub(crate) mod phantom {
     use std::iter::repeat;
 
     use ax_stark_backend::p3_field::PrimeField32;
+    use eyre::bail;
+    use num_bigint_dig::BigUint;
+    use num_integer::Integer;
+    use num_traits::One;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
-    use eyre::bail;
-    use num_bigint_dig::BigUint;
-    use num_integer::Integer;
-    use num_traits::One;
 
     use super::CurveConfig;
 

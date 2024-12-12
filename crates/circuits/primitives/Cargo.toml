@@ -1,5 +1,5 @@
 [package]
-name = "ax-circuit-primitives"
+name = "openvm-circuit-primitives"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ description = "Library of plonky3 primitives for general purpose use in other ZK
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-ax-circuit-derive = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 
 rand.workspace = true
 derive-new.workspace = true

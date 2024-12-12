@@ -6,12 +6,12 @@ use std::{
     marker::PhantomData,
 };
 
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
+use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
@@ -26,8 +26,8 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use itertools::izip;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers

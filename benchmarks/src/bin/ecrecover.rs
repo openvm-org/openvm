@@ -1,7 +1,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::{
     bench::run_with_metric_collection,
@@ -10,6 +9,11 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_keccak::Keccak256Hash,
 };
+use clap::Parser;
+use derive_more::derive::From;
+use eyre::Result;
+use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
+use num_bigint_dig::BigUint;
 use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
@@ -23,6 +27,7 @@ use openvm_circuit::{
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
 };
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
@@ -41,11 +46,6 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_sdk::{config::AppConfig, StdIn};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use clap::Parser;
-use derive_more::derive::From;
-use eyre::Result;
-use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
-use num_bigint_dig::BigUint;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Keccak};

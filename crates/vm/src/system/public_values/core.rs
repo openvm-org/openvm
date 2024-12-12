@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use ax_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr};
 
 pub fn ec_add_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.

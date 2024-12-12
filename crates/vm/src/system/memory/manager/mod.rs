@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_primitives::{
+use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_less_than::IsLtSubAir,
     is_zero::IsZeroSubAir,
@@ -840,7 +840,7 @@ pub fn memory_image_to_equipartition<F: PrimeField32, const N: usize>(
 mod tests {
     use std::sync::Arc;
 
-    use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+    use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use ax_stark_backend::p3_field::AbstractField;
     use ax_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};

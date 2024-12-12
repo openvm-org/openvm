@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,

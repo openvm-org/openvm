@@ -6,8 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use ax_poseidon2_air::poseidon2::Poseidon2Config;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
@@ -23,6 +21,8 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use itertools::Itertools;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use rand::{
     prelude::{SliceRandom, StdRng},
     Rng,

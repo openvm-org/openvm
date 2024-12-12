@@ -3,8 +3,8 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::not;
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives::utils::not;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},

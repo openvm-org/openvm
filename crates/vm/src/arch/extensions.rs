@@ -1,7 +1,7 @@
 use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };

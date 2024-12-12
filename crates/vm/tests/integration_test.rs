@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
@@ -16,6 +15,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
+use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -33,6 +33,7 @@ use openvm_circuit::{
     },
     utils::{air_test, air_test_with_min_segments},
 };
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -44,7 +45,9 @@ use openvm_instructions::{
     SystemOpcode::*,
     VmOpcode,
 };
-use openvm_keccak256_circuit::{utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_circuit::{
+    utils::keccak256, Keccak256, Keccak256Executor, Keccak256Periphery,
+};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::*;
 use openvm_native_circuit::{Native, NativeConfig, NativeExecutor, NativePeriphery};
 use openvm_native_compiler::{
@@ -52,7 +55,6 @@ use openvm_native_compiler::{
     NativeLoadStoreOpcode::*, NativePhantom,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-use derive_more::derive::From;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use test_log::test;

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
+use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use ax_stark_backend::{
     p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
 };

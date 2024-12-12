@@ -1,6 +1,5 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::AbstractField,
@@ -20,6 +19,7 @@ use openvm_circuit::{
     },
     utils::generate_long_number,
 };
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 

@@ -1,12 +1,12 @@
 [package]
-name = "ax-mod-circuit-builder"
+name = "openvm-mod-circuit-builder"
 version = "0.1.0"
 edition = "2021"
 description = "Modular arithmetic framework for building OpenVm circuits."
 
 [dependencies]
 ax-stark-backend = { workspace = true }
-ax-circuit-primitives = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
@@ -21,7 +21,7 @@ tracing.workspace = true
 itertools.workspace = true
 
 [dev-dependencies]
-ax-circuit-primitives = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
 hex-literal = { workspace = true }
 sha3 = "0.10.8"
 lazy_static.workspace = true

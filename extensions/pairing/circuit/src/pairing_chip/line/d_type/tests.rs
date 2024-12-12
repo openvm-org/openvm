@@ -1,19 +1,23 @@
 use std::sync::Arc;
 
-use ax_circuit_primitives::bitwise_op_lookup::{
+use ax_stark_backend::p3_field::AbstractField;
+use ax_stark_sdk::p3_baby_bear::BabyBear;
+use halo2curves_axiom::{
+    bn256::{Fq, Fq12, Fq2, G1Affine},
+    ff::Field,
+};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_mod_circuit_builder::{
+use openvm_ecc_guest::AffinePoint;
+use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint,
     },
     ExprBuilderConfig,
 };
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-use openvm_ecc_guest::AffinePoint;
-use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
 use openvm_pairing_guest::{
     bn254::{BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
     halo2curves_shims::bn254::{tangent_line_013, Bn254},
@@ -23,10 +27,6 @@ use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,
-};
-use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, G1Affine},
-    ff::Field,
 };
 use rand::{rngs::StdRng, SeedableRng};
 

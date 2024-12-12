@@ -1,6 +1,6 @@
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
+use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
@@ -9,12 +9,12 @@ use openvm_circuit::{
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use openvm_instructions::*;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use derive_more::derive::From;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

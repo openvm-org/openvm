@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_algebra_circuit::{

@@ -4,8 +4,7 @@ use std::{
     marker::PhantomData,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::not;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -26,6 +25,7 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
+use openvm_circuit_primitives::utils::not;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 
 use super::RV32_REGISTER_NUM_LIMBS;

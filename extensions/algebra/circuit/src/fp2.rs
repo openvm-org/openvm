@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_mod_circuit_builder::{ExprBuilder, FieldVariable, SymbolicExpr};
+use openvm_mod_circuit_builder::{ExprBuilder, FieldVariable, SymbolicExpr};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 #[derive(Clone)]
@@ -166,8 +166,6 @@ impl Fp2 {
 
 #[cfg(test)]
 mod tests {
-    use ax_circuit_primitives::TraceSubRowGenerator;
-    use ax_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
     use ax_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
     };
@@ -175,9 +173,11 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
-    use openvm_pairing_guest::bn254::BN254_MODULUS;
     use halo2curves_axiom::bn256::Fq2;
     use num_bigint_dig::BigUint;
+    use openvm_circuit_primitives::TraceSubRowGenerator;
+    use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
 
     use super::Fp2;
 

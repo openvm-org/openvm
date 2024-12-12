@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 openvm-build.workspace = true
 openvm-circuit.workspace = true
-ax-circuit-derive.workspace = true
+openvm-circuit-primitives-derive.workspace = true
 openvm-sdk.workspace = true
 ax-stark-backend.workspace = true
 ax-stark-sdk.workspace = true

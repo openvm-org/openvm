@@ -9,7 +9,6 @@ use std::{
     sync::atomic::AtomicU32,
 };
 
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir, PairBuilder},
@@ -17,6 +16,7 @@ use ax_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 
 mod bus;
 

@@ -1,4 +1,4 @@
-use ax_circuit_primitives::{
+use openvm_circuit_primitives::{
     assert_less_than::{AssertLessThanIo, AssertLtSubAir},
     is_zero::{IsZeroIo, IsZeroSubAir},
     utils::not,

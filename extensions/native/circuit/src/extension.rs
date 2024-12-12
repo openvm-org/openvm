@@ -1,4 +1,4 @@
-use ax_circuit_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use ax_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::{

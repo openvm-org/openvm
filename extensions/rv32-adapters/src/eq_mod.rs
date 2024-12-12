@@ -6,15 +6,13 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
 };
+use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -30,12 +28,16 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use openvm_rv32im_circuit::adapters::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use itertools::izip;
+use openvm_rv32im_circuit::adapters::{
+    read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers

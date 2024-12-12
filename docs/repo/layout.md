@@ -58,10 +58,10 @@ Command-line binary to compile, execute, and prove guest programs is in [`cargo-
 
 ### Circuit Foundations
 
-- [`ax-circuit-primitives`](../../crates/circuits/primitives): Primitive chips and sub-chips for standalone use in any circuit.
-- [`ax-circuit-derive`](../../crates/circuits/derive): Procedural macros for use in circuit to derive traits.
+- [`openvm-circuit-primitives`](../../crates/circuits/primitives): Primitive chips and sub-chips for standalone use in any circuit.
+- [`openvm-circuit-primitives-derive`](../../crates/circuits/derive): Procedural macros for use in circuit to derive traits.
 - [`ax-poseidon2-air`](../../crates/circuits/poseidon2-air): Standalone poseidon2 AIR implementation.
-- [`ax-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating chip for any modular arithmetic expression for a compile-time modulus.
+- [`openvm-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating chip for any modular arithmetic expression for a compile-time modulus.
 
 ### Proof System
 

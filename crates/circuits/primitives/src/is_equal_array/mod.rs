@@ -1,6 +1,6 @@
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 use itertools::izip;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 
 use crate::{SubAir, TraceSubRowGenerator};
 

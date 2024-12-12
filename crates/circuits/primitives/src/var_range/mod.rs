@@ -9,7 +9,6 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -20,6 +19,7 @@ use ax_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use tracing::instrument;
 
 mod bus;

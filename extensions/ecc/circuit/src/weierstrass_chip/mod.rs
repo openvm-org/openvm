@@ -7,14 +7,14 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
+use num_bigint_dig::BigUint;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
-use num_bigint_dig::BigUint;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output

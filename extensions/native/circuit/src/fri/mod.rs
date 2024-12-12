@@ -5,12 +5,6 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
-    is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::{assert_array_eq, next_power_of_two_or_zero, not},
-    SubAir, TraceSubRowGenerator,
-};
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -35,6 +29,12 @@ use openvm_circuit::{
         program::ProgramBus,
     },
 };
+use openvm_circuit_primitives::{
+    is_zero::{IsZeroIo, IsZeroSubAir},
+    utils::{assert_array_eq, next_power_of_two_or_zero, not},
+    SubAir, TraceSubRowGenerator,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 

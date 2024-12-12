@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-};
 use ax_stark_backend::p3_field::PrimeField32;
+use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
@@ -14,13 +10,17 @@ use openvm_circuit::{
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, PhantomDiscriminant, UsizeOpcode};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::{program::DEFAULT_PC_STEP, PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
-use derive_more::derive::From;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -510,12 +510,12 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 /// Phantom sub-executors
 mod phantom {
     use ax_stark_backend::p3_field::{Field, PrimeField32};
+    use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
     use openvm_instructions::PhantomDiscriminant;
-    use eyre::bail;
 
     use crate::adapters::unsafe_read_rv32_register;
 

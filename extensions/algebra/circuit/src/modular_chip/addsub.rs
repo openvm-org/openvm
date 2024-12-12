@@ -1,12 +1,8 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use ax_circuit_primitives::{
+use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
-};
-use ax_mod_circuit_builder::{
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
 };
 use ax_stark_backend::{
     interaction::InteractionBuilder,
@@ -14,14 +10,18 @@ use ax_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use itertools::Itertools;
+use num_bigint_dig::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
     DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_instructions::instruction::Instruction;
-use itertools::Itertools;
-use num_bigint_dig::BigUint;
+use openvm_mod_circuit_builder::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
+};
 
 /// The number of limbs and limb bits are determined at runtime.
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-use ax_circuit_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -1,19 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use itertools::izip;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
     VmCoreAir, VmCoreChip,
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
-use itertools::izip;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

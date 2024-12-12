@@ -1,8 +1,5 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
 use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},
@@ -13,7 +10,10 @@ use ax_stark_backend::{
 };
 use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, VmOpcode, UsizeOpcode};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 

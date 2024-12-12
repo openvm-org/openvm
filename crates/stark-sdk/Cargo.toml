@@ -22,7 +22,7 @@ itertools.workspace = true
 tracing.workspace = true
 
 ax-stark-backend = { workspace = true }
-ax-circuit-derive = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 
 serde = { workspace = true, features = ["alloc"] }
 rand.workspace = true

@@ -8,8 +8,8 @@ description = "OpenVm adapters for rv32 intrinsics"
 [dependencies]
 ax-stark-backend = { workspace = true }
 ax-stark-sdk = { workspace = true }
-ax-circuit-primitives = { workspace = true }
-ax-circuit-derive = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-instructions = { workspace = true }

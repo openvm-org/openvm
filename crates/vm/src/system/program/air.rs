@@ -1,4 +1,3 @@
-use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
@@ -7,6 +6,7 @@ use ax_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 
 use super::ProgramBus;
 

@@ -6,11 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
-    utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -31,6 +27,10 @@ use openvm_circuit::{
         },
         program::ProgramBus,
     },
+};
+use openvm_circuit_primitives::{
+    utils::select,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_instructions::{
     instruction::Instruction,

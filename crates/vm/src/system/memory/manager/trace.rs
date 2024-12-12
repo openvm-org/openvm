@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, cmp::max};
 
-use ax_circuit_primitives::{utils::next_power_of_two_or_zero, TraceSubRowGenerator};
+use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, TraceSubRowGenerator};
 use ax_stark_backend::{p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use crate::system::memory::{

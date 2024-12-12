@@ -94,10 +94,10 @@ lto = "thin"
 # Axiom
 openvm-sdk = { path = "crates/sdk", default-features = false }
 cargo-axiom = { path = "crates/cargo-axiom", default-features = false }
-ax-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
+openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 ax-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
-ax-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
-ax-circuit-derive = { path = "crates/circuits/derive", default-features = false }
+openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
+openvm-circuit-primitives-derive = { path = "crates/circuits/derive", default-features = false }
 openvm = { path = "crates/toolchain/openvm", default-features = false }
 openvm-build = { path = "crates/toolchain/build", default-features = false }
 openvm-instructions = { path = "crates/toolchain/instructions", default-features = false }

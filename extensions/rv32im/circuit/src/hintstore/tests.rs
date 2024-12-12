@@ -1,8 +1,5 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
 use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::AbstractField,
@@ -20,6 +17,9 @@ use openvm_circuit::{
         Streams, VmAdapterChip, BITWISE_OP_LOOKUP_BUS,
     },
     utils::{u32_into_limbs, u32_sign_extend},
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};

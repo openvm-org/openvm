@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-};
 use ax_stark_backend::p3_field::PrimeField32;
+use derive_more::derive::From;
 use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
@@ -18,12 +14,16 @@ use openvm_circuit::{
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use openvm_instructions::{program::DEFAULT_PC_STEP, VmOpcode, UsizeOpcode};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
+};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::{program::DEFAULT_PC_STEP, UsizeOpcode, VmOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use derive_more::derive::From;
 use serde::{Deserialize, Serialize};
 
 use crate::*;

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use ax_circuit_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,

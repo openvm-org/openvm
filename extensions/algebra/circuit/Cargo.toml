@@ -5,13 +5,13 @@ edition = "2021"
 description = "Modular arithmetic circuits."
 
 [dependencies]
-ax-circuit-primitives = { workspace = true }
-ax-circuit-derive = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 ax-stark-backend = { workspace = true }
-ax-mod-circuit-builder = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true }
 ax-stark-sdk = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
@@ -29,7 +29,7 @@ serde.workspace = true
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }
-ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

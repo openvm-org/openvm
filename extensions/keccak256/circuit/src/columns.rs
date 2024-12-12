@@ -1,9 +1,9 @@
 use core::mem::size_of;
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::assert_array_eq;
 use ax_stark_backend::p3_air::AirBuilder;
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
+use openvm_circuit_primitives::utils::assert_array_eq;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 

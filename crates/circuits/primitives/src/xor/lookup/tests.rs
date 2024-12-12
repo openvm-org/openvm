@@ -13,7 +13,7 @@ use rand::Rng;
 
 use crate::xor::XorLookupChip;
 
-// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in ax-circuit-primitives
+// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in openvm-circuit-primitives
 const BYTE_XOR_BUS: usize = 10;
 
 #[test]

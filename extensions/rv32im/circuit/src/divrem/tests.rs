@@ -1,9 +1,5 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-};
 use ax_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field},
@@ -23,6 +19,10 @@ use openvm_circuit::{
         RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::DivRemOpcode;

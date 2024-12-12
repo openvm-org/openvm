@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Tests for the OpenVm toolchain starting from Rust"
 
 [dependencies]
-ax-circuit-derive.workspace = true
+openvm-circuit-primitives-derive.workspace = true
 ax-stark-backend.workspace = true
 ax-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }

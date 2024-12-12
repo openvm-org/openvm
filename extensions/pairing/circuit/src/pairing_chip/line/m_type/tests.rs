@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
-use ax_circuit_primitives::bitwise_op_lookup::{
+use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_mod_circuit_builder::{test_utils::*, ExprBuilderConfig};
 use ax_stark_backend::p3_field::AbstractField;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
+use halo2curves_axiom::{
+    bls12_381::{Fq, Fq12, Fq2, G1Affine},
+    ff::Field,
+};
 use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_ecc_guest::AffinePoint;
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_mod_circuit_builder::{test_utils::*, ExprBuilderConfig};
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_LIMB_BITS, BLS12_381_MODULUS, BLS12_381_NUM_LIMBS, BLS12_381_XI_ISIZE},
     halo2curves_shims::bls12_381::{tangent_line_023, Bls12_381},
@@ -17,10 +21,6 @@ use openvm_pairing_guest::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::{
     rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip,
-};
-use halo2curves_axiom::{
-    bls12_381::{Fq, Fq12, Fq2, G1Affine},
-    ff::Field,
 };
 use rand::{rngs::StdRng, SeedableRng};
 

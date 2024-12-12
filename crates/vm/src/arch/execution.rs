@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,

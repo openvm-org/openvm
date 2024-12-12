@@ -1,4 +1,4 @@
-use ax_circuit_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::*;
 use openvm_circuit::arch::{

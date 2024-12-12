@@ -4,11 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
-    utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-};
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use ax_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,6 +13,10 @@ use ax_stark_backend::{
 };
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::{
+    utils::select,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};

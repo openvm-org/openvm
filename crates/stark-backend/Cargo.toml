@@ -35,7 +35,7 @@ tikv-jemallocator = { version = "0.6", optional = true }
 mimalloc = { version = "0.1.43", optional = true }
 
 [dev-dependencies]
-ax-circuit-derive = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
 ax-stark-sdk = { workspace = true }
 
 p3-dft = { workspace = true }

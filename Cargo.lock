@@ -370,68 +370,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
-name = "ax-circuit-derive"
-version = "0.1.0"
-dependencies = [
- "itertools 0.13.0",
- "proc-macro2",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "ax-circuit-primitives"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-derive",
- "ax-stark-backend",
- "ax-stark-sdk",
- "derive-new",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint-dig",
- "num-traits",
- "p3-dft",
- "p3-fri",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
- "rand",
- "test-case",
- "tracing",
-]
-
-[[package]]
-name = "ax-mod-circuit-builder"
-version = "0.1.0"
-dependencies = [
- "ax-circuit-primitives",
- "ax-stark-backend",
- "ax-stark-sdk",
- "halo2curves-axiom 0.7.0",
- "hex-literal",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint-dig",
- "num-traits",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-pairing-guest",
- "rand",
- "sha3",
- "tracing",
-]
-
-[[package]]
 name = "ax-poseidon2-air"
 version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "itertools 0.13.0",
  "lazy_static",
+ "openvm-circuit-primitives",
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
@@ -445,7 +392,6 @@ name = "ax-stark-backend"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ax-circuit-derive",
  "ax-stark-sdk",
  "cfg-if",
  "csv",
@@ -454,6 +400,7 @@ dependencies = [
  "itertools 0.13.0",
  "metrics",
  "mimalloc",
+ "openvm-circuit-primitives-derive",
  "p3-air",
  "p3-baby-bear",
  "p3-challenger",
@@ -486,7 +433,6 @@ dependencies = [
 name = "ax-stark-sdk"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
  "ax-stark-backend",
  "derive_more 0.99.18",
  "ff 0.13.0",
@@ -494,6 +440,7 @@ dependencies = [
  "metrics",
  "metrics-tracing-context",
  "metrics-util",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "p3-baby-bear",
  "p3-blake3",
@@ -2776,9 +2723,6 @@ dependencies = [
 name = "openvm-algebra-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -2790,7 +2734,10 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
+ "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
@@ -2850,7 +2797,6 @@ dependencies = [
 name = "openvm-benchmarks"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
  "ax-stark-backend",
  "ax-stark-sdk",
  "clap",
@@ -2866,6 +2812,7 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-build",
  "openvm-circuit",
+ "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
@@ -2891,8 +2838,6 @@ dependencies = [
 name = "openvm-bigint-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -2902,6 +2847,8 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
@@ -2958,8 +2905,6 @@ version = "0.1.0"
 dependencies = [
  "ark-ff 0.4.2",
  "async-trait",
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
@@ -2981,6 +2926,8 @@ dependencies = [
  "openvm-bigint-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-instructions",
@@ -3021,12 +2968,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-circuit-primitives"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "derive-new",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm-circuit-primitives-derive",
+ "p3-dft",
+ "p3-fri",
+ "p3-merkle-tree",
+ "p3-poseidon2",
+ "p3-symmetric",
+ "rand",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-circuit-primitives-derive"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
 name = "openvm-ecc-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -3040,9 +3016,12 @@ dependencies = [
  "openvm-algebra-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-ecc-guest",
  "openvm-ecc-transpiler",
  "openvm-instructions",
+ "openvm-mod-circuit-builder",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
  "serde",
@@ -3130,8 +3109,6 @@ dependencies = [
 name = "openvm-keccak256-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -3143,6 +3120,8 @@ dependencies = [
  "lazy_static",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
  "openvm-rv32im-circuit",
@@ -3186,11 +3165,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-mod-circuit-builder"
+version = "0.1.0"
+dependencies = [
+ "ax-stark-backend",
+ "ax-stark-sdk",
+ "halo2curves-axiom 0.7.0",
+ "hex-literal",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint-dig",
+ "num-traits",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-instructions",
+ "openvm-pairing-guest",
+ "rand",
+ "sha3",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-native-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-poseidon2-air",
  "ax-stark-backend",
  "ax-stark-sdk",
@@ -3202,6 +3200,8 @@ dependencies = [
  "lazy_static",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-native-compiler",
  "openvm-rv32im-circuit",
@@ -3218,7 +3218,6 @@ dependencies = [
 name = "openvm-native-compiler"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "backtrace",
@@ -3232,6 +3231,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "openvm-circuit",
+ "openvm-circuit-primitives",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-native-circuit",
@@ -3296,9 +3296,6 @@ dependencies = [
 name = "openvm-pairing-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
- "ax-mod-circuit-builder",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -3312,9 +3309,12 @@ dependencies = [
  "openvm-algebra-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-instructions",
+ "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
  "openvm-rv32-adapters",
@@ -3380,8 +3380,6 @@ dependencies = [
 name = "openvm-rv32-adapters"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -3389,6 +3387,8 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-circuit",
  "rand",
@@ -3401,8 +3401,6 @@ dependencies = [
 name = "openvm-rv32im-circuit"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
- "ax-circuit-primitives",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive-new",
@@ -3414,6 +3412,8 @@ dependencies = [
  "num-integer",
  "openvm-circuit",
  "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "parking_lot",
@@ -3498,7 +3498,6 @@ dependencies = [
 name = "openvm-toolchain-tests"
 version = "0.1.0"
 dependencies = [
- "ax-circuit-derive",
  "ax-stark-backend",
  "ax-stark-sdk",
  "derive_more 1.0.0",
@@ -3511,6 +3510,7 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-build",
  "openvm-circuit",
+ "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-ecc-transpiler",

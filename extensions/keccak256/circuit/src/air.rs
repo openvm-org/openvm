@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, iter::zip};
 
-use ax_circuit_primitives::{
+use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not, select},
 };

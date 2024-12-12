@@ -13,7 +13,7 @@ ax-stark-backend = { workspace = true }
 openvm-native-compiler-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-instructions-derive = { workspace = true }
-ax-circuit-primitives = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
 ax-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }

@@ -3,9 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
 use ax_stark_backend::p3_field::PrimeField32;
 use ax_stark_sdk::p3_baby_bear::BabyBear;
+use derive_more::derive::From;
+use eyre::Result;
+use num_bigint_dig::BigUint;
 use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
     ModularExtensionExecutor, ModularExtensionPeriphery,
@@ -20,6 +22,7 @@ use openvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
@@ -31,9 +34,6 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
-use derive_more::derive::From;
-use eyre::Result;
-use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
 
