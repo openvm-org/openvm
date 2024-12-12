@@ -12,14 +12,16 @@ openvm-algebra-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.
 openvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false, features = [
     "k256",
 ] }
-revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false, features = [
-    "openvm",
-] }
-revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false }
+k256 = { version = "0.13.3", default-features = false, features = ["ecdsa"] }
+# We do not patch revm-precompile so that the benchmark only depends on this repo.
+revm-precompile = { version = "14.0.0", default-features = false }
+alloy-primitives = { version = "0.8.10", default-features = false, features = [
+    "native-keccak",
+] } # revm does not re-export this feature so we enable it here
 
 [features]
 default = []
-std = ["openvm/std"]
+std = ["openvm/std", "k256/std", "revm-precompile/std", "alloy-primitives/std"]
 
 [patch."ssh://git@github.com/axiom-crypto/afs-prototype.git"]
 openvm = { path = "../../../crates/toolchain/openvm" }
