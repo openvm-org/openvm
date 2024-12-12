@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
@@ -10,6 +9,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, SymbolicExpr,
 };
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp2;
 
@@ -122,8 +122,6 @@ pub fn fp2_muldiv_expr(
 mod tests {
     use std::sync::Arc;
 
-    use openvm_stark_backend::p3_field::AbstractField;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
     use openvm_algebra_transpiler::Fp2Opcode;
@@ -138,6 +136,8 @@ mod tests {
     };
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::Fp2MulDivChip;

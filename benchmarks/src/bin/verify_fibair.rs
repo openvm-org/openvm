@@ -1,22 +1,22 @@
-/// Benchmark of aggregation VM performance.
-/// Proofs:
-/// 1. Prove Fibonacci AIR.
-/// 2. Verify the proof of 1. by execution VM program in STARK VM.
-use openvm_stark_sdk::{
-    openvm_stark_backend::Chip,
-    bench::run_with_metric_collection,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    dummy_airs::fib_air::chip::FibonacciChip,
-    engine::StarkFriEngine,
-};
+use clap::Parser;
+use eyre::Result;
 use openvm_benchmarks::utils::{bench_from_exe, BenchmarkCli};
 use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::config::AppConfig;
-use clap::Parser;
-use eyre::Result;
+/// Benchmark of aggregation VM performance.
+/// Proofs:
+/// 1. Prove Fibonacci AIR.
+/// 2. Verify the proof of 1. by execution VM program in STARK VM.
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    dummy_airs::fib_air::chip::FibonacciChip,
+    engine::StarkFriEngine,
+    openvm_stark_backend::Chip,
+};
 use tracing::info_span;
 
 fn main() -> Result<()> {

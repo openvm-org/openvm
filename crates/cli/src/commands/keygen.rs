@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
+use clap::Parser;
+use eyre::Result;
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::{write_app_pk_to_file, write_app_vk_to_file},
     Sdk,
 };
-use clap::Parser;
-use eyre::Result;
 
 use crate::util::read_to_struct_toml;
 

@@ -1,5 +1,5 @@
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 use derive_new::new;
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 
 use crate::{
     is_zero::{IsZeroAuxCols, IsZeroIo, IsZeroSubAir},

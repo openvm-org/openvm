@@ -1,9 +1,9 @@
+use derivative::Derivative;
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig},
     keygen::types::MultiStarkProvingKey,
 };
 use openvm_stark_sdk::config::FriParameters;
-use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 ///Proving key for a specific VM.

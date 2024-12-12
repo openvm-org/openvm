@@ -4,13 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
-    rap::BaseAirWithPublicValues,
-};
 use num_bigint_dig::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
@@ -23,7 +16,14 @@ use openvm_circuit_primitives::{
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
     SubAir, TraceSubRowGenerator,
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
+};
 
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR

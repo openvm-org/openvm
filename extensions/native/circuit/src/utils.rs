@@ -1,6 +1,6 @@
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::arch::{Streams, SystemConfig, VmExecutor};
 use openvm_instructions::program::Program;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{Native, NativeConfig};
 

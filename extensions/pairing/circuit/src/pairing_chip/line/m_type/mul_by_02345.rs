@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
@@ -11,6 +10,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp12;
 

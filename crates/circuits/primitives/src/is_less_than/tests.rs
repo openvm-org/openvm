@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use derive_new::new;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -13,7 +14,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
-use derive_new::new;
 
 use super::IsLessThanIo;
 use crate::{

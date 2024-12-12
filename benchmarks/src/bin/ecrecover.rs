@@ -1,14 +1,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
-use openvm_stark_sdk::{
-    bench::run_with_metric_collection,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-    p3_keccak::Keccak256Hash,
-};
 use clap::Parser;
 use derive_more::derive::From;
 use eyre::Result;
@@ -45,6 +37,14 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{config::AppConfig, StdIn};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    p3_keccak::Keccak256Hash,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use serde::{Deserialize, Serialize};

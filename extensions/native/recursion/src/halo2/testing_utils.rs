@@ -1,3 +1,4 @@
+use openvm_native_compiler::prelude::Witness;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
@@ -5,7 +6,6 @@ use openvm_stark_sdk::{
     },
     engine::{ProofInputForTest, StarkFriEngine},
 };
-use openvm_native_compiler::prelude::Witness;
 use snark_verifier_sdk::Snark;
 
 use crate::{

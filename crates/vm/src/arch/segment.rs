@@ -1,3 +1,7 @@
+use backtrace::Backtrace;
+#[cfg(feature = "function-span")]
+use openvm_instructions::exe::FnBound;
+use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -5,10 +9,6 @@ use openvm_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     Chip,
 };
-#[cfg(feature = "function-span")]
-use openvm_instructions::exe::FnBound;
-use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
-use backtrace::Backtrace;
 
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,

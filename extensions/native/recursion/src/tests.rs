@@ -1,5 +1,7 @@
 use std::{panic::catch_unwind, sync::Arc};
 
+use openvm_circuit::utils::gen_vm_program_test_proof_input;
+use openvm_native_circuit::NativeConfig;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
@@ -23,8 +25,6 @@ use openvm_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine},
     utils::to_field_vec,
 };
-use openvm_circuit::utils::gen_vm_program_test_proof_input;
-use openvm_native_circuit::NativeConfig;
 
 use crate::{
     hints::Hintable, stark::VerifierProgram, testing_utils::inner::run_recursive_test,

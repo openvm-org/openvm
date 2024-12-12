@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{AbstractField, PrimeField32},
@@ -14,7 +15,6 @@ use openvm_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
-use openvm_instructions::{exe::VmExe, program::Program};
 
 use crate::{
     arch::{

@@ -1,11 +1,13 @@
 use std::{iter, sync::Arc};
 
-use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap};
+use list::ListChip;
+use openvm_stark_backend::{
+    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, rap::AnyRap,
+};
 use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use list::ListChip;
 use rand::Rng;
 
 use crate::range::{bus::RangeCheckBus, RangeCheckerChip};

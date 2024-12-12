@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use num_bigint_dig::BigUint;
 use openvm_circuit::arch::{testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -23,6 +21,8 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 

@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::prover::types::Proof, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    engine::StarkFriEngine,
-};
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::arch::SingleSegmentVmExecutor;
 use openvm_circuit::arch::Streams;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    openvm_stark_backend::prover::types::Proof,
+};
 use tracing::info_span;
 
 // #[cfg(feature = "bench-metrics")]

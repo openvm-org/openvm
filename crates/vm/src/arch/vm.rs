@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -10,7 +11,6 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
-use openvm_instructions::exe::VmExe;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};

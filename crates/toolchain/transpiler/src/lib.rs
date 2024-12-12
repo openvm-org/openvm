@@ -1,12 +1,12 @@
 //! A transpiler from custom RISC-V ELFs to OpenVm executable binaries.
 
-use openvm_stark_backend::p3_field::PrimeField32;
+use elf::Elf;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
 };
 pub use openvm_platform;
-use elf::Elf;
+use openvm_stark_backend::p3_field::PrimeField32;
 use transpiler::{Transpiler, TranspilerError};
 
 use crate::util::elf_memory_image_to_openvm_memory_image;

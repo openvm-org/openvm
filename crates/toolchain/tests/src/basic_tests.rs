@@ -1,4 +1,4 @@
-use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use eyre::Result;
 use openvm_bigint_circuit::Int256Rv32Config;
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
@@ -12,8 +12,8 @@ use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_transpiler::{elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf};
-use eyre::Result;
 use test_case::test_case;
 
 use crate::utils::{build_example_program, build_example_program_with_features};

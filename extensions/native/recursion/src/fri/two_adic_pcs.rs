@@ -1,8 +1,8 @@
+use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
     p3_field::{AbstractField, TwoAdicField},
 };
-use openvm_native_compiler::prelude::*;
 use p3_symmetric::Hash;
 
 use super::{
@@ -314,6 +314,12 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
+    use itertools::Itertools;
+    use openvm_circuit::arch::instructions::program::Program;
+    use openvm_native_compiler::{
+        asm::AsmBuilder,
+        ir::{Array, RVar, DIGEST_SIZE},
+    };
     use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, FieldChallenger},
@@ -324,12 +330,6 @@ pub mod tests {
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         p3_baby_bear::BabyBear,
     };
-    use openvm_circuit::arch::instructions::program::Program;
-    use openvm_native_compiler::{
-        asm::AsmBuilder,
-        ir::{Array, RVar, DIGEST_SIZE},
-    };
-    use itertools::Itertools;
     use rand::rngs::OsRng;
 
     use crate::{

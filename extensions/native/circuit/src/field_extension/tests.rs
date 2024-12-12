@@ -3,6 +3,12 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
+use openvm_circuit::arch::testing::{
+    memory::{gen_address_space, gen_pointer},
+    VmChipTestBuilder,
+};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField},
     utils::disable_debug_builder,
@@ -10,12 +16,6 @@ use openvm_stark_backend::{
     ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use openvm_circuit::arch::testing::{
-    memory::{gen_address_space, gen_pointer},
-    VmChipTestBuilder,
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use openvm_native_compiler::FieldExtensionOpcode;
 use rand::Rng;
 use strum::EnumCount;
 

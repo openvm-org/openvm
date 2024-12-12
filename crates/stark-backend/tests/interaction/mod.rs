@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use openvm_stark_backend::{
     p3_field::AbstractField, prover::USE_DEBUG_BUILDER, verifier::VerificationError,
 };
@@ -5,7 +6,6 @@ use openvm_stark_sdk::{
     any_rap_arc_vec,
     dummy_airs::interaction::{dummy_interaction_air::DummyInteractionAir, verify_interactions},
 };
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_matrix::dense::RowMajorMatrix;
 

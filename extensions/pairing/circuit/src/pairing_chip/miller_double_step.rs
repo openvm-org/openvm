@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
@@ -11,6 +10,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: AffinePoint<Fp2>: 4 field elements
 // Output: (AffinePoint<Fp2>, Fp2, Fp2) -> 8 field elements
@@ -87,8 +87,6 @@ pub fn miller_double_step_expr(
 mod tests {
     use std::sync::Arc;
 
-    use openvm_stark_backend::p3_field::AbstractField;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -106,6 +104,8 @@ mod tests {
     };
     use openvm_pairing_transpiler::PairingOpcode;
     use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;

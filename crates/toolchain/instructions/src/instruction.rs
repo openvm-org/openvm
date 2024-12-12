@@ -1,5 +1,5 @@
-use openvm_stark_backend::p3_field::Field;
 use backtrace::Backtrace;
+use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 
 use crate::{utils::isize_to_field, PhantomDiscriminant, SystemOpcode, UsizeOpcode, VmOpcode};

@@ -1,18 +1,18 @@
 use alloc::vec::Vec;
 
+use itertools::izip;
 use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivUnsafe, Field,
 };
 use openvm_ecc_guest::AffinePoint;
-use itertools::izip;
 #[cfg(target_os = "zkvm")]
 use {
     crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
+    core::mem::MaybeUninit,
     openvm_platform::custom_insn_r,
     openvm_rv32im_guest,
-    core::mem::MaybeUninit,
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};

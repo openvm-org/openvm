@@ -1,5 +1,11 @@
 use std::borrow::BorrowMut;
 
+use openvm_circuit::{
+    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
+    system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
+};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
     p3_field::{AbstractField, Field, PrimeField32},
     prover::USE_DEBUG_BUILDER,
@@ -11,12 +17,6 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
-use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder},
-    system::native_adapter::{NativeAdapterChip, NativeAdapterCols},
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
-use openvm_native_compiler::FieldArithmeticOpcode;
 use rand::Rng;
 use strum::EnumCount;
 

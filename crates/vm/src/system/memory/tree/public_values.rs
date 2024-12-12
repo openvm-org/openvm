@@ -141,9 +141,9 @@ pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
 
 #[cfg(test)]
 mod tests {
+    use openvm_instructions::exe::MemoryImage;
     use openvm_stark_backend::p3_field::AbstractField;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use openvm_instructions::exe::MemoryImage;
 
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{

@@ -3,6 +3,9 @@ use std::{
     sync::Arc,
 };
 
+use openvm_instructions::{
+    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
+};
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::AbstractField,
     prover::types::AirProofInput, utils::disable_debug_builder,
@@ -14,9 +17,6 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
-};
-use openvm_instructions::{
-    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
 };
 
 use super::VmConnectorPvs;

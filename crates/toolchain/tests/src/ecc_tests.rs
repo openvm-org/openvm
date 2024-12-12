@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use derive_more::derive::From;
+use eyre::Result;
+use num_bigint_dig::BigUint;
 use openvm_algebra_circuit::{
     ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery, Rv32ModularConfig,
     Rv32ModularWithFp2Config,
@@ -16,6 +16,7 @@ use openvm_circuit::{
     derive::{AnyEnum, InstructionExecutor, VmConfig},
     utils::new_air_test_with_min_segments,
 };
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
     WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
@@ -30,10 +31,9 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use derive_more::derive::From;
-use eyre::Result;
-use num_bigint_dig::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{build_example_program, build_example_program_with_features};

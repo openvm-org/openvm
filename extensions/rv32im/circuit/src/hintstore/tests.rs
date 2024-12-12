@@ -1,16 +1,5 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::AbstractField,
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
-    utils::disable_debug_builder,
-    verifier::VerificationError,
-};
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
@@ -23,6 +12,17 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::AbstractField,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
+use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 

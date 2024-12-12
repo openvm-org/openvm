@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use thiserror::Error;
 
 use super::Streams;

@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
@@ -20,7 +21,6 @@ use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use derive_new::new;
 
 use super::*;
 use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};

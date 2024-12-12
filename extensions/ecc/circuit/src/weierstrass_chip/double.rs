@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use num_bigint_dig::BigUint;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr};
 
 pub fn ec_double_expr(

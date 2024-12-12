@@ -12,8 +12,8 @@ use std::{
     process::{Command, Stdio},
 };
 
-use openvm_platform::memory;
 use cargo_metadata::{MetadataCommand, Package};
+use openvm_platform::memory;
 
 pub use self::config::GuestOptions;
 

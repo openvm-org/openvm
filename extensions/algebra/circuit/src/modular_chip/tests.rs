@@ -1,7 +1,5 @@
 use std::{array::from_fn, sync::Arc};
 
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
@@ -24,6 +22,8 @@ use openvm_rv32_adapters::{
     rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
 };
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{

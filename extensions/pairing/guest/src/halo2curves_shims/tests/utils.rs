@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
+use itertools::izip;
 use openvm_algebra_guest::Field;
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use itertools::izip;
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::affine_point::AffineCoords;

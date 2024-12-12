@@ -8,13 +8,13 @@ pub mod wrapper;
 
 use std::{fmt, fmt::Debug};
 
-use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use itertools::Itertools;
 use openvm_native_compiler::{
     constraints::halo2::compiler::{Halo2ConstraintCompiler, Halo2State},
     ir::{Config, DslIr, TracedVec, Witness},
 };
-use itertools::Itertools;
+use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use serde::{
     de,
     de::{MapAccess, Visitor},

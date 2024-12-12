@@ -1,9 +1,20 @@
 use std::{array::from_fn, borrow::Borrow, iter::zip};
 
+use itertools::{izip, Itertools};
+use openvm_circuit::{
+    arch::{ExecutionBridge, ExecutionState},
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress,
+    },
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not, select},
 };
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_rv32im_circuit::adapters::abstract_compose;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
@@ -12,17 +23,6 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAddress,
-    },
-};
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use openvm_rv32im_circuit::adapters::abstract_compose;
-use itertools::{izip, Itertools};
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, U64_LIMBS};
 
 use super::{

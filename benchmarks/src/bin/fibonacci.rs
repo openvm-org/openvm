@@ -1,16 +1,9 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::{
-    bench::run_with_metric_collection,
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-};
+use clap::Parser;
+use eyre::Result;
+use metrics::gauge;
 use openvm_benchmarks::utils::{bench_from_exe, build_bench_program, time, BenchmarkCli};
 use openvm_circuit::arch::{
     instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
@@ -30,10 +23,17 @@ use openvm_sdk::{
     prover::{AggStarkProver, AppProver, LeafProver},
     Sdk, StdIn,
 };
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+    },
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use clap::Parser;
-use eyre::Result;
-use metrics::gauge;
 use tracing::info_span;
 
 fn main() -> Result<()> {

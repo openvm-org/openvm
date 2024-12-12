@@ -1,14 +1,14 @@
 use std::array;
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
-    config::FriParameters,
-};
 use openvm_circuit::arch::instructions::program::Program;
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
     fri::TwoAdicFriPcsVariable, hints::Hintable, types::new_from_inner_multi_vk,
     utils::const_fri_config,
+};
+use openvm_stark_sdk::{
+    config::FriParameters,
+    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField},
 };
 
 use crate::{

@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
+use clap::Parser;
+use eyre::Result;
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::read_exe_from_file,
     Sdk,
 };
-use clap::Parser;
-use eyre::Result;
 
 use crate::util::{read_to_stdin, read_to_struct_toml, Input};
 

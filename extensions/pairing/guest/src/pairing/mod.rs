@@ -5,15 +5,15 @@ mod miller_step;
 mod operations;
 mod sextic_ext_field;
 
+pub use final_exp::*;
+pub use line::*;
+pub use miller_loop::*;
+pub use miller_step::*;
 use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     Field, IntMod,
 };
 use openvm_ecc_guest::AffinePoint;
-pub use final_exp::*;
-pub use line::*;
-pub use miller_loop::*;
-pub use miller_step::*;
 #[allow(unused_imports)]
 pub(crate) use operations::*;
 pub use sextic_ext_field::*;

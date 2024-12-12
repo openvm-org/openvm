@@ -1,9 +1,9 @@
+use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
     p3_field::{AbstractField, TwoAdicField},
 };
 use openvm_stark_sdk::config::FriParameters;
-use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
 
 use crate::fri::{types::FriConfigVariable, TwoAdicMultiplicativeCosetVariable};
 

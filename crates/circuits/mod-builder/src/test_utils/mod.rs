@@ -1,7 +1,5 @@
 use std::{array, cell::RefCell, rc::Rc, sync::Arc};
 
-use openvm_stark_backend::p3_field::PrimeField64;
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use openvm_circuit::utils::generate_long_number;
@@ -9,6 +7,8 @@ use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
+use openvm_stark_backend::p3_field::PrimeField64;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, RngCore};
 
 use crate::{ExprBuilder, ExprBuilderConfig};

@@ -1,15 +1,5 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use openvm_circuit_primitives::{
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
-};
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-    rap::BaseAirWithPublicValues,
-};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
@@ -17,10 +7,20 @@ use openvm_circuit::arch::{
     instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface,
     DynArray, MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
+use openvm_circuit_primitives::{
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
+};
 use openvm_instructions::instruction::Instruction;
 use openvm_mod_circuit_builder::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExprCols, FieldVariable,
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
 };
 
 /// The number of limbs and limb bits are determined at runtime.

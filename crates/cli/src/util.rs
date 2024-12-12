@@ -5,8 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use openvm_sdk::StdIn;
 use eyre::Result;
+use openvm_sdk::StdIn;
 use serde::de::DeserializeOwned;
 
 #[allow(dead_code)]

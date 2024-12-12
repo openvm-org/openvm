@@ -1,15 +1,15 @@
 use std::array;
 
+use derivative::Derivative;
+use openvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
 use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
         prover::types::Proof,
     },
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
-use openvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
-use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 

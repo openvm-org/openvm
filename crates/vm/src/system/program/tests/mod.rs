@@ -1,5 +1,14 @@
 use std::{iter, sync::Arc};
 
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
+    VmOpcode,
+};
+use openvm_native_compiler::{
+    FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
+};
+use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     p3_field::AbstractField,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -14,15 +23,6 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use openvm_instructions::{
-    instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
-    VmOpcode,
-};
-use openvm_native_compiler::{
-    FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
-};
-use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
 

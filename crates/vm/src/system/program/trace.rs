@@ -1,5 +1,8 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
+use derivative::Derivative;
+use itertools::Itertools;
+use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
 use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
@@ -11,9 +14,6 @@ use openvm_stark_backend::{
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
-use derivative::Derivative;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};

@@ -1,8 +1,8 @@
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
+use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 use crate::pairing::{FinalExp, MultiMillerLoop};

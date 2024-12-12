@@ -1,5 +1,5 @@
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use derive_new::new;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 
 use crate::{arch::MemoryConfig, system::memory::CHUNK};
 

@@ -4,9 +4,9 @@ use core::{
     ops::{Mul, Neg},
 };
 
+use itertools::{izip, Itertools};
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
-use itertools::{izip, Itertools};
 
 use super::{Evaluatable, EvaluatedLine, MillerStep, UnevaluatedLine};
 

@@ -4,13 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-    rap::BaseAirWithPublicValues,
-};
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
@@ -18,8 +11,15 @@ use openvm_circuit_primitives::{
     utils::select,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, UsizeOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
+};
 
 use crate::adapters::LoadStoreInstruction;
 

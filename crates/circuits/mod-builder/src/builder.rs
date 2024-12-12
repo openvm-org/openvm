@@ -1,12 +1,5 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField64},
-    p3_matrix::Matrix,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-};
 use num_bigint_dig::{BigInt, BigUint, Sign};
 use num_traits::Zero;
 use openvm_circuit_primitives::{
@@ -18,6 +11,13 @@ use openvm_circuit_primitives::{
     },
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField64},
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use super::{FieldVariable, SymbolicExpr};

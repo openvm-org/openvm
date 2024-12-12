@@ -6,10 +6,10 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use itertools::Itertools;
+use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
-use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use itertools::Itertools;
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},

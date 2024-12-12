@@ -1,6 +1,6 @@
-use openvm_stark_backend::p3_field::Field;
 use num_bigint_dig::BigUint;
 use num_traits::Num;
+use openvm_stark_backend::p3_field::Field;
 
 pub fn parse_biguint_auto(s: &str) -> Option<BigUint> {
     let s = s.trim();

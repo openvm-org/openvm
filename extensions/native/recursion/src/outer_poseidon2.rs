@@ -1,6 +1,6 @@
-use openvm_stark_backend::p3_field::{AbstractField, Field};
-use openvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
 use itertools::Itertools;
+use openvm_native_compiler::ir::{Builder, Config, DslIr, Felt, Var};
+use openvm_stark_backend::p3_field::{AbstractField, Field};
 
 use crate::{utils::reduce_32, vars::OuterDigestVariable, OUTER_DIGEST_SIZE};
 
@@ -26,7 +26,10 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
     fn p2_hash(&mut self, input: &[Felt<C::F>]) -> OuterDigestVariable<C> {
         self.cycle_tracker_start(POSEIDON_CELL_TRACKER_NAME);
         assert_eq!(C::N::bits(), openvm_stark_sdk::p3_bn254_fr::Bn254Fr::bits());
-        assert_eq!(C::F::bits(), openvm_stark_sdk::p3_baby_bear::BabyBear::bits());
+        assert_eq!(
+            C::F::bits(),
+            openvm_stark_sdk::p3_baby_bear::BabyBear::bits()
+        );
         let num_f_elms = C::N::bits() / C::F::bits();
         let mut state: [Var<C::N>; SPONGE_SIZE] = [
             self.eval(C::N::ZERO),

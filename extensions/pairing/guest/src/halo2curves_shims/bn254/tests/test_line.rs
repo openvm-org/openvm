@@ -1,8 +1,8 @@
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
+use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{

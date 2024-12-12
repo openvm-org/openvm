@@ -97,8 +97,8 @@ fn test_single_fib_selector_stark() {
 
 #[test]
 fn test_double_fib_starks() {
-    use openvm_stark_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
     use fib_selector_air::air::FibonacciSelectorAir;
+    use openvm_stark_sdk::dummy_airs::{fib_air, fib_air::air::FibonacciAir};
 
     let log_n1 = 3;
     let log_n2 = 5;

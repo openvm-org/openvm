@@ -14,8 +14,8 @@
 
 use alloc::{string::String, vec::Vec};
 
-use openvm_platform::{align_up, WORD_SIZE};
 use bytemuck::Pod;
+use openvm_platform::{align_up, WORD_SIZE};
 use serde::de::{DeserializeOwned, DeserializeSeed, IntoDeserializer, Visitor};
 
 use super::err::{Error, Result};

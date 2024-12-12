@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use clap::Parser;
+use eyre::{eyre, Result};
 use openvm_sdk::{
     fs::{
         read_app_proof_from_file, read_app_vk_from_file, read_evm_proof_from_file,
@@ -7,8 +9,6 @@ use openvm_sdk::{
     },
     Sdk,
 };
-use clap::Parser;
-use eyre::{eyre, Result};
 
 use crate::commands::VERIFIER_PATH;
 

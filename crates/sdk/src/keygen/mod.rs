@@ -1,19 +1,7 @@
 use std::sync::Arc;
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::{
-        config::{Com, StarkGenericConfig},
-        keygen::types::MultiStarkVerifyingKey,
-        prover::types::Proof,
-        Chip,
-    },
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_bn254_fr::Bn254Fr,
-};
+use derivative::Derivative;
+use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{VirtualMachine, VmConfig},
     system::program::trace::VmCommittedExe,
@@ -23,8 +11,20 @@ use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::halo2::{
     utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
-use derivative::Derivative;
-use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters,
+    },
+    engine::StarkFriEngine,
+    openvm_stark_backend::{
+        config::{Com, StarkGenericConfig},
+        keygen::types::MultiStarkVerifyingKey,
+        prover::types::Proof,
+        Chip,
+    },
+    p3_bn254_fr::Bn254Fr,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{

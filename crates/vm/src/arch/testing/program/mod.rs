@@ -1,6 +1,7 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use air::ProgramDummyAir;
+use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{AbstractField, Field, PrimeField32},
@@ -9,7 +10,6 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use openvm_instructions::instruction::Instruction;
 
 use crate::{
     arch::ExecutionState,

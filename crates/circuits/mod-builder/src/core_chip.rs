@@ -1,12 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    rap::BaseAirWithPublicValues,
-};
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
 use openvm_circuit::arch::{
@@ -17,6 +10,13 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::instruction::Instruction;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    rap::BaseAirWithPublicValues,
+};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},

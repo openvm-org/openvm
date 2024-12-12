@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
@@ -10,6 +9,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_pairing_transpiler::Fp12Opcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp12;
 // Input: Fp12 * 2
@@ -69,8 +69,6 @@ pub fn fp12_mul_expr(
 mod tests {
     use std::sync::Arc;
 
-    use openvm_stark_backend::p3_field::AbstractField;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
     use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
@@ -85,6 +83,8 @@ mod tests {
     };
     use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
     use openvm_rv32_adapters::rv32_write_heap_default_with_increment;
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;

@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{AbstractField, Field},
@@ -15,7 +16,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
 
 use super::*;
 

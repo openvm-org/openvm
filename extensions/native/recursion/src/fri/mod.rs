@@ -1,4 +1,4 @@
-use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
+pub use domain::*;
 use openvm_native_compiler::{
     ir::{
         Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
@@ -6,7 +6,7 @@ use openvm_native_compiler::{
     },
     prelude::MemVariable,
 };
-pub use domain::*;
+use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{

@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
+use clap::Parser;
+use eyre::Result;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
     config::AggConfig,
     fs::{write_agg_pk_to_file, write_evm_verifier_to_file},
     Sdk,
 };
-use clap::Parser;
-use eyre::Result;
 
 pub const AGG_PK_PATH: &str = "~/.openvm/agg.pk";
 pub const VERIFIER_PATH: &str = "~/.openvm/verifier.sol";

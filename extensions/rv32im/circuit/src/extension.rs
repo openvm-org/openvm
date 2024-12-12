@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -21,6 +20,7 @@ use openvm_rv32im_transpiler::{
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -509,13 +509,13 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 
 /// Phantom sub-executors
 mod phantom {
-    use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
     use openvm_instructions::PhantomDiscriminant;
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
     use crate::adapters::unsafe_read_rv32_register;
 

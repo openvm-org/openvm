@@ -2,17 +2,10 @@ extern crate core;
 
 use std::{fs::read, panic::catch_unwind, path::Path, sync::Arc};
 
-use openvm_stark_backend::engine::StarkEngine;
-use openvm_stark_sdk::{
-    openvm_stark_backend::{verifier::VerificationError, Chip},
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-        FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-};
+use commit::commit_app_exe;
+use config::AppConfig;
+use eyre::Result;
+use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
@@ -28,16 +21,23 @@ use openvm_native_recursion::{
     },
     types::InnerConfig,
 };
+use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
+        FriParameters,
+    },
+    engine::StarkFriEngine,
+    openvm_stark_backend::{verifier::VerificationError, Chip},
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{
-    openvm_platform::memory::MEM_SIZE,
     elf::Elf,
+    openvm_platform::memory::MEM_SIZE,
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use commit::commit_app_exe;
-use config::AppConfig;
-use eyre::Result;
-use keygen::{AppProvingKey, AppVerifyingKey};
 use prover::vm::ContinuationVmProof;
 
 pub mod commit;

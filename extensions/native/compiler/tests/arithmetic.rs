@@ -1,7 +1,3 @@
-use openvm_stark_backend::p3_field::{
-    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field,
-};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::arch::{ExecutionError, VmExecutor};
 use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{
@@ -9,6 +5,10 @@ use openvm_native_compiler::{
     conversion::{convert_program, CompilerOptions},
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
 };
+use openvm_stark_backend::p3_field::{
+    extension::BinomialExtensionField, AbstractExtensionField, AbstractField, Field,
+};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;

@@ -1,19 +1,19 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::{
-        config::{Com, StarkGenericConfig, Val},
-        p3_field::PrimeField32,
-        prover::types::Proof,
-    },
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
+use derivative::Derivative;
 use openvm_circuit::circuit_derive::AlignedBorrow;
 use openvm_native_compiler::{
     ir::{Builder, Config, Felt},
     prelude::DIGEST_SIZE,
 };
-use derivative::Derivative;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    openvm_stark_backend::{
+        config::{Com, StarkGenericConfig, Val},
+        p3_field::PrimeField32,
+        prover::types::Proof,
+    },
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 

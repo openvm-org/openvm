@@ -1,6 +1,6 @@
+use internal::types::InternalVmVerifierPvs;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use internal::types::InternalVmVerifierPvs;
 
 use crate::{config::AggStarkConfig, verifier::common::types::VmVerifierPvs};
 

@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use openvm_stark_sdk::{
-    openvm_stark_backend::prover::types::Proof,
-    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
-    engine::{StarkEngine, StarkFriEngine},
-};
 use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::prover::types::Proof,
+};
 
 use crate::{
     keygen::RootVerifierProvingKey,

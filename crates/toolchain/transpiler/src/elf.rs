@@ -2,10 +2,6 @@
 // and https://github.com/risc0/risc0/blob/f61379bf69b24d56e49d6af96a3b284961dcc498/risc0/binfmt/src/elf.rs#L34 under Apache License
 use std::{cmp::min, collections::BTreeMap, fmt::Debug};
 
-#[cfg(feature = "function-span")]
-use openvm_instructions::exe::FnBound;
-use openvm_instructions::exe::FnBounds;
-use openvm_platform::WORD_SIZE;
 use elf::{
     abi::{EM_RISCV, ET_EXEC, PF_X, PT_LOAD},
     endian::LittleEndian,
@@ -13,6 +9,10 @@ use elf::{
     ElfBytes,
 };
 use eyre::{self, bail, ContextCompat};
+#[cfg(feature = "function-span")]
+use openvm_instructions::exe::FnBound;
+use openvm_instructions::exe::FnBounds;
+use openvm_platform::WORD_SIZE;
 
 pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 

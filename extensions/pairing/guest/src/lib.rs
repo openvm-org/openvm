@@ -27,9 +27,9 @@ impl PairingBaseFunct7 {
 extern crate alloc;
 extern crate self as openvm_ecc;
 
-pub use openvm_algebra_guest as algebra;
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
+pub use openvm_algebra_guest as algebra;
 
 pub mod affine_point;
 

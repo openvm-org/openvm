@@ -4,11 +4,6 @@ use std::{
     marker::PhantomData,
 };
 
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
-};
 use openvm_circuit::{
     arch::{
         instructions::UsizeOpcode, AdapterAirContext, AdapterRuntimeContext, ExecutionBridge,
@@ -27,6 +22,11 @@ use openvm_circuit_primitives::utils;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+};
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,

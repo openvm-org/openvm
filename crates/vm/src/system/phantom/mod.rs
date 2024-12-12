@@ -5,6 +5,10 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode, UsizeOpcode, VmOpcode,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -15,10 +19,6 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
-};
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, UsizeOpcode, VmOpcode,
 };
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;

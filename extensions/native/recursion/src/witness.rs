@@ -1,5 +1,8 @@
 use core::borrow::Borrow;
 
+use openvm_native_compiler::ir::{
+    Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
+};
 use openvm_stark_backend::{
     p3_util::log2_strict_usize,
     prover::{
@@ -10,9 +13,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
-};
-use openvm_native_compiler::ir::{
-    Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
 use p3_symmetric::Hash;
 

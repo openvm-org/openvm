@@ -1,11 +1,8 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::Chip,
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-};
+use clap::{command, Parser};
+use eyre::Result;
+use metrics::{counter, gauge, Gauge};
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use openvm_sdk::{
@@ -15,10 +12,13 @@ use openvm_sdk::{
     prover::{AppProver, LeafProver},
     StdIn,
 };
-use openvm_transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf};
-use clap::{command, Parser};
-use eyre::Result;
-use metrics::{counter, gauge, Gauge};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    engine::StarkFriEngine,
+    openvm_stark_backend::Chip,
+    p3_baby_bear::BabyBear,
+};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
 type F = BabyBear;

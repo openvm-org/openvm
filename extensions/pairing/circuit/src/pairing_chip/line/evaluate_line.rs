@@ -1,16 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
 use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>

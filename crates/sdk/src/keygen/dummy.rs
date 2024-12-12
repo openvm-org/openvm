@@ -1,15 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::{
-        config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof, Chip,
-    },
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
-    },
-    engine::StarkFriEngine,
-};
 use openvm_circuit::{
     arch::{
         instructions::{
@@ -25,6 +15,16 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
 use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+    },
+    engine::StarkFriEngine,
+    openvm_stark_backend::{
+        config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof, Chip,
+    },
+};
 
 use crate::{
     prover::vm::{

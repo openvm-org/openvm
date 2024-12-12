@@ -8,6 +8,9 @@ use std::{
     sync::Arc,
 };
 
+use getset::Getters;
+use itertools::{izip, zip_eq, Itertools};
+pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_less_than::IsLtSubAir,
@@ -16,6 +19,7 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     TraceSubRowGenerator,
 };
+use openvm_instructions::exe::MemoryImage;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
@@ -26,10 +30,6 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
     rap::AnyRap,
 };
-use openvm_instructions::exe::MemoryImage;
-use getset::Getters;
-use itertools::{izip, zip_eq, Itertools};
-pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 

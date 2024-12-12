@@ -7,11 +7,6 @@ use std::{
     sync::Arc,
 };
 
-use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-};
 use itertools::izip;
 use openvm_circuit::{
     arch::{
@@ -38,6 +33,11 @@ use openvm_instructions::{
 };
 use openvm_rv32im_circuit::adapters::{
     read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers.

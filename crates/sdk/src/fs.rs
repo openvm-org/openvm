@@ -4,9 +4,9 @@ use std::{
     path::Path,
 };
 
+use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
 use openvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
-use eyre::Result;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{

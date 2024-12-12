@@ -1,7 +1,7 @@
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
 use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};

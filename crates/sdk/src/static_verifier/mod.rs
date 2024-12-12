@@ -1,11 +1,3 @@
-use openvm_stark_sdk::{
-    openvm_stark_backend::{
-        p3_field::{AbstractField, PrimeField32},
-        prover::types::Proof,
-    },
-    p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
-};
 use openvm_circuit::arch::PROGRAM_CACHED_TRACE_INDEX;
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{
@@ -18,6 +10,14 @@ use openvm_native_recursion::{
     stark::StarkVerifier,
     utils::const_fri_config,
     witness::Witnessable,
+};
+use openvm_stark_sdk::{
+    openvm_stark_backend::{
+        p3_field::{AbstractField, PrimeField32},
+        prover::types::Proof,
+    },
+    p3_baby_bear::BabyBear,
+    p3_bn254_fr::Bn254Fr,
 };
 
 use crate::{

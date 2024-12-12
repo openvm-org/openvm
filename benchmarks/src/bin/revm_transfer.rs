@@ -2,13 +2,8 @@
 #![allow(unused_imports)]
 use std::rc::Rc;
 
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::{
-    bench::run_with_metric_collection,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-};
+use clap::Parser;
+use eyre::Result;
 use openvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_keccak256_circuit::Keccak256Rv32Config;
@@ -18,9 +13,14 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{config::AppConfig, StdIn};
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use clap::Parser;
-use eyre::Result;
 use tracing::info_span;
 
 fn main() -> Result<()> {

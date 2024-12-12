@@ -49,10 +49,10 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-pub use openvm_algebra_moduli_setup as moduli_setup;
 pub use field::Field;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+pub use openvm_algebra_moduli_setup as moduli_setup;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
 

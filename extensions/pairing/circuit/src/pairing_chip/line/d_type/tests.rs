@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::p3_field::AbstractField;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
@@ -28,6 +26,8 @@ use openvm_rv32_adapters::{
     rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
     Rv32VecHeapTwoReadsAdapterChip,
 };
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{super::EvaluateLineChip, *};

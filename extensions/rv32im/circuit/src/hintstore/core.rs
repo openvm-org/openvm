@@ -4,22 +4,22 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ExecutionError, MinimalInstruction, Result, Streams,
+    VmAdapterInterface, VmCoreAir, VmCoreChip,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32HintStoreOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ExecutionError, MinimalInstruction, Result, Streams,
-    VmAdapterInterface, VmCoreAir, VmCoreChip,
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
-use openvm_rv32im_transpiler::Rv32HintStoreOpcode;
 use parking_lot::Mutex;
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};

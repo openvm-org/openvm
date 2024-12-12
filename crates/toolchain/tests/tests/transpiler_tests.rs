@@ -3,8 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use derive_more::derive::From;
 use eyre::Result;
 use num_bigint_dig::BigUint;
@@ -33,6 +31,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;

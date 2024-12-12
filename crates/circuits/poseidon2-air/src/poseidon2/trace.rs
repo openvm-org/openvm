@@ -1,8 +1,8 @@
+use itertools::izip;
 use openvm_stark_backend::{
     p3_field::{AbstractField, Field},
     p3_matrix::dense::RowMajorMatrix,
 };
-use itertools::izip;
 
 use super::{
     air::SBOX_DEGREE,

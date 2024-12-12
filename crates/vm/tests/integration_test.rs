@@ -1,20 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use openvm_stark_backend::{
-    config::StarkGenericConfig,
-    engine::StarkEngine,
-    p3_field::{AbstractField, PrimeField32},
-};
-use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        setup_tracing, FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
-};
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -55,6 +40,21 @@ use openvm_native_compiler::{
     NativeLoadStoreOpcode::*, NativePhantom,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_stark_backend::{
+    config::StarkGenericConfig,
+    engine::StarkEngine,
+    p3_field::{AbstractField, PrimeField32},
+};
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        setup_tracing, FriParameters,
+    },
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
+};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use test_log::test;

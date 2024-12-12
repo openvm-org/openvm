@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use clap::Parser;
+use eyre::Result;
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
@@ -12,9 +14,7 @@ use openvm_sdk::{
     fs::write_exe_to_file,
     Sdk,
 };
-use openvm_transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler};
-use clap::Parser;
-use eyre::Result;
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler};
 
 use crate::util::read_to_struct_toml;
 

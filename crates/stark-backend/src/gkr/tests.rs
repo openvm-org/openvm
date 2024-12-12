@@ -1,9 +1,9 @@
 use std::iter::zip;
 
+use itertools::Itertools;
 use openvm_stark_sdk::{
     config::baby_bear_blake3::default_engine, engine::StarkEngine, utils::create_seeded_rng,
 };
-use itertools::Itertools;
 use p3_baby_bear::BabyBear;
 use p3_field::AbstractField;
 use rand::Rng;

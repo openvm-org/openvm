@@ -1,9 +1,9 @@
 extern crate self as openvm_circuit;
 
+pub use openvm_circuit_derive as derive;
 pub use openvm_circuit_primitives_derive as circuit_derive;
 #[cfg(feature = "test-utils")]
 pub use openvm_stark_sdk;
-pub use openvm_circuit_derive as derive;
 
 /// Traits and constructs for the OpenVm architecture.
 pub mod arch;

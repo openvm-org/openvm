@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -22,6 +21,7 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, FromRepr};
 
@@ -366,7 +366,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
 pub(crate) mod phantom {
     use std::collections::VecDeque;
 
-    use openvm_stark_backend::p3_field::PrimeField32;
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -383,6 +382,7 @@ pub(crate) mod phantom {
         pairing::{FinalExp, MultiMillerLoop},
     };
     use openvm_rv32im_circuit::adapters::{compose, unsafe_read_rv32_register};
+    use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::PairingCurve;
 

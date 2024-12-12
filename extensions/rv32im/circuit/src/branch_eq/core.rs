@@ -3,20 +3,20 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
 use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
-use openvm_rv32im_transpiler::BranchEqualOpcode;
 use strum::IntoEnumIterator;
 
 #[repr(C)]

@@ -4,26 +4,26 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use num_bigint::BigUint;
+use num_integer::Integer;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
     utils::{not, select},
 };
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
-use openvm_rv32im_transpiler::DivRemOpcode;
-use num_bigint::BigUint;
-use num_integer::Integer;
 use strum::IntoEnumIterator;
 
 #[repr(C)]

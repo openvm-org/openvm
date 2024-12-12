@@ -5,6 +5,7 @@ use std::{
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::UsizeOpcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
@@ -15,7 +16,6 @@ use openvm_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use openvm_instructions::UsizeOpcode;
 
 use crate::{
     arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},

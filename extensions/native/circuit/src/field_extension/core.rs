@@ -4,20 +4,20 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
+use itertools::izip;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
-use openvm_native_compiler::FieldExtensionOpcode::{self, *};
-use itertools::izip;
 
 pub const BETA: usize = 11;
 pub const EXT_DEG: usize = 4;

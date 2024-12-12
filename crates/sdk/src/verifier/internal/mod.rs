@@ -1,12 +1,12 @@
-use openvm_stark_sdk::{
-    openvm_stark_backend::keygen::types::MultiStarkVerifyingKey,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
-};
 use openvm_circuit::arch::instructions::program::Program;
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
     fri::TwoAdicFriPcsVariable, hints::Hintable, types::new_from_inner_multi_vk,
     utils::const_fri_config,
+};
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    openvm_stark_backend::keygen::types::MultiStarkVerifyingKey,
 };
 
 use crate::{

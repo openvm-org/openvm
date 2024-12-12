@@ -3,9 +3,9 @@
 
 use std::{array, borrow::Borrow, iter};
 
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
 

@@ -1,5 +1,12 @@
 use std::borrow::BorrowMut;
 
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    UsizeOpcode, VmOpcode,
+};
+use openvm_native_compiler::NativeJalOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},
@@ -9,13 +16,6 @@ use openvm_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
-use openvm_instructions::{
-    instruction::Instruction,
-    program::{DEFAULT_PC_STEP, PC_BITS},
-    UsizeOpcode, VmOpcode,
-};
-use openvm_native_compiler::NativeJalOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
 use super::{

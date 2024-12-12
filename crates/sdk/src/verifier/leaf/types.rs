@@ -1,14 +1,14 @@
+use derivative::Derivative;
+use openvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
+use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         prover::types::Proof,
     },
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     p3_baby_bear::BabyBear,
 };
-use openvm_circuit::system::memory::tree::public_values::UserPublicValuesProof;
-use openvm_native_compiler::ir::DIGEST_SIZE;
-use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
 

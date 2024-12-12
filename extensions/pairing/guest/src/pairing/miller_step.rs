@@ -6,8 +6,8 @@ use openvm_ecc_guest::AffinePoint;
 use {
     crate::pairing::shifted_funct7,
     crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
-    openvm_platform::custom_insn_r,
     core::mem::MaybeUninit,
+    openvm_platform::custom_insn_r,
 };
 
 use super::{PairingIntrinsics, UnevaluatedLine};

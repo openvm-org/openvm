@@ -2,11 +2,11 @@ extern crate std;
 
 use std::ops::{Add, Mul, Neg, Sub};
 
+use halo2curves_axiom::bls12_381::{Fq12, Fq2};
 use openvm_ecc_guest::{
     algebra::{field::FieldExtension, Field},
     AffinePoint,
 };
-use halo2curves_axiom::bls12_381::{Fq12, Fq2};
 
 use super::{Bls12_381, BLS12_381_XI};
 use crate::pairing::{EvaluatedLine, LineMulMType};

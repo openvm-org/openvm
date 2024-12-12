@@ -1,5 +1,12 @@
 use std::marker::PhantomData;
 
+use itertools::Itertools;
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_native_compiler::{
+    conversion::CompilerOptions,
+    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
+    prelude::RVar,
+};
 use openvm_stark_backend::{
     air_builders::{
         symbolic::symbolic_expression::SymbolicExpression,
@@ -14,13 +21,6 @@ use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     p3_baby_bear::BabyBear,
 };
-use openvm_circuit::arch::instructions::program::Program;
-use openvm_native_compiler::{
-    conversion::CompilerOptions,
-    ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
-    prelude::RVar,
-};
-use itertools::Itertools;
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},

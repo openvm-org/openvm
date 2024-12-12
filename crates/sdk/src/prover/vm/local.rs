@@ -1,13 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::types::Proof,
-    Chip,
-};
-use openvm_stark_sdk::engine::StarkFriEngine;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, Streams, VirtualMachine, VmComplexTraceHeights,
@@ -15,6 +8,13 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    prover::types::Proof,
+    Chip,
+};
+use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,

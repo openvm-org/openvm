@@ -1,9 +1,9 @@
-use openvm_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
+use itertools::Itertools;
 use openvm_native_compiler::{
     ir::{Builder, Config},
     prelude::*,
 };
-use itertools::Itertools;
+use openvm_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
 
 use crate::{
     types::{MultiStarkVerificationAdvice, StarkVerificationAdvice},

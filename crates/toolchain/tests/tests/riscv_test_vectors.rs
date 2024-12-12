@@ -1,6 +1,6 @@
 use std::{fs::read_dir, path::PathBuf};
 
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use eyre::Result;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmExecutor},
     utils::new_air_test_with_min_segments,
@@ -9,9 +9,9 @@ use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::utils::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use eyre::Result;
 
 type F = BabyBear;
 

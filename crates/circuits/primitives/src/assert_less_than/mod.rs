@@ -1,10 +1,10 @@
+use derive_new::new;
+use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
     p3_field::{AbstractField, Field},
 };
-use derive_new::new;
-use openvm_circuit_primitives_derive::AlignedBorrow;
 
 use crate::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},

@@ -166,6 +166,11 @@ impl Fp2 {
 
 #[cfg(test)]
 mod tests {
+    use halo2curves_axiom::bn256::Fq2;
+    use num_bigint_dig::BigUint;
+    use openvm_circuit_primitives::TraceSubRowGenerator;
+    use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
         p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
     };
@@ -173,11 +178,6 @@ mod tests {
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
-    use halo2curves_axiom::bn256::Fq2;
-    use num_bigint_dig::BigUint;
-    use openvm_circuit_primitives::TraceSubRowGenerator;
-    use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
-    use openvm_pairing_guest::bn254::BN254_MODULUS;
 
     use super::Fp2;
 

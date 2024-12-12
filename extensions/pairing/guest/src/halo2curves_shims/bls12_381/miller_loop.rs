@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
+use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use itertools::izip;
 use openvm_ecc_guest::{
     algebra::{DivUnsafe, Field},
     AffinePoint,
 };
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-use itertools::izip;
 
 use super::Bls12_381;
 use crate::{

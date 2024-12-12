@@ -1,14 +1,5 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
-use openvm_stark_sdk::{
-    openvm_stark_backend::{p3_field::AbstractField, Chip},
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    },
-    engine::{StarkEngine, StarkFriEngine},
-    p3_baby_bear::BabyBear,
-};
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
@@ -29,6 +20,15 @@ use openvm_sdk::{
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
     },
     Sdk, StdIn,
+};
+use openvm_stark_sdk::{
+    config::{
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+    },
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::{p3_field::AbstractField, Chip},
+    p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::transpiler::Transpiler;
 

@@ -1,8 +1,8 @@
+use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
     p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset},
     p3_field::{AbstractField, Field, TwoAdicField},
 };
-use openvm_native_compiler::prelude::*;
 
 use super::types::FriConfigVariable;
 use crate::commit::PolynomialSpaceVariable;
@@ -167,6 +167,8 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use openvm_native_circuit::execute_program;
+    use openvm_native_compiler::asm::AsmBuilder;
     use openvm_stark_backend::{
         config::{Domain, StarkGenericConfig, Val},
         p3_commit::{Pcs, PolynomialSpace},
@@ -176,8 +178,6 @@ pub(crate) mod tests {
         baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         FriParameters,
     };
-    use openvm_native_circuit::execute_program;
-    use openvm_native_compiler::asm::AsmBuilder;
     use rand::{thread_rng, Rng};
 
     use super::*;

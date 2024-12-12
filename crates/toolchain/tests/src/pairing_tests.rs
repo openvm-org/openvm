@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use eyre::Result;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, SystemConfig},
@@ -10,8 +10,8 @@ use openvm_ecc_circuit::WeierstrassExtension;
 use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
 use openvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use eyre::Result;
 use rand::SeedableRng;
 
 type F = BabyBear;
@@ -577,7 +577,8 @@ mod bls12_381 {
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
-        let [c, s] = [c, s].map(|x| openvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let [c, s] =
+            [c, s].map(|x| openvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
         let io = openvm::serde::to_vec(&io).unwrap();
         let io = io

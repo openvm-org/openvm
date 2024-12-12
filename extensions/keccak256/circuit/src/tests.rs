@@ -1,8 +1,15 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
+use hex::FromHex;
+use openvm_circuit::arch::{
+    testing::{VmChipTestBuilder, VmChipTester},
+    BITWISE_OP_LOOKUP_BUS,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::{
     p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError,
 };
@@ -10,13 +17,6 @@ use openvm_stark_sdk::{
     config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use openvm_circuit::arch::{
-    testing::{VmChipTestBuilder, VmChipTester},
-    BITWISE_OP_LOOKUP_BUS,
-};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use hex::FromHex;
 use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;

@@ -1,17 +1,5 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_stark_backend::{
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field},
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
-    utils::disable_debug_builder,
-    verifier::VerificationError,
-    ChipUsageGetter,
-};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
@@ -26,6 +14,18 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::DivRemOpcode;
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+    ChipUsageGetter,
+};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::core::run_divrem;

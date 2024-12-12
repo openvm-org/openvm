@@ -1,13 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
-use openvm_stark_sdk::{
-    openvm_stark_backend::p3_field::AbstractField,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
-};
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -20,6 +12,14 @@ use openvm_circuit::{
     },
 };
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
+use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine,
+    openvm_stark_backend::p3_field::AbstractField,
+    p3_baby_bear::BabyBear,
+    p3_bn254_fr::Bn254Fr,
+};
 
 use crate::{
     keygen::AppProvingKey, verifier::leaf::LeafVmVerifierConfig, NonRootCommittedExe, F, SC,

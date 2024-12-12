@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
@@ -19,6 +18,7 @@ use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
@@ -197,7 +197,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
 pub(crate) mod phantom {
     use std::iter::repeat;
 
-    use openvm_stark_backend::p3_field::PrimeField32;
     use eyre::bail;
     use num_bigint_dig::BigUint;
     use num_integer::Integer;
@@ -208,6 +207,7 @@ pub(crate) mod phantom {
     };
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
+    use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::CurveConfig;
 

@@ -1,8 +1,8 @@
 use core::ops::{Add, AddAssign, Mul};
 
-use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
 use elliptic_curve::PrimeCurve;
+use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
 use crate::{
     weierstrass::{IntrinsicCurve, WeierstrassPoint},

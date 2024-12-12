@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+use itertools::izip;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
@@ -22,8 +24,6 @@ use openvm_stark_sdk::{
     engine::StarkEngine,
     p3_baby_bear::BabyBear,
 };
-use openvm_instructions::instruction::Instruction;
-use itertools::izip;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

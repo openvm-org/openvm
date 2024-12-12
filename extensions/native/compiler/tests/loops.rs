@@ -1,7 +1,7 @@
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Var};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 #[test]
 fn test_compiler_loop() {

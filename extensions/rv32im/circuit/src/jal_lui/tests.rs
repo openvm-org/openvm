@@ -1,8 +1,11 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},
@@ -12,9 +15,6 @@ use openvm_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip, BITWISE_OP_LOOKUP_BUS};
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
-use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip};
