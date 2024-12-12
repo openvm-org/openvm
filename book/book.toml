@@ -3,4 +3,4 @@ authors = ["Yi Sun"]
 language = "en"
 multilingual = false
 src = "src"
-title = "OpenVm Book"
+title = "OpenVM Book"

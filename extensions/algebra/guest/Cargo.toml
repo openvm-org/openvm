@@ -3,7 +3,7 @@ name = "openvm-algebra-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
+description = "OpenVM guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
 
 [dependencies]
 openvm = { workspace = true }

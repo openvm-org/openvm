@@ -1,4 +1,4 @@
-## OpenVm Contributor Documentation
+## OpenVM Contributor Documentation
 
 This directory contains documentation for contributors.
 

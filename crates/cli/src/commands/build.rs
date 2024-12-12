@@ -19,7 +19,7 @@ use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler:
 use crate::util::read_to_struct_toml;
 
 #[derive(Parser)]
-#[command(name = "build", about = "Compile an OpenVm program")]
+#[command(name = "build", about = "Compile an OpenVM program")]
 pub struct BuildCmd {
     #[clap(flatten)]
     build_args: BuildArgs,

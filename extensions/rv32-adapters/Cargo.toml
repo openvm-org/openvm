@@ -3,7 +3,7 @@ name = "openvm-rv32-adapters"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm adapters for rv32 intrinsics"
+description = "OpenVM adapters for rv32 intrinsics"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

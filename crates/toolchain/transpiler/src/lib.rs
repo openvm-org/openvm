@@ -1,4 +1,4 @@
-//! A transpiler from custom RISC-V ELFs to OpenVm executable binaries.
+//! A transpiler from custom RISC-V ELFs to OpenVM executable binaries.
 
 use elf::Elf;
 use openvm_instructions::{

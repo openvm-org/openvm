@@ -3,7 +3,7 @@ name = "openvm-native-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm circuit extension for native VM"
+description = "OpenVM circuit extension for native VM"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

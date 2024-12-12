@@ -5,7 +5,7 @@
 1. Add a new crate to the [programs](./programs) directory.
 2. Add the [benchmark to CI](#adding-a-benchmark-to-ci).
 
-This is called a "guest program" because it is intended to be run on the OpenVm architecture and
+This is called a "guest program" because it is intended to be run on the OpenVM architecture and
 not on the machine doing the compilation (the "host machine"), although we will discuss shortly how you can still test it locally on the host machine.
 
 ### Writing the Guest Program
@@ -40,7 +40,7 @@ You can find an example of passing in a single `Vec<u8>` input in [base64_json](
 
 #### Testing the Guest Program
 
-You can test by directly running `cargo run --bin <bench_name>` which will run the program in the OpenVm runtime. For a more convenient dev experience, we created the `openvm` crate such that it will still build and run normally on the host machine. From the guest program root directory, you can run
+You can test by directly running `cargo run --bin <bench_name>` which will run the program in the OpenVM runtime. For a more convenient dev experience, we created the `openvm` crate such that it will still build and run normally on the host machine. From the guest program root directory, you can run
 
 ```bash
 cargo run --features std
@@ -48,7 +48,7 @@ cargo run --features std
 
 To run the program on host (in normal rust runtime). This requires the std library, which is enabled by the `std` feature. To ensure that your guest program is still `no_std`, you should not make `std` the default feature.
 
-The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run on OpenVm or the host machine. As mentioned above, when running on OpenVm, the inputs must be provided in the `bench_from_exe` function.
+The behavior of `openvm::io::read_vec` and `openvm::io::read` differs when run on OpenVM or the host machine. As mentioned above, when running on OpenVM, the inputs must be provided in the `bench_from_exe` function.
 On the host machine, when you run `cargo run --features std`, each `read_vec` call will read bytes to end from stdin. For example here is how you would run the fibonacci guest program:
 
 ```bash

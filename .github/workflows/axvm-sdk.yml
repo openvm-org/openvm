@@ -1,4 +1,4 @@
-name: OpenVm SDK Tests
+name: OpenVM SDK Tests
 
 on:
   push:

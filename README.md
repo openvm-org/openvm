@@ -1,4 +1,4 @@
-# OpenVm
+# OpenVM
 
 **Install**
 | User Book

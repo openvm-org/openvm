@@ -3,7 +3,7 @@ name = "openvm-bigint-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm circuit extension for uint256 and int256"
+description = "OpenVM circuit extension for uint256 and int256"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

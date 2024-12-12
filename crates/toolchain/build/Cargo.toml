@@ -5,7 +5,7 @@ authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "OpenVm build tool"
+description = "OpenVM build tool"
 
 [dependencies]
 openvm-platform = { workspace = true }

@@ -1,6 +1,6 @@
-# OpenVm Instruction Set Architecture
+# OpenVM Instruction Set Architecture
 
-# OpenVm Architecture
+# OpenVM Architecture
 
 ## Instruction format
 
@@ -100,7 +100,7 @@ The pointers can have values in `[0, 2^pointer_max_bits)`. We require `as_height
 
 ## Constants and Configuration Parameters
 
-OpenVm depends on the following parameters, some of which are fixed and some of which are configurable:
+OpenVM depends on the following parameters, some of which are fixed and some of which are configurable:
 
 | Name               | Description                                                        | Constraints                                                           |
 | ------------------ | ------------------------------------------------------------------ | --------------------------------------------------------------------- |
@@ -112,7 +112,7 @@ OpenVm depends on the following parameters, some of which are fixed and some of 
 | `as_height`        | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`               |
 | `pointer_max_bits` | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`        |
 
-# OpenVm Instruction Set
+# OpenVM Instruction Set
 
 All instruction types are divided into classes, mostly based on purpose and nature of the operation (e.g., ALU instructions, U256 instructions, Modular arithmetic instructions, etc).
 Instructions within each class are usually handled by the same chip, but this is not always the case (for example, if
@@ -243,7 +243,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 ### System Calls
 
 There are currently no system calls. System calls are used when the ISA and system are customized separately.
-Since OpenVm controls both the ISA and the underlying virtual machine, we use custom opcodes directly whenever possible.
+Since OpenVM controls both the ISA and the underlying virtual machine, we use custom opcodes directly whenever possible.
 
 <!--
 Currently we have no need for `ECALLBREAK`, but we include it for future use.
@@ -255,7 +255,7 @@ Currently we have no need for `ECALLBREAK`, but we include it for future use.
 
 ## RV32 Intrinsics
 
-RV32 intrinsics are custom OpenVm opcodes that are designed to be compatible with the RV32 architecture.
+RV32 intrinsics are custom OpenVM opcodes that are designed to be compatible with the RV32 architecture.
 We continue to use \_RV32 to specify that the operand parsing is specifically targeting 32-bit RISC-V registers.
 
 All instructions below assume that all memory cells in address spaces `1` and `2` are field elements that are in range `[0, 2^LIMB_BITS)` where `LIMB_BITS = 8`. The instructions must all ensure that any writes will uphold this constraint.

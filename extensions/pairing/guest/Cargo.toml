@@ -3,7 +3,7 @@ name = "openvm-pairing-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm guest library for elliptic curve pairings."
+description = "OpenVM guest library for elliptic curve pairings."
 
 [dependencies]
 openvm = { workspace = true }

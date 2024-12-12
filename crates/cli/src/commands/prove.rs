@@ -32,10 +32,10 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key")]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVm executable")]
+        #[clap(long, action, help = "Path to OpenVM executable")]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to OpenVm program")]
+        #[clap(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
         #[clap(long, action, help = "Path to output proof")]
@@ -45,10 +45,10 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key")]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVm executable")]
+        #[clap(long, action, help = "Path to OpenVM executable")]
         exe: PathBuf,
 
-        #[clap(long, value_parser, help = "Input to OpenVm program")]
+        #[clap(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
         #[clap(long, action, help = "Path to output proof")]

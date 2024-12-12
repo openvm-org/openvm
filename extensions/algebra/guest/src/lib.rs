@@ -39,7 +39,7 @@ impl ComplexExtFieldBaseFunct7 {
     pub const COMPLEX_EXT_FIELD_MAX_KINDS: u8 = 8;
 }
 
-/// Modular arithmetic traits for use with OpenVm intrinsics.
+/// Modular arithmetic traits for use with OpenVM intrinsics.
 extern crate alloc;
 
 use alloc::vec::Vec;
@@ -83,7 +83,7 @@ pub trait DivAssignUnsafe<Rhs = Self>: Sized {
     fn div_assign_unsafe(&mut self, other: Rhs);
 }
 
-/// Trait definition for OpenVm modular integers, where each operation
+/// Trait definition for OpenVM modular integers, where each operation
 /// is done modulo MODULUS.
 ///
 /// Division is only defined over the group of units in the ring of integers modulo MODULUS.

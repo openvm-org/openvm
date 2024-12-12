@@ -3,7 +3,7 @@ name = "openvm-keccak256-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm circuit extension for keccak256"
+description = "OpenVM circuit extension for keccak256"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

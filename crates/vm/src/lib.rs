@@ -5,7 +5,7 @@ pub use openvm_circuit_primitives_derive as circuit_derive;
 #[cfg(feature = "test-utils")]
 pub use openvm_stark_sdk;
 
-/// Traits and constructs for the OpenVm architecture.
+/// Traits and constructs for the OpenVM architecture.
 pub mod arch;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;

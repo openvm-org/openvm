@@ -3,7 +3,7 @@ name = "openvm-circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm circuits"
+description = "OpenVM circuits"
 
 [dependencies]
 p3-symmetric = { workspace = true }

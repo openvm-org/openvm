@@ -39,13 +39,13 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### VM SDK
 
-- [`openvm-sdk`](../../crates/openvm-sdk): The developer SDK for the VM. It includes the OpenVm aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
+- [`openvm-sdk`](../../crates/openvm-sdk): The developer SDK for the VM. It includes the OpenVM aggregation programs to support continuations for all VMs in the framework, and well as local aggregation scheduling implementation. It provides the final interface for proving an arbitrary program for a target VM. Includes utilities to generate final onchain SNARK verifier contract.
 
 ### Rust Toolchain
 
-- [`openvm`](../../crates/toolchain/openvm): The OpenVm standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
-- [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV32IM target using OpenVm intrinsic for system termination.
-- [`openvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into OpenVm executable with OpenVm instructions.
+- [`openvm`](../../crates/toolchain/openvm): The OpenVM standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
+- [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV32IM target using OpenVM intrinsic for system termination.
+- [`openvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into OpenVM executable with OpenVM instructions.
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
 - [`openvm-toolchain-tests`](../../crates/toolchain/tests): Testing of Rust toolchain including all official RISC-V 32-bit IM test vectors.
 
@@ -53,8 +53,8 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 - [`openvm-circuit`](../../crates/vm): The VM circuit framework. It includes the struct and trait definitions used throughout the architecture, as well as the system chips.
 - [`openvm-circuit-derive`](../../crates/vm/derive): Procedural macros to derive traits in the VM circuit framework.
-- [`openvm-instructions`](../../crates/toolchain/instructions): OpenVm instruction struct and trait definitions.
-- [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVm instructions.
+- [`openvm-instructions`](../../crates/toolchain/instructions): OpenVM instruction struct and trait definitions.
+- [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVM instructions.
 
 ### Circuit Foundations
 
@@ -81,7 +81,7 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 #### Native Recursion
 
 - [`openvm-native-circuit`](../../extensions/native/circuit/): VM circuit extension for native instructions operating on field elements.
-- [`openvm-native-compiler`](../../extensions/native/compiler/): Implementation of compiler from a Rust embedded DSL to OpenVm assembly targeting the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
+- [`openvm-native-compiler`](../../extensions/native/compiler/): Implementation of compiler from a Rust embedded DSL to OpenVM assembly targeting the native kernel extension. The eDSL also has a static mode to support compilation to a Halo2 circuit.
 - [`openvm-native-recursion`](../../extensions/native/recursion): Library written in the native eDSL with functions to verify arbitrary STARK proofs. Library supports compilation to Halo2 circuit.
 
 #### Keccak256

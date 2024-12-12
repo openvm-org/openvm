@@ -5,7 +5,7 @@ use eyre::{eyre, Result};
 use yansi::Paint;
 
 #[derive(Parser)]
-#[command(name = "new", about = "Setup a new OpenVm project.")]
+#[command(name = "new", about = "Setup a new OpenVM project.")]
 pub struct NewCmd {
     /// The name of the project.
     name: String,

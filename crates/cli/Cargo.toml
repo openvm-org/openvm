@@ -1,6 +1,6 @@
 [package]
 name = "cargo-openvm"
-description = "OpenVm CLI tools"
+description = "OpenVM CLI tools"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true

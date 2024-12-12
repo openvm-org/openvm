@@ -2,7 +2,7 @@
 name = "openvm-mod-circuit-builder"
 version = "0.1.0"
 edition = "2021"
-description = "Modular arithmetic framework for building OpenVm circuits."
+description = "Modular arithmetic framework for building OpenVM circuits."
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

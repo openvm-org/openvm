@@ -3,7 +3,7 @@ name = "openvm-ecc-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVm guest elliptic curve cryptography library."
+description = "OpenVM guest elliptic curve cryptography library."
 
 [dependencies]
 openvm = { workspace = true }

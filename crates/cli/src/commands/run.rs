@@ -11,15 +11,15 @@ use openvm_sdk::{
 use crate::util::{read_to_stdin, read_to_struct_toml, Input};
 
 #[derive(Parser)]
-#[command(name = "run", about = "Run an OpenVm program")]
+#[command(name = "run", about = "Run an OpenVM program")]
 pub struct RunCmd {
-    #[clap(long, action, help = "Path to OpenVm executable")]
+    #[clap(long, action, help = "Path to OpenVM executable")]
     exe: PathBuf,
 
     #[clap(long, action, help = "Path to app config TOML file")]
     config: PathBuf,
 
-    #[clap(long, value_parser, help = "Input to OpenVm program")]
+    #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
 }
 
