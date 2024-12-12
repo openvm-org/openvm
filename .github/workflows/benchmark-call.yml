@@ -249,7 +249,7 @@ jobs:
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${METRIC_NAME}-${{ env.current_sha }}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
           if [[ -f $METRIC_PATH ]]; then
             s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
           fi
