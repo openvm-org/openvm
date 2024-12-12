@@ -542,7 +542,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
-        // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
             use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};

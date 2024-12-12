@@ -81,7 +81,7 @@ impl Sdk {
             }
             Err(None) => {
                 return Err(eyre::eyre!(
-                    "Failed to build guest (AXIOM_SKIP_BUILD is set)"
+                    "Failed to build guest (OPENVM_SKIP_BUILD is set)"
                 ));
             }
         };

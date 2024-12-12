@@ -64,7 +64,7 @@ moduli_declare! {
 }
 ```
 
-generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields, and saves the list of moduli in the static `AXIOM_SERIALIZED_MODULI` variable in the `.axiom` section. Hexadecimal and decimal formats are supported.
+generates classes `Bls12381` and `Bn254` that represent the elements of the corresponding modular fields. Hexadecimal and decimal formats are supported.
 
 For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_Bls12381()` and `setup_Bn254()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
 

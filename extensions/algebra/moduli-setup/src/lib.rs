@@ -699,7 +699,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
-    let mut axiom_section = Vec::new();
+    let mut openvm_section = Vec::new();
     let mut setup_all_moduli = Vec::new();
 
     // List of all modular limbs in one (that is, with a compile-time known size) array.
@@ -750,15 +750,15 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 .chain(modulus_bytes.iter().copied())
                 .collect::<Vec<_>>();
         let serialized_name = syn::Ident::new(
-            &format!("AXIOM_SERIALIZED_MODULUS_{}", mod_idx),
+            &format!("OPENVM_SERIALIZED_MODULUS_{}", mod_idx),
             span.into(),
         );
         let serialized_len = serialized_modulus.len();
         let setup_function = syn::Ident::new(&format!("setup_{}", mod_idx), span.into());
 
-        axiom_section.push(quote::quote_spanned! { span.into() =>
+        openvm_section.push(quote::quote_spanned! { span.into() =>
             #[cfg(target_os = "zkvm")]
-            #[link_section = ".axiom"]
+            #[link_section = ".openvm"]
             #[no_mangle]
             #[used]
             static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
@@ -874,7 +874,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let total_limbs_cnt = two_modular_limbs_flattened_list.len();
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
-        #(#axiom_section)*
+        #(#openvm_section)*
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi {
             #(#externs)*

@@ -1,6 +1,6 @@
 [package]
 name = "openvm-platform"
-description = "Axiom VM"
+description = "OpenVM Rust platform definitions."
 version = { workspace = true }
 edition = { workspace = true }
 # license = { workspace = true }

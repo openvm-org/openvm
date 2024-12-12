@@ -23,7 +23,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  AXIOM_FAST_TEST: "1"
+  OPENVM_FAST_TEST: "1"
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 

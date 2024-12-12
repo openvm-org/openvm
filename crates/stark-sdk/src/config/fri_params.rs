@@ -36,7 +36,7 @@ impl FriParameters {
 ///
 /// Assumes that the challenge field used as more than 100 bits.
 pub fn standard_fri_params_with_100_bits_conjectured_security(log_blowup: usize) -> FriParameters {
-    if let Ok("1") = std::env::var("AXIOM_FAST_TEST").as_deref() {
+    if let Ok("1") = std::env::var("OPENVM_FAST_TEST").as_deref() {
         return FriParameters {
             log_blowup,
             num_queries: 2,

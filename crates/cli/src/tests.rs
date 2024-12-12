@@ -29,7 +29,7 @@ fn test_cli_e2e() -> Result<()> {
     run_cmd(
         "cargo",
         &[
-            "axiom",
+            "openvm",
             "build",
             "--manifest-dir",
             "../sdk/example",
@@ -44,7 +44,7 @@ fn test_cli_e2e() -> Result<()> {
     run_cmd(
         "cargo",
         &[
-            "axiom",
+            "openvm",
             "keygen",
             "--config",
             "example/app_config.toml",
@@ -58,7 +58,7 @@ fn test_cli_e2e() -> Result<()> {
     run_cmd(
         "cargo",
         &[
-            "axiom",
+            "openvm",
             "run",
             "--exe",
             temp_exe.to_str().unwrap(),
@@ -70,7 +70,7 @@ fn test_cli_e2e() -> Result<()> {
     run_cmd(
         "cargo",
         &[
-            "axiom",
+            "openvm",
             "prove",
             "app",
             "--app-pk",
@@ -85,7 +85,7 @@ fn test_cli_e2e() -> Result<()> {
     run_cmd(
         "cargo",
         &[
-            "axiom",
+            "openvm",
             "verify",
             "app",
             "--app-vk",

@@ -630,7 +630,6 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
-        // #(#axiom_section)*
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_complex {
             #(#externs)*

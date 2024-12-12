@@ -75,7 +75,7 @@ fn air_test_with_compress_poseidon2(
     program: Program<BabyBear>,
     continuation_enabled: bool,
 ) {
-    let fri_params = if matches!(std::env::var("AXIOM_FAST_TEST"), Ok(x) if &x == "1") {
+    let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
             log_blowup: 3,
             num_queries: 2,

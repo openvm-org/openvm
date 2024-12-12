@@ -1,6 +1,6 @@
 [package]
 name = "openvm"
-description = "Axiom zkVM"
+description = "OpenVM standard Rust library for guest programs."
 version = { workspace = true }
 edition = { workspace = true }
 # license = { workspace = true }

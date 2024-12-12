@@ -18,7 +18,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  AXIOM_FAST_TEST: "1"
+  OPENVM_FAST_TEST: "1"
 
 # TODO: E2E build, transpile, run, keygen, prove, contract, verify on large machine
 jobs:

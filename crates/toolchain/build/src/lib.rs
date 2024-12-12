@@ -81,14 +81,14 @@ pub fn current_package() -> Package {
     get_package(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
-/// Reads the value of the environment variable `AXIOM_BUILD_DEBUG` and returns true if it is set to 1.
+/// Reads the value of the environment variable `OPENVM_BUILD_DEBUG` and returns true if it is set to 1.
 pub fn is_debug() -> bool {
-    get_env_var("AXIOM_BUILD_DEBUG") == "1"
+    get_env_var("OPENVM_BUILD_DEBUG") == "1"
 }
 
-/// Reads the value of the environment variable `AXIOM_SKIP_BUILD` and returns true if it is set to 1.
+/// Reads the value of the environment variable `OPENVM_SKIP_BUILD` and returns true if it is set to 1.
 pub fn is_skip_build() -> bool {
-    !get_env_var("AXIOM_SKIP_BUILD").is_empty()
+    !get_env_var("OPENVM_SKIP_BUILD").is_empty()
 }
 
 fn get_env_var(name: &str) -> String {
@@ -161,11 +161,11 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         "riscv32im-risc0-zkvm-elf",
     ];
 
-    if std::env::var("AXIOM_BUILD_LOCKED").is_ok() {
+    if std::env::var("OPENVM_BUILD_LOCKED").is_ok() {
         args.push("--locked");
     }
 
-    // let rust_src = get_env_var("AXIOM_RUST_SRC");
+    // let rust_src = get_env_var("OPENVM_RUST_SRC");
     // if !rust_src.is_empty() {
     // TODO[jpw]: only do this for custom src once we make axiom toolchain
     args.push("-Z");
@@ -218,7 +218,7 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
 // progress messages from the inner cargo so the user doesn't
 // think it's just hanging.
 fn tty_println(msg: &str) {
-    let tty_file = env::var("AXIOM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
+    let tty_file = env::var("OPENVM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
 
     let mut tty = fs::OpenOptions::new()
         .read(true)
