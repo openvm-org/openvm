@@ -34,6 +34,7 @@ axvm-pairing-guest = { workspace = true, features = [
 ] }
 axvm-instructions = { workspace = true }
 axvm-platform = { workspace = true }
+axvm = { workspace = true }
 
 eyre.workspace = true
 test-case.workspace = true

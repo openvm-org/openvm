@@ -4,9 +4,6 @@ pub use bench::*;
 mod build;
 pub use build::*;
 
-mod contract;
-pub use contract::*;
-
 mod keygen;
 pub use keygen::*;
 
@@ -19,8 +16,8 @@ pub use prove::*;
 mod run;
 pub use run::*;
 
-mod transpile;
-pub use transpile::*;
+mod setup;
+pub use setup::*;
 
 mod verify;
 pub use verify::*;

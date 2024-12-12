@@ -21,10 +21,10 @@ use axvm_circuit::{
 };
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use axvm_native_recursion::types::InnerConfig;
+use axvm_native_recursion::{halo2::utils::CacheHalo2ParamsReader, types::InnerConfig};
 use axvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
 use axvm_sdk::{
-    config::{AggConfig, AppConfig, FullAggConfig, Halo2Config},
+    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
     keygen::AppProvingKey,
     verifier::{
         common::types::VmVerifierPvs,
@@ -86,9 +86,9 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<AxVmCommittedExe<SC>
     .unwrap()
 }
 
-fn full_agg_config_for_test() -> FullAggConfig {
-    FullAggConfig {
-        agg_config: agg_config_for_test(),
+fn agg_config_for_test() -> AggConfig {
+    AggConfig {
+        agg_stark_config: agg_stark_config_for_test(),
         halo2_config: Halo2Config {
             verifier_k: 24,
             wrapper_k: None,
@@ -96,8 +96,8 @@ fn full_agg_config_for_test() -> FullAggConfig {
     }
 }
 
-fn agg_config_for_test() -> AggConfig {
-    AggConfig {
+fn agg_stark_config_for_test() -> AggStarkConfig {
+    AggStarkConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
         leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
         internal_fri_params: standard_fri_params_with_100_bits_conjectured_security(
@@ -122,7 +122,8 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
                 .with_public_values(16),
             Native,
         ),
-        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP),
+        leaf_fri_params: standard_fri_params_with_100_bits_conjectured_security(LEAF_LOG_BLOWUP)
+            .into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -137,8 +138,8 @@ fn test_public_values_and_leaf_verification() {
     let app_pk = AppProvingKey::keygen(app_config);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
 
-    let agg_config = agg_config_for_test();
-    let leaf_vm_config = agg_config.leaf_vm_config();
+    let agg_stark_config = agg_stark_config_for_test();
+    let leaf_vm_config = agg_stark_config.leaf_vm_config();
     let leaf_vm = SingleSegmentVmExecutor::new(leaf_vm_config);
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
@@ -253,22 +254,27 @@ fn test_public_values_and_leaf_verification() {
 }
 
 #[test]
-fn test_e2e_app_log_blowup_1() {
+fn test_e2e_proof_generation_and_verification() {
     let app_log_blowup = 1;
-    const AGG_PK_PATH: &str = "temp/agg_pk.out";
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = Sdk.app_keygen(app_config, None::<&str>).unwrap();
+    let app_pk = Sdk.app_keygen(app_config).unwrap();
+    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
     let agg_pk = Sdk
-        .agg_keygen(full_agg_config_for_test(), Some(AGG_PK_PATH))
+        .agg_keygen(agg_config_for_test(), &params_reader)
         .unwrap();
     let evm_verifier = Sdk
-        .generate_snark_verifier_contract(&agg_pk, None::<&'static str>)
+        .generate_snark_verifier_contract(&params_reader, &agg_pk)
         .unwrap();
 
-    let e2e_prover = Sdk
-        .create_e2e_prover(app_pk, app_committed_exe_for_test(app_log_blowup), agg_pk)
+    let evm_proof = Sdk
+        .generate_evm_proof(
+            &params_reader,
+            Arc::new(app_pk),
+            app_committed_exe_for_test(app_log_blowup),
+            agg_pk,
+            StdIn::default(),
+        )
         .unwrap();
-    let evm_proof = e2e_prover.generate_proof_for_evm(StdIn::default());
     assert!(Sdk.verify_evm_proof(&evm_verifier, &evm_proof));
 }
 
@@ -281,8 +287,13 @@ fn test_sdk_guest_build_and_transpile() {
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("example");
-    let one = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
-    let two = sdk.build(guest_opts.clone(), &pkg_dir).unwrap();
+    let one = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    let two = sdk
+        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .unwrap();
+    assert_eq!(one.instructions, two.instructions);
     assert_eq!(one.instructions, two.instructions);
     let transpiler = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)

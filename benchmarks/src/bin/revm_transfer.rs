@@ -17,7 +17,7 @@ use axvm_native_recursion::testing_utils::inner::build_verification_program;
 use axvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use axvm_sdk::StdIn;
+use axvm_sdk::{config::AppConfig, StdIn};
 use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use clap::Parser;
 use eyre::Result;
@@ -36,17 +36,15 @@ fn main() -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
     )?;
+    let app_config = AppConfig {
+        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+        app_vm_config: Keccak256Rv32Config::default(),
+        leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(1).into(),
+        compiler_options: CompilerOptions::default().with_cycle_tracker(),
+    };
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let vdata = info_span!("revm 100 transfers").in_scope(|| {
-            let engine = BabyBearPoseidon2Engine::new(
-                FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
-            );
-            bench_from_exe(
-                engine,
-                Keccak256Rv32Config::default(),
-                exe,
-                StdIn::default(),
-            )
+        info_span!("revm 100 transfers").in_scope(|| {
+            bench_from_exe("revm_transfer", app_config, exe, StdIn::default(), false)
         })?;
         Ok(())
     })

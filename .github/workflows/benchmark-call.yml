@@ -1,4 +1,4 @@
-name: "Benchmark: Coordinate Runner & Reporting"
+name: "Benchmark: running individual benchmarks"
 
 on:
   workflow_dispatch:
@@ -49,6 +49,10 @@ on:
         required: false
         description: Max segment length for continuations, must be larger than 524288
         default: 1048476
+      e2e_bench:
+        type: boolean
+        required: true
+        description: Whether to run the e2e benchmark
   workflow_call:
     inputs:
       benchmark_name:
@@ -90,6 +94,10 @@ on:
         required: false
         description: Max segment length for continuations, must be larger than 524288
         default: 1048476
+      e2e_bench:
+        type: boolean
+        required: true
+        description: Whether to run the e2e benchmark
 
 env:
   S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
@@ -129,33 +137,8 @@ jobs:
 
       - name: Install architecture specific tools
         run: |
-          arch=$(uname -m)
-          case $arch in
-            arm64|aarch64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
-              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
-              ;;
-            x86_64|amd64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
-              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
-              ;;
-            *)
-              echo "Unsupported architecture: $arch"
-              exit 1
-              ;;
-          esac
-
-          echo "Checking s5cmd"
-          if type s5cmd &>/dev/null; then
-              echo "s5cmd was installed."
-          else
-              TMP_DIR=/tmp/s5cmd
-              rm -rf $TMP_DIR
-              mkdir $TMP_DIR
-              echo "s5cmd was not installed. Installing.."
-              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
-              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
-          fi
+          source ci/scripts/utils.sh
+          install_s5cmd
 
       - name: Feature flags
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -166,31 +149,14 @@ jobs:
       - name: Setup e2e (halo2 and arguments)
         working-directory: extensions/native/recursion # We only ever run halo2 for recursion
         run: |
-          E2E_BENCH=$(jq -r --arg name "${{ inputs.benchmark_name }}" \
-          --arg instance_type "${{ inputs.instance_type }}" \
-          --arg memory_allocator "${{ inputs.memory_allocator }}" \
-          --argjson app_log_blowup "${{ inputs.app_log_blowup }}" \
-          --argjson agg_log_blowup "${{ inputs.agg_log_blowup }}" \
-          --argjson root_log_blowup "${{ inputs.root_log_blowup }}" \
-          --argjson internal_log_blowup "${{ inputs.internal_log_blowup }}" \
-          --argjson max_segment_length "${{ inputs.max_segment_length }}" \
-          '.benchmarks[] |
-            select(.name == $name) |
-            select(.run_params[] | .instance_type == $instance_type) |
-            select(.run_params[] | .memory_allocator == $memory_allocator) |
-            select(.run_params[] | .app_log_blowup == $app_log_blowup) |
-            select(.run_params[] | .agg_log_blowup == $agg_log_blowup) |
-            select(.run_params[] | (.root_log_blowup // 0) == $root_log_blowup) |
-            select(.run_params[] | (.internal_log_blowup // 0) == $internal_log_blowup) |
-            select(.run_params[] | (.max_segment_length // 1048476) == $max_segment_length) |
-            .e2e_bench
-          ' ../../../ci/benchmark-config.json)
+          E2E_BENCH=${{ inputs.e2e_bench }}
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
 
           if [[ "${E2E_BENCH}" == "true" ]]; then
             ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
+            bash ./extensions/native/recursion/trusted_setup_s3.sh
           fi
 
       - name: Set BIN_NAME and CMD_ARGS
@@ -198,15 +164,6 @@ jobs:
           CMD_ARGS="--features ${FEATURE_FLAGS}"
           echo "CMD_ARGS=${CMD_ARGS}" >> $GITHUB_ENV
           echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
-
-      - name: Set application and aggregation level log blowup
-        run: |
-          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
-          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
-          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
-          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
-          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
-          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${INPUT_ARGS}" >> $GITHUB_ENV
 
       - name: Set working directory
         id: set-working-dir
@@ -219,9 +176,25 @@ jobs:
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
           echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            bash ./extensions/native/recursion/trusted_setup_s3.sh
-          fi
+
+      - name: Set metric name
+        run: |
+          input_json_str="${{ toJSON(github.event.inputs) }}"
+          input_hash=$(echo $input_json_str | sha256sum | cut -d' ' -f1)
+          METRIC_NAME=${BIN_NAME}-${input_hash}
+          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
+          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
+          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
+
+      - name: Set input args
+        run: |
+          INSTANCE_TYPE="--instance_type ${{ inputs.instance_type }}"
+          MEMORY_ALLOCATOR="--memory_allocator ${{ inputs.memory_allocator }}"
+          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
+          AGG_ARG="--agg_log_blowup ${{ inputs.agg_log_blowup }}"
+          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
+          OUTPUT_PATH="--output_path $METRIC_PATH"
+          echo "INPUT_ARGS=${INSTANCE_TYPE} ${MEMORY_ALLOCATOR} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
@@ -234,38 +207,16 @@ jobs:
       ##########################################################################
       # Generate result .md files and flamegraphs, store them in S3            #
       ##########################################################################
-      - name: Store metric json and compute diff with previous
+      - name: Upload metric json and compute diff with previous to generate markdown
         run: |
-          METRIC_NAME="${BIN_NAME}-${{ inputs.app_log_blowup }}-${{ inputs.agg_log_blowup }}"
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            METRIC_NAME="${METRIC_NAME}-${{ inputs.root_log_blowup }}-${{ inputs.internal_log_blowup }}"
-          fi
-          METRIC_NAME="${METRIC_NAME}-${{ inputs.max_segment_length }}-${{ inputs.instance_type }}-${{ inputs.memory_allocator }}"
-          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
-
-          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
-          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
-
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
-          if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
+          s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${current_sha}-${METRIC_NAME}.json
 
-            prev_path="${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
-            count=`s5cmd ls $prev_path | wc -l`
-
-            if [[ $count -gt 0 ]]; then
-              s5cmd cp $prev_path prev.json
-              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --prev prev.json --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
-            else
-              echo "No previous benchmark on main branch found"
-              python3 ci/scripts/metric_unify/main.py $METRIC_PATH --aggregation-json ci/scripts/metric_unify/aggregation.json > results.md
-            fi
-          else
-            echo "No benchmark metrics found at ${METRIC_PATH}"
-          fi
+          source ci/scripts/utils.sh
+          generate_markdown $METRIC_PATH $METRIC_NAME ${{ env.S3_METRICS_PATH }} "."
 
       - name: Install inferno-flamegraph
         run: cargo install inferno
@@ -279,33 +230,12 @@ jobs:
           fi
 
       - name: Add benchmark metadata
+        id: add_metadata
         run: |
-          commit_url="https://github.com/${{ github.repository }}/commit/${current_sha}"
-          RESULT_PATH=results.md
-          echo "" >> $RESULT_PATH
-          if [[ "$UPLOAD_FLAMEGRAPHS" == '1' ]]; then
-            echo "<details>" >> $RESULT_PATH
-            echo "<summary>Flamegraphs</summary>" >> $RESULT_PATH
-            echo "" >> $RESULT_PATH
-            for file in .bench_metrics/flamegraphs/*.svg; do
-              filename=$(basename "$file")
-              flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
-              echo "[![]($flamegraph_url)]($flamegraph_url)" >> $RESULT_PATH
-            done
-            echo "" >> $RESULT_PATH
-            echo "</details>" >> $RESULT_PATH
-            echo "" >> $RESULT_PATH
-          fi
-          echo "Commit: ${commit_url}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Max Segment Length: ${{ inputs.max_segment_length }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Instance Type: ${{ inputs.instance_type }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "Memory Allocator: ${{ inputs.memory_allocator }}" >> $RESULT_PATH
-          echo "" >> $RESULT_PATH
-          echo "[Benchmark Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $RESULT_PATH
-          s5cmd cp $RESULT_PATH "${{ env.S3_PATH }}/${current_sha}-${METRIC_NAME}.md"
+          source ci/scripts/utils.sh
+          add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
+          s3_md_file="${BIN_NAME}-${current_sha}.md"
+          s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
 
       ##########################################################################
       # Update S3 with individual results upon a push event                    #
@@ -350,7 +280,8 @@ jobs:
       - name: Update PR github pages with new bench results
         run: |
           mkdir -p ${GH_PAGES_PATH}
-          s5cmd cp "${{ env.S3_PATH }}/${{ env.current_sha }}-${METRIC_NAME}.md" ${GH_PAGES_PATH}/${METRIC_NAME}.md
+          s3_md_file="${BIN_NAME}-${current_sha}.md"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git add ${GH_PAGES_PATH}/${METRIC_NAME}.md
           git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${METRIC_NAME}.md"
 
@@ -372,7 +303,6 @@ jobs:
                   ATTEMPT=$((ATTEMPT + 1))
               fi
           done
-
           if [ "$SUCCESS" = false ]; then
               echo "PUSH_FAILED"
               exit 1

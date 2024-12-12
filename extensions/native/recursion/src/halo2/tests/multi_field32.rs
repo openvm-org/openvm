@@ -3,7 +3,7 @@ use ax_stark_backend::{
     p3_field::{extension::BinomialExtensionField, AbstractField},
 };
 use ax_stark_sdk::{
-    config::baby_bear_poseidon2_outer::outer_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
 };
 use axvm_native_compiler::ir::{Builder, SymbolicExt, Witness};
 use p3_symmetric::Hash;
@@ -17,7 +17,7 @@ use crate::{
 
 #[test]
 fn test_challenger() {
-    let perm = outer_perm();
+    let perm = root_perm();
     let mut challenger = OuterChallenger::new(perm).unwrap();
     let a = BabyBear::from_canonical_usize(1);
     let b = BabyBear::from_canonical_usize(2);
@@ -63,7 +63,7 @@ fn test_challenger() {
 
 #[test]
 fn test_challenger_sample_ext() {
-    let perm = outer_perm();
+    let perm = root_perm();
     let mut challenger = OuterChallenger::new(perm).unwrap();
     let a = BabyBear::from_canonical_usize(1);
     let b = BabyBear::from_canonical_usize(2);

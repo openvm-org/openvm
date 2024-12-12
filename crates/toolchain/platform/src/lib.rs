@@ -4,9 +4,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-// Re-export bincode for consistent version for serialization and deserialization across crates.
-pub use bincode;
-
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod custom_insn;
 #[cfg(all(feature = "export-getrandom", target_os = "zkvm"))]

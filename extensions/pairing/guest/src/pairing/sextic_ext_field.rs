@@ -69,6 +69,7 @@ impl<'a, F: Field> Sub<&'a SexticExtField<F>> for &SexticExtField<F> {
 ///
 /// When `target_os = "zkvm"`, this function calls an intrinsic instruction,
 /// which is assumed to be supported by the VM.
+#[allow(dead_code)]
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(

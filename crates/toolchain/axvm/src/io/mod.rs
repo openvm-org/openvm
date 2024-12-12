@@ -5,13 +5,15 @@ use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::fmt::Write;
 
-use axvm_platform::bincode;
 #[cfg(target_os = "zkvm")]
 use axvm_rv32im_guest::{hint_input, hint_store_u32};
 use serde::de::DeserializeOwned;
 
 #[cfg(not(target_os = "zkvm"))]
 use crate::host::{hint_input, read_n_bytes, read_u32};
+use crate::serde::Deserializer;
+
+mod read;
 
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
@@ -21,10 +23,9 @@ pub fn read_vec() -> Vec<u8> {
 
 /// Read the next vec and deserialize it into a type `T`.
 pub fn read<T: DeserializeOwned>() -> T {
-    let serialized_data = read_vec();
-    bincode::serde::decode_from_slice(&serialized_data[..], bincode::config::standard())
-        .expect("Deserialize from bytes failed")
-        .0
+    let reader = read::Reader::new();
+    let mut deserializer = Deserializer::new(reader);
+    T::deserialize(&mut deserializer).unwrap()
 }
 
 /// Read the next 4 bytes from the hint stream into a register.
@@ -44,8 +45,17 @@ pub fn read_u32() -> u32 {
     result
 }
 
+fn hint_store_word(ptr: *mut u32) {
+    #[cfg(target_os = "zkvm")]
+    hint_store_u32!(ptr, 0);
+    #[cfg(not(target_os = "zkvm"))]
+    unsafe {
+        *ptr = crate::host::read_u32();
+    }
+}
+
 /// Read the next `len` bytes from the hint stream into a vector.
-fn read_vec_by_len(len: usize) -> Vec<u8> {
+pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = (len + 3) / 4;
     let capacity = num_words * 4;
 

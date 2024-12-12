@@ -9,7 +9,6 @@ pub use axvm_circuit_derive as derive;
 pub mod arch;
 /// Instrumentation metrics for performance analysis and debugging
 pub mod metrics;
-pub mod prover;
 /// System chips that are always required by the architecture.
 /// (The [PhantomChip](system::phantom::PhantomChip) is not technically required for a functioning VM,
 /// but there is almost always a need for it.)

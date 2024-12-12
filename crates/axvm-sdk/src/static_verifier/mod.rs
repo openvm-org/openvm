@@ -6,14 +6,14 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
-use axvm_circuit::{arch::PROGRAM_CACHED_TRACE_INDEX, prover::SingleSegmentVmProver};
+use axvm_circuit::arch::PROGRAM_CACHED_TRACE_INDEX;
 use axvm_native_compiler::prelude::*;
 use axvm_native_recursion::{
     challenger::multi_field32::MultiField32ChallengerVariable,
     config::outer::{new_from_outer_multi_vk, OuterConfig},
     digest::DigestVariable,
     fri::TwoAdicFriPcsVariable,
-    halo2::{verifier::Halo2VerifierProvingKey, DslOperations, Halo2Prover},
+    halo2::{verifier::Halo2VerifierProvingKey, DslOperations, Halo2Params, Halo2Prover},
     hints::Hintable,
     stark::StarkVerifier,
     utils::const_fri_config,
@@ -22,31 +22,31 @@ use axvm_native_recursion::{
 
 use crate::{
     keygen::RootVerifierProvingKey,
-    prover::RootVerifierLocalProver,
+    prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
     verifier::{
         common::assert_single_segment_vm_exit_successfully_with_connector_air_id,
         root::types::{RootVmVerifierInput, RootVmVerifierPvs},
     },
-    OuterSC, F, SC,
+    RootSC, F, SC,
 };
 
 impl RootVerifierProvingKey {
     /// Keygen the static verifier for this root verifier.
     pub fn keygen_static_verifier(
         &self,
-        halo2_k: usize,
-        root_proof: Proof<OuterSC>,
+        params: &Halo2Params,
+        root_proof: Proof<RootSC>,
     ) -> Halo2VerifierProvingKey {
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let dsl_operations = build_static_verifier_operations(self, &root_proof);
         Halo2VerifierProvingKey {
-            pinning: Halo2Prover::keygen(halo2_k, dsl_operations.clone(), witness),
+            pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
         }
     }
 
-    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<OuterSC> {
+    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<RootSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
         let num_public_values = prover
@@ -69,7 +69,7 @@ impl RootVerifierProvingKey {
 
 fn build_static_verifier_operations(
     root_verifier_pk: &RootVerifierProvingKey,
-    proof: &Proof<OuterSC>,
+    proof: &Proof<RootSC>,
 ) -> DslOperations<OuterConfig> {
     let advice = new_from_outer_multi_vk(&root_verifier_pk.vm_pk.vm_pk.get_vk());
     let special_air_ids = root_verifier_pk.air_id_permutation().get_special_air_ids();

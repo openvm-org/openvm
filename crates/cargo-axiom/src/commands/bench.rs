@@ -1,4 +1,4 @@
-use std::{fs::read, path::PathBuf, time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 use anstyle::*;
 use ax_stark_sdk::{
@@ -12,18 +12,14 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
-use axvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use axvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
-};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf, transpiler::Transpiler, FromElf};
+use axvm_sdk::fs::read_exe_from_file;
 use clap::Parser;
 use eyre::Result;
 
 use super::build::{build, BuildArgs};
 use crate::util::{write_status, Input};
 
-#[derive(Parser)]
+#[derive(Clone, Parser)]
 #[command(name = "bench", about = "(default) Build and prove a program")]
 pub struct BenchCmd {
     #[clap(long, value_parser)]
@@ -44,24 +40,15 @@ pub struct BenchCmd {
 
 impl BenchCmd {
     pub fn run(&self) -> Result<()> {
-        let elf_path = build(&self.build_args)?
-            .pop()
-            .ok_or_else(|| eyre::eyre!("No bin found"))?;
-
         if self.profile {
             setup_tracing();
         }
+        let mut build_args = self.build_args.clone();
+        build_args.transpile = true;
+        let elf_path = build(&self.build_args)?.unwrap();
+        let exe_path = build_args.exe_path(&elf_path);
+        let exe = read_exe_from_file(&exe_path)?;
 
-        let data = read(elf_path)?;
-        let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        let exe = AxVmExe::from_elf(
-            elf,
-            Transpiler::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Keccak256TranspilerExtension),
-        )?;
         // TODO: read from axiom.toml
         let app_log_blowup = 2;
         let engine = BabyBearPoseidon2Engine::new(

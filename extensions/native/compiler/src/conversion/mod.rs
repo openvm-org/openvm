@@ -42,6 +42,10 @@ impl CompilerOptions {
         let offset = Opcode::default_offset();
         AxVmOpcode::from_usize(offset + opcode.as_usize())
     }
+    pub fn with_cycle_tracker(mut self) -> Self {
+        self.enable_cycle_tracker = true;
+        self
+    }
 }
 
 fn inst<F: PrimeField64>(opcode: AxVmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {

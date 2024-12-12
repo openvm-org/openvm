@@ -52,3 +52,6 @@ pub fn is_supported_target() -> bool {
 pub fn get_target() -> String {
     target_lexicon::HOST.to_string()
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,4 +1,4 @@
-name: axVM Benchmarks
+name: "axVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
   push:
@@ -95,6 +95,7 @@ jobs:
       root_log_blowup: ${{ matrix.benchmark_run.root_log_blowup }}
       internal_log_blowup: ${{ matrix.benchmark_run.internal_log_blowup }}
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
+      e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
     secrets: inherit
 
   summarize:
@@ -142,17 +143,20 @@ jobs:
 
       - name: Load all metadata files from S3
         run: |
+          current_sha=$(git rev-parse HEAD)
           md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench != true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-"' |
+            sed "s/$/${current_sha}.md/" |
             sort)
           md_file_list=$(echo -n "$md_files" | paste -sd "," -)
 
           e2e_md_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             select(.e2e_bench == true) |
-            "\(.name)-\(.app_log_blowup)-\(.agg_log_blowup)-\(.root_log_blowup)-\(.internal_log_blowup)-\(.max_segment_length)-\(.instance_type)-\(.memory_allocator).md"' |
+            "\(.name)-"' |
+            sed "s/$/${current_sha}.md/" |
             sort)
           e2e_md_file_list=$(echo -n "$e2e_md_files" | paste -sd "," -)
 
@@ -161,14 +165,14 @@ jobs:
               continue
             fi
             echo "Downloading results for benchmark: $md_file"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${CURRENT_SHA}-${md_file}" "${md_file}"
+            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${md_file}" "${md_file}"
           done <<< "$md_files"
 
           E2E_FILE_LIST=""
           if [[ -n "$e2e_md_files" ]]; then
             while read e2e_md_file; do
               echo "Downloading results for benchmark: $e2e_md_file"
-              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${CURRENT_SHA}-${e2e_md_file}" "${e2e_md_file}"
+              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${e2e_md_file}" "${e2e_md_file}"
             done <<< "$e2e_md_files"
             E2E_FILE_LIST="${e2e_md_file_list}"
           fi

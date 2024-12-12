@@ -6,6 +6,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![feature(thread_local)]
 
+#[macro_use]
 extern crate alloc;
 
 // always include rust_rt so the memory allocator is enabled
@@ -23,6 +24,7 @@ pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
 pub mod pal_abi;
 pub mod process;
+pub mod serde;
 
 #[cfg(not(target_os = "zkvm"))]
 pub mod utils;

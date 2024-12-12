@@ -14,9 +14,8 @@ use std::{
 
 use axvm_platform::memory;
 use cargo_metadata::{MetadataCommand, Package};
-use config::GuestBuildOptions;
 
-pub use self::config::{DockerOptions, GuestOptions};
+pub use self::config::GuestOptions;
 
 mod config;
 
@@ -26,7 +25,7 @@ const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
 pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
-    let manifest_path = manifest_dir.as_ref().join("Cargo.toml");
+    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
     let manifest_meta = MetadataCommand::new()
         .manifest_path(&manifest_path)
         .no_deps()
@@ -67,6 +66,14 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
         .expect("cargo metadata command failed")
         .target_directory
         .into()
+}
+
+/// Returns the target executable directory given `target_dir` and `profile`.
+pub fn get_dir_with_profile(target_dir: impl AsRef<Path>, profile: &str) -> PathBuf {
+    target_dir
+        .as_ref()
+        .join("riscv32im-risc0-zkvm-elf")
+        .join(profile)
 }
 
 /// When called from a build.rs, returns the current package being built.
@@ -230,20 +237,21 @@ fn tty_println(msg: &str) {
 
 /// Builds a package that targets the riscv guest into the specified target
 /// directory.
-pub fn build_guest_package<P>(
+pub fn build_guest_package(
     pkg: &Package,
-    target_dir: P,
-    guest_opts: &GuestBuildOptions,
+    guest_opts: &GuestOptions,
     runtime_lib: Option<&str>,
-) -> Result<(), Option<i32>>
-where
-    P: AsRef<Path>,
-{
+) -> Result<PathBuf, Option<i32>> {
     if is_skip_build() {
         return Err(None);
     }
 
-    fs::create_dir_all(target_dir.as_ref()).unwrap();
+    let target_dir = guest_opts
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| get_target_dir(pkg.manifest_path.clone()));
+
+    fs::create_dir_all(&target_dir).unwrap();
 
     let runtime_rust_flags = runtime_lib
         .map(|lib| vec![String::from("-C"), format!("link_arg={}", lib)])
@@ -268,12 +276,17 @@ where
         "--manifest-path",
         pkg.manifest_path.as_str(),
         "--target-dir",
-        target_dir.as_ref().to_str().unwrap(),
+        target_dir.to_str().unwrap(),
     ]);
 
-    if !is_debug() {
-        cmd.args(["--release"]);
-    }
+    let profile = if let Some(profile) = &guest_opts.profile {
+        profile
+    } else if is_debug() {
+        "dev"
+    } else {
+        "release"
+    };
+    cmd.args(["--profile", profile]);
 
     cmd.args(&guest_opts.options);
     tty_println(&format!("cargo command: {:?}", cmd));
@@ -298,7 +311,52 @@ where
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(())
+        Ok(get_dir_with_profile(&target_dir, profile))
+    }
+}
+
+/// A filter for selecting a target from a package.
+#[derive(Default)]
+pub struct TargetFilter {
+    /// A substring of the target name to match.
+    pub name_substr: Option<String>,
+    /// The kind of target to match.
+    pub kind: Option<String>,
+}
+
+/// Finds the unique executable target in the given package and target directory,
+/// using the given target filter.
+pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
+    pkg_dir: P,
+    target_dir: Q,
+    target_filter: &TargetFilter,
+) -> eyre::Result<PathBuf> {
+    let pkg = get_package(pkg_dir.as_ref());
+    let elf_paths = pkg
+        .targets
+        .into_iter()
+        .filter(move |target| {
+            if let Some(name_substr) = &target_filter.name_substr {
+                if !target.name.contains(name_substr) {
+                    return false;
+                }
+            }
+            if let Some(kind) = &target_filter.kind {
+                if !target.kind.iter().any(|k| k == kind) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect::<Vec<_>>();
+    if elf_paths.len() != 1 {
+        Err(eyre::eyre!(
+            "Expected 1 target, got {}: {:#?}",
+            elf_paths.len(),
+            elf_paths
+        ))
+    } else {
+        Ok(target_dir.as_ref().join(&elf_paths[0].name))
     }
 }
 

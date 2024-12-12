@@ -82,6 +82,14 @@ impl AppExecutionCommit<F> {
             exe_commit: user_commit,
         }
     }
+
+    pub fn app_config_commit_to_bn254(&self) -> Bn254Fr {
+        babybear_digest_to_bn254(&self.leaf_vm_verifier_commit)
+    }
+
+    pub fn exe_commit_to_bn254(&self) -> Bn254Fr {
+        babybear_digest_to_bn254(&self.exe_commit)
+    }
 }
 
 pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {

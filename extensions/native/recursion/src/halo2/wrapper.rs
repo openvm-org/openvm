@@ -3,22 +3,19 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::{
     evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk},
-    halo2::{
-        aggregation::{AggregationCircuit, AggregationConfigParams, VerifierUniversality},
-        gen_snark_shplonk,
-    },
+    halo2::aggregation::{AggregationCircuit, AggregationConfigParams, VerifierUniversality},
     snark_verifier::halo2_base::{
         gates::circuit::{
             CircuitBuilderStage,
             CircuitBuilderStage::{Keygen, Prover},
         },
-        halo2_proofs::plonk::keygen_pk2,
+        halo2_proofs::{plonk::keygen_pk2, poly::commitment::Params},
     },
     CircuitExt, Snark, SHPLONK,
 };
 
 use crate::halo2::{
-    utils::{read_params, KZG_PARAMS_FOR_SVK},
+    utils::{Halo2ParamsReader, KZG_PARAMS_FOR_SVK},
     EvmProof, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
 };
 
@@ -34,16 +31,17 @@ const MIN_ROWS: usize = 20;
 
 impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
-    pub fn keygen_auto_tune(dummy_snark: Snark) -> Self {
+    pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
         let k = Self::select_k(dummy_snark.clone());
         tracing::info!("Selected k: {}", k);
-        Self::keygen(k, dummy_snark)
+        let params = reader.read_params(k);
+        Self::keygen(&params, dummy_snark)
     }
-    pub fn keygen(k: usize, dummy_snark: Snark) -> Self {
-        let params = read_params(k as u32);
+    pub fn keygen(params: &Halo2Params, dummy_snark: Snark) -> Self {
+        let k = params.k();
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
-        let mut circuit = generate_wrapper_circuit_object(Keygen, k, dummy_snark);
+        let mut circuit = generate_wrapper_circuit_object(Keygen, k as usize, dummy_snark);
         circuit.calculate_params(Some(MIN_ROWS));
         let config_params = circuit.builder.config_params.clone();
         tracing::info!(
@@ -52,7 +50,7 @@ impl Halo2WrapperProvingKey {
         );
         #[cfg(feature = "bench-metrics")]
         emit_wrapper_circuit_metrics(&circuit);
-        let pk = keygen_pk2(params.as_ref(), &circuit, false).unwrap();
+        let pk = keygen_pk2(params, &circuit, false).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("halo2_keygen_time_ms").set(start.elapsed().as_millis() as f64);
@@ -77,25 +75,20 @@ impl Halo2WrapperProvingKey {
         );
     }
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
-    pub fn generate_evm_verifier(&self) -> EvmVerifier {
-        let params = read_params(self.pinning.metadata.config_params.k as u32);
+    pub fn generate_evm_verifier(&self, params: &Halo2Params) -> EvmVerifier {
+        assert_eq!(
+            self.pinning.metadata.config_params.k as u32,
+            params.k(),
+            "Provided params don't match circuit config"
+        );
         EvmVerifier(gen_evm_verifier_shplonk::<AggregationCircuit>(
-            &params,
+            params,
             self.pinning.pk.get_vk(),
             self.pinning.metadata.num_pvs.clone(),
             None,
         ))
     }
-    pub fn prove_for_evm(&self, snark_to_verify: Snark) -> EvmProof {
-        let k = self.pinning.metadata.config_params.k;
-        let params = read_params(k as u32);
-        self.prove_for_evm_with_loaded_params(&params, snark_to_verify)
-    }
-    pub fn prove_for_evm_with_loaded_params(
-        &self,
-        params: &Halo2Params,
-        snark_to_verify: Snark,
-    ) -> EvmProof {
+    pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> EvmProof {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
         let k = self.pinning.metadata.config_params.k;
@@ -109,17 +102,6 @@ impl Halo2WrapperProvingKey {
             instances: pvs,
             proof,
         }
-    }
-    pub fn prove(&self, snark_to_verify: Snark) -> Snark {
-        let k = self.pinning.metadata.config_params.k;
-        let params = read_params(k as u32);
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-        let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
-        let snark = gen_snark_shplonk(&params, &self.pinning.pk, prover_circuit, None::<String>);
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("halo2_proof_time_ms").set(start.elapsed().as_millis() as f64);
-        snark
     }
     fn generate_circuit_object_for_proving(
         &self,

@@ -8,23 +8,23 @@ use ax_stark_backend::{
     Chip,
 };
 use ax_stark_sdk::engine::StarkFriEngine;
-
-use crate::{
+use axvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, vm::VirtualMachine, Streams, VmComplexTraceHeights,
+        hasher::poseidon2::vm_poseidon2_hasher, Streams, VirtualMachine, VmComplexTraceHeights,
         VmConfig,
-    },
-    prover::{
-        types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
-        ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
     },
     system::{
         memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
     },
 };
 
+use crate::prover::vm::{
+    types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
+    ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
+};
+
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
-    pub pk: VmProvingKey<SC, VC>,
+    pub pk: Arc<VmProvingKey<SC, VC>>,
     pub committed_exe: Arc<AxVmCommittedExe<SC>>,
     overridden_heights: Option<VmComplexTraceHeights>,
     _marker: PhantomData<E>,
@@ -34,7 +34,7 @@ impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLoc
 where
     Val<SC>: PrimeField32,
 {
-    pub fn new(pk: VmProvingKey<SC, VC>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
+    pub fn new(pk: Arc<VmProvingKey<SC, VC>>, committed_exe: Arc<AxVmCommittedExe<SC>>) -> Self {
         Self {
             pk,
             committed_exe,
@@ -44,7 +44,7 @@ where
     }
 
     pub fn new_with_overridden_trace_heights(
-        pk: VmProvingKey<SC, VC>,
+        pk: Arc<VmProvingKey<SC, VC>>,
         committed_exe: Arc<AxVmCommittedExe<SC>>,
         overridden_heights: Option<VmComplexTraceHeights>,
     ) -> Self {

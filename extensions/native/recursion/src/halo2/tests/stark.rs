@@ -1,6 +1,6 @@
 use ax_stark_sdk::{
     config::{
-        baby_bear_poseidon2_outer::{BabyBearPoseidon2OuterConfig, BabyBearPoseidon2OuterEngine},
+        baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
         setup_tracing_with_log_level,
     },
     engine::{ProofInputForTest, StarkFriEngine},
@@ -18,23 +18,23 @@ use crate::{
 
 #[test]
 fn test_fibonacci() {
-    run_recursive_test(fibonacci_test_proof_input::<BabyBearPoseidon2OuterConfig>(
+    run_recursive_test(fibonacci_test_proof_input::<BabyBearPoseidon2RootConfig>(
         16,
     ))
 }
 
 #[test]
 fn test_interactions() {
-    run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2OuterConfig>())
+    run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2RootConfig>())
 }
 
-fn run_recursive_test(mut test_proof_input: ProofInputForTest<BabyBearPoseidon2OuterConfig>) {
+fn run_recursive_test(mut test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>) {
     setup_tracing_with_log_level(Level::WARN);
     test_proof_input
         .per_air
         .sort_by(|a, b| b.raw.height().cmp(&a.raw.height()));
     let vparams =
-        <BabyBearPoseidon2OuterEngine as StarkFriEngine<BabyBearPoseidon2OuterConfig>>::run_test_fast(
+        <BabyBearPoseidon2RootEngine as StarkFriEngine<BabyBearPoseidon2RootConfig>>::run_test_fast(
             test_proof_input.per_air,
         )
         .unwrap();

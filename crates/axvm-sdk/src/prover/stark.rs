@@ -4,9 +4,9 @@ use ax_stark_backend::{prover::types::Proof, Chip};
 use axvm_circuit::arch::VmConfig;
 
 use crate::{
-    keygen::{AggProvingKey, AppProvingKey},
+    keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
-    NonRootCommittedExe, OuterSC, StdIn, F, SC,
+    NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
 pub struct StarkProver<VC> {
@@ -15,34 +15,38 @@ pub struct StarkProver<VC> {
 }
 impl<VC> StarkProver<VC> {
     pub fn new(
-        app_pk: AppProvingKey<VC>,
+        app_pk: Arc<AppProvingKey<VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
-        agg_pk: AggProvingKey,
+        agg_stark_pk: AggStarkProvingKey,
     ) -> Self
     where
         VC: VmConfig<F>,
     {
-        let AppProvingKey {
-            leaf_committed_exe,
-            leaf_fri_params,
-            app_vm_pk,
-        } = app_pk;
         assert_eq!(
-            leaf_fri_params, agg_pk.leaf_vm_pk.fri_params,
+            app_pk.leaf_fri_params, agg_stark_pk.leaf_vm_pk.fri_params,
             "App VM is incompatible with Agg VM because of leaf FRI parameters"
         );
         assert_eq!(
-            app_vm_pk.vm_config.system().num_public_values,
-            agg_pk.num_public_values(),
+            app_pk.app_vm_pk.vm_config.system().num_public_values,
+            agg_stark_pk.num_public_values(),
             "App VM is incompatible with Agg VM  because of the number of public values"
         );
 
         Self {
-            app_prover: AppProver::new(app_vm_pk, app_committed_exe),
-            agg_prover: AggStarkProver::new(agg_pk, leaf_committed_exe),
+            app_prover: AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe),
+            agg_prover: AggStarkProver::new(agg_stark_pk, app_pk.leaf_committed_exe.clone()),
         }
     }
-    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<OuterSC>
+    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
+        self.app_prover.set_profile(profile);
+        self.agg_prover.set_profile(profile);
+        self
+    }
+    pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
+        self.app_prover.set_program_name(program_name);
+        self
+    }
+    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
         VC: VmConfig<F>,
         VC::Executor: Chip<SC>,
