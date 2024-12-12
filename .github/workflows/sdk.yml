@@ -9,7 +9,7 @@ on:
       - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "crates/openvm-sdk/**"
+      - "crates/sdk/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -72,7 +72,7 @@ jobs:
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 
       - name: Run openvm-sdk crate tests
-        working-directory: crates/openvm-sdk
+        working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel
