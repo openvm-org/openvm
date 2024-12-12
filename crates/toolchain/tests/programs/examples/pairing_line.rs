@@ -11,7 +11,7 @@ axvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
-    use axvm_pairing_guest::bn254::{Bn254, Fp12, Fp2};
+    use axvm_pairing_guest::bn254::{Bn254, Fp, Fp12, Fp2};
 
     use super::*;
 
@@ -67,7 +67,7 @@ mod bn254 {
 
 #[cfg(feature = "bls12_381")]
 mod bls12_381 {
-    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp12, Fp2};
+    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp12, Fp2};
 
     use super::*;
 
