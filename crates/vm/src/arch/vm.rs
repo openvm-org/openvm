@@ -10,7 +10,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
-use axvm_instructions::exe::AxVmExe;
+use axvm_instructions::exe::VmExe;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
@@ -19,7 +19,7 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
-        program::trace::AxVmCommittedExe,
+        program::trace::VmCommittedExe,
     },
 };
 
@@ -105,7 +105,7 @@ where
 
     pub fn execute_segments(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
@@ -178,7 +178,7 @@ where
 
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let mut results = self.execute_segments(exe, input)?;
@@ -198,7 +198,7 @@ where
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
@@ -211,7 +211,7 @@ where
 
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<AxVmCommittedExe<SC>>,
+        commited_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
@@ -227,7 +227,7 @@ where
     }
     fn execute_and_generate_impl<SC: StarkGenericConfig>(
         &self,
-        exe: AxVmExe<F>,
+        exe: VmExe<F>,
         committed_program: Option<CommittedTraceData<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
@@ -302,7 +302,7 @@ where
     /// Executes a program and returns the public values. None means the public value is not set.
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = self.execute_impl(exe.into(), input)?;
@@ -323,7 +323,7 @@ where
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<AxVmCommittedExe<SC>>,
+        commited_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
@@ -340,7 +340,7 @@ where
 
     fn execute_impl(
         &self,
-        exe: AxVmExe<F>,
+        exe: VmExe<F>,
         input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
@@ -444,14 +444,14 @@ where
         keygen_builder.generate_pk()
     }
 
-    pub fn commit_exe(&self, exe: impl Into<AxVmExe<F>>) -> Arc<AxVmCommittedExe<SC>> {
+    pub fn commit_exe(&self, exe: impl Into<VmExe<F>>) -> Arc<VmCommittedExe<SC>> {
         let exe = exe.into();
-        Arc::new(AxVmCommittedExe::commit(exe, self.engine.config().pcs()))
+        Arc::new(VmCommittedExe::commit(exe, self.engine.config().pcs()))
     }
 
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         self.executor.execute(exe, input)
@@ -459,7 +459,7 @@ where
 
     pub fn execute_and_generate(
         &self,
-        exe: impl Into<AxVmExe<F>>,
+        exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError> {
         self.executor.execute_and_generate(exe, input)
@@ -467,7 +467,7 @@ where
 
     pub fn execute_and_generate_with_cached_program(
         &self,
-        committed_exe: Arc<AxVmCommittedExe<SC>>,
+        committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where

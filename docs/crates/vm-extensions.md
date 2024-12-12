@@ -20,7 +20,7 @@ Due to strong types, we have **two** associated trait types `Executor, Periphery
 
 ### `VmInventory<Executor, Periphery>`
 
-Think of `VmInventory<Executor, Periphery>` as the collection of all chips, which can be either `Executor` or `Periphery`. It also has a lookup from `AxVmOpcode` to `Executor` which is how runtime execution knows how to route instructions to executors.
+Think of `VmInventory<Executor, Periphery>` as the collection of all chips, which can be either `Executor` or `Periphery`. It also has a lookup from `VmOpcode` to `Executor` which is how runtime execution knows how to route instructions to executors.
 
 `VmInventory` API relevant for `VmExtension`:
 
@@ -28,7 +28,7 @@ Think of `VmInventory<Executor, Periphery>` as the collection of all chips, whic
     pub fn add_executor(
         &mut self,
         executor: impl Into<Executor>,
-        opcodes: impl IntoIterator<Item = AxVmOpcode>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
     ) -> Result<(), VmInventoryError>;
 
     pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<Periphery>);
@@ -53,9 +53,9 @@ where you should specify all opcodes owned by an executor when you add it.
 For runtime execution in a segment, the `VmInventory` also provides the getter functions:
 
 ```rust
-    pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&Executor>;
+    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&Executor>;
 
-    pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut Executor>;
+    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut Executor>;
 ```
 
 ### `VmInventoryBuilder`
@@ -164,7 +164,7 @@ TODO: discuss usage
 
 ## Examples
 
-The `extensions/` folder contains extensions implementing all non-system functionality via several extensions.  For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
+The `extensions/` folder contains extensions implementing all non-system functionality via several extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
 
 # Design Choices
 

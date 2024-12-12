@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use ax_circuit_derive::AlignedBorrow;
 use ax_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
 use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode, PhantomDiscriminant,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
 use thiserror::Error;
 
@@ -31,7 +31,7 @@ pub enum ExecutionError {
         program_len: usize,
     },
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
-    DisabledOperation { pc: u32, opcode: AxVmOpcode },
+    DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
     HintOutOfBounds { pc: u32 },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]

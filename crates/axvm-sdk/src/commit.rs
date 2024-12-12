@@ -11,12 +11,12 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        instructions::exe::AxVmExe,
+        instructions::exe::VmExe,
         VmConfig,
     },
     system::{
         memory::{memory_image_to_equipartition, tree::MemoryNode},
-        program::trace::AxVmCommittedExe,
+        program::trace::VmCommittedExe,
     },
 };
 use axvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
@@ -116,7 +116,7 @@ pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
         compiler_options,
     }
     .build_program(&app_vm_vk);
-    Arc::new(AxVmCommittedExe::commit(
+    Arc::new(VmCommittedExe::commit(
         leaf_program.into(),
         leaf_engine.config.pcs(),
     ))
@@ -124,9 +124,9 @@ pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
 
 pub fn commit_app_exe(
     app_fri_params: FriParameters,
-    app_exe: impl Into<AxVmExe<F>>,
+    app_exe: impl Into<VmExe<F>>,
 ) -> Arc<NonRootCommittedExe> {
-    let exe: AxVmExe<_> = app_exe.into();
+    let exe: VmExe<_> = app_exe.into();
     let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    Arc::new(AxVmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
+    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }

@@ -14,7 +14,7 @@ use ax_stark_sdk::{
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
-use axvm_instructions::{exe::AxVmExe, program::Program};
+use axvm_instructions::{exe::VmExe, program::Program};
 
 use crate::{
     arch::{
@@ -24,7 +24,7 @@ use crate::{
     system::connector::VmConnectorPvs,
 };
 
-pub fn air_test<VC>(config: VC, exe: impl Into<AxVmExe<BabyBear>>)
+pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
     VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
@@ -36,7 +36,7 @@ where
 /// Executes the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VC>(
     config: VC,
-    exe: impl Into<AxVmExe<BabyBear>>,
+    exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
@@ -62,7 +62,7 @@ where
 /// Executes the VM and returns the final memory state.
 pub fn new_air_test_with_min_segments<VC>(
     config: VC,
-    exe: impl Into<AxVmExe<BabyBear>>,
+    exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     always_prove: bool,

@@ -31,7 +31,7 @@ Together, these perform the following functionalities:
 - **Keygen:** This is done via the `.eval()` function from `Air<AB>`
 - **Trace Generation:** This is done by calling `.execute()` from `InstructionExecutor<F>` which stores execution records and then `generate_air_proof_input()` from `Chip<SC>` which generates the trace using the corresponding records.
 
-There is a `struct AxVmOpcode(usize)` to protect the global opcode usize.
+There is a `struct VmOpcode(usize)` to protect the global opcode usize.
 
 ### Phantom Sub-Instructions
 

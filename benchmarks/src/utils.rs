@@ -7,7 +7,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
+use axvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use axvm_sdk::{
     commit::commit_app_exe,
     config::AppConfig,
@@ -80,7 +80,7 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 pub fn bench_from_exe<VC>(
     bench_name: impl ToString,
     app_config: AppConfig<VC>,
-    exe: impl Into<AxVmExe<F>>,
+    exe: impl Into<VmExe<F>>,
     input_stream: StdIn,
     bench_leaf: bool,
 ) -> Result<()>

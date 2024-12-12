@@ -5,7 +5,7 @@ use ax_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
 };
 use axvm_benchmarks::utils::{build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use axvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use axvm_rv32im_circuit::Rv32ImConfig;
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     let app_pk = Arc::new(Sdk.app_keygen(app_config)?);
     let full_agg_pk = Sdk.agg_keygen(agg_config, &halo2_params_reader)?;
     let elf = build_bench_program("fibonacci")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::default()
             .with_extension(Rv32ITranspilerExtension)

@@ -13,7 +13,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use axvm_instructions::{instruction::Instruction, AxVmOpcode};
+use axvm_instructions::{instruction::Instruction, VmOpcode};
 use rand::Rng;
 
 use super::{Poseidon2Chip, Poseidon2VmIoCols, CHUNK, WIDTH};
@@ -35,9 +35,9 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
-                    AxVmOpcode::from_usize(PERM_POS2 as usize)
+                    VmOpcode::from_usize(PERM_POS2 as usize)
                 } else {
-                    AxVmOpcode::from_usize(COMP_POS2 as usize)
+                    VmOpcode::from_usize(COMP_POS2 as usize)
                 },
                 a,
                 b,

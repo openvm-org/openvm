@@ -30,9 +30,9 @@ pub trait UsizeOpcode {
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, derive_new::new, Serialize, Deserialize)]
-pub struct AxVmOpcode(usize);
+pub struct VmOpcode(usize);
 
-impl AxVmOpcode {
+impl VmOpcode {
     /// Returns the corresponding `local_opcode_idx`
     pub fn local_opcode_idx(&self, offset: usize) -> usize {
         self.as_usize() - offset
@@ -43,23 +43,23 @@ impl AxVmOpcode {
         self.0
     }
 
-    /// Create a new [AxVmOpcode] from a usize
+    /// Create a new [VmOpcode] from a usize
     pub fn from_usize(value: usize) -> Self {
         Self(value)
     }
 
-    /// Returns the corresponding [AxVmOpcode] from `local_opcode` with default offset
-    pub fn with_default_offset<Opcode: UsizeOpcode>(local_opcode: Opcode) -> AxVmOpcode {
+    /// Returns the corresponding [VmOpcode] from `local_opcode` with default offset
+    pub fn with_default_offset<Opcode: UsizeOpcode>(local_opcode: Opcode) -> VmOpcode {
         Self(local_opcode.with_default_offset())
     }
 
-    /// Convert the AxVmOpcode into a field element
+    /// Convert the VmOpcode into a field element
     pub fn to_field<F: Field>(&self) -> F {
         F::from_canonical_usize(self.as_usize())
     }
 }
 
-impl std::fmt::Display for AxVmOpcode {
+impl std::fmt::Display for VmOpcode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }

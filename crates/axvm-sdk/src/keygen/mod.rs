@@ -16,7 +16,7 @@ use ax_stark_sdk::{
 };
 use axvm_circuit::{
     arch::{VirtualMachine, VmConfig},
-    system::program::trace::AxVmCommittedExe,
+    system::program::trace::VmCommittedExe,
 };
 use axvm_native_circuit::NativeConfig;
 use axvm_native_compiler::ir::DIGEST_SIZE;
@@ -103,7 +103,7 @@ where
                 compiler_options: config.compiler_options,
             }
             .build_program(&app_vm_pk.vm_pk.get_vk());
-            Arc::new(AxVmCommittedExe::commit(
+            Arc::new(VmCommittedExe::commit(
                 leaf_program.into(),
                 leaf_engine.config.pcs(),
             ))
@@ -184,7 +184,7 @@ impl AggStarkProvingKey {
             compiler_options: config.compiler_options,
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
-        let internal_committed_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
+        let internal_committed_exe = Arc::new(VmCommittedExe::<SC>::commit(
             internal_program.into(),
             internal_vm.engine.config.pcs(),
         ));
@@ -206,7 +206,7 @@ impl AggStarkProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let root_committed_exe = Arc::new(AxVmCommittedExe::<RootSC>::commit(
+            let root_committed_exe = Arc::new(VmCommittedExe::<RootSC>::commit(
                 root_program.into(),
                 root_engine.config.pcs(),
             ));
@@ -272,7 +272,7 @@ pub struct RootVerifierProvingKey {
     /// - `VmConfig.memory_config.boundary_air_height` is specified.
     pub vm_pk: Arc<VmProvingKey<RootSC, NativeConfig>>,
     /// Committed executable for the root VM.
-    pub root_committed_exe: Arc<AxVmCommittedExe<RootSC>>,
+    pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
     // The following is currently not used:

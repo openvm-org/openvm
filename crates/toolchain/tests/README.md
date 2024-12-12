@@ -14,7 +14,7 @@ Your IDE will likely not lint or use rust-analyzer on the crate while in the wor
 2. Add a rust test to the current crate in [`src`](./src).
 
 Follow the existing examples. There is a utility function `build_example_program` which will compile the guest program with target set to RISC-V and read the output RISC-V ELF file.
-For runtime tests, create a `VmExecutor` with the `VmConfig` you want, and then call `execute`. The `execute` function take in `Into<AxVmExe<F>>`, which the decoded RISC-V ELF `Elf` struct implements (this `Into` is where transpilation to axVM executable happens).
+For runtime tests, create a `VmExecutor` with the `VmConfig` you want, and then call `execute`. The `execute` function take in `Into<VmExe<F>>`, which the decoded RISC-V ELF `Elf` struct implements (this `Into` is where transpilation to axVM executable happens).
 
 See `basic_tests::test_read_vec_runtime` for an example of running execution with a single input `Vec<u8>` in the input stream. This is read via `read_vec()` in the guest program.
 

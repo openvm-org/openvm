@@ -3,7 +3,7 @@
 use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, SystemConfig},
+    arch::{instructions::exe::VmExe, SystemConfig},
     utils::new_air_test_with_min_segments,
 };
 use axvm_ecc_circuit::WeierstrassExtension;
@@ -54,7 +54,7 @@ mod bn254 {
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -84,7 +84,7 @@ mod bn254 {
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -136,7 +136,7 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -179,7 +179,7 @@ mod bn254 {
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -226,7 +226,7 @@ mod bn254 {
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -313,7 +313,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -343,7 +343,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -396,7 +396,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -439,7 +439,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -492,7 +492,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -544,7 +544,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program_with_features("final_exp_hint", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let axvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)

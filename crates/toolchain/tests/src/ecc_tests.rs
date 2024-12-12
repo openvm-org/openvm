@@ -10,7 +10,7 @@ use axvm_algebra_circuit::{
 use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use axvm_circuit::{
     arch::{
-        instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        instructions::exe::VmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
         VmConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
@@ -43,7 +43,7 @@ type F = BabyBear;
 #[test]
 fn test_moduli_setup_runtime() -> Result<()> {
     let elf = build_example_program("moduli_setup")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -62,7 +62,7 @@ fn test_moduli_setup_runtime() -> Result<()> {
 #[test]
 fn test_modular_runtime() -> Result<()> {
     let elf = build_example_program("little")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -78,7 +78,7 @@ fn test_modular_runtime() -> Result<()> {
 #[test]
 fn test_complex_runtime() -> Result<()> {
     let elf = build_example_program("complex")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -96,7 +96,7 @@ fn test_complex_runtime() -> Result<()> {
 #[test]
 fn test_complex_two_moduli_runtime() -> Result<()> {
     let elf = build_example_program("complex-two-modulos")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -116,7 +116,7 @@ fn test_complex_two_moduli_runtime() -> Result<()> {
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ec", ["k256"])?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -135,7 +135,7 @@ fn test_decompress() -> Result<()> {
     use axvm_ecc_guest::halo2curves::{group::Curve, secp256k1::Secp256k1Affine};
 
     let elf = build_example_program_with_features("decompress", ["k256"])?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -199,7 +199,7 @@ fn test_ecdsa_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ecdsa", ["k256"])?;
     let config = Rv32ModularKeccak256Config::new(vec![SECP256K1_CONFIG.clone()]);
 
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)

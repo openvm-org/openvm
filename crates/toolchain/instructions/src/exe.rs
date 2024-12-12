@@ -16,7 +16,7 @@ pub type FnBounds = BTreeMap<u32, FnBound>;
     serialize = "F: Serialize",
     deserialize = "F: std::cmp::Ord + Deserialize<'de>"
 ))]
-pub struct AxVmExe<F> {
+pub struct VmExe<F> {
     /// Program to execute.
     pub program: Program<F>,
     /// Start address of pc.
@@ -27,7 +27,7 @@ pub struct AxVmExe<F> {
     pub fn_bounds: FnBounds,
 }
 
-impl<F> AxVmExe<F> {
+impl<F> VmExe<F> {
     pub fn new(program: Program<F>) -> Self {
         Self {
             program,
@@ -46,7 +46,7 @@ impl<F> AxVmExe<F> {
     }
 }
 
-impl<F: Field> From<Program<F>> for AxVmExe<F> {
+impl<F: Field> From<Program<F>> for VmExe<F> {
     fn from(program: Program<F>) -> Self {
         Self::new(program)
     }

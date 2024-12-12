@@ -12,7 +12,7 @@ use axvm_circuit::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_ecc_circuit::CurveConfig;
-use axvm_instructions::{AxVmOpcode, PhantomDiscriminant, UsizeOpcode};
+use axvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use axvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE},
     bn254::{BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
@@ -140,7 +140,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleStepRv32_32(miller_double),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
                         )],
                     )?;
@@ -159,7 +159,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         PairingExtensionExecutor::MillerDoubleAndAddStepRv32_32(
                             miller_double_and_add,
                         ),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset
                                 + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
                         )],
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EvaluateLineRv32_32(eval_line),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
                         )],
                     )?;
@@ -195,7 +195,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMul013By013(mul013),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MUL_013_BY_013 as usize,
                         )],
                     )?;
@@ -213,7 +213,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMulBy01234(mul01234),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MUL_BY_01234 as usize,
                         )],
                     )?;
@@ -231,7 +231,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::Fp12MulRv32_32(fp12_mul),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             fp12_class_offset + Fp12Opcode::MUL as usize,
                         )],
                     )?;
@@ -255,7 +255,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::MillerDoubleStepRv32_48(miller_double),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MILLER_DOUBLE_STEP as usize,
                         )],
                     )?;
@@ -274,7 +274,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                         PairingExtensionExecutor::MillerDoubleAndAddStepRv32_48(
                             miller_double_and_add,
                         ),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset
                                 + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
                         )],
@@ -292,7 +292,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EvaluateLineRv32_48(eval_line),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::EVALUATE_LINE as usize,
                         )],
                     )?;
@@ -310,7 +310,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMul023By023(mul023),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MUL_023_BY_023 as usize,
                         )],
                     )?;
@@ -328,7 +328,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::EcLineMulBy02345(mul02345),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             pairing_class_offset + PairingOpcode::MUL_BY_02345 as usize,
                         )],
                     )?;
@@ -346,7 +346,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                     );
                     inventory.add_executor(
                         PairingExtensionExecutor::Fp12MulRv32_48(fp12_mul),
-                        [AxVmOpcode::from_usize(
+                        [VmOpcode::from_usize(
                             fp12_class_offset + Fp12Opcode::MUL as usize,
                         )],
                     )?;

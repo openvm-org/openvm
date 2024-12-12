@@ -16,13 +16,13 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_instructions::{
-    instruction::Instruction, program::Program, AxVmOpcode, SystemOpcode::TERMINATE,
+    instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
 };
 
 use super::VmConnectorPvs;
 use crate::{
     arch::{SingleSegmentVmExecutor, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID},
-    system::program::trace::AxVmCommittedExe,
+    system::program::trace::VmCommittedExe,
 };
 
 type F = BabyBear;
@@ -75,7 +75,7 @@ fn test_impl(
 
     {
         let instructions = vec![Instruction::from_isize(
-            AxVmOpcode::with_default_offset(TERMINATE),
+            VmOpcode::with_default_offset(TERMINATE),
             0,
             0,
             exit_code as isize,
@@ -84,7 +84,7 @@ fn test_impl(
         )];
 
         let program = Program::from_instructions(&instructions);
-        let committed_exe = Arc::new(AxVmCommittedExe::commit(
+        let committed_exe = Arc::new(VmCommittedExe::commit(
             program.into(),
             vm.engine.config.pcs(),
         ));

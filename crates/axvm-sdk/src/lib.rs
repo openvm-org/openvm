@@ -17,10 +17,8 @@ use axvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, ExecutionError, VmConfig, VmExecutor},
-    system::{
-        memory::tree::public_values::extract_public_values, program::trace::AxVmCommittedExe,
-    },
+    arch::{instructions::exe::VmExe, ExecutionError, VmConfig, VmExecutor},
+    system::{memory::tree::public_values::extract_public_values, program::trace::VmCommittedExe},
 };
 use axvm_native_recursion::{
     halo2::{
@@ -64,7 +62,7 @@ pub(crate) type SC = BabyBearPoseidon2Config;
 pub(crate) type C = InnerConfig;
 pub(crate) type F = BabyBear;
 pub(crate) type RootSC = BabyBearPoseidon2RootConfig;
-pub type NonRootCommittedExe = AxVmCommittedExe<SC>;
+pub type NonRootCommittedExe = VmCommittedExe<SC>;
 
 pub struct Sdk;
 
@@ -97,13 +95,13 @@ impl Sdk {
         &self,
         elf: Elf,
         transpiler: Transpiler<F>,
-    ) -> Result<AxVmExe<F>, TranspilerError> {
-        AxVmExe::from_elf(elf, transpiler)
+    ) -> Result<VmExe<F>, TranspilerError> {
+        VmExe::from_elf(elf, transpiler)
     }
 
     pub fn execute<VC: VmConfig<F>>(
         &self,
-        exe: AxVmExe<F>,
+        exe: VmExe<F>,
         vm_config: VC,
         inputs: StdIn,
     ) -> Result<Vec<F>, ExecutionError>
@@ -124,7 +122,7 @@ impl Sdk {
     pub fn commit_app_exe(
         &self,
         app_fri_params: FriParameters,
-        exe: AxVmExe<F>,
+        exe: VmExe<F>,
     ) -> Result<Arc<NonRootCommittedExe>> {
         let committed_exe = commit_app_exe(app_fri_params, exe);
         Ok(committed_exe)

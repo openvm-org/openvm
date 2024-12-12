@@ -18,7 +18,7 @@ use axvm_algebra_transpiler::ModularTranspilerExtension;
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
 use axvm_circuit::{
     arch::{
-        instructions::exe::AxVmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
+        instructions::exe::VmExe, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex,
         VmConfig, VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("ecrecover")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
             .with_extension(Rv32ITranspilerExtension)

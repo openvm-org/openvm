@@ -13,7 +13,7 @@ use axvm_circuit::{
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use axvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
-use axvm_instructions::{AxVmOpcode, PhantomDiscriminant, UsizeOpcode};
+use axvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use derive_more::derive::From;
 use num_bigint_dig::BigUint;
@@ -125,7 +125,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + class_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
                     Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
@@ -143,7 +143,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
                     ec_double_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + class_offset)),
                 )?;
             } else if bytes <= 48 {
                 let add_ne_chip = EcAddNeChip::new(
@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + class_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
                     Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
@@ -179,7 +179,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
                     ec_double_opcodes
                         .clone()
-                        .map(|x| AxVmOpcode::from_usize(x + class_offset)),
+                        .map(|x| VmOpcode::from_usize(x + class_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");

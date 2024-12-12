@@ -3,8 +3,8 @@ use axvm_circuit::arch::instructions::program::Program;
 use axvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
-    AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode,
-    UsizeOpcode,
+    PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
+    VmOpcode,
 };
 use axvm_rv32im_transpiler::BranchEqualOpcode;
 use serde::{Deserialize, Serialize};
@@ -38,9 +38,9 @@ impl Default for CompilerOptions {
 }
 
 impl CompilerOptions {
-    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> AxVmOpcode {
+    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> VmOpcode {
         let offset = Opcode::default_offset();
-        AxVmOpcode::from_usize(offset + opcode.as_usize())
+        VmOpcode::from_usize(offset + opcode.as_usize())
     }
     pub fn with_cycle_tracker(mut self) -> Self {
         self.enable_cycle_tracker = true;
@@ -48,7 +48,7 @@ impl CompilerOptions {
     }
 }
 
-fn inst<F: PrimeField64>(opcode: AxVmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
+fn inst<F: PrimeField64>(opcode: VmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
     Instruction {
         opcode,
         a,
@@ -63,7 +63,7 @@ fn inst<F: PrimeField64>(opcode: AxVmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> 
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: AxVmOpcode,
+    opcode: VmOpcode,
     a: F,
     b: F,
     c: F,
@@ -85,7 +85,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: AxVmOpcode,
+    opcode: VmOpcode,
     a: F,
     b: F,
     c: F,

@@ -17,8 +17,8 @@ use ax_stark_backend::{
 };
 use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use axvm_instructions::{
-    program::Program, AxVmOpcode, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode,
-    SystemOpcode, UsizeOpcode,
+    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode, VmOpcode,
 };
 use derive_more::derive::From;
 use getset::Getters;
@@ -188,7 +188,7 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 #[derive(Clone, Debug)]
 pub struct VmInventory<E, P> {
     /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
-    instruction_lookup: FxHashMap<AxVmOpcode, ExecutorId>,
+    instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
     executors: Vec<E>,
     pub(super) periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
@@ -218,7 +218,7 @@ pub enum ChipId {
 #[derive(thiserror::Error, Debug)]
 pub enum VmInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
-    ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+    ExecutorExists { opcode: VmOpcode, id: ExecutorId },
     #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
     PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
     #[error("Chip {name} not found")]
@@ -282,7 +282,7 @@ impl<E, P> VmInventory<E, P> {
     pub fn add_executor(
         &mut self,
         executor: impl Into<E>,
-        opcodes: impl IntoIterator<Item = AxVmOpcode>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
     ) -> Result<(), VmInventoryError> {
         let opcodes: Vec<_> = opcodes.into_iter().collect();
         for opcode in &opcodes {
@@ -308,12 +308,12 @@ impl<E, P> VmInventory<E, P> {
         self.insertion_order.push(ChipId::Periphery(id));
     }
 
-    pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&E> {
+    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&E> {
         let id = self.instruction_lookup.get(&opcode)?;
         self.executors.get(*id)
     }
 
-    pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut E> {
+    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
         let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
     }
@@ -539,7 +539,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory
                 .add_executor(
                     chip,
-                    [AxVmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
+                    [VmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
                 )
                 .unwrap();
         }
@@ -567,7 +567,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM);
+        let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
             PROGRAM_BUS,

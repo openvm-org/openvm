@@ -11,7 +11,7 @@ use std::array;
 
 use ax_poseidon2_air::poseidon2::{Poseidon2Air, Poseidon2Cols, Poseidon2Config};
 use ax_stark_backend::p3_field::PrimeField32;
-use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, AxVmOpcode};
+use axvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode};
 use columns::*;
 
 use self::air::Poseidon2VmAir;
@@ -176,7 +176,7 @@ impl<F: PrimeField32> Poseidon2Chip<F> {
                         d: instruction.d,
                         e: instruction.e,
                         is_compress_opcode: F::from_bool(
-                            instruction.opcode == AxVmOpcode::from_usize(COMP_POS2 as usize),
+                            instruction.opcode == VmOpcode::from_usize(COMP_POS2 as usize),
                         ),
                     },
                     aux: Poseidon2VmAuxCols {
@@ -314,7 +314,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Poseidon2Chip<F> {
 
         self.records.push(Poseidon2Record::FromInstruction {
             instruction: Instruction {
-                opcode: AxVmOpcode::from_usize(local_opcode as usize),
+                opcode: VmOpcode::from_usize(local_opcode as usize),
                 ..instruction
             },
             from_state,

@@ -8,18 +8,18 @@ use eyre::Result;
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
 pub enum Cargo {
-    Axiom(AxVmCli),
+    Axiom(VmCli),
 }
 
 #[derive(clap::Args)]
 #[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = AXVM_VERSION_MESSAGE)]
-pub struct AxVmCli {
+pub struct VmCli {
     #[clap(subcommand)]
-    pub command: AxVmCliCommands,
+    pub command: VmCliCommands,
 }
 
 #[derive(Subcommand)]
-pub enum AxVmCliCommands {
+pub enum VmCliCommands {
     Bench(BenchCmd),
     Build(BuildCmd),
     Keygen(KeygenCmd),
@@ -33,12 +33,12 @@ fn main() -> Result<()> {
     let Cargo::Axiom(args) = Cargo::parse();
     let command = args.command;
     match command {
-        AxVmCliCommands::Bench(cmd) => cmd.run(),
-        AxVmCliCommands::Build(cmd) => cmd.run(),
-        AxVmCliCommands::Run(cmd) => cmd.run(),
-        AxVmCliCommands::Keygen(cmd) => cmd.run(),
-        AxVmCliCommands::Prove(cmd) => cmd.run(),
-        AxVmCliCommands::Setup(cmd) => cmd.run(),
-        AxVmCliCommands::Verify(cmd) => cmd.run(),
+        VmCliCommands::Bench(cmd) => cmd.run(),
+        VmCliCommands::Build(cmd) => cmd.run(),
+        VmCliCommands::Run(cmd) => cmd.run(),
+        VmCliCommands::Keygen(cmd) => cmd.run(),
+        VmCliCommands::Prove(cmd) => cmd.run(),
+        VmCliCommands::Setup(cmd) => cmd.run(),
+        VmCliCommands::Verify(cmd) => cmd.run(),
     }
 }

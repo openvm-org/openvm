@@ -13,12 +13,12 @@ use ax_stark_sdk::{
 use axvm_circuit::{
     arch::{
         instructions::{
-            exe::AxVmExe, instruction::Instruction, program::Program, AxVmOpcode,
-            SystemOpcode::TERMINATE,
+            exe::VmExe, instruction::Instruction, program::Program, SystemOpcode::TERMINATE,
+            VmOpcode,
         },
         SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights, VmConfig, VmExecutor,
     },
-    system::program::trace::AxVmCommittedExe,
+    system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
 };
 use axvm_native_circuit::NativeConfig;
@@ -46,7 +46,7 @@ use crate::{
 /// All trace heights are rounded to the next power of two (or 0 -> 0).
 pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
-    root_exe: AxVmExe<F>,
+    root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
@@ -136,7 +136,7 @@ fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
         "Dummy proof should only have 1 segment"
     );
     let e = BabyBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
-    let leaf_exe = Arc::new(AxVmCommittedExe::<SC>::commit(
+    let leaf_exe = Arc::new(VmCommittedExe::<SC>::commit(
         leaf_program.into(),
         e.config.pcs(),
     ));
@@ -199,15 +199,12 @@ where
 fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe> {
     let program = dummy_app_program();
     let e = BabyBearPoseidon2Engine::new(fri_params);
-    Arc::new(AxVmCommittedExe::<SC>::commit(
-        program.into(),
-        e.config.pcs(),
-    ))
+    Arc::new(VmCommittedExe::<SC>::commit(program.into(), e.config.pcs()))
 }
 
 fn dummy_app_program() -> Program<F> {
     let mut ret = Program::from_instructions(&[Instruction::from_isize(
-        AxVmOpcode::with_default_offset(TERMINATE),
+        VmOpcode::with_default_offset(TERMINATE),
         0,
         0,
         0,

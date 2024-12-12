@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
     engine::StarkFriEngine,
 };
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
+use axvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_sdk::fs::read_exe_from_file;
 use clap::Parser;
@@ -76,7 +76,7 @@ impl BenchCmd {
 pub fn bench_from_exe<SC, E, VC>(
     engine: E,
     config: VC,
-    exe: impl Into<AxVmExe<Val<SC>>>,
+    exe: impl Into<VmExe<Val<SC>>>,
     input_stream: Vec<Vec<Val<SC>>>,
 ) -> Result<u128>
 where

@@ -2,7 +2,7 @@ use std::{fs::read_dir, path::PathBuf};
 
 use ax_stark_sdk::p3_baby_bear::BabyBear;
 use axvm_circuit::{
-    arch::{instructions::exe::AxVmExe, VmExecutor},
+    arch::{instructions::exe::VmExe, VmExecutor},
     utils::new_air_test_with_min_segments,
 };
 use axvm_rv32im_circuit::Rv32ImConfig;
@@ -32,7 +32,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             println!("Running: {}", file_name);
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
-                let exe = AxVmExe::from_elf(
+                let exe = VmExe::from_elf(
                     elf,
                     Transpiler::<F>::default()
                         .with_extension(Rv32ITranspilerExtension)
@@ -71,7 +71,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             }
             println!("Running: {}", file_name);
             let elf = decode_elf(&path)?;
-            let exe = AxVmExe::from_elf(
+            let exe = VmExe::from_elf(
                 elf,
                 Transpiler::<F>::default()
                     .with_extension(Rv32ITranspilerExtension)

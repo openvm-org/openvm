@@ -15,9 +15,7 @@ use axvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, SingleSegmentVmExecutor,
         SystemConfig, VmConfig, VmExecutor,
     },
-    system::{
-        memory::tree::public_values::UserPublicValuesProof, program::trace::AxVmCommittedExe,
-    },
+    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
 use axvm_native_circuit::{Native, NativeConfig};
 use axvm_native_compiler::{conversion::CompilerOptions, prelude::*};
@@ -45,7 +43,7 @@ const ROOT_LOG_BLOWUP: usize = 4;
 
 fn run_leaf_verifier<VC: VmConfig<F>>(
     leaf_vm: &SingleSegmentVmExecutor<F, VC>,
-    leaf_committed_exe: Arc<AxVmCommittedExe<SC>>,
+    leaf_committed_exe: Arc<VmCommittedExe<SC>>,
     verifier_input: LeafVmVerifierInput<SC>,
 ) -> Result<Vec<F>, ExecutionError>
 where
@@ -64,7 +62,7 @@ where
     Ok(runtime_pvs)
 }
 
-fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<AxVmCommittedExe<SC>> {
+fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> {
     let program = {
         let n = 200;
         let mut builder = Builder::<C>::default();

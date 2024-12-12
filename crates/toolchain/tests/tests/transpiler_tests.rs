@@ -21,7 +21,7 @@ use axvm_circuit::{
     utils::new_air_test_with_min_segments,
 };
 use axvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
-use axvm_instructions::exe::AxVmExe;
+use axvm_instructions::exe::VmExe;
 use axvm_platform::memory::MEM_SIZE;
 use axvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
@@ -81,7 +81,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 #[test_case("tests/data/rv32im-fib-from-as")]
 fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -133,7 +133,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
         vec![SECP256K1_MODULUS.clone()],
     );
     let elf = get_elf(elf_path)?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -151,7 +151,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 fn test_terminate_prove() -> Result<()> {
     let config = Rv32ImConfig::default();
     let elf = get_elf("tests/data/rv32im-terminate-from-as")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)

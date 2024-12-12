@@ -10,7 +10,7 @@ use ax_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, BenchmarkCli};
-use axvm_circuit::arch::instructions::exe::AxVmExe;
+use axvm_circuit::arch::instructions::exe::VmExe;
 use axvm_keccak256_circuit::Keccak256Rv32Config;
 use axvm_native_compiler::conversion::CompilerOptions;
 use axvm_native_recursion::testing_utils::inner::build_verification_program;
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     // let agg_log_blowup = cli_args.agg_log_blowup.unwrap_or(2);
 
     let elf = build_bench_program("revm_transfer")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
             .with_extension(Rv32ITranspilerExtension)

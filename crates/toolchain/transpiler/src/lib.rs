@@ -2,7 +2,7 @@
 
 use ax_stark_backend::p3_field::PrimeField32;
 use axvm_instructions::{
-    exe::AxVmExe,
+    exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
 };
 pub use axvm_platform;
@@ -25,7 +25,7 @@ pub trait FromElf {
         Self: Sized;
 }
 
-impl<F: PrimeField32> FromElf for AxVmExe<F> {
+impl<F: PrimeField32> FromElf for VmExe<F> {
     type ElfContext = Transpiler<F>;
     fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Result<Self, TranspilerError> {
         let instructions = transpiler.transpile(&elf.instructions)?;
@@ -37,7 +37,7 @@ impl<F: PrimeField32> FromElf for AxVmExe<F> {
         );
         let init_memory = elf_memory_image_to_axvm_memory_image(elf.memory_image);
 
-        Ok(AxVmExe {
+        Ok(VmExe {
             program,
             pc_start: elf.pc_start,
             init_memory,

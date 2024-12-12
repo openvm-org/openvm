@@ -13,7 +13,7 @@ use ax_stark_sdk::{
 };
 use axvm_benchmarks::utils::{bench_from_exe, build_bench_program, time, BenchmarkCli};
 use axvm_circuit::arch::{
-    instructions::{exe::AxVmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
+    instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES},
     VirtualMachine,
 };
 use axvm_native_circuit::NativeConfig;
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     };
 
     let elf = build_bench_program("fibonacci")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
             .with_extension(Rv32ITranspilerExtension)

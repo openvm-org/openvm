@@ -2,7 +2,7 @@ use ax_stark_sdk::{ax_stark_backend::p3_field::AbstractField, p3_baby_bear::Baby
 use axvm_bigint_circuit::Int256Rv32Config;
 use axvm_bigint_transpiler::Int256TranspilerExtension;
 use axvm_circuit::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::AxVmExe, VmExecutor},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, VmExecutor},
     system::memory::tree::public_values::UserPublicValuesProof,
     utils::new_air_test_with_min_segments,
 };
@@ -23,7 +23,7 @@ type F = BabyBear;
 #[test_case("fibonacci", 1)]
 fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -38,7 +38,7 @@ fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test_case("collatz", 1)]
 fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program(example_name)?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -54,7 +54,7 @@ fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
 #[test_case("collatz", 1)]
 fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> {
     let elf = build_example_program_with_features(example_name, ["std"])?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -69,7 +69,7 @@ fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> 
 #[test]
 fn test_read_vec_runtime() -> Result<()> {
     let elf = build_example_program("hint")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -85,7 +85,7 @@ fn test_read_vec_runtime() -> Result<()> {
 #[test]
 fn test_read_runtime() -> Result<()> {
     let elf = build_example_program("read")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -117,7 +117,7 @@ fn test_read_runtime() -> Result<()> {
 #[test]
 fn test_reveal_runtime() -> Result<()> {
     let elf = build_example_program("reveal")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -148,7 +148,7 @@ fn test_reveal_runtime() -> Result<()> {
 #[test]
 fn test_keccak256_runtime() -> Result<()> {
     let elf = build_example_program("keccak")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Keccak256TranspilerExtension)
@@ -164,7 +164,7 @@ fn test_keccak256_runtime() -> Result<()> {
 #[test]
 fn test_print_runtime() -> Result<()> {
     let elf = build_example_program("print")?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -180,7 +180,7 @@ fn test_print_runtime() -> Result<()> {
 #[test]
 fn test_matrix_power_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -197,7 +197,7 @@ fn test_matrix_power_runtime() -> Result<()> {
 #[test]
 fn test_matrix_power_signed_runtime() -> Result<()> {
     let elf = build_example_program("matrix-power-signed")?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -214,7 +214,7 @@ fn test_matrix_power_signed_runtime() -> Result<()> {
 #[test]
 fn test_ruint_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ruint", ["ruint"])?;
-    let axvm_exe = AxVmExe::from_elf(
+    let axvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
@@ -231,7 +231,7 @@ fn test_ruint_runtime() -> Result<()> {
 #[test]
 fn test_tiny_mem_test_runtime() -> Result<()> {
     let elf = build_example_program_with_features("tiny-mem-test", ["heap-embedded-alloc"])?;
-    let exe = AxVmExe::from_elf(
+    let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)

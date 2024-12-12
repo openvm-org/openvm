@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VmConfig};
+use axvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
 use axvm_native_recursion::halo2::{wrapper::EvmVerifier, EvmProof};
 use eyre::Result;
 use serde::{de::DeserializeOwned, Serialize};
@@ -15,13 +15,13 @@ use crate::{
     F, SC,
 };
 
-pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<AxVmExe<F>> {
+pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
     let data = std::fs::read(path)?;
     let exe = bincode::serde::decode_from_slice(&data, bincode::config::standard())?.0;
     Ok(exe)
 }
 
-pub fn write_exe_to_file<P: AsRef<Path>>(exe: AxVmExe<F>, path: P) -> Result<()> {
+pub fn write_exe_to_file<P: AsRef<Path>>(exe: VmExe<F>, path: P) -> Result<()> {
     let data = bincode::serde::encode_to_vec(&exe, bincode::config::standard())?;
     File::create(path)?.write_all(&data)?;
     Ok(())

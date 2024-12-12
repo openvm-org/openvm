@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
 use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_instructions::{instruction::Instruction, AxVmOpcode, SystemOpcode};
+use axvm_instructions::{instruction::Instruction, SystemOpcode, VmOpcode};
 use parking_lot::Mutex;
 
 use super::PhantomChip;
@@ -21,7 +21,7 @@ fn test_nops_and_terminate() {
     chip.set_streams(Arc::new(Mutex::new(Default::default())));
 
     let nop = Instruction::from_isize(
-        AxVmOpcode::with_default_offset(SystemOpcode::PHANTOM),
+        VmOpcode::with_default_offset(SystemOpcode::PHANTOM),
         0,
         0,
         0,
