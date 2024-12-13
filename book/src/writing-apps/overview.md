@@ -1,8 +1,8 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+**Table of Contents**
 
-- [Overview of basic usage](#overview-of-basic-usage)
+- [Overview of Basic Usage](#overview-of-basic-usage)
   - [How to write a guest program](#how-to-write-a-guest-program)
   - [How to test a program](#how-to-test-a-program)
   - [How to cross-compile a guest program](#how-to-cross-compile-a-guest-program)
@@ -12,7 +12,7 @@
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-# Overview of basic usage
+# Overview of Basic Usage
 
 ## How to write a guest program
 
