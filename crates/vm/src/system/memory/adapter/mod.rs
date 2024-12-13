@@ -80,6 +80,9 @@ impl<F> AccessAdapterInventory<F> {
             .map(|chip| chip.current_trace_height())
             .collect()
     }
+    pub fn get_widths(&self) -> Vec<usize> {
+        self.chips.iter().map(|chip| chip.trace_width()).collect()
+    }
     pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
     where
         F: PrimeField32,

@@ -13,7 +13,6 @@ use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
-    is_less_than::IsLtSubAir,
     is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
@@ -36,12 +35,9 @@ use self::interface::MemoryInterface;
 use super::{merkle::DirectCompressionBus, volatile::VolatileBoundaryChip};
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
-    system::memory::{
-        adapter::AccessAdapterAir,
-        offline_checker::{
-            MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
-            MemoryWriteAuxCols, AUX_LEN,
-        },
+    system::memory::offline_checker::{
+        MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
+        MemoryWriteAuxCols, AUX_LEN,
     },
 };
 
@@ -450,14 +446,6 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
-    fn access_adapter_air<const N: usize>(&self) -> AccessAdapterAir<N> {
-        let lt_air = IsLtSubAir::new(self.range_checker.bus(), self.mem_config.clk_max_bits);
-        AccessAdapterAir::<N> {
-            memory_bus: self.memory_bus,
-            lt_air,
-        }
-    }
-
     /// Returns the final memory state if persistent.
     pub fn finalize(
         &mut self,
@@ -681,18 +669,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 widths.push(BaseAir::<F>::width(&merkle_chip.air));
             }
         };
-        self.add_access_adapter_width::<2>(&mut widths);
-        self.add_access_adapter_width::<4>(&mut widths);
-        self.add_access_adapter_width::<8>(&mut widths);
-        self.add_access_adapter_width::<16>(&mut widths);
-        self.add_access_adapter_width::<32>(&mut widths);
-        self.add_access_adapter_width::<64>(&mut widths);
+        widths.extend(self.access_adapters.get_widths());
         widths
-    }
-    fn add_access_adapter_width<const N: usize>(&self, widths: &mut Vec<usize>) {
-        if self.mem_config.max_access_adapter_n >= N {
-            widths.push(BaseAir::<F>::width(&self.access_adapter_air::<N>()));
-        }
     }
 
     pub fn current_trace_cells(&self) -> Vec<usize> {
