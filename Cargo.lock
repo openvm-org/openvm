@@ -3426,6 +3426,8 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-sdk-example-test",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
