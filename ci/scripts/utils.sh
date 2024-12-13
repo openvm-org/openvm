@@ -36,7 +36,7 @@ add_metadata() {
         echo "" >> $result_path
         for file in .bench_metrics/flamegraphs/*.svg; do
         filename=$(basename "$file")
-            flamegraph_url=https://axiom-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
+            flamegraph_url=https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/flamegraphs/${current_sha}/${filename}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
         done
         echo "" >> $result_path

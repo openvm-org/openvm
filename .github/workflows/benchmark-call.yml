@@ -104,13 +104,16 @@ on:
         description: Whether to run the e2e benchmark
 
 env:
-  S3_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results
-  S3_METRICS_PATH: s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/metrics
-  PUBLIC_S3_PATH: s3://axiom-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
+  S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
+  PUBLIC_S3_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   CMD_ARGS: ""
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+permissions:
+  contents: write
 
 jobs:
   bench-new:

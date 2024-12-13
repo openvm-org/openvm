@@ -25,6 +25,10 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   create-matrix:
     runs-on:
@@ -167,14 +171,14 @@ jobs:
               continue
             fi
             echo "Downloading results for benchmark: $md_file"
-            s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${md_file}" "${md_file}"
+            s5cmd cp "s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results/${md_file}" "${md_file}"
           done <<< "$md_files"
 
           E2E_FILE_LIST=""
           if [[ -n "$e2e_md_files" ]]; then
             while read e2e_md_file; do
               echo "Downloading results for benchmark: $e2e_md_file"
-              s5cmd cp "s3://axiom-workflow-data-sandbox-us-east-1/benchmark/github/results/${e2e_md_file}" "${e2e_md_file}"
+              s5cmd cp "s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results/${e2e_md_file}" "${e2e_md_file}"
             done <<< "$e2e_md_files"
             E2E_FILE_LIST="${e2e_md_file_list}"
           fi
