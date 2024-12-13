@@ -2,7 +2,7 @@ use core::ops::{Add, AddAssign, Neg};
 
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
-use openvm_ecc_guest::Group;
+use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 
 mod fp12;
 mod fp2;
@@ -126,6 +126,27 @@ impl Field for Scalar {
     fn square_assign(&mut self) {
         IntMod::square_assign(self);
     }
+}
+
+impl CyclicGroup for G1Affine {
+    // https://eips.ethereum.org/EIPS/eip-197
+    const GENERATOR: Self = G1Affine {
+        x: Bn254Fp::from_const_u8(1),
+        y: Bn254Fp::from_const_u8(2),
+    };
+    const NEG_GENERATOR: Self = G1Affine {
+        x: Bn254Fp::from_const_u8(1),
+        y: Bn254Fp::from_const_bytes(hex!(
+            "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
+        )),
+    };
+}
+
+impl IntrinsicCurve for Bn254 {
+    type Scalar = Scalar;
+    type Point = G1Affine;
+
+    // TODO: msm optimization
 }
 
 impl PairingIntrinsics for Bn254 {

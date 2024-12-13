@@ -40,6 +40,17 @@ pub trait WeierstrassPoint: Group {
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
+        if x == Self::Coordinate::ZERO && y == Self::Coordinate::ZERO {
+            Some(Self::IDENTITY)
+        } else {
+            Self::from_xy_nonidentity(x, y)
+        }
+    }
+
+    fn from_xy_nonidentity(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
+    where
+        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
+    {
         let lhs = &y * &y;
         let rhs = &x * &x * &x + &Self::CURVE_B;
         if lhs != rhs {

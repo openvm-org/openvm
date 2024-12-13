@@ -2,7 +2,7 @@ use core::ops::{Add, AddAssign, Neg};
 
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
-use openvm_ecc_guest::Group;
+use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
 
 mod fp12;
 mod fp2;
@@ -91,6 +91,33 @@ impl Field for Scalar {
     fn square_assign(&mut self) {
         IntMod::square_assign(self);
     }
+}
+
+impl CyclicGroup for G1Affine {
+    // https://neuromancer.sk/std/bls/BLS12-381
+    const GENERATOR: Self = G1Affine {
+        x: Bls12_381Fp::from_const_bytes(hex!(
+            "BBC622DB0AF03AFBEF1A7AF93FE8556C58AC1B173F3A4EA105B974974F8C68C30FACA94F8C63952694D79731A7D3F117"
+        )),
+        y: Bls12_381Fp::from_const_bytes(hex!(
+            "E1E7C5462923AA0CE48A88A244C73CD0EDB3042CCB18DB00F60AD0D595E0F5FCE48A1D74ED309EA0F1A0AAE381F4B308"
+        )),
+    };
+    const NEG_GENERATOR: Self = G1Affine {
+        x: Bls12_381Fp::from_const_bytes(hex!(
+            "BBC622DB0AF03AFBEF1A7AF93FE8556C58AC1B173F3A4EA105B974974F8C68C30FACA94F8C63952694D79731A7D3F117"
+        )),
+        y: Bls12_381Fp::from_const_bytes(hex!(
+            "CAC239B9D6DC54AD1B75CB0EBA386F4E3642ACCAD5B95566C907B51DEF6A8167F2212ECFC8767DAAA845D555681D4D11"
+        )),
+    };
+}
+
+impl IntrinsicCurve for Bls12_381 {
+    type Scalar = Scalar;
+    type Point = G1Affine;
+
+    // TODO: msm optimization
 }
 
 impl PairingIntrinsics for Bls12_381 {
