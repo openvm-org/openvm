@@ -1,6 +1,7 @@
 [book]
-authors = ["Yi Sun"]
+authors = ["OpenVM Contributors"]
 language = "en"
 multilingual = false
 src = "src"
 title = "OpenVM Book"
+site-url = "https://book.openvm.dev/"
