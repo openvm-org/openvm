@@ -1,5 +1,6 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
 **Table of Contents**
 
 - [Summary](#summary)
@@ -8,6 +9,27 @@
 
 # Summary
 
-- [Chapter 1](./chapter_1.md)
-- [Chapter 2](./chapter_2.md)
-- [Chapter 3](./chapter_3.md)
+[Introduction](./introduction.md)
+
+# Getting Started
+
+- [Install](./getting-started/install.md)
+
+- [Quickstart](./getting-started/quickstart.md)
+
+# Writing Apps
+
+- [Overview](./writing-apps/overview.md)
+- [Writing a Program](./writing-apps/write-program.md)
+- [Cross-Compilation](./writing-apps/compile.md)
+- [Testing](./writing-apps/testing.md)
+- [Generating Proofs](./writing-apps/prove.md)
+- [Onchain Verification](./writing-apps/verify.md)
+
+# Using Extensions
+
+- [Customizable Extensions](./using-extensions/customizable-extensions.md)
+
+# Advanced Usage
+
+- [Overview](./advanced-usage/overview.md)
