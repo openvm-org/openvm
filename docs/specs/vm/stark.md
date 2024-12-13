@@ -5,7 +5,7 @@ randomness between AIR matrices to enable permutation arguments such as log-up.
 
 In the following, we will refer to a circuit as a collection of AIR matrices (also referred to as chips) of possibly
 different heights, which may communicate with one another over buses using a log-up permutation argument. We refer to
-messages sent to such a bus as [interactions](../../../stark-backend/src/interaction/README.md).
+messages sent to such a bus as [interactions](https://github.com/openvm-org/stark-backend/tree/main/crates/stark-backend/src/interaction).
 
 Our framework is modular and allows the creation of custom VM circuits to support different instruction sets that follow
 our overall ISA framework.
