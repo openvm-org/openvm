@@ -168,7 +168,7 @@ fn test_vm_override_executor_height() {
         SystemTraceHeights {
             memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
                 boundary: 1,
-                access_adapters: vec![(2, 0), (4, 0), (8, 0)].into_iter().collect(),
+                access_adapters: vec![0, 0, 0],
             }),
         }
     );
@@ -195,7 +195,7 @@ fn test_vm_override_executor_height() {
     let system_overridden_heights = SystemTraceHeights {
         memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
             boundary: 1,
-            access_adapters: vec![(2, 8), (4, 4), (8, 2)].into_iter().collect(),
+            access_adapters: vec![8, 4, 2],
         }),
     };
     let inventory_overridden_heights = VmInventoryTraceHeights {

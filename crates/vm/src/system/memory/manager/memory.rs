@@ -3,25 +3,10 @@ use std::{array, cmp::max, fmt::Debug};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::system::memory::{Equipartition, TimestampedEquipartition, TimestampedValues};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccessAdapterRecordKind {
-    Split,
-    Merge {
-        left_timestamp: u32,
-        right_timestamp: u32,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccessAdapterRecord<T> {
-    pub timestamp: u32,
-    pub address_space: T,
-    pub start_index: T,
-    pub data: Vec<T>,
-    pub kind: AccessAdapterRecordKind,
-}
+use crate::system::memory::{
+    adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
+    Equipartition, TimestampedEquipartition, TimestampedValues,
+};
 
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
@@ -433,7 +418,7 @@ mod tests {
 
     use super::{BlockData, Memory};
     use crate::system::memory::{
-        manager::memory::{AccessAdapterRecord, AccessAdapterRecordKind},
+        adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
         Equipartition, MemoryReadRecord, MemoryWriteRecord, TimestampedValues,
     };
 

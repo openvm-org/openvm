@@ -9,7 +9,7 @@ use std::{
 };
 
 use getset::Getters;
-use itertools::{izip, zip_eq, Itertools};
+use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
@@ -30,7 +30,6 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
     rap::AnyRap,
 };
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
@@ -39,7 +38,6 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         adapter::AccessAdapterAir,
-        manager::memory::AccessAdapterRecord,
         offline_checker::{
             MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryReadOrImmediateAuxCols,
             MemoryWriteAuxCols, AUX_LEN,
@@ -50,9 +48,9 @@ use crate::{
 pub mod dimensions;
 mod interface;
 pub(super) mod memory;
-mod trace;
 
 use crate::system::memory::{
+    adapter::AccessAdapterInventory,
     dimensions::MemoryDimensions,
     manager::memory::{Memory, INITIAL_TIMESTAMP},
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
@@ -110,9 +108,8 @@ pub struct MemoryController<F> {
 
     // addr_space -> Memory data structure
     memory: Memory<F>,
-    /// Maps a length to a list of access adapters with that block length as th larger size.
-    adapter_records: FxHashMap<usize, Vec<AccessAdapterRecord<F>>>,
 
+    access_adapters: AccessAdapterInventory<F>,
     /// If set, the height of the traces will be overridden.
     overridden_heights: Option<MemoryTraceHeights>,
 
@@ -127,12 +124,6 @@ pub enum MemoryTraceHeights {
 }
 
 impl MemoryTraceHeights {
-    fn access_adapters_ref(&self) -> &FxHashMap<usize, usize> {
-        match self {
-            MemoryTraceHeights::Volatile(oh) => &oh.access_adapters,
-            MemoryTraceHeights::Persistent(oh) => &oh.access_adapters,
-        }
-    }
     fn flatten(&self) -> Vec<usize> {
         match self {
             MemoryTraceHeights::Volatile(oh) => oh.flatten(),
@@ -160,27 +151,27 @@ impl MemoryTraceHeights {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VolatileMemoryTraceHeights {
     pub boundary: usize,
-    pub access_adapters: FxHashMap<usize, usize>,
+    pub access_adapters: Vec<usize>,
 }
 
 impl VolatileMemoryTraceHeights {
     pub fn flatten(&self) -> Vec<usize> {
         iter::once(self.boundary)
-            .chain(self.access_adapters.iter().sorted().map(|(_, &v)| v))
+            .chain(self.access_adapters.iter().copied())
             .collect()
     }
 
     fn round_to_next_power_of_two(&mut self) {
         self.boundary = self.boundary.next_power_of_two();
         self.access_adapters
-            .values_mut()
+            .iter_mut()
             .for_each(|v| *v = v.next_power_of_two());
     }
 
     fn round_to_next_power_of_two_or_zero(&mut self) {
         self.boundary = next_power_of_two_or_zero(self.boundary);
         self.access_adapters
-            .values_mut()
+            .iter_mut()
             .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
@@ -189,13 +180,13 @@ impl VolatileMemoryTraceHeights {
 pub struct PersistentMemoryTraceHeights {
     boundary: usize,
     merkle: usize,
-    access_adapters: FxHashMap<usize, usize>,
+    access_adapters: Vec<usize>,
 }
 impl PersistentMemoryTraceHeights {
     pub fn flatten(&self) -> Vec<usize> {
         vec![self.boundary, self.merkle]
             .into_iter()
-            .chain(self.access_adapters.iter().sorted().map(|(_, v)| *v))
+            .chain(self.access_adapters.iter().copied())
             .collect()
     }
 
@@ -203,7 +194,7 @@ impl PersistentMemoryTraceHeights {
         self.boundary = self.boundary.next_power_of_two();
         self.merkle = self.merkle.next_power_of_two();
         self.access_adapters
-            .values_mut()
+            .iter_mut()
             .for_each(|v| *v = v.next_power_of_two());
     }
 
@@ -211,7 +202,7 @@ impl PersistentMemoryTraceHeights {
         self.boundary = next_power_of_two_or_zero(self.boundary);
         self.merkle = next_power_of_two_or_zero(self.merkle);
         self.access_adapters
-            .values_mut()
+            .iter_mut()
             .for_each(|v| *v = next_power_of_two_or_zero(*v));
     }
 }
@@ -241,7 +232,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: Memory::new(&Equipartition::<_, 1>::new()),
-            adapter_records: FxHashMap::default(),
+            access_adapters: AccessAdapterInventory::new(
+                range_checker.clone(),
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
             range_checker,
             range_checker_bus,
             result: None,
@@ -279,7 +275,12 @@ impl<F: PrimeField32> MemoryController<F> {
             mem_config,
             interface_chip,
             memory,
-            adapter_records: FxHashMap::default(),
+            access_adapters: AccessAdapterInventory::new(
+                range_checker.clone(),
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
             range_checker,
             range_checker_bus,
             result: None,
@@ -288,13 +289,19 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
-        match self.interface_chip {
-            MemoryInterface::Volatile { .. } => match overridden_heights {
-                MemoryTraceHeights::Volatile(_) => {}
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => match &overridden_heights {
+                MemoryTraceHeights::Volatile(oh) => {
+                    self.access_adapters
+                        .set_override_trace_heights(oh.access_adapters.clone());
+                }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
             },
-            MemoryInterface::Persistent { .. } => match overridden_heights {
-                MemoryTraceHeights::Persistent(_) => {}
+            MemoryInterface::Persistent { .. } => match &overridden_heights {
+                MemoryTraceHeights::Persistent(oh) => {
+                    self.access_adapters
+                        .set_override_trace_heights(oh.access_adapters.clone());
+                }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
             },
         }
@@ -356,10 +363,7 @@ impl<F: PrimeField32> MemoryController<F> {
             .memory
             .read::<N>(address_space.as_canonical_u32() as usize, ptr_u32 as usize);
         for record in adapter_records {
-            self.adapter_records
-                .entry(record.data.len())
-                .or_default()
-                .push(record);
+            self.access_adapters.add_record(record);
         }
 
         for i in 0..N as u32 {
@@ -409,10 +413,7 @@ impl<F: PrimeField32> MemoryController<F> {
             data,
         );
         for record in adapter_records {
-            self.adapter_records
-                .entry(record.data.len())
-                .or_default()
-                .push(record);
+            self.access_adapters.add_record(record);
         }
 
         for i in 0..N as u32 {
@@ -533,18 +534,14 @@ impl<F: PrimeField32> MemoryController<F> {
             }
         };
         for record in records {
-            self.adapter_records
-                .entry(record.data.len())
-                .or_default()
-                .push(record);
+            self.access_adapters.add_record(record);
         }
 
-        self.add_access_adapter_trace::<2>(&mut traces, &mut pvs);
-        self.add_access_adapter_trace::<4>(&mut traces, &mut pvs);
-        self.add_access_adapter_trace::<8>(&mut traces, &mut pvs);
-        self.add_access_adapter_trace::<16>(&mut traces, &mut pvs);
-        self.add_access_adapter_trace::<32>(&mut traces, &mut pvs);
-        self.add_access_adapter_trace::<64>(&mut traces, &mut pvs);
+        // FIXME: avoid clone.
+        let aa_traces = self.access_adapters.clone().generate_traces();
+        let aa_pvs = vec![vec![]; aa_traces.len()];
+        traces.extend(aa_traces);
+        pvs.extend(aa_pvs);
 
         self.result = Some(MemoryControllerResult {
             traces,
@@ -552,16 +549,6 @@ impl<F: PrimeField32> MemoryController<F> {
         });
 
         final_memory
-    }
-    fn add_access_adapter_trace<const N: usize>(
-        &self,
-        traces: &mut Vec<RowMajorMatrix<F>>,
-        pvs: &mut Vec<Vec<F>>,
-    ) {
-        if self.mem_config.max_access_adapter_n >= N {
-            traces.push(self.generate_access_adapter_trace::<N>());
-            pvs.push(vec![]);
-        }
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
@@ -604,23 +591,9 @@ impl<F: PrimeField32> MemoryController<F> {
                 airs.push(Arc::new(merkle_chip.air.clone()));
             }
         }
-
-        self.add_access_adapter_air::<SC, 2>(&mut airs);
-        self.add_access_adapter_air::<SC, 4>(&mut airs);
-        self.add_access_adapter_air::<SC, 8>(&mut airs);
-        self.add_access_adapter_air::<SC, 16>(&mut airs);
-        self.add_access_adapter_air::<SC, 32>(&mut airs);
-        self.add_access_adapter_air::<SC, 64>(&mut airs);
+        airs.extend(self.access_adapters.airs());
 
         airs
-    }
-    fn add_access_adapter_air<SC: StarkGenericConfig, const N: usize>(
-        &self,
-        airs: &mut Vec<Arc<dyn AnyRap<SC>>>,
-    ) {
-        if self.mem_config.max_access_adapter_n >= N {
-            airs.push(Arc::new(self.access_adapter_air::<N>()));
-        }
     }
 
     /// Return the number of AIRs in the memory controller.
@@ -655,21 +628,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = [2, 4, 8, 16, 32, 64]
-            .iter()
-            .flat_map(|&n| {
-                if self.mem_config.max_access_adapter_n >= n {
-                    Some((
-                        n,
-                        self.adapter_records
-                            .get(&n)
-                            .map_or(0, |records| records.len()),
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let access_adapters = self.access_adapters.get_heights();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -689,16 +648,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = [2, 4, 8, 16, 32, 64]
-            .iter()
-            .flat_map(|&n| {
-                if self.mem_config.max_access_adapter_n >= n {
-                    Some((n, 1))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -881,6 +831,10 @@ mod tests {
                 memory_controller.read::<1>(address_space, pointer);
             }
         }
-        assert_eq!(memory_controller.adapter_records.len(), 0);
+        assert!(memory_controller
+            .access_adapters
+            .get_heights()
+            .iter()
+            .all(|&h| h == 0));
     }
 }

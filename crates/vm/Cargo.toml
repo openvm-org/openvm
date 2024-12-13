@@ -22,6 +22,7 @@ itertools.workspace = true
 tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
+enum_dispatch.workspace = true
 backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
