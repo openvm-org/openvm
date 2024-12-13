@@ -22,13 +22,6 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=64cpu-linux-arm64
 
-      # TEMPORARY
-      - name: Give GitHub Actions access to private repositories
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -36,6 +29,13 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
+
+      # TEMPORARY
+      - name: Give GitHub Actions access to private repositories
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
       - name: Run keccak256 extension crate tests
         working-directory: extensions/keccak256/circuit
