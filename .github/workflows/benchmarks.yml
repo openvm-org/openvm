@@ -7,8 +7,6 @@ on:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
-      - "crates/stark-backend/**"
-      - "crates/stark-sdk/**"
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"

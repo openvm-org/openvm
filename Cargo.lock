@@ -3419,49 +3419,34 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "0.1.0"
+version = "0.1.0-alpha"
+source = "git+ssh://git@github.com/openvm-org/stark-backend#79fcdbe321c21f2b146e1b4d58a88662c2abd6b4"
 dependencies = [
  "async-trait",
  "cfg-if",
- "csv",
  "derivative",
- "eyre",
  "itertools 0.13.0",
  "metrics",
  "mimalloc",
- "openvm-circuit-primitives-derive",
- "openvm-stark-sdk",
  "p3-air",
- "p3-baby-bear",
  "p3-challenger",
  "p3-commit",
- "p3-dft",
  "p3-field",
- "p3-fri",
- "p3-goldilocks",
- "p3-keccak",
  "p3-matrix",
  "p3-maybe-rayon",
- "p3-mds",
- "p3-merkle-tree",
- "p3-poseidon2",
- "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
- "rand",
  "rayon",
  "serde",
- "serde_json",
  "thiserror 1.0.69",
  "tikv-jemallocator",
  "tracing",
- "tracing-forest",
- "tracing-subscriber",
 ]
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "0.1.0"
+version = "0.1.0-alpha"
+source = "git+ssh://git@github.com/openvm-org/stark-backend#79fcdbe321c21f2b146e1b4d58a88662c2abd6b4"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",
@@ -3469,8 +3454,6 @@ dependencies = [
  "metrics",
  "metrics-tracing-context",
  "metrics-util",
- "openvm-circuit-primitives-derive",
- "openvm-instructions",
  "openvm-stark-backend",
  "p3-baby-bear",
  "p3-blake3",

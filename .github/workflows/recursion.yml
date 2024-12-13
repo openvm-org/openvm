@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "extensions/native/compiler/**"
@@ -35,6 +34,13 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      # TEMPORARY
+      - name: Give GitHub Actions access to private repositories
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
       - name: Run recursion crate tests
         working-directory: extensions/native/recursion

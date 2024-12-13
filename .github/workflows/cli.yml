@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "crates/stark-backend/**"
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "crates/sdk/**"
@@ -57,6 +56,13 @@ jobs:
       - name: Setup halo2
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
+
+      # TEMPORARY
+      - name: Give GitHub Actions access to private repositories
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
       # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
       - name: Run app-level CLI commands
