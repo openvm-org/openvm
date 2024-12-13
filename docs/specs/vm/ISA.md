@@ -332,8 +332,10 @@ Each instruction performs block accesses with block size `4` in address space `1
 | ---------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ADDMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 + [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
 | SUBMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 - [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
+| SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2`  |
 | MULMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 * [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
 | DIVMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 / [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([r32{0}(c): N::NUM_LIMBS]_2, N) != 1`. |
+| SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2`  |
 
 ### Modular Branching
 
@@ -342,6 +344,7 @@ The configuration of `N` is the same as above. For each instruction, the input e
 | Name              | Operands    | Description                                                                                                                                                                                                                                                                                         |
 | ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
+| SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(a): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `a`   
 
 ### Short Weierstrass Elliptic Curve Arithmetic
 
@@ -362,7 +365,9 @@ r32_ec_point(a) -> EcPoint {
 | Name           | Operands    | Description                                                                                                                                                                                                                                                                          |
 | -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SW_ADD_NE\<C\> | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field. |
+| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)` |
 | SW_DOUBLE\<C\> | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                           |
+| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 
 ### Complex Extension Field
 
@@ -386,8 +391,10 @@ r32_fp2(a) -> Fp2 {
 | ---------- | ----------- | ------------------------------------------ |
 | ADD\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)` |
 | SUB\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)` |
+| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 | MUL\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)` |
 | DIV\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)` |
+| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
 ### Optimal Ate Pairing
 
