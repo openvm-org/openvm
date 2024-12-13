@@ -1,5 +1,5 @@
 use std::{
-    fs::{create_dir_all, write, File},
+    fs::{create_dir_all, read, write, File},
     io::Write,
     path::Path,
 };
@@ -76,11 +76,11 @@ pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Resu
 }
 
 pub fn read_evm_verifier_from_file<P: AsRef<Path>>(path: P) -> Result<EvmVerifier> {
-    read_from_file_bson(path)
+    read_from_file_bytes(path)
 }
 
 pub fn write_evm_verifier_to_file<P: AsRef<Path>>(verifier: EvmVerifier, path: P) -> Result<()> {
-    write_to_file_bson(path, verifier)
+    write_to_file_bytes(path, verifier)
 }
 
 pub(crate) fn read_from_file_bson<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
@@ -93,6 +93,22 @@ pub(crate) fn write_to_file_bson<T: Serialize, P: AsRef<Path>>(path: P, data: T)
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
     }
-    write(path, &bytes)?;
+    write(path, bytes)?;
+    Ok(())
+}
+
+pub(crate) fn read_from_file_bytes<T: From<Vec<u8>>, P: AsRef<Path>>(path: P) -> Result<T> {
+    let bytes = read(path)?;
+    Ok(T::from(bytes))
+}
+
+pub(crate) fn write_to_file_bytes<T: Into<Vec<u8>>, P: AsRef<Path>>(
+    path: P,
+    data: T,
+) -> Result<()> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent)?;
+    }
+    write(path, data.into())?;
     Ok(())
 }

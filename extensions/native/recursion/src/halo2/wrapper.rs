@@ -22,6 +22,18 @@ use crate::halo2::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvmVerifier(pub Vec<u8>);
 
+impl From<Vec<u8>> for EvmVerifier {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl From<EvmVerifier> for Vec<u8> {
+    fn from(verifier: EvmVerifier) -> Self {
+        verifier.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Halo2WrapperProvingKey {
     pub pinning: Halo2ProvingPinning,
