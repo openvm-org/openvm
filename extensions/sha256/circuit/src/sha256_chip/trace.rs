@@ -40,6 +40,9 @@ where
         let height = next_power_of_two_or_zero(non_padded_height);
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
+        if height == 0 {
+            return AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![]);
+        }
         let records = self.records;
         let memory_aux_cols_factory = RefCell::borrow(&self.memory_controller).aux_cols_factory();
 
