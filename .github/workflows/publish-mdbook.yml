@@ -32,14 +32,9 @@ jobs:
         run: |
           cargo install mdbook-katex mdbook-linkcheck mdbook-mermaid just
 
-      - name: Install pnpm
-        run: npm install -g pnpm@9.1.0
-
       - name: Build the book
         run: |
           cd book
-          pnpm i --frozen-lockfile
-          just lint-book-toc
           mdbook build
 
       - name: Install Vercel CLI

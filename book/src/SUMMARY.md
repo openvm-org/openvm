@@ -1,15 +1,3 @@
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**
-
-- [Summary](#summary)
-- [Getting Started](#getting-started)
-- [Writing Apps](#writing-apps)
-- [Using Extensions](#using-extensions)
-- [Advanced Usage](#advanced-usage)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 # Summary
 
 [Introduction](./introduction.md)

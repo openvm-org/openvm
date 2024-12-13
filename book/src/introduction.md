@@ -1,12 +1,3 @@
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**
-
-- [Introduction](#introduction)
-- [In particular, Chapter 2 is for this, Chapter 3 is for that, et cetera.](#in-particular-chapter-2-is-for-this-chapter-3-is-for-that-et-cetera)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 # Introduction
 
 OpenVM is ...
@@ -22,4 +13,5 @@ An _extension_ (we could also call it a _module_ but we prefer not to in order t
 ...
 
 The next chapters are supposed to serve as a manual for using this modularity.
+
 # In particular, Chapter 2 is for this, Chapter 3 is for that, et cetera.
