@@ -20,12 +20,12 @@ To declare a modular arithmetic struct, one needs to use the `moduli_declare!` m
 
 ```rust
 moduli_declare! {
-    Bls12381 { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
-    Bn254 { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
+    Bls12381_Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
+    Bn254_Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 }
 ```
 
-This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on). The modulus for each struct is specified in the `modulus` parameter of the macro. It should be a string literal in either decimal or hexadecimal format (in the latter case, it must start with `0x`).
+This creates two structs, `Bls12381_Fp` and `Bn254_Fp`, each representing the modular arithmetic class. These classes implement `Add`, `Sub` and other basic arithmetic operations; the underlying functions used for this are a part of the `IntMod` trait. The modulus for each struct is specified in the `modulus` parameter of the macro. It should be a string literal in either decimal or hexadecimal format (in the latter case, it must start with `0x`).
 
 The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
 
@@ -36,11 +36,18 @@ moduli_init! {
 }
 ```
 
-This macro **must be called exactly once** in the program, and it must contain all the moduli that have ever been declared in the `moduli_declare!` macros across all the compilation units. It is possible to `declare` a number in decimal and `init` it in hexadecimal, and vice versa.
+This macro **must be called exactly once** in the final executable program, and it must contain all the moduli that have ever been declared in the `moduli_declare!` macros across all the compilation units. It is possible to `declare` a number in decimal and `init` it in hexadecimal, and vice versa.
 
 When `moduli_init!` is called, the moduli in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the modulus this chip uses is exactly the one we `init`ed.
 
 To send a setup instruction for the $i$-th struct, one needs to call the `setup_<i>()` function (for instance, `setup_1()`). There is also a function `setup_all_moduli()` that calls all the available `setup` functions.
+
+To summarize:
+
+- `moduli_declare!` declares a struct for a modular arithmetic class. It can be called multiple times across the compilation units.
+- `moduli_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every modulus ever `declare`d in the program must be among the arguments of `moduli_init!`**.
+- `setup_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `moduli_init!`**. The order of `moduli_declare!` invocations or the arguments in them does not matter.
+- `setup_all_moduli()` sends setup instructions for all the structs.
 
 ## `openvm-ecc`
 
