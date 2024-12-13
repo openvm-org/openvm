@@ -79,7 +79,7 @@ pub trait WeierstrassPoint: Group {
         // Must assert unique so we can check the parity
         y.assert_unique();
         assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
-        Self::from_xy(x, y).expect("decompressed point not on curve")
+        Self::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
     }
 
     /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`

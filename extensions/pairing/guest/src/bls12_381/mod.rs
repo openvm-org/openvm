@@ -93,8 +93,11 @@ impl Field for Scalar {
     }
 }
 
+// https://hackmd.io/@benjaminion/bls12-381#Cofactor
+// BLS12-381: The from_xy function will allow constructing elements that lie on the curve
+// but aren't actually in the cyclic subgroup of prime order that is usually called G1.
 impl CyclicGroup for G1Affine {
-    // https://neuromancer.sk/std/bls/BLS12-381
+    // https://github.com/zcash/librustzcash/blob/6e0364cd42a2b3d2b958a54771ef51a8db79dd29/pairing/src/bls12_381/README.md#generators
     const GENERATOR: Self = G1Affine {
         x: Bls12_381Fp::from_const_bytes(hex!(
             "BBC622DB0AF03AFBEF1A7AF93FE8556C58AC1B173F3A4EA105B974974F8C68C30FACA94F8C63952694D79731A7D3F117"
