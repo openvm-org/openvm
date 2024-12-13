@@ -29,9 +29,8 @@ openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm = { workspace = true }
 
-bincode = { workspace = true, features = ["serde", "std"] }
+bitcode = { workspace = true }
 bon = { workspace = true }
-bson = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }

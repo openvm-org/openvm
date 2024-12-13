@@ -17,6 +17,7 @@ use openvm_sdk::{
 use crate::{
     default::{
         DEFAULT_AGG_PK_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH, DEFAULT_EVM_PROOF_PATH,
+        DEFAULT_PARAMS_DIR,
     },
     util::{read_to_stdin, Input},
 };
@@ -77,12 +78,11 @@ impl ProveCmd {
                 input,
                 output,
             } => {
-                // FIXME: read path from config.
-                let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+                let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
+                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let evm_proof =
                     Sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;

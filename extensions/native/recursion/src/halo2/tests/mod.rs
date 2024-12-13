@@ -180,8 +180,9 @@ fn test_pinning_serde() {
     };
 
     let mut f = tempfile::NamedTempFile::new().unwrap();
-    f.write_all(&bson::to_vec(&wrapper).unwrap()).unwrap();
-    let new_wrapper: Halo2WrapperProvingKey = bson::from_reader(f.reopen().unwrap()).unwrap();
+    f.write_all(&bitcode::serialize(&wrapper).unwrap()).unwrap();
+    let new_wrapper: Halo2WrapperProvingKey =
+        bitcode::deserialize(&std::fs::read(f.path()).unwrap()).unwrap();
     let new_pinning = new_wrapper.pinning;
     let params = gen_kzg_params(DUMMY_K as u32);
     let mut builder = BaseCircuitBuilder::from_stage(Prover)
