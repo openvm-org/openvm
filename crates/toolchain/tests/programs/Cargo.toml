@@ -16,6 +16,8 @@ openvm-ecc-guest = { path = "../../../../extensions/ecc/guest", default-features
 openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
 openvm-keccak256-guest = { path = "../../../../extensions/keccak256/guest" }
 openvm-pairing-guest = { path = "../../../../extensions/pairing/guest", default-features = false }
+openvm-sha256-guest = { path = "../../../../extensions/sha256/guest"}
+
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",

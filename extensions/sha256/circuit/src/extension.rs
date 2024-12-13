@@ -26,7 +26,7 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Keccak256Rv32Config {
+pub struct Sha256Rv32Config {
     #[system]
     pub system: SystemConfig,
     #[extension]
@@ -39,7 +39,7 @@ pub struct Keccak256Rv32Config {
     pub sha256: Sha256,
 }
 
-impl Default for Keccak256Rv32Config {
+impl Default for Sha256Rv32Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),

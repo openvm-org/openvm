@@ -15,6 +15,7 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-transpiler.workspace = true
 openvm-build.workspace = true
 openvm-keccak256-transpiler.workspace = true
+openvm-sha256-transpiler.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-bigint-transpiler.workspace = true
 openvm-ecc-transpiler.workspace = true
@@ -26,6 +27,7 @@ openvm-algebra-circuit.workspace = true
 openvm-ecc-circuit.workspace = true
 openvm-pairing-circuit.workspace = true
 openvm-keccak256-circuit.workspace = true
+openvm-sha256-circuit.workspace = true
 openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",

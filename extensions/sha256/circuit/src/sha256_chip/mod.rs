@@ -1,4 +1,4 @@
-//! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
+//! Sha256 hasher. Handles full sha256 hashing with padding.
 //! variable length inputs read from VM memory.
 use std::{
     array,

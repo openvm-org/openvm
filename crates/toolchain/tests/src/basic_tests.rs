@@ -12,6 +12,8 @@ use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sha256_circuit::Sha256Rv32Config;
+use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
 use openvm_transpiler::{elf::ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES, transpiler::Transpiler, FromElf};
 use test_case::test_case;
@@ -157,6 +159,22 @@ fn test_keccak256_runtime() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
+    executor.execute(openvm_exe, vec![])?;
+    Ok(())
+}
+
+#[test]
+fn test_sha256_runtime() -> Result<()> {
+    let elf = build_example_program("sha256")?;
+    let openvm_exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Sha256TranspilerExtension)
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
+    )?;
+    let executor = VmExecutor::<F, Sha256Rv32Config>::new(Sha256Rv32Config::default());
     executor.execute(openvm_exe, vec![])?;
     Ok(())
 }
