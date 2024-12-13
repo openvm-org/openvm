@@ -9,8 +9,7 @@ use openvm_sdk::{
     Sdk,
 };
 
-pub const AGG_PK_PATH: &str = "~/.openvm/agg.pk";
-pub const VERIFIER_PATH: &str = "~/.openvm/verifier.sol";
+use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_VERIFIER_PATH};
 
 #[derive(Parser)]
 #[command(
@@ -21,7 +20,9 @@ pub struct EvmProvingSetupCmd {}
 
 impl EvmProvingSetupCmd {
     pub fn run(&self) -> Result<()> {
-        if PathBuf::from(AGG_PK_PATH).exists() && PathBuf::from(VERIFIER_PATH).exists() {
+        if PathBuf::from(DEFAULT_AGG_PK_PATH).exists()
+            && PathBuf::from(DEFAULT_VERIFIER_PATH).exists()
+        {
             println!("Aggregation proving key and verifier contract already exist");
             return Ok(());
         }
@@ -30,8 +31,8 @@ impl EvmProvingSetupCmd {
         let agg_config = AggConfig::default();
         let agg_pk = Sdk.agg_keygen(agg_config, &params_reader)?;
         let verifier = Sdk.generate_snark_verifier_contract(&params_reader, &agg_pk)?;
-        write_agg_pk_to_file(agg_pk, AGG_PK_PATH)?;
-        write_evm_verifier_to_file(verifier, VERIFIER_PATH)?;
+        write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
+        write_evm_verifier_to_file(verifier, DEFAULT_VERIFIER_PATH)?;
         Ok(())
     }
 }

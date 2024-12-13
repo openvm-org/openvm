@@ -16,7 +16,7 @@ use openvm_sdk::{
 };
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler};
 
-use crate::util::read_to_struct_toml;
+use crate::{default::DEFAULT_MANIFEST_DIR, util::read_to_struct_toml};
 
 #[derive(Parser)]
 #[command(name = "build", about = "Compile an OpenVM program")]
@@ -36,9 +36,10 @@ impl BuildCmd {
 pub struct BuildArgs {
     #[arg(
         long,
-        help = "Path to the directory containing the Cargo.toml file for the guest code (relative to the current directory)"
+        help = "Path to the directory containing the Cargo.toml file for the guest code (relative to the current directory)",
+        default_value = DEFAULT_MANIFEST_DIR
     )]
-    pub manifest_dir: Option<PathBuf>,
+    pub manifest_dir: PathBuf,
 
     #[arg(long, value_delimiter = ',', help = "Feature flags passed to cargo")]
     pub features: Vec<String>,
@@ -109,19 +110,17 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
             None
         },
     };
-    let pkg_dir = build_args
-        .manifest_dir
-        .clone()
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
     let guest_options = GuestOptions {
         features: build_args.features.clone(),
         ..Default::default()
     };
 
-    let pkg = get_package(&pkg_dir);
+    let pkg = get_package(&build_args.manifest_dir);
     // We support builds of libraries with 0 or >1 executables.
     let elf_path = match build_guest_package(&pkg, &guest_options, None) {
-        Ok(target_dir) => find_unique_executable(&pkg_dir, &target_dir, &target_filter),
+        Ok(target_dir) => {
+            find_unique_executable(&build_args.manifest_dir, &target_dir, &target_filter)
+        }
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
         }

@@ -93,6 +93,6 @@ pub(crate) fn write_to_file_bson<T: Serialize, P: AsRef<Path>>(path: P, data: T)
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
     }
-    write(path, bytes)?;
+    write(path, &bytes)?;
     Ok(())
 }

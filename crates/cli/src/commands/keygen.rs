@@ -8,7 +8,10 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::util::read_to_struct_toml;
+use crate::{
+    default::{DEFAULT_APP_PK_PATH, DEFAULT_APP_VK_PATH},
+    util::read_to_struct_toml,
+};
 
 #[derive(Parser)]
 #[command(name = "keygen", about = "Generate an application proving key")]
@@ -16,10 +19,20 @@ pub struct KeygenCmd {
     #[clap(long, action, help = "Path to app config TOML file")]
     config: PathBuf,
 
-    #[clap(long, action, help = "Path to output app proving key file")]
+    #[clap(
+        long,
+        action,
+        help = "Path to output app proving key file",
+        default_value = DEFAULT_APP_PK_PATH
+    )]
     output: PathBuf,
 
-    #[clap(long, action, help = "Path to output app verifying key file")]
+    #[clap(
+        long,
+        action,
+        help = "Path to output app verifying key file",
+        default_value = DEFAULT_APP_VK_PATH
+    )]
     vk_output: PathBuf,
 }
 
