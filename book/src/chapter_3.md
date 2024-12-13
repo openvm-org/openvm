@@ -51,4 +51,37 @@ To summarize:
 
 ## `openvm-ecc`
 
-**TODO**: fill in.
+This crate allows one to create and use structs for elliptic curve cryptography. More specifically, it only supports curves where the defining equation is in short [Weierstrass curves](https://en.wikipedia.org/wiki/Weierstrass_form) (that is, `a = 0`).
+
+To declare an elliptic curve struct, one needs to use the `sw_declare!` macro. A usage example is given below:
+
+```rust
+sw_declare! {
+    Bls12381 { mod_type = Bls12381_Fp, b = BLS12381_B },
+    Bn254 { mod_type = Bn254_Fp, b = BN254_B },
+}
+```
+
+Similar to the `moduli_declare!` macro, the `sw_declare!` macro creates a struct for an elliptic curve. The `mod_type` parameter specifies the type of the modulus for this curve, and the `b` parameter specifies the free coefficient of the curve equation; both of these parameters are required. The `mod_type` parameter must be a struct that implements the `IntMod` trait. The `b` parameter must be a constant.
+
+The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
+
+```rust
+sw_init! {
+    Bls12381, Bn254,
+}
+```
+
+Again, this macro **must be called exactly once** in the final executable program, and it must contain all the curves that have ever been declared in the `sw_declare!` macros across all the compilation units.
+
+When `sw_init!` is called, the curves in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the curve this chip uses is exactly the one we `init`ed.
+
+To send a setup instruction for the $i$-th struct, one needs to call the `setup_sw_<i>()` function (for instance, `setup_sw_1()`). There is also a function `setup_all_curves()` that calls all the available `setup` functions.
+
+To summarize:
+
+- `sw_declare!` declares a struct for an elliptic curve. It can be called multiple times across the compilation units.
+- `sw_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every curve ever `declare`d in the program must be among the arguments of `sw_init!`**.
+- `setup_sw_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th curve in `sw_init!`**. The order of `sw_declare!` invocations or the arguments in them does not matter.
+- `setup_all_curves()` sends setup instructions for all the structs.
+
