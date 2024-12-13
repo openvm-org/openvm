@@ -4,4 +4,6 @@ language = "en"
 multilingual = false
 src = "src"
 title = "OpenVM Book"
+
+[output.html]
 site-url = "https://book.openvm.dev/"
