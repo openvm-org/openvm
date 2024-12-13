@@ -1,6 +1,6 @@
 **Keccak Guest Library**
 
-To use the Keccak Guest Library, the `openvm-keccak-guest` crate must be imported in your program. The library provides two functions:
+The library provides two functions:
 
 - `keccak256`: Computes the Keccak-256 hash of the input data and returns an array of 32 bytes.
 - `set_keccak256`: Sets the output to the Keccak-256 hash of the input data.
@@ -8,6 +8,8 @@ To use the Keccak Guest Library, the `openvm-keccak-guest` crate must be importe
 The key feature of these functions is that they utilize conditional compilation:
 - If the `target_os` is `zkvm`, then the functions will use the native `KECCAK256_RV32` circuit.
 - If the `target_os` is not `zkvm`, then the functions will use the regular Rust implementation of Keccak-256.
+
+To use the Keccak Guest Library, the `openvm-keccak-guest` crate must be imported in your program. 
 
 Example:
 ```rust
