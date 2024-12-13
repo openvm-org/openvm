@@ -4,13 +4,16 @@
 mod generate;
 mod types;
 
-use rkyv::{access, rancor::Panic, Archive};
+use core::hint::black_box;
+
+use rkyv::{access_unchecked, Archive};
 use types::Players;
 
 openvm::entry!(main);
 
 fn main() {
-    // nothing up our sleeves, state and stream are first 20 digits of pi
+    // Uncomment to generate a minecraft save file:
+    // // nothing up our sleeves, state and stream are first 20 digits of pi
     // const STATE: u64 = 3141592653;
     // const STREAM: u64 = 5897932384;
 
@@ -29,5 +32,7 @@ fn main() {
 
     let data = openvm::io::read_vec();
 
-    access::<<Players as Archive>::Archived, Panic>(&data).expect("Failed to deserialize");
+    // The zkVM does not need alignment guarantees, and in fact because of how read_vec works,
+    // `data` will only be 4-aligned since it first reads a u32 for the vec length.
+    let _archived = black_box(unsafe { access_unchecked::<<Players as Archive>::Archived>(&data) });
 }
