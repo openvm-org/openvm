@@ -2,6 +2,7 @@ use std::{
     fs::{create_dir_all, write},
     path::PathBuf,
 };
+
 use aws_config::{defaults, BehaviorVersion, Region};
 use aws_sdk_s3::Client;
 use clap::Parser;
@@ -13,7 +14,7 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_VERIFIER_PATH, DEFAULT_PARAMS_DIR};
+use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_PARAMS_DIR, DEFAULT_VERIFIER_PATH};
 
 #[derive(Parser)]
 #[command(
