@@ -30,7 +30,8 @@ pub enum VmCliCommands {
     Verify(VerifyCmd),
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
     match command {
@@ -39,7 +40,7 @@ fn main() -> Result<()> {
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),
-        VmCliCommands::Setup(cmd) => cmd.run(),
+        VmCliCommands::Setup(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }
 }
