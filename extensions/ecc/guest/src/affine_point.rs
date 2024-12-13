@@ -29,6 +29,29 @@ impl<F: Field> AffinePoint<F> {
     pub fn is_infinity(&self) -> bool {
         self.x == F::ZERO && self.y == F::ZERO
     }
+
+    fn add_impl(&self, rhs: &Self) -> Self {
+        if self.is_infinity() {
+            return rhs.clone();
+        }
+        if rhs.is_infinity() {
+            return self.clone();
+        }
+
+        if self.x == rhs.x && self.y == -rhs.y.clone() {
+            return Self::IDENTITY;
+        }
+
+        if self.x == rhs.x && self.y == rhs.y {
+            return self.double();
+        }
+
+        let slope = (rhs.y.clone() - self.y.clone()).div_unsafe(&(rhs.x.clone() - self.x.clone()));
+        let x3 = slope.clone() * slope.clone() - self.x.clone() - rhs.x.clone();
+        let y3 = slope * (self.x.clone() - x3.clone()) - self.y.clone();
+
+        Self::new(x3, y3)
+    }
 }
 
 impl<F> Neg for AffinePoint<F>
@@ -49,9 +72,26 @@ impl<F: Field> Add for AffinePoint<F> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        let x = self.x + rhs.x;
-        let y = self.y + rhs.y;
-        Self { x, y }
+        if self.is_infinity() {
+            return rhs.clone();
+        }
+        if rhs.is_infinity() {
+            return self;
+        }
+
+        if self.x == rhs.x && self.y == -rhs.y.clone() {
+            return Self::IDENTITY;
+        }
+
+        if self.x == rhs.x && self.y == rhs.y {
+            return self.double();
+        }
+
+        let slope = (rhs.y.clone() - self.y.clone()).div_unsafe(&(rhs.x.clone() - self.x.clone()));
+        let x3 = slope.clone() * slope.clone() - self.x.clone() - rhs.x.clone();
+        let y3 = slope * (self.x - x3.clone()) - self.y;
+
+        Self::new(x3, y3)
     }
 }
 
@@ -59,9 +99,7 @@ impl<'a, F: Field> Add<&'a Self> for AffinePoint<F> {
     type Output = Self;
 
     fn add(self, rhs: &'a Self) -> Self {
-        let x = self.x + rhs.x.clone();
-        let y = self.y + rhs.y.clone();
-        Self { x, y }
+        self.add_impl(rhs)
     }
 }
 
@@ -69,19 +107,19 @@ impl<F: Field> Add<&AffinePoint<F>> for &AffinePoint<F> {
     type Output = AffinePoint<F>;
 
     fn add(self, rhs: &AffinePoint<F>) -> Self::Output {
-        self.clone() + rhs.clone()
+        self.add_impl(rhs)
     }
 }
 
 impl<F: Field> AddAssign for AffinePoint<F> {
     fn add_assign(&mut self, rhs: Self) {
-        self.add_assign(&rhs);
+        *self = self.add_impl(&rhs);
     }
 }
 
 impl<F: Field> AddAssign<&AffinePoint<F>> for AffinePoint<F> {
     fn add_assign(&mut self, rhs: &AffinePoint<F>) {
-        *self = self.clone() + rhs;
+        *self = self.add_impl(rhs);
     }
 }
 
@@ -89,9 +127,7 @@ impl<F: Field> Sub for AffinePoint<F> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        let x = self.x - rhs.x;
-        let y = self.y - rhs.y;
-        Self { x, y }
+        self.add_impl(&rhs.clone().neg())
     }
 }
 
@@ -99,9 +135,7 @@ impl<'a, F: Field> Sub<&'a Self> for AffinePoint<F> {
     type Output = Self;
 
     fn sub(self, rhs: &'a Self) -> Self {
-        let x = self.x - rhs.x.clone();
-        let y = self.y - rhs.y.clone();
-        Self { x, y }
+        self.add_impl(&rhs.clone().neg())
     }
 }
 
@@ -109,19 +143,19 @@ impl<F: Field> Sub<&AffinePoint<F>> for &AffinePoint<F> {
     type Output = AffinePoint<F>;
 
     fn sub(self, rhs: &AffinePoint<F>) -> Self::Output {
-        self.clone() - rhs.clone()
+        self.add_impl(&rhs.clone().neg())
     }
 }
 
 impl<F: Field> SubAssign for AffinePoint<F> {
     fn sub_assign(&mut self, rhs: Self) {
-        self.sub_assign(&rhs);
+        *self = self.add_impl(&rhs.clone().neg());
     }
 }
 
 impl<F: Field> SubAssign<&AffinePoint<F>> for AffinePoint<F> {
     fn sub_assign(&mut self, rhs: &AffinePoint<F>) {
-        *self = self.clone() - rhs;
+        *self = self.add_impl(&rhs.clone().neg());
     }
 }
 
