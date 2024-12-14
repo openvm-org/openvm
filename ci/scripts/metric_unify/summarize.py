@@ -100,7 +100,7 @@ def read_first_markdown_table(md_file):
     return table, other_info
 
 # group stats (ex. app, agg, root) are either added to the row as is, or aggregated together
-def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
+def generate_row(md_file, sections, aggregation_groups, benchmark_results_link):
     table, other_info = read_first_markdown_table(md_file)
     sections = [table[0].group] + sections
     section_by_group = {};
@@ -116,7 +116,7 @@ def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
                     section_by_group[group_name] = row
                 break
 
-    res = [f"[ {table[0].group} ]({gh_pages_link}/individual/{md_file})"]
+    res = [f"[ {table[0].group} ]({benchmark_results_link}/individual/{md_file})"]
     for section in sections:
         group_row = section_by_group.get(section)
         if group_row is None:
@@ -154,14 +154,14 @@ def main():
     md_files = args.metrics_md_files.split(',')
     outputs = []
     for md_file in md_files:
-        outputs.append(generate_row(md_file, ["leaf"], {}, args.gh_pages_link))
+        outputs.append(generate_row(md_file, ["leaf"], {}, args.benchmark_results_link))
     write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
     if args.e2e_md_files and args.e2e_md_files.strip():
         outputs = []
         md_files = args.e2e_md_files.split(',')
         for md_file in md_files:
-            outputs.append(generate_row(md_file, ["root", "leaf", "internal"], {"internal.*": "internal"}, args.gh_pages_link))
+            outputs.append(generate_row(md_file, ["root", "leaf", "internal"], {"internal.*": "internal"}, args.benchmark_results_link))
         if outputs:
             write_md_table(outputs, "E2E Benchmarks", e2e_headers)
 

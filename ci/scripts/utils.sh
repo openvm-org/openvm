@@ -54,7 +54,7 @@ add_metadata() {
     echo "[Benchmark Workflow](https://github.com/${repo}/actions/runs/${run_id})" >> $result_path
 }
 
-commit_and_push_gh_pages() {
+commit_and_push_benchmark_results() {
     local files=$1
     local commit_message=$2
     git add ${files}

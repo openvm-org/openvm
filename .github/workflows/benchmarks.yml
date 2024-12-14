@@ -138,14 +138,14 @@ jobs:
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
         run: |
-          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
-          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          BENCHMARK_RESULTS_PATH="benchmarks-pr/${{ github.event.pull_request.number }}"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          GH_PAGES_PATH="benchmarks"
-          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          BENCHMARK_RESULTS_PATH="benchmarks"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Load all metadata files from S3
         run: |
@@ -189,7 +189,7 @@ jobs:
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --e2e-md-files "${E2E_FILE_LIST}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
-            --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${GH_PAGES_PATH}"
+            --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}"
 
           echo "" >> summary.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}" >> summary.md
@@ -215,14 +215,14 @@ jobs:
       - name: Update github pages with new bench results
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
-          mkdir -p ${GH_PAGES_PATH}
-          cp /tmp/benchmark-results/summary.md ${GH_PAGES_PATH}/summary.md
-          git add ${GH_PAGES_PATH}/summary.md
+          mkdir -p ${BENCHMARK_RESULTS_PATH}
+          cp /tmp/benchmark-results/summary.md ${BENCHMARK_RESULTS_PATH}/summary.md
+          git add ${BENCHMARK_RESULTS_PATH}/summary.md
           if [[ "${{ github.event_name }}" == "push" ]]; then
             cp /tmp/benchmark-results/summary.md index.md
             git add index.md
           fi
-          git commit --allow-empty -m "Update summarized benchmark result at ${GH_PAGES_PATH}/summary.md"
+          git commit --allow-empty -m "Update summarized benchmark result at ${BENCHMARK_RESULTS_PATH}/summary.md"
           git push --force
 
       ##########################################################################
