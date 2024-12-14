@@ -25,6 +25,7 @@ jobs:
       - name: Build documentation
         run: cargo doc --workspace --no-deps
         env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
           # taken from https://github.com/paradigmxyz/reth/blob/main/.github/workflows/book.yml
           RUSTDOCFLAGS: --cfg docsrs --show-type-layout --generate-link-to-definition --enable-index-page -Zunstable-options --html-in-header assets/head.html
 
