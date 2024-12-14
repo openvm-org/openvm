@@ -13,6 +13,7 @@ use openvm_rv32im_transpiler::{
 use openvm_sdk::{
     commit::commit_app_exe,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
+    prover::ContinuationProver,
     Sdk, StdIn,
 };
 use openvm_stark_sdk::{
@@ -87,14 +88,10 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        Sdk.generate_evm_proof(
-            &halo2_params_reader,
-            app_pk,
-            app_committed_exe,
-            full_agg_pk,
-            stdin,
-        )
-        .unwrap();
+        let e2e_prover =
+            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk)
+                .with_profiling();
+        let _proof = e2e_prover.generate_proof_for_evm(stdin);
     });
 
     Ok(())

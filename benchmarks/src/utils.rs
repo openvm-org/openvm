@@ -100,11 +100,8 @@ where
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
         commit_app_exe(app_config.app_fri_params, exe)
     });
-    // 3. Executes runtime again without metric collection and generate trace.
-    time(gauge!("execute_and_trace_gen_time_ms"), || {
-        vm.execute_and_generate_with_cached_program(committed_exe.clone(), input_stream.clone())
-    })?;
-    // 4. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 3. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 4. Executes runtime again without metric collection and generate trace.
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
