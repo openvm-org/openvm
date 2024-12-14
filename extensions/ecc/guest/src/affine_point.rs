@@ -72,26 +72,7 @@ impl<F: Field> Add for AffinePoint<F> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        if self.is_infinity() {
-            return rhs.clone();
-        }
-        if rhs.is_infinity() {
-            return self;
-        }
-
-        if self.x == rhs.x && self.y == -rhs.y.clone() {
-            return Self::IDENTITY;
-        }
-
-        if self.x == rhs.x && self.y == rhs.y {
-            return self.double();
-        }
-
-        let slope = (rhs.y.clone() - self.y.clone()).div_unsafe(&(rhs.x.clone() - self.x.clone()));
-        let x3 = slope.clone() * slope.clone() - self.x.clone() - rhs.x;
-        let y3 = slope * (self.x - x3.clone()) - self.y;
-
-        Self::new(x3, y3)
+        self.add_impl(&rhs)
     }
 }
 
