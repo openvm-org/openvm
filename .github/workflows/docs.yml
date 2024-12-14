@@ -31,7 +31,7 @@ jobs:
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace 
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
           # taken from https://github.com/paradigmxyz/reth/blob/main/.github/workflows/book.yml
