@@ -33,6 +33,9 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
+      - name: Cargo check
+        run: cargo check
+
       - name: Build documentation
         run: cargo doc --workspace
 
