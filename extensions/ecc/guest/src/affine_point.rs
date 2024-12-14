@@ -2,7 +2,7 @@ use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use openvm_algebra_guest::Field;
 
-use crate::Group;
+use crate::{weierstrass::IntrinsicCurve, Group};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[repr(C)]
@@ -38,17 +38,33 @@ impl<F: Field> AffinePoint<F> {
             return self.clone();
         }
 
-        if self.x == rhs.x && self.y == -rhs.y.clone() {
-            return Self::IDENTITY;
+        if self.x == rhs.x {
+            if self.y == rhs.y.clone().neg() {
+                return Self::IDENTITY;
+            }
+            if self.y == rhs.y {
+                return self.double();
+            }
         }
 
-        if self.x == rhs.x && self.y == rhs.y {
-            return self.double();
-        }
+        // let lambda = (rhs.y.clone() - self.y.clone()).div_unsafe(&(rhs.x.clone() - self.x.clone()));
+        let mut lambda = rhs.y.clone();
+        lambda -= self.y.clone();
+        let mut denom = rhs.x.clone();
+        denom -= self.x.clone();
+        lambda.div_assign_unsafe(&denom);
 
-        let slope = (rhs.y.clone() - self.y.clone()).div_unsafe(&(rhs.x.clone() - self.x.clone()));
-        let x3 = slope.clone() * slope.clone() - self.x.clone() - rhs.x.clone();
-        let y3 = slope * (self.x.clone() - x3.clone()) - self.y.clone();
+        // x3 = lambda^2 - x1 - x2
+        let mut x3 = lambda.clone();
+        x3.square_assign();
+        x3 -= self.x.clone();
+        x3 -= rhs.x.clone();
+
+        // y3 = lambda * (x1 - x3) - y1
+        let x1_minus_x3 = self.x.clone() - x3.clone();
+        let mut y3 = lambda;
+        y3 *= x1_minus_x3;
+        y3 -= self.y.clone();
 
         Self::new(x3, y3)
     }
