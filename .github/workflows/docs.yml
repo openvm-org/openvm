@@ -35,13 +35,11 @@ jobs:
 
       - name: Build documentation
         run: cargo doc --workspace
-        env:
-          RUSTDOCFLAGS: --html-in-header assets/head.html
 
       - name: Build index page
         run: cargo doc --workspace --no-deps --exclude "openvm-benchmarks"
         env:
-          RUSTDOCFLAGS: --enable-index-page -Zunstable-options --html-in-header assets/head.html
+          RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
       # TODO: make a special tag for doc commit when pushing v*.*.* tags
 
