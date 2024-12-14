@@ -159,7 +159,6 @@ jobs:
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
 
       - name: Setup e2e (halo2 and arguments)
-        working-directory: extensions/native/recursion # We only ever run halo2 for recursion
         run: |
           E2E_BENCH=${{ inputs.e2e_bench }}
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
@@ -169,6 +168,7 @@ jobs:
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
             bash ./extensions/native/recursion/trusted_setup_s3.sh
+            export PARAMS_DIR=$(pwd)/params
           fi
 
       - name: Set BIN_NAME and CMD_ARGS
@@ -185,8 +185,8 @@ jobs:
             select(.name == $name) |
             .working_directory
           ' ./ci/benchmark-config.json)
-          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
-          echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKING_DIR'))")
+          echo "working_dir=$WORKING_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
       # Metric name is unique within a run (matrix)
