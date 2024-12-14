@@ -1,0 +1,43 @@
+name: Build and Deploy Crate Docs to Vercel 
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - v*.*.*
+
+jobs:
+  docs:
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps
+        env:
+          # taken from https://github.com/paradigmxyz/reth/blob/main/.github/workflows/book.yml
+          RUSTDOCFLAGS: --cfg docsrs --show-type-layout --generate-link-to-definition --enable-index-page -Zunstable-options --html-in-header assets/head.html
+
+      # TODO: make a special tag for doc commit when pushing v*.*.* tags
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }} # Token stored in GitHub Secrets
+          VERCEL_DOCS_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          cd target/doc
+          mkdir .vercel
+          echo "{\"projectId\":\"$VERCEL_DOCS_PROJECT_ID\",\"orgId\":\"$VERCEL_ORG_ID\"}" > .vercel/project.json
+          vercel --prod --token $VERCEL_TOKEN        
