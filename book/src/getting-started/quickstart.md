@@ -73,7 +73,7 @@ Some example host programs can be found [here](https://github.com/openvm-org/ope
 
 ### Generating to prove
 
-To generate a proof besides executing the program, instead of using `executor` above, do the following:
+To generate a proof besides executing the program, instead of using `executor` above (step 4), do the following:
 ```rust
 // Some additional configuration.
 let app_log_blowup = 2;
