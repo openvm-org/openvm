@@ -14,12 +14,11 @@ To support host machine execution, the top of your guest program should have:
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You can find some examples of guest programs in the `benchmarks/programs` directory.
+You can find some examples of guest programs in the [benchmarks/programs](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs) directory.
 
 ### no-std
 
-By default, the guest program is written in Rust with the `no-std` feature. This means that the program is not allowed to use any standard library features.
-But one can also use std?
+if we can use std, what's the downside of using it? should we use it / avoid it?
 
 ## Testing the program
 
@@ -35,42 +34,66 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 
 *TODO*: point to how to install SDK
 
-
+First to build the guest program:
 ```
 cargo axiom build
 ```
 
--> ELF
-
-Write another program that runs the ELF with openvm:
-
-Build the vm config with the extensions needed.
+This compiles to guest program into an [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) that can be found at `target/riscv32im-risc0-zkvm-elf` directory.
+Next, a host program is needed to run the ELF with openvm runtime. This is where one can configure the openvm with different parameters. There are a few steps:
 
 ```rust
+use openvm::transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf};
+use openvm_circuit::arch::instructions::exe::OpenVmExe
+use openvm_circuit::arch::VmExecutor;
+use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
+
+let sdk = Sdk;
+// 1. Build the vm config with the extensions needed.
+// TODO: link to extension
 let vm_config = SdkVmConfig::builder()
     .system(Default::default())
     .rv32i(Default::default())
-    ...
+    .io(Default::default())
+    .build();
+
+// 2. Load the ELF
+let elf = Elf::decode("your_path_to_elf", MEM_SIZE as u32)?;
+let exe = OpenVmExe::from_elf(elf, vm_config.transpiler()).unwrap();
+
+// 3. Prepare the input data
+let mut stdin = StdIn::default();
+stdin.write("some input data");
+
+// 4. Run the program
+let executor = VmExecutor::<_, _>::new(vm_config);
+executor.execute(exe, stdin)?;
 ```
+Some example host programs can be found [here](https://github.com/openvm-org/openvm/tree/main/benchmarks/src/bin).
 
-Load the ELF
+### Generating to prove
 
+To generate a proof besides executing the program, instead of using `executor` above, do the following:
 ```rust
-let sdk = Sdk;
-let guest_opts = GuestOptions::default();
-let mut pkg_dir = PathBuf::from("path_to_guest_program");
-let program = sdk
-    .build(guest_opts.clone(), &pkg_dir, &TargetFilter::default())
-    .unwrap();
+// Some additional configuration.
+let app_log_blowup = 2;
+let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
+let app_config = AppConfig { ... };
+
+let app_pk = sdk.app_keygen(app_config)?;
+let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
+let mut app_prover =
+    AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe)
+        .with_program_name(program_name);
+let proof = app_prover.generate_app_proof(stdin);
+let app_vk = app_pk.get_vk();
+sdk.verify_app_proof(&app_vk, &proof)?;
 ```
 
-Run the program
+## Troubleshooting
 
-```rust
-let exe = sdk
-    .transpile(program, vm_config.transpiler())
-    .unwrap();
-let input = // make your input data
-```
+todo
 
-How to run the program???
+## FAQ
+
+todo
