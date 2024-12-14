@@ -14,11 +14,11 @@ To support host machine execution, the top of your guest program should have:
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-You can find some examples of guest programs in the [benchmarks/programs](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs) directory.
+Some examples of guest programs are in the [benchmarks/programs](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs) directory.
 
 ### no-std
 
-if we can use std, what's the downside of using it? should we use it / avoid it?
+TODO: if we can use std, what's the downside of using it? should we use it / avoid it?
 
 ## Testing the program
 
@@ -80,6 +80,7 @@ let app_log_blowup = 2;
 let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
 let app_config = AppConfig { ... };
 
+// Keygen and prove
 let app_pk = sdk.app_keygen(app_config)?;
 let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
 let mut app_prover =
