@@ -45,5 +45,5 @@ The flamegraphs will be written to `*.svg` files in `.bench_metrics/flamegraphs`
 
 ### Latest Benchmark Results
 
-Latest benchmark results can be found [here](https://github.com/axiom-crypto/afs-prototype/blob/gh-pages/index.md).
+Latest benchmark results can be found [here](https://github.com/axiom-crypto/afs-prototype/blob/benchmark-results/index.md).
 These are run via [github workflows](./.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.

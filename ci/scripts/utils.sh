@@ -67,9 +67,9 @@ commit_and_push_gh_pages() {
 
     while [ $ATTEMPT -lt $MAX_RETRIES ]; do
         echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
-        git fetch origin gh-pages
-        git merge origin/gh-pages --no-edit
-        if git push origin gh-pages; then
+        git fetch origin benchmark-results
+        git merge origin/benchmark-results --no-edit
+        if git push origin benchmark-results; then
             SUCCESS=true
             break
         else

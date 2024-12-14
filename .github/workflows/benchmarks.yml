@@ -189,7 +189,7 @@ jobs:
           python3 ci/scripts/metric_unify/summarize.py "${md_file_list}" \
             --e2e-md-files "${E2E_FILE_LIST}" \
             --aggregation-json ci/scripts/metric_unify/aggregation.json \
-            --gh-pages-link "https://github.com/${{ github.repository }}/blob/gh-pages/${GH_PAGES_PATH}"
+            --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${GH_PAGES_PATH}"
 
           echo "" >> summary.md
           echo "Commit: https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}" >> summary.md
@@ -199,12 +199,12 @@ jobs:
           cp summary.md /tmp/benchmark-results/
 
       ##########################################################################
-      # Update gh-pages with summary upon a PR event                           #
+      # Update benchmark-results with summary upon a PR event                           #
       ##########################################################################
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
-          ref: gh-pages
+          ref: benchmark-results
 
       - name: Set up git
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')

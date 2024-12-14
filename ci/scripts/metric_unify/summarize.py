@@ -142,7 +142,7 @@ def main():
     argparser.add_argument('metrics_md_files', type=str, help="Comma separated list of metrics markdown file names")
     argparser.add_argument('--e2e-md-files', type=str, required=False, help="Comma separated list of e2e metrics markdown file names")
     argparser.add_argument('--aggregation-json', type=str, required=True, help="Path to a JSON file with metrics to aggregate")
-    argparser.add_argument('--gh-pages-link', type=str, required=True, help="Link to this PR's gh-pages directory")
+    argparser.add_argument('--benchmark-results-link', type=str, required=True, help="Link to this PR's benchmark-results directory")
     args = argparser.parse_args()
 
     aggregations = read_aggregations(args.aggregation_json)
