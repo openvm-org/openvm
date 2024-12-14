@@ -121,7 +121,7 @@ def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
         group_row = section_by_group.get(section)
         if group_row is None:
             res += [format_cell("-", None, None)] * COLS_PER_SECTION
-        else:    
+        else:
             res.append(str(group_row.log_blowup))
             for cell in group_row.cells:
                 res.append(str(cell))
@@ -154,14 +154,14 @@ def main():
     md_files = args.metrics_md_files.split(',')
     outputs = []
     for md_file in md_files:
-        outputs.append(generate_row(md_file, ["leaf_verifier"], {}, args.gh_pages_link))
+        outputs.append(generate_row(md_file, ["leaf"], {}, args.gh_pages_link))
     write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
     if args.e2e_md_files and args.e2e_md_files.strip():
         outputs = []
         md_files = args.e2e_md_files.split(',')
         for md_file in md_files:
-            outputs.append(generate_row(md_file, ["root_verifier", "leaf_verifier", "internal_verifier"], {"internal.*": "internal_verifier"}, args.gh_pages_link))
+            outputs.append(generate_row(md_file, ["root", "leaf", "internal"], {"internal.*": "internal"}, args.gh_pages_link))
         if outputs:
             write_md_table(outputs, "E2E Benchmarks", e2e_headers)
 

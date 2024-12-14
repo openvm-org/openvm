@@ -88,9 +88,10 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        let e2e_prover =
+        let mut e2e_prover =
             ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk)
                 .with_profiling();
+        e2e_prover.set_program_name("fib_e2e");
         let _proof = e2e_prover.generate_proof_for_evm(stdin);
     });
 
