@@ -85,9 +85,6 @@ instructions similarly to most of the other opcodes. Also, instead of having the
 and duplicate the instructions with the chips that actually execute them, we have each step of execution only generating
 one new row in the machine chip (and maybe more lines in other primitive chips that it uses for execution).
 
-See [internal doc](https://docs.google.com/document/d/1-UkvxiW5tvYH5qw7O4t2WjMIY8v2Gso9kt_MrWW5hPg/edit?usp=sharing) for
-discussion of alternatives and the trace cell cost analysis.
-
 ### Offline Memory
 
 In the no-CPU design, each chip receives the opcode instruction directly, and memory access (read or write) is
