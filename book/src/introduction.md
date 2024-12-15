@@ -1,17 +1,24 @@
-# Introduction
+# OpenVM
 
-OpenVM is ...
+_A modular toolkit for extensible zkVMs_
 
-... is _modular_, which means that its functionality is provided by several independent components. In particular, one can expand the functionality of OpenVM by adding new components.
+OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.
 
-An _extension_ (we could also call it a _module_ but we prefer not to in order to avoid confusion with the concept of a _module_ in the Rust language) is a component that provides a specific functionality. It consists of the following parts:
+## Key Features
 
-- one
-- two
-- three
+- **Modular no-CPU Architecture**: Unlike traditional machine architectures, the OpenVM architecture has no central processing unit. This design choice allows for seamless integration of custom chips, **without forking or modifying the core architecture**.
 
-...
+- **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine.
 
-The next chapters are supposed to serve as a manual for using this modularity.
+- **Rust Frontend**: ISA extensions are directly accessible through a Rust frontend via [intrinsic functions](https://en.wikipedia.org/wiki/Intrinsic_function), providing a smooth developer experience.
 
-# In particular, Chapter 2 is for this, Chapter 3 is for that, et cetera.
+- **On-chain Verification**: Every VM made using the framework comes with out-of-the-box support for unbounded program proving with verification on Ethereum.
+
+## Using This Book
+
+The following chapters will guide you through:
+
+- [Getting started](./getting-started/install.md)
+- [Writing applications](./writing-apps/overview.md) in Rust targeting OpenVM and generating proofs.
+- [Using existing extensions](./using-extensions/) to optimize your Rust programs.
+- How to add custom VM extensions
