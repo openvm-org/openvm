@@ -22,11 +22,7 @@ mod bn254 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Bn254_Fp2 { mod_idx = 0 },
-    }
-
-    openvm_ecc_sw_setup::sw_init! {
-        Fp,
+        Bn254Fp2 { mod_idx = 0 },
     }
 
     pub fn test_miller_step(io: &[u8]) {
@@ -104,11 +100,7 @@ mod bls12_381 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Bls12_381_Fp2 { mod_idx = 0 },
-    }
-
-    openvm_ecc_sw_setup::sw_init! {
-        Fp,
+        Bls12_381Fp2 { mod_idx = 0 },
     }
 
     pub fn test_miller_step(io: &[u8]) {

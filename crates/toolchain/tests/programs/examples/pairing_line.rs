@@ -20,10 +20,6 @@ mod bn254 {
         "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
     }
 
-    openvm_ecc_sw_setup::sw_init! {
-        Fp,
-    }
-
     pub fn test_mul_013_by_013(io: &[u8]) {
         assert_eq!(io.len(), 32 * 18);
         let l0 = &io[..32 * 4];
@@ -74,10 +70,6 @@ mod bls12_381 {
     openvm_algebra_moduli_setup::moduli_init! {
         "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
         "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
-    }
-
-    openvm_ecc_sw_setup::sw_init! {
-        Fp,
     }
 
     pub fn test_mul_023_by_023(io: &[u8]) {

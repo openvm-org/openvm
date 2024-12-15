@@ -47,8 +47,8 @@ To declare an elliptic curve struct, one needs to use the `sw_declare!` macro. A
 
 ```rust
 sw_declare! {
-    Bls12381 { mod_type = Bls12381_Fp, b = BLS12381_B },
-    Bn254 { mod_type = Bn254_Fp, b = BN254_B },
+    Bls12_381G1Affine { mod_type = Bls12_381Fp, b = BLS12_381_B },
+    Bn254 { mod_type = Bn254Fp, b = BN254_B },
 }
 ```
 
@@ -58,7 +58,7 @@ The arithmetic operations for these classes, when compiling for the `zkvm` targe
 
 ```rust
 sw_init! {
-    Bls12381, Bn254,
+    Bls12_381Fp, Bn254Fp,
 }
 ```
 

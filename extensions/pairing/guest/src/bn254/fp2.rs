@@ -9,14 +9,14 @@ use super::Fp;
 // The struct name needs to be globally unique for linking purposes.
 // The mod_type is a path used only in the struct definition.
 complex_declare! {
-    Bn254_Fp2 { mod_type = Fp }
+    Bn254Fp2 { mod_type = Fp }
 }
 
 complex_impl_field! {
-    Bn254_Fp2,
+    Bn254Fp2,
 }
 
-pub type Fp2 = Bn254_Fp2;
+pub type Fp2 = Bn254Fp2;
 
 impl FieldExtension<Fp> for Fp2 {
     const D: usize = 2;
