@@ -79,3 +79,9 @@ let n: u64 = read();
 `openvm::io::reveal` sends a public value to the final proof (to be read by the smart contract).
 
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
+
+## Compilation
+
+Notice that in the `cargo openvm build` command, there are `--transpile` and `--transpiler-config` flags. This is because we first compile the program normally on your *host* platform with RISC-V.
+But to run the program with the OpenVM runtime, we then to transpile it to a different target (for example, think compiling an Android app). See here for some explanation of [cross-compilation](https://rust-lang.github.io/rustup/cross-compilation.html).
+Right now we use `riscv32im-risc0-zkvm-elf` target which is avaiable in the [Rust toolchain](https://doc.rust-lang.org/rustc/platform-support/riscv32im-risc0-zkvm-elf.html), but we will contribute an OpenVM target to Rust in the future.
