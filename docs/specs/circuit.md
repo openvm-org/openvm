@@ -127,6 +127,7 @@ Read) sets. Any memory access in a chip must add one entry into each set and con
 To balance the Read and Write sets, an additional chip must ensure that every accessed address has an initial $(a, v_
 {init}, 0)$ added to the Write set, and $(a, v_{final}, t_{last})$ added to Read set.
 
+<!--
 For the offline checking to be sound, it must be constrained that the list of accessed addresses in the initial Write
 list are all **unique**. Uniqueness of the initial address list implies, together with the bus argument, that the final
 address list is also unique (vice versa, uniqueness of final set implies uniqueness of initial set). The key observation
@@ -135,6 +136,7 @@ address list. The traditional approach prior to OLB24 to enforce uniqueness is t
 sorted, which uses logup lookups for range checks necessary to constrain `IsLessThan`. OLB24 shows that one can
 implement an AIR with in-circuit randomness to constrain that all entries in a trace column are unique (with an
 extension to conditional uniqueness).
+-->
 
 The initial and final memory accesses are constrained different when the VM has continuations.
 See [Continuations](./continuations.md) for full details. In summary, because the initial and final memory states are
