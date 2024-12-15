@@ -31,7 +31,7 @@ std = ["openvm/std"]
 
 *TODO*: point to CLI installation instructions
 
-First we need to build the program targetting OpenVM runtime, and that requires some configuration. Put the following in `app_config.toml`:
+First we need to build the program targeting the OpenVM runtime, and that requires some configuration. Put the following in `openvm.toml`:
 ```toml
 [app_fri_params]
 log_blowup = 2
@@ -45,29 +45,37 @@ range_tuple_checker_sizes = [256, 2048]
 ```
 
 And run the following command to build the program:
-```
-cargo openvm build --transpile --transpiler-config app_config.toml --transpile-to outputs/fibonacci.exe
+
+```bash
+cargo openvm build --transpile --transpiler-config openvm.toml --transpile-to outputs/fibonacci.vmexe
 ```
 
-Now we can keygen, prove and verify the program.
+Next we can keygen the generate the proving and verifying keys:
 
 ```bash
 cargo openvm keygen --config app_config.toml --output outputs/pk --vk-output outputs/vk
-cargo openvm prove app --app-pk outputs/pk --exe outputs/fibonacci.exe --input "0xA086010000000000" --output outputs/proof
+```
+
+Now, to prove the program some input is needed. The input parameter is either a hex string or a file path. So for example if we want to compute the 10th fibonacci number, we can run:
+
+```bash
+cargo openvm prove app --app-pk outputs/pk --exe outputs/fibonacci.vmexe --input "0x000000000000000A" --output outputs/proof
 cargo openvm verify app --app-vk outputs/vk --proof outputs/proof
 ```
 
+No errors should be returned, and the proof should be correctly verified.
+
 ## Handling I/O
 
-`openvm::io` provides a few functions to read and write data.
+The program can take input from stdin, with some functions provided by `openvm::io`.
 
-`read` takes from stdin the next vec and deserialize it into a generic type `T`, so one should specify the type when calling it:
+`openvm::io::read` takes from stdin and deserializes it into a generic type `T`, so one should specify the type when calling it:
 ```rust
 let n: u64 = read();
 ```
 
-`read_vec` will just read a vector and return `Vec<u8>`.
+`openvm::io::read_vec` will just read a vector and return `Vec<u8>`.
 
-`reveal` prints the value to stdout, but should be thought of as sending a public value to the final proof.
+`openvm::io::reveal` sends a public value to the final proof (to be read by the smart contract).
 
-For debugging purposes, `print` and `println` can be used normally, but `println!` will only work if `std` is enabled.
+For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
