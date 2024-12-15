@@ -2,11 +2,11 @@
 
 _A modular toolkit for extensible zkVMs_
 
-OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the zkVM stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.
+OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.
 
 ## Key Features
 
-- **Modular no-CPU Architecture**: Unlike traditional machine architectures, the OpenVM architecture has no central processing unit. This design choice unlocks even more modularity by allowing seamless integration of custom chips, **without forking or modifying the core architecture**.
+- **Modular no-CPU Architecture**: Unlike traditional machine architectures, the OpenVM architecture has no central processing unit. This design choice allows for seamless integration of custom chips, **without forking or modifying the core architecture**.
 
 - **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine.
 
@@ -21,4 +21,4 @@ The following chapters will guide you through:
 - [Getting started](./getting-started/install.md)
 - [Writing applications](./writing-apps/overview.md) in Rust targeting OpenVM and generating proofs.
 - [Using existing extensions](./using-extensions/) to optimize your Rust programs.
-- How to build a custom VM extension
+- How to add custom VM extensions
