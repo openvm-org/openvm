@@ -2,7 +2,10 @@ use core::ops::{Add, AddAssign, Neg};
 
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{
+    weierstrass::{CachedMulTable, IntrinsicCurve},
+    CyclicGroup, Group,
+};
 
 mod fp12;
 mod fp2;
@@ -146,7 +149,20 @@ impl IntrinsicCurve for Bn254 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
-    // TODO: msm optimization
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        // heuristic
+        if coeffs.len() < 25 {
+            // BN254(Fp) is of prime order by Weil conjecture:
+            // <https://hackmd.io/@jpw/bn254#Subgroup-check-for-mathbb-G_1>
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            openvm_ecc_guest::msm(coeffs, bases)
+        }
+    }
 }
 
 impl PairingIntrinsics for Bn254 {
