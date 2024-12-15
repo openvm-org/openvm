@@ -12,7 +12,7 @@ A full guest program example is available here: [pairing_check.rs](https://githu
 
 ## Guest program setup
 
-We'll be working with an example using the BLS12-381 elliptic curve. This is in addition to the setup that needs to be done in the [Writing a Program](./writing-apps/write-program.md) section.
+We'll be working with an example using the BLS12-381 elliptic curve. This is in addition to the setup that needs to be done in the [Writing a Program](../writing-apps/write-program.md) section.
 
 In the guest program, we will import the `PairingCheck` and `IntMod` traits, along with a few other values that we will require:
 
@@ -26,7 +26,7 @@ use openvm_algebra_guest::IntMod;
 use openvm::io::read;
 ```
 
-Additionally, we'll need to initialize our moduli and `Fp2` struct via the following macros. For a more in-depth description of these macros, please see the [Customizable Extensions](./using-extensions/customizable-extensions.md) section.
+Additionally, we'll need to initialize our moduli and `Fp2` struct via the following macros. For a more in-depth description of these macros, please see the [Customizable Extensions](./customizable-extensions.md) section.
 
 ```rust
 openvm_algebra_moduli_setup::moduli_init! {
