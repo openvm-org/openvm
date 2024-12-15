@@ -1,3 +1,15 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Writing a Program](#writing-a-program)
+  - [Writing a guest program](#writing-a-guest-program)
+    - [no-std](#no-std)
+    - [Building and running](#building-and-running)
+  - [Handling I/O](#handling-io)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Writing a Program
 
 ## Writing a guest program

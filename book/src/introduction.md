@@ -1,3 +1,12 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Introduction](#introduction)
+- [In particular, Chapter 2 is for this, Chapter 3 is for that, et cetera.](#in-particular-chapter-2-is-for-this-chapter-3-is-for-that-et-cetera)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Introduction
 
 OpenVM is ...

@@ -1,3 +1,15 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Using already existing extensions](#using-already-existing-extensions)
+  - [`openvm-algebra`](#openvm-algebra)
+    - [Modular arithmetic](#modular-arithmetic)
+    - [Complex field extension](#complex-field-extension)
+  - [`openvm-ecc`](#openvm-ecc)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Using already existing extensions
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
@@ -5,6 +17,8 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor i
 ## `openvm-algebra`
 
 This crate allows one to create and use structs for convenient modular arithmetic operations, and also for their complex extensions (for example, if $p$ is a prime number, `openvm-algebra` provides methods for modular arithmetic in the field $\mathbb{F}_p[x]/(x^2 + 1)$).
+
+### Modular arithmetic
 
 To declare a modular arithmetic struct, one needs to use the `moduli_declare!` macro. A usage example is given below:
 
@@ -38,6 +52,40 @@ To summarize:
 - `moduli_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every modulus ever `declare`d in the program must be among the arguments of `moduli_init!`**.
 - `setup_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `moduli_init!`**. The order of `moduli_declare!` invocations or the arguments in them does not matter.
 - `setup_all_moduli()` sends setup instructions for all the structs.
+
+### Complex field extension
+
+To declare a complex field extension struct, one needs to use the `complex_declare!` macro. A usage example is given below:
+
+```rust
+complex_declare! {
+    Bn254_Fp2 { mod_type = Bn254_Fp }
+}
+```
+
+This creates a struct `Bn254_Fp2`, which represents the complex field extension class. The `mod_type` parameter must be a struct that implements the `IntMod` trait.
+
+The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
+
+```rust
+complex_init! {
+    Bn254_Fp2 { mod_idx = 0 },
+}
+```
+
+This macro **must be called exactly once** in the final executable program, and it must contain all the moduli that have ever been declared in the `complex_declare!` macros across all the compilation units. This macro must be called after `moduli_init!`, and `mod_idx` must be the index of the modulus in the `moduli_init!` macro (and is unrelated to the order of `moduli_declare!` invocations or the modular structs in them).
+
+When `complex_init!` is called, the structs in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the modulus this chip uses is exactly the one we `init`ed.
+
+To send a setup instruction for the $i$-th struct, one needs to call the `setup_complex_<i>()` function (for instance, `setup_complex_1()`). There is also a function `setup_all_complex_extensions()` that calls all the available `setup` functions.
+
+To summarize:
+
+- `complex_declare!` declares a struct for a complex field extension class. It can be called multiple times across the compilation units.
+- `complex_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every struct ever `declare`d in the program must be among the arguments of `complex_init!`**.
+- `setup_complex_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `complex_init!`**. The order of `complex_declare!` invocations or the arguments in them does not matter.
+- `setup_all_complex_extensions()` sends setup instructions for all the structs.
+
 
 ## `openvm-ecc`
 
