@@ -7,6 +7,8 @@ on:
       - v*.*.*
   pull_request:
     branches: [main]
+    paths:
+      - ".github/workflows/docs.yml"
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -39,8 +41,12 @@ jobs:
       - name: Build documentation
         run: cargo doc --workspace
 
+      # We only want the index page to display workspace crates, so we build
+      # separately and copy over the index as a hack
       - name: Build index page
-        run: cargo doc --workspace --no-deps --exclude "openvm-benchmarks"
+        run: |
+          cargo doc --workspace --no-deps --exclude "openvm-benchmarks" --target-dir target/doc-nodeps
+          cp target/doc-nodep/doc/index.html target/doc/
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
