@@ -25,7 +25,7 @@ mod bn254 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Fp2 { mod_idx = 0 },
+        Bn254_Fp2 { mod_idx = 0 },
     }
 
     pub fn test_pairing_check(io: &[u8]) {
@@ -65,7 +65,7 @@ mod bls12_381 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Fp2 { mod_idx = 0 },
+        Bls12_381_Fp2 { mod_idx = 0 },
     }
 
     pub fn test_pairing_check(io: &[u8]) {

@@ -22,7 +22,7 @@ mod bn254 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Fp2 { mod_idx = 0 },
+        Bn254_Fp2 { mod_idx = 0 },
     }
 
     openvm_ecc_sw_setup::sw_init! {
@@ -104,7 +104,7 @@ mod bls12_381 {
     }
 
     openvm_algebra_complex_macros::complex_init! {
-        Fp2 { mod_idx = 0 },
+        Bls12_381_Fp2 { mod_idx = 0 },
     }
 
     openvm_ecc_sw_setup::sw_init! {
