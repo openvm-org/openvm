@@ -12,7 +12,8 @@ pub trait VmExtension<F: PrimeField32> {
 }
 ```
 
-The `VmExtensionTrait` is a way to specify how to construct a collection of chips and all assign opcodes to be handled by them. This data is collected into a `VmInventory` struct, which is returned.
+The `VmExtensionTrait` is a way to specify how to construct a collection of chips and all assign opcodes to be handled
+by them. This data is collected into a `VmInventory` struct, which is returned.
 
 To handle previous chip dependencies necessary for chip construction and also automatic bus index management, we provide a `VmInventoryBuilder` api.
 
