@@ -1,1 +1,152 @@
 # OpenVM BigInt
+
+The OpenVM BigInt extension (aka `Int256`) provides two structs: `U256` and `I256`. These structs can be used to perform 256 bit arithmetic operations. The functional part is provided by the `openvm-bigint-guest` crate, which is a guest library that can be used in any OpenVM program.
+
+## `U256`
+
+The `U256` struct is a 256-bit unsigned integer type. 
+
+### Constants
+
+The `U256` struct has the following constants:
+
+- `MAX`: The maximum value of a `U256` known at compile time.
+- `MIN`: The minimum value of a `U256` known at compile time.
+- `ZERO`: The zero constant known at compile time.
+
+### Constructors
+
+The `U256` struct implements the following constructors: `from_u8`, `from_u32`, and `from_u64`.
+
+### Binary Operations
+
+The `U256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, and `bitwise shift operations`. All operations will wrap the result when the result is outside the range of the `U256` type.
+
+All of the operations can be used in 6 different ways:
+`U256 op U256` or `U256 op &U256` or `&U256 op U256` or `&U256 op &U256` or `U256 op= U256` or `&U256 op= U256`.
+
+### Other
+
+When using the `U256` struct with target os `zkvm`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+
+### Example matrix multiplication using `U256`
+
+```rust
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use openvm_bigint_guest::U256;
+
+const N: usize = 16;
+type Matrix = [[U256; N]; N];
+
+pub fn get_matrix(val: u8) -> Matrix {
+    array::from_fn(|_| array::from_fn(|_| U256::from_u8(val)))
+}
+
+pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
+    let mut c = get_matrix(0);
+    for i in 0..N {
+        for j in 0..N {
+            for k in 0..N {
+                c[i][j] += &a[i][k] * &b[k][j];
+            }
+        }
+    }
+    c
+}
+```
+
+## `I256`
+
+The `I256` struct is a 256-bit signed integer type. The `I256` struct is very similar to the `U256` struct.
+
+### Constants
+
+The `I256` struct has the following constants:
+
+- `MAX`: The maximum value of a `I256` known at compile time.
+- `MIN`: The minimum value of a `I256` known at compile time.
+- `ZERO`: The zero constant known at compile time.
+
+### Binary Operations
+
+The `I256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, and `bitwise shift operations`. All operations will wrap the result when the result is outside the range of the `I256` type. Also, unlike the `U256`, when performing the shift right operation `I256` will perform an arithmetic shift right (i.e. sign extends the result).
+
+All of the operations can be used in 6 different ways:
+`I256 op I256` or `I256 op &I256` or `&I256 op I256` or `&I256 op &I256` or `I256 op= I256` or `&I256 op= I256`.
+
+### Constructors
+
+The `I256` struct implements the following constructors: `from_i8`, `from_i32`, and `from_i64`.
+
+### Other
+
+When using the `I256` struct with target os `zkvm`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+
+### Example matrix multiplication using `I256`
+
+```rust
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use openvm_bigint_guest::I256;
+
+const N: usize = 16;
+type Matrix = [[I256; N]; N];
+
+pub fn get_matrix(val: i8) -> Matrix {
+    array::from_fn(|_| array::from_fn(|_| I256::from_i8(val)))
+}
+
+pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
+    let mut c = get_matrix(0);
+    for i in 0..N {
+        for j in 0..N {
+            for k in 0..N {
+                c[i][j] += &a[i][k] * &b[k][j];
+            }
+        }
+    }
+    c
+}
+```
+
+
+## External Functions
+
+The Bigint Guest extension provides another way to use the native implementation. It provides external functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for the 256 bit integer native implementations. Enabled only when the target is `zkvm`. All of the functions are defined as `unsafe extern "C" fn`.
+
+- `zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a + b`.
+- `zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a - b`.
+- `zkvm_u256_wrapping_mul_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a * b`.
+- `zkvm_u256_bitxor_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a ^ b`.
+- `zkvm_u256_bitand_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a & b`.
+- `zkvm_u256_bitor_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a | b`.
+- `zkvm_u256_wrapping_shl_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a << b`.
+- `zkvm_u256_wrapping_shr_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a >> b`.
+- `zkvm_u256_arithmetic_shr_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a.arithmetic_shr(b)`.
+- `zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool`: takes in two pointers to the inputs. Returns `true` if `a == b`, otherwise `false`.
+- `zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering`: takes in two pointers to the inputs. Returns the ordering of `a` and `b`.
+- `zkvm_u256_clone_impl(result: *mut u8, a: *const u8)`: takes in a pointer to the result, and a pointer to the input. `result = a`.
+
+And in the external library, you can do the following:
+
+```rust
+extern "C" {
+    fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8);
+}
+
+fn wrapping_add(a: &U256, b: &U256) -> U256 {
+    #[cfg(target_os = "zkvm")] {
+        let mut result = U256::ZERO;
+        unsafe {
+            zkvm_u256_wrapping_add_impl(&mut result, a, b);
+        }
+        result
+    }
+    #[cfg(not(target_os = "zkvm"))] {
+        // Regular wrapping add implementation
+    }
+}
+```
