@@ -4,8 +4,10 @@
 
 - [Using already existing extensions](#using-already-existing-extensions)
   - [`openvm-algebra`](#openvm-algebra)
+    - [Available traits and methods](#available-traits-and-methods)
     - [Modular arithmetic](#modular-arithmetic)
     - [Complex field extension](#complex-field-extension)
+    - [A toy example of a guest program using `openvm-algebra` extension](#a-toy-example-of-a-guest-program-using-openvm-algebra-extension)
   - [`openvm-ecc`](#openvm-ecc)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -17,6 +19,16 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor i
 ## `openvm-algebra`
 
 This crate allows one to create and use structs for convenient modular arithmetic operations, and also for their complex extensions (for example, if $p$ is a prime number, `openvm-algebra` provides methods for modular arithmetic in the field $\mathbb{F}_p[x]/(x^2 + 1)$).
+
+### Available traits and methods
+
+- `IntMod` trait: contains type `Repr`, constants `MODULUS`, `NUM_LIMBS`, `ZERO`, `ONE`, and basic methods for constructing an object and arithmetic operations. `Repr` is usually `[u8; NUM_LIMBS]` and indicates the underlying representation of the number. `MODULUS: Repr` is the modulus of the struct, `ZERO` and `ONE` are the additive and multiplicative identities (both are of type `Repr`). To construct a struct, methods `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, `from_u64` are available.
+
+- `Field` trait: contains constants `ZERO` and `ONE`, and methods for basic arithmetic operations.
+
+<!-- TODO: FieldExtension trait -->
+
+<!-- TODO: exp_bytes is only intended for host? -->
 
 ### Modular arithmetic
 
@@ -86,6 +98,52 @@ To summarize:
 - `setup_complex_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `complex_init!`**. The order of `complex_declare!` invocations or the arguments in them does not matter.
 - `setup_all_complex_extensions()` sends setup instructions for all the structs.
 
+### A toy example of a guest program using `openvm-algebra` extension
+
+```rust
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use openvm_algebra_guest::IntMod;
+
+openvm::entry!(main);
+
+// This macro will create two structs, `Mod1` and `Mod2`,
+// one for arithmetic modulo 998244353, and the other for arithmetic modulo 1000000007.
+openvm_algebra_moduli_setup::moduli_declare! {
+    Mod1 { modulus = "998244353" },
+    Mod2 { modulus = "1000000007" }
+}
+
+// This macro will initialize the moduli.
+// Now, `Mod1` is the "zeroth" modular struct, and `Mod2` is the "first" one.
+openvm_algebra_moduli_setup::moduli_init! {
+    "998244353", "1000000007"
+}
+
+// This macro will create two structs, `Complex1` and `Complex2`,
+// one for arithmetic in the field $\mathbb{F}_{998244353}[x]/(x^2 + 1)$,
+// and the other for arithmetic in the field $\mathbb{F}_{1000000007}[x]/(x^2 + 1)$.
+openvm_algebra_complex_macros::complex_declare! {
+    Complex1 { mod_type = Mod1 },
+    Complex2 { mod_type = Mod2 },
+}
+
+// The order of these structs does not matter,
+// given that we specify the `mod_idx` parameters properly.
+openvm_algebra_complex_macros::complex_init! {
+    Complex2 { mod_idx = 1 }, Complex1 { mod_idx = 0 },
+}
+
+pub fn main() {
+    setup_all_complex_extensions();
+    let a = Complex1::new(Mod1::ZERO, Mod1::from_u32(0x3b8) * Mod1::from_u32(0x100000)); // a = -i in the corresponding field
+    let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding field
+    assert_eq!(a.clone() * &a * &a * &a * &a, a); // a^5 = a
+    assert_eq!(b.clone() * &b * &b * &b * &b, b); // b^5 = b
+    // Note that these assertions would fail, have we provided the `mod_idx` parameters wrongly.
+}
+```
 
 ## `openvm-ecc`
 
