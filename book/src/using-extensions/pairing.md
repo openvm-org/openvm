@@ -79,7 +79,7 @@ let res = Bls12_381::pairing_check(
     &[p0, p1],
     &[q0, q1],
 );
-assert_eq!(res.is_ok())
+assert!(res.is_ok())
 ```
 
 ## Additional functionality
