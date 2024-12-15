@@ -11,7 +11,7 @@ WARNING: to prevent from building for your host machine, make sure you do not ha
 Build example with full command:
 
 ```bash
-cargo +nightly build -Z build-std=alloc,core,proc_macro,panic_abort --target riscv32im-risc0-zkvm-elf --example fibonacci
+cargo +nightly build -Z build-std=alloc,core,proc_macro,panic_abort --target zkvm-elf --example fibonacci
 ```
 
 Also works with just `cargo +nightly build` because we have a `.cargo/config.toml` that specifies the target and unstable build features (if uncommented).
@@ -19,14 +19,14 @@ Also works with just `cargo +nightly build` because we have a `.cargo/config.tom
 After this the ELF will be found via
 
 ```bash
-file target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
-target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program: ELF 32-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, with debug_info, not stripped
+file target/zkvm-elf/debug/examples/openvm-fibonacci-program
+target/zkvm-elf/debug/examples/openvm-fibonacci-program: ELF 32-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, with debug_info, not stripped
 ```
 
 To disassemble the ELF to read the instructions, [install cargo-binutils](https://github.com/rust-embedded/cargo-binutils) and run
 
 ```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
+rust-objdump -d target/zkvm-elf/debug/examples/openvm-fibonacci-program
 ```
 
 where `-d` is short for `--disassemble`.

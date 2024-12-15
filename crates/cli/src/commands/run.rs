@@ -8,7 +8,10 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::util::{read_to_stdin, read_to_struct_toml, Input};
+use crate::{
+    default::default_app_config,
+    util::{read_to_stdin, read_to_struct_toml, Input},
+};
 
 #[derive(Parser)]
 #[command(name = "run", about = "Run an OpenVM program")]
@@ -17,7 +20,7 @@ pub struct RunCmd {
     exe: PathBuf,
 
     #[clap(long, action, help = "Path to app config TOML file")]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
@@ -26,7 +29,11 @@ pub struct RunCmd {
 impl RunCmd {
     pub fn run(&self) -> Result<()> {
         let exe = read_exe_from_file(&self.exe)?;
-        let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&self.config)?;
+        let app_config: AppConfig<SdkVmConfig> = if let Some(config) = self.config.as_ref() {
+            read_to_struct_toml(config)?
+        } else {
+            default_app_config()
+        };
         let output = Sdk.execute(exe, app_config.app_vm_config, read_to_stdin(&self.input)?)?;
         println!("Execution output: {:?}", output);
         Ok(())

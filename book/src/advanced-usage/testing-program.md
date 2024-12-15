@@ -18,7 +18,7 @@ First to build the guest program:
 cargo axiom build
 ```
 
-This compiles the guest program into an [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) that can be found at `target/riscv32im-risc0-zkvm-elf` directory.
+This compiles the guest program into an [ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) that can be found at `target/zkvm-elf` directory.
 Next, a host program is needed to run the ELF with openvm runtime. This is where one can configure the openvm with different parameters. There are a few steps:
 
 ```rust

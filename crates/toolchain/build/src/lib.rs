@@ -72,7 +72,7 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
 pub fn get_dir_with_profile(target_dir: impl AsRef<Path>, profile: &str) -> PathBuf {
     target_dir
         .as_ref()
-        .join("riscv32im-risc0-zkvm-elf")
+        .join("zkvm-elf")
         .join(profile)
 }
 
@@ -120,7 +120,7 @@ pub fn guest_methods(
         .map(|target| {
             target_dir
                 .as_ref()
-                .join("riscv32im-risc0-zkvm-elf")
+                .join("zkvm-elf")
                 .join(profile)
                 .join(&target.name)
                 .to_path_buf()
@@ -158,7 +158,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         "+nightly-2024-10-30",
         subcmd,
         "--target",
-        "riscv32im-risc0-zkvm-elf",
+        "zkvm-elf",
     ];
 
     if std::env::var("OPENVM_BUILD_LOCKED").is_ok() {
@@ -308,7 +308,7 @@ pub fn build_guest_package(
     let stderr = child.stderr.take().unwrap();
 
     tty_println(&format!(
-        "{}: Starting build for riscv32im-risc0-zkvm-elf",
+        "{}: Starting build for zkvm-elf",
         pkg.name
     ));
 

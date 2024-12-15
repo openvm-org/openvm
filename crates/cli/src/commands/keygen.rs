@@ -9,7 +9,7 @@ use openvm_sdk::{
 };
 
 use crate::{
-    default::{DEFAULT_APP_PK_PATH, DEFAULT_APP_VK_PATH},
+    default::{default_app_config, DEFAULT_APP_PK_PATH, DEFAULT_APP_VK_PATH},
     util::read_to_struct_toml,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 #[command(name = "keygen", about = "Generate an application proving key")]
 pub struct KeygenCmd {
     #[clap(long, action, help = "Path to app config TOML file")]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     #[clap(
         long,
@@ -38,7 +38,11 @@ pub struct KeygenCmd {
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
-        let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&self.config)?;
+        let app_config: AppConfig<SdkVmConfig> = if let Some(config) = self.config.as_ref() {
+            read_to_struct_toml(config)?
+        } else {
+            default_app_config()
+        };
         let app_pk = Sdk.app_keygen(app_config)?;
         write_app_vk_to_file(app_pk.get_vk(), &self.vk_output)?;
         write_app_pk_to_file(app_pk, &self.output)?;

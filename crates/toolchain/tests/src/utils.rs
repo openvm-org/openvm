@@ -56,7 +56,7 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
         .map(|target| {
             target_dir
                 .as_ref()
-                .join("riscv32im-risc0-zkvm-elf")
+                .join("zkvm-elf")
                 .join(profile)
                 .join("examples")
                 .join(&target.name)

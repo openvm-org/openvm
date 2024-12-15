@@ -61,10 +61,10 @@ printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
 #### Local Builds
 
 By default, if you run `cargo build` or `cargo run` from the guest program root directory, it will
-build with target set to your **host** machine, while running `bench_from_exe` in the bench script will build with target set to `openvm`. If you want to directly build for `openvm` (more specifically a special RISC-V target), copy the `.cargo` folder from [here](./programs/revm_contract_deployment/.cargo) to the guest program root directory and uncomment the `.cargo/config.toml` file. (This config is equivalent to what the `build_bench_program` function does behind the scenes.) You can then `cargo build` or `cargo build --release` and it will output a RISC-V ELF file to `target/riscv32im-risc0-zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
+build with target set to your **host** machine, while running `bench_from_exe` in the bench script will build with target set to `openvm`. If you want to directly build for `openvm` (more specifically a special RISC-V target), copy the `.cargo` folder from [here](./programs/revm_contract_deployment/.cargo) to the guest program root directory and uncomment the `.cargo/config.toml` file. (This config is equivalent to what the `build_bench_program` function does behind the scenes.) You can then `cargo build` or `cargo build --release` and it will output a RISC-V ELF file to `target/zkvm-elf/release/*`. You can install [cargo-binutils](https://github.com/rust-embedded/cargo-binutils) to be able to disassemble the ELF file:
 
 ```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/release/openvm-fibonacci-program
+rust-objdump -d target/zkvm-elf/release/openvm-fibonacci-program
 ```
 
 ## Adding a Benchmark to CI
