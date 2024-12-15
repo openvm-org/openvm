@@ -1,4 +1,4 @@
-# `openvm-pairing`
+# Elliptic Curve Pairing
 
 The pairing extension enables usage of the optimal Ate pairing check on the BN254 and BLS12-381 elliptic curves. The following field extension tower for $\mathbb{F}_{p^{12}}$ is used for pairings in this crate:
 
