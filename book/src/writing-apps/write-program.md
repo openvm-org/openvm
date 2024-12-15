@@ -20,11 +20,19 @@ Some examples of guest programs are in the [benchmarks/programs](https://github.
 
 Although it's ususally ok to use std (like in quickstart), not all std functionalities are supported (e.g., randomness). There might be unexpected runtime errors if one uses std, so it is recommended you develop no_std libraries if possible to reduce surprises.
 
+### reading input
+
+`openvm::io::read_vec` and `openvm::io::read` will read from stdin. `read` takes the next vec and deserialize it into a generic type `T`, so one should specify the type when calling it:
+```rust
+let n: u64 = read();
+```
+`read_vec` reads the size of the vec first (`size: u32`) and then `size` bytes into a vector.
+
 ## Testing the program
 
 ### Running on the host machine
 
-To test the program on the host machine, one can use the `std` feature: `cargo run --features std`. `openvm::io::read_vec` and `openvm::io::read` will read from stdin. So for example to run the [fibonacci program](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs/fibonacci):
+To test the program on the host machine, one can use the `std` feature: `cargo run --features std`. So for example to run the [fibonacci program](https://github.com/openvm-org/openvm/tree/main/benchmarks/programs/fibonacci):
 
 ```bash
 printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run --features std
@@ -62,8 +70,9 @@ let elf = Elf::decode("your_path_to_elf", MEM_SIZE as u32)?;
 let exe = OpenVmExe::from_elf(elf, vm_config.transpiler()).unwrap();
 
 // 3. Prepare the input data
+let my_input = SomeStruct; // anything that can be serialized
 let mut stdin = StdIn::default();
-stdin.write("some input data");
+stdin.write(StdIn::from_bytes(my_input.as_bytes()));
 
 // 4. Run the program
 let executor = VmExecutor::<_, _>::new(vm_config);
