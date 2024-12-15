@@ -1,4 +1,4 @@
-name: Build and Deploy Crate Docs to Vercel
+name: Build and Serve Crate Docs
 
 on:
   push:
@@ -44,18 +44,15 @@ jobs:
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
-      # TODO: make a special tag for doc commit when pushing v*.*.* tags
+      - name: Install s5cmd
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel
-
-      - name: Deploy to Vercel
+      # TODO: store versioned copy of docs when new v*.*.* tag is pushed
+      - name: Sync static S3 bucket
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }} # Token stored in GitHub Secrets
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
         run: |
           cd target/doc
-          mkdir .vercel
-          echo "{\"projectId\":\"$VERCEL_PROJECT_ID\",\"orgId\":\"$VERCEL_ORG_ID\"}" > .vercel/project.json
-          vercel --prod --token $VERCEL_TOKEN
+          s5cmd sync . s3://${S3_BUCKET%/}/static/
