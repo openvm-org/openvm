@@ -1,17 +1,3 @@
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
-
-- [Testing the program](#testing-the-program)
-  - [Running on the host machine](#running-on-the-host-machine)
-  - [Running with the OpenVM runtime](#running-with-the-openvm-runtime)
-  - [Generating to prove](#generating-to-prove)
-- [Troubleshooting](#troubleshooting)
-- [FAQ](#faq)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
-
 ## Testing the program
 
 ### Running on the host machine
