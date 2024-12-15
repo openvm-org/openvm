@@ -1,24 +1,36 @@
-# Using already existing extensions
+# Using Existing Extensions
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Certain arithmetic operations, particularly modular arithmetic, can be optimized significantly when the modulus is known at compile time.  This approach requires a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, three steps are involved:
+
+1. **Declare**: Introduce a modular arithmetic or related structure, along with its modulus and functionality. This can be done in any library or binary file.
+2. **Init**: Performed exactly once in the final binary. It aggregates all previously declared structures, assigns them stable indices, and sets up linkage so that they can be referenced in generated code.
+3. **Setup**: A one-time runtime procedure for security. This ensures that the compiled code matches the virtual machine’s expectations and that each instruction set is tied to the correct modulus or extension.
+
+These steps ensure both performance and security: performance because the modulus is known at compile time, and security because runtime checks confirm that the correct structures have been initialized.
 
 ## `openvm-algebra`
 
-This crate allows one to create and use structs for convenient modular arithmetic operations, and also for their complex extensions (for example, if $p$ is a prime number, `openvm-algebra` provides methods for modular arithmetic in the field $\mathbb{F}_p[x]/(x^2 + 1)$).
+The `openvm-algebra` crate provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if $p$ is prime, `openvm-algebra` can handle modular arithmetic in $\mathbb{F}_p$​ and its quadratic extension fields $\mathbb{F}_p[x]/(x^2 + 1)$.
 
 ### Available traits and methods
 
-- `IntMod` trait: contains type `Repr`, constants `MODULUS`, `NUM_LIMBS`, `ZERO`, `ONE`, and basic methods for constructing an object and arithmetic operations. `Repr` is usually `[u8; NUM_LIMBS]` and indicates the underlying representation of the number. `MODULUS: Repr` is the modulus of the struct, `ZERO` and `ONE` are the additive and multiplicative identities (both are of type `Repr`). To construct a struct, methods `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, `from_u64` are available.
+- `IntMod` trait:
+    Defines the type `Repr` and constants `MODULUS`, `NUM_LIMBS`, `ZERO`, and `ONE`. It also provides basic methods for constructing a modular arithmetic object and performing arithmetic operations.
+    - `Repr` typically is `[u8; NUM_LIMBS]`, representing the number’s underlying storage.
+    - `MODULUS` is the compile-time known modulus.
+    - `ZERO` and `ONE` represent the additive and multiplicative identities, respectively.
+    - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, and `from_u64`.
 
-- `Field` trait: contains constants `ZERO` and `ONE`, and methods for basic arithmetic operations.
-
-<!-- TODO: FieldExtension trait -->
+- `Field` trait:
+    Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.
 
 <!-- TODO: exp_bytes is only intended for host? -->
 
 ### Modular arithmetic
 
-To declare a modular arithmetic struct, one needs to use the `moduli_declare!` macro. A usage example is given below:
+To leverage compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
+
+1. **Declare**: Use the `moduli_declare!` macro to define a modular arithmetic struct. This can be done multiple times in various crates or modules:
 
 ```rust
 moduli_declare! {
@@ -27,9 +39,9 @@ moduli_declare! {
 }
 ```
 
-This creates two structs, `Bls12381_Fp` and `Bn254_Fp`, each representing the modular arithmetic class. These classes implement `Add`, `Sub` and other basic arithmetic operations; the underlying functions used for this are a part of the `IntMod` trait. The modulus for each struct is specified in the `modulus` parameter of the macro. It should be a string literal in either decimal or hexadecimal format (in the latter case, it must start with `0x`).
+This creates `Bls12381_Fp` and `Bn254_Fp` structs, each implementing `Add`, `Sub`, and other operations defined by `IntMod`. The modulus parameter must be a string literal in decimal or hexadecimal format.
 
-The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
+2. **Init**: Use the `moduli_init!` macro exactly once in the final binary:
 
 ```rust
 moduli_init! {
@@ -38,22 +50,20 @@ moduli_init! {
 }
 ```
 
-This macro **must be called exactly once** in the final executable program, and it must contain all the moduli that have ever been declared in the `moduli_declare!` macros across all the compilation units. It is possible to `declare` a number in decimal and `init` it in hexadecimal, and vice versa.
+This step enumerates the declared moduli (e.g., `0` for the first one, `1` for the second one) and sets up internal linkage so the compiler can generate the appropriate RISC-V instructions associated with each modulus.
 
-When `moduli_init!` is called, the moduli in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the modulus this chip uses is exactly the one we `init`ed.
+3. **Setup**: At runtime, before performing arithmetic, a setup instruction must be sent to ensure security and correctness. For the $i$-th modulus, you call `setup_<i>()` (e.g., `setup_0()` or `setup_1()`). Alternatively, `setup_all_moduli()` can be used to handle all declared moduli.
 
-To send a setup instruction for the $i$-th struct, one needs to call the `setup_<i>()` function (for instance, `setup_1()`). There is also a function `setup_all_moduli()` that calls all the available `setup` functions.
-
-To summarize:
-
-- `moduli_declare!` declares a struct for a modular arithmetic class. It can be called multiple times across the compilation units.
-- `moduli_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every modulus ever `declare`d in the program must be among the arguments of `moduli_init!`**.
-- `setup_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `moduli_init!`**. The order of `moduli_declare!` invocations or the arguments in them does not matter.
-- `setup_all_moduli()` sends setup instructions for all the structs.
+**Summary**:
+- `moduli_declare!`: Declares modular arithmetic structures and can be done multiple times.
+- `moduli_init!`: Called once in the final binary to assign and lock in the moduli.
+- `setup_<i>()`/`setup_all_moduli()`: Ensures at runtime that the correct modulus is in use, providing a security check and finalizing the environment for safe arithmetic operations.
 
 ### Complex field extension
 
-To declare a complex field extension struct, one needs to use the `complex_declare!` macro. A usage example is given below:
+Complex extensions, such as $\mathbb{F}_p[x]/(x^2 + 1)$, are defined similarly using `complex_declare!` and `complex_init!`:
+
+1. **Declare**:
 
 ```rust
 complex_declare! {
@@ -61,9 +71,9 @@ complex_declare! {
 }
 ```
 
-This creates a struct `Bn254_Fp2`, which represents the complex field extension class. The `mod_type` parameter must be a struct that implements the `IntMod` trait.
+This creates a `Bn254_Fp2` struct, representing a complex extension field. The `mod_type` must implement `IntMod`.
 
-The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
+2. **Init**: Called once, after `moduli_init!`, to enumerate these extensions and generate corresponding instructions:
 
 ```rust
 complex_init! {
@@ -71,21 +81,13 @@ complex_init! {
 }
 ```
 
-This macro **must be called exactly once** in the final executable program, and it must contain all the moduli that have ever been declared in the `complex_declare!` macros across all the compilation units. This macro must be called after `moduli_init!`, and `mod_idx` must be the index of the modulus in the `moduli_init!` macro (and is unrelated to the order of `moduli_declare!` invocations or the modular structs in them).
+Here, `mod_idx` refers to the index of the underlying modulus as initialized by `moduli_init!`
 
-When `complex_init!` is called, the structs in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the modulus this chip uses is exactly the one we `init`ed.
+3. **Setup**: Similar to moduli, call `setup_complex_<i>()` or `setup_all_complex_extensions()` at runtime to secure the environment.
 
-To send a setup instruction for the $i$-th struct, one needs to call the `setup_complex_<i>()` function (for instance, `setup_complex_1()`). There is also a function `setup_all_complex_extensions()` that calls all the available `setup` functions.
+### Example program
 
-To summarize:
-
-- `complex_declare!` declares a struct for a complex field extension class. It can be called multiple times across the compilation units.
-- `complex_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every struct ever `declare`d in the program must be among the arguments of `complex_init!`**.
-- `setup_complex_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th modulus in `complex_init!`**. The order of `complex_declare!` invocations or the arguments in them does not matter.
-- `setup_all_complex_extensions()` sends setup instructions for all the structs.
-
-### A toy example of a guest program using `openvm-algebra` extension
-
+Here is a toy example using both the modular arithmetic and complex field extension capabilities:
 ```rust
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -133,9 +135,9 @@ pub fn main() {
 
 ## `openvm-ecc`
 
-This crate allows one to create and use structs for elliptic curve cryptography. More specifically, it only supports curves where the defining equation is in short [Weierstrass curves](https://en.wikipedia.org/wiki/Weierstrass_form) (that is, `a = 0`).
+For elliptic curve cryptography, the `openvm-ecc` crate provides similar macros:
 
-To declare an elliptic curve struct, one needs to use the `sw_declare!` macro. A usage example is given below:
+1. **Declare**: Use `sw_declare!` to define elliptic curves over the previously declared moduli. For example:
 
 ```rust
 sw_declare! {
@@ -144,9 +146,9 @@ sw_declare! {
 }
 ```
 
-Similar to the `moduli_declare!` macro, the `sw_declare!` macro creates a struct for an elliptic curve. The `mod_type` parameter specifies the type of the modulus for this curve, and the `b` parameter specifies the free coefficient of the curve equation; both of these parameters are required. The `mod_type` parameter must be a struct that implements the `IntMod` trait. The `b` parameter must be a constant.
+Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation $y^2 = x^3 + b$.
 
-The arithmetic operations for these classes, when compiling for the `zkvm` target, are converted into RISC-V asm instructions which are distinguished by the `funct7` field. The corresponding "distinguishers assignment" is happening when another macro is called:
+2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:
 
 ```rust
 sw_init! {
@@ -154,15 +156,10 @@ sw_init! {
 }
 ```
 
-Again, this macro **must be called exactly once** in the final executable program, and it must contain all the curves that have ever been declared in the `sw_declare!` macros across all the compilation units.
+3. **Setup**: Similar to the moduli and complex extensions, runtime setup instructions ensure that the correct curve parameters are being used, guaranteeing secure operation.
 
-When `sw_init!` is called, the curves in it are enumerated from `0`. For each chip that is used, the first instruction that this chip receives must be a `setup` instruction -- this adds a record to the trace that guarantees that the curve this chip uses is exactly the one we `init`ed.
+**Summary**:
 
-To send a setup instruction for the $i$-th struct, one needs to call the `setup_sw_<i>()` function (for instance, `setup_sw_1()`). There is also a function `setup_all_curves()` that calls all the available `setup` functions.
-
-To summarize:
-
-- `sw_declare!` declares a struct for an elliptic curve. It can be called multiple times across the compilation units.
-- `sw_init!` initializes the data required for transpiling the program into the RISC-V assembly. **Every curve ever `declare`d in the program must be among the arguments of `sw_init!`**.
-- `setup_sw_<i>()` sends a setup instruction for the $i$-th struct. Here, **$i$-th struct is the one that corresponds to the $i$-th curve in `sw_init!`**. The order of `sw_declare!` invocations or the arguments in them does not matter.
-- `setup_all_curves()` sends setup instructions for all the structs.
+- `sw_declare!`: Declares elliptic curve structures.
+- `sw_init!`: Initializes them once, linking them to the underlying moduli.
+- `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
