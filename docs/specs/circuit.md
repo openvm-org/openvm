@@ -157,19 +157,14 @@ The main idea is that in the offline checking memory argument [above](#offline-m
 t)$ where the length of $v$ is variable. The difference in word sizes only needs to be resolved when there is a sequence
 of read+write or write+read involving different word sizes.
 
-We introduce chips MemoryConverterChip[$w$] and MemoryPackChip[$w$] where
+We introduce chips `AccessAdapterChip<N>` that can:
 
-- MemoryConverterChip: read $(a, v_0 || ... || v_{B-1}, t)$ and write $(a + B \cdot i, v_i, t + 1)$ for $i \in [0,B)$
-  where $B$ is `WORD_BLOCK_SIZE`, or
-- MemoryConverterChip: read $(a + B \cdot i, v_i, t - 1)$ for $i \in [0,B)$ and write $(a, v_0 || ... || v_{w-1}, t)$ to
-  the memory.
-- MemoryPackChip: read $(a + B \cdot i, v_i, t_{prev,i})$ for $i \in [0,B)$ and write $(a, v_0 || ... || v_{w-1}, t)$ to
-  the memory. It must constrain $t_{prev,i} < t$. The difference between this and MemoryConverterChip is that it allows
-  packing smaller words that may have been modified at different previous times. This packing is more expensive.
+- read $(a, v_0 || ... || v_{N-1}, t)$ and write $(a, v_0 || ... || v_{N/2 - 1}, t)$ and $(a + N/2, v_{N/2} || ... || v_{N-1}, t)$
+- read $(a, v_0 || ... || v_{N/2 - 1}, t_0)$ and $(a + N / 2, v_{N/2} || ... || v_{N-1}, t_1)$ and write $(a, v_0 || .. || v_{N-1}, max(t_0, t_1))$
 
-Here the length of $v_i$ is $w$.
+where we allow `N` to be different powers of two.
 
-The values of $a, v_i$ that appear in the trace of the converter chip is generated on-demand based on the needs of the
+The values of $a, v_i$ that appear in the trace of the access adapter chip are generated on-demand based on the needs of the
 runtime memory access. In other words, the converter inserts additional writes into the MEMORY_BUS when needed in order
 to link up accesses of different word sizes.
 
