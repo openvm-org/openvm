@@ -1,5 +1,29 @@
 # OpenVM ECC
 
+The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations.
+
+## Available traits and methods
+
+- `Group` trait:
+    This represents an element of a algebraic additive group. Therefore it should implements `add`, `sub`, and `double`.
+    - `IDENTITY` is the identity element of the group.
+
+- `CyclicGroup` trait:
+    It's a group that has a generator, so it defines `GENERATOR` and `NEG_GENERATOR`.
+
+- `WeierstrassPoint` trait:
+    It's represents a point on a Weierstrass curve, so it extends `Group`.
+    - `Coordinate` type is the type of the coordinates of the point, and it implements `IntMod`.
+    - `x`, `y`, `from_xy` methods are used to get the coordinates and construct a point.
+    - The point supports elliptic curve operations with `add_ne_nonidentity` and `double_nonidentity`.
+    - `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
+
+- `msm`: for multi-scalar multiplication.
+
+- `ecdsa`: for doing ECDSA public key recovery.
+
+## Macros
+
 For elliptic curve cryptography, the `openvm-ecc` crate provides macros similar to those in [`openvm-algebra`](./algebra.md):
 
 1. **Declare**: Use `sw_declare!` to define elliptic curves over the previously declared moduli. For example:
@@ -28,3 +52,54 @@ sw_init! {
 - `sw_declare!`: Declares elliptic curve structures.
 - `sw_init!`: Initializes them once, linking them to the underlying moduli.
 - `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
+
+## Example program
+
+See a working example [here](https://github.com/openvm-org/openvm/blob/c19c9ac60b135bb0f38fc997df5eb149db8144b4/crates/toolchain/tests/programs/examples/ec.rs).
+
+To use the ECC extension, add the following dependencies to `Cargo.toml`:
+
+```toml
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["k256"] }
+```
+
+One can define their own ECC structs but we will use the Secp256k1 struct from `openvm-ecc-guest` and thus the `k256` feature should be enabled.
+
+```rust
+use openvm_ecc_guest::{
+    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar}
+    Group,
+};
+
+openvm_algebra_guest::moduli_setup::moduli_init! {
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+}
+
+openvm_ecc_guest::sw_setup::sw_init! {
+    Secp256k1Coord,
+}
+```
+
+With the above we can start doing elliptic curve operations like adding points:
+
+```rust
+pub fn main() {
+    setup_all_moduli();
+    setup_all_curves();
+    let x1 = Secp256k1Coord::from_u32(1);
+    let y1 = Secp256k1Coord::from_le_bytes(&hex!(
+        "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"
+    ));
+    let p1 = Secp256k1Point { x: x1, y: y1 };
+
+    let x2 = Secp256k1Coord::from_u32(2);
+    let y2 = Secp256k1Coord::from_le_bytes(&hex!(
+        "D1A847A8F879E0AEE32544DA5BA0B3BD1703A1F52867A5601FF6454DD8180499"
+    ));
+    let p2 = Secp256k1Point { x: x2, y: y2 };
+
+    let p3 = &p1 + &p2;
+}
+```
