@@ -31,6 +31,32 @@ std = ["openvm/std"]
 
 *TODO*: point to CLI installation instructions
 
+First we need to build the program targetting OpenVM runtime, and that requires some configuration. Put the following in `app_config.toml`:
+```toml
+[app_fri_params]
+log_blowup = 2
+num_queries = 42
+proof_of_work_bits = 16
+
+[app_vm_config.io]
+[app_vm_config.rv32i]
+[app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 2048]
+```
+
+And run the following command to build the program:
+```
+cargo openvm build --transpile --transpiler-config app_config.toml --transpile-to outputs/fibonacci.exe
+```
+
+Now we can keygen, prove and verify the program.
+
+```bash
+cargo openvm keygen --config app_config.toml --output outputs/pk --vk-output outputs/vk
+cargo openvm prove app --app-pk outputs/pk --exe outputs/fibonacci.exe --input "0xA086010000000000" --output outputs/proof
+cargo openvm verify app --app-vk outputs/vk --proof outputs/proof
+```
+
 ## Handling I/O
 
 `openvm::io` provides a few functions to read and write data.
@@ -42,4 +68,6 @@ let n: u64 = read();
 
 `read_vec` will just read a vector and return `Vec<u8>`.
 
-`reveal`
+`reveal` prints the value to stdout, but should be thought of as sending a public value to the final proof.
+
+For debugging purposes, `print` and `println` can be used normally, but `println!` will only work if `std` is enabled.

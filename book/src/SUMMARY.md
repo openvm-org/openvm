@@ -24,3 +24,4 @@
 # Advanced Usage
 
 - [Overview](./advanced-usage/overview.md)
+- [Testing the program](./advanced-usage/testing-program.md)
