@@ -53,7 +53,7 @@ cargo openvm build --transpile --transpiler-config openvm.toml --transpile-to ou
 Next we can keygen the generate the proving and verifying keys:
 
 ```bash
-cargo openvm keygen --config app_config.toml --output outputs/pk --vk-output outputs/vk
+cargo openvm keygen --config openvm.toml --output outputs/pk --vk-output outputs/vk
 ```
 
 Now, to prove the program some input is needed. The input parameter is either a hex string or a file path. So for example if we want to compute the 10th fibonacci number, we can run:
