@@ -53,11 +53,10 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     c
 }
 ```
-Add the following to your `Cargo.toml` file:
+Add the following to your `openvm.toml` file:
 
 ```toml
-[dependencies]
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+[app_vm_config.bigint]
 ```
 
 ## `I256`
@@ -112,11 +111,10 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 }
 ```
 
-Add the following to your `Cargo.toml` file:
+Add the following to your `openvm.toml` file:
 
 ```toml
-[dependencies]
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+[app_vm_config.bigint]
 ```
 
 ## External Functions

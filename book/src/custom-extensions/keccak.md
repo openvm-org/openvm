@@ -33,36 +33,10 @@ pub fn main() {
 }
 ```
 
-To use the Keccak256 Guest extension, you need to add the following to your `Cargo.toml` file:
+To use the Keccak256 Guest extension, you need to add the following to your `openvm.toml` file:
 
 ```toml
-[dependencies]
-openvm-keccak256-guest = { git = "https://github.com/openvm-org/openvm.git" }
-```
-
-To actually run the above example guest program you would have something like this:
-
-```rust
-let elf = Elf::decode("your_path_to_elf", MEM_SIZE as u32)?;
-let vm_config = SdkVmConfig::builder()
-    .system(Default::default())
-    .rv32im(Default::default())
-    .io(Default::default())
-    .keccak256(Default::default())
-    .build();
-// or Keccak256Rv32Config::default();
-let transpiler = Transpiler::<F>::default()
-    .with_extension(Rv32ITranspilerExtension)
-    .with_extension(Rv32MTranspilerExtension)
-    .with_extension(Rv32IoTranspilerExtension)
-    .with_extension(Keccak256TranspilerExtension);
-let executor = VmExecutor::<F, _>::new(vm_config);
-let input = [].map(F::from_canonical_u8).to_vec();
-let expected_output = [
-        197, 210, 70, 1, 134, 247, 35, 60, 146, 126, 125, 178, 220, 199, 3, 192, 229, 0, 182, 83,
-        202, 130, 39, 59, 123, 250, 216, 4, 93, 133, 164, 112,
-].map(F::from_canonical_u8).to_vec();
-executor.execute(openvm_exe, vec![input, expected_output])?;
+[app_vm_config.keccak256]
 ```
 
 See the another example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/keccak.rs).
