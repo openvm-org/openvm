@@ -66,4 +66,4 @@ jobs:
       - name: Build openvm-ecc-guest crate for openvm
         working-directory: extensions/ecc/guest
         run: |
-          cargo openvm build
+          cargo openvm build --no-transpile

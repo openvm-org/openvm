@@ -6,8 +6,13 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_sdk::StdIn;
+use openvm_sdk::{
+    config::{AppConfig, SdkVmConfig},
+    StdIn,
+};
 use serde::de::DeserializeOwned;
+
+use crate::default::default_app_config;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -71,4 +76,16 @@ pub(crate) fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
         Some(Input::HexBytes(bytes)) => Ok(StdIn::from_bytes(bytes)),
         None => Ok(StdIn::default()),
     }
+}
+
+pub(crate) fn read_config_toml_or_default(config: &PathBuf) -> Result<AppConfig<SdkVmConfig>> {
+    let mut app_config: Result<AppConfig<SdkVmConfig>> = read_to_struct_toml(config);
+    if app_config.is_err() {
+        println!(
+            "{:?} not found, using default application configuration",
+            config
+        );
+        app_config = Ok(default_app_config());
+    }
+    app_config
 }

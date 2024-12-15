@@ -8,17 +8,12 @@ use eyre::Result;
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
 };
-use openvm_rv32im_transpiler::{Rv32ITranspilerExtension, Rv32MTranspilerExtension};
-use openvm_sdk::{
-    config::{AppConfig, SdkVmConfig},
-    fs::write_exe_to_file,
-    Sdk,
-};
-use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler};
+use openvm_sdk::{fs::write_exe_to_file, Sdk};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
-    default::{DEFAULT_APP_EXE_PATH, DEFAULT_MANIFEST_DIR},
-    util::read_to_struct_toml,
+    default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_MANIFEST_DIR},
+    util::read_config_toml_or_default,
 };
 
 #[derive(Parser)]
@@ -62,9 +57,10 @@ pub struct BuildArgs {
 
     #[arg(
         long,
+        default_value = DEFAULT_APP_CONFIG_PATH,
         help = "Path to the SDK config .toml file that specifies the transpiler extensions"
     )]
-    pub transpiler_config: Option<PathBuf>,
+    pub transpiler_config: PathBuf,
 
     #[arg(
         long,
@@ -137,14 +133,8 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
         let output_path = build_args.exe_path(&elf_path);
-        let transpiler = if let Some(transpiler_config) = build_args.transpiler_config.clone() {
-            let app_config: AppConfig<SdkVmConfig> = read_to_struct_toml(&transpiler_config)?;
-            app_config.app_vm_config.transpiler()
-        } else {
-            Transpiler::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-        };
+        let app_config = read_config_toml_or_default(&build_args.transpiler_config)?;
+        let transpiler = app_config.app_vm_config.transpiler();
 
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
