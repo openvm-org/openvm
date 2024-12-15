@@ -15,5 +15,5 @@ The list of existing extensions:
 - [`openvm-algebra`](./algebra.md)
 - [`openvm-bigint`](./bigint.md)
 - [`openvm-keccak`](./keccak.md)
-- [`openvm-pairing`](./pairing.md)
 - [`openvm-ecc`](./ecc.md)
+- [`openvm-pairing`](./pairing.md)

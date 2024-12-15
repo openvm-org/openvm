@@ -20,6 +20,11 @@
 # Using Extensions
 
 - [Customizable Extensions](./custom-extensions/overview.md)
+    - [Algebra](./custom-extensions/algebra.md)
+    - [BigInt](./custom-extensions/bigint.md)
+    - [Keccak](./custom-extensions/keccak.md)
+    - [ECC](./custom-extensions/ecc.md)
+    - [Pairing](./custom-extensions/pairing.md)
 
 # Advanced Usage
 
