@@ -24,7 +24,7 @@ In `Cargo.toml`, add the following dependency:
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"] }
 ```
 
-Note that `std` is not enabled by default, so explicitly enable it is required.
+Note that `std` is not enabled by default, so explicitly enabling it is required.
 
 ## The fibonacci program
 
@@ -43,10 +43,4 @@ fn main() {
     }
     println!("{}", a);
 }
-```
-
-## Running on host
-
-```bash
-printf '\xA0\x86\x01\x00\x00\x00\x00\x00' | cargo run
 ```

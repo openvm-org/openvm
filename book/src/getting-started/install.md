@@ -5,6 +5,10 @@ TODO: how to install `cargo-openvm`.
 
 ## Build from source
 
-`cargo install --force --path path-openvm-repo/crates/cli`
+```bash
+git clone https://github.com/openvm-org/openvm.git
+cd openvm
+cargo install --force --path crates/cli
+```
 
 ## Toolchain
