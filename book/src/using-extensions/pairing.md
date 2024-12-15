@@ -48,7 +48,7 @@ setup_all_complex_extensions();
 
 ## Input values
 
-The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathbb{F}_{p^2}$. They can be constructed the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
+The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathbb{F}_{p^2}$. They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
 
 We can create a new struct that will hold this point outside of our guest program and import it into our guest program:
 
