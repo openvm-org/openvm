@@ -1,6 +1,13 @@
-use std::array::from_fn;
+use std::{array::from_fn, sync::Arc};
 
-use openvm_stark_backend::{p3_air::BaseAir, p3_field::Field, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_air::BaseAir,
+    p3_commit::PolynomialSpace,
+    p3_field::Field,
+    p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput,
+};
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 
 use crate::arch::{
@@ -39,6 +46,12 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
             rows.push(F::ZERO);
         }
         RowMajorMatrix::new(rows, width)
+    }
+    pub fn generate_air_proof_input<SC: StarkGenericConfig>(&self) -> AirProofInput<SC>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        AirProofInput::simple_no_pis(Arc::new(self.air()), self.trace())
     }
 }
 

@@ -3,12 +3,16 @@ use std::{collections::HashSet, iter, sync::Arc};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
     p3_field::{AbstractField, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput,
+    Chip,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
 };
 use rand::Rng;
 use test_log::test;
@@ -42,7 +46,8 @@ fn boundary_air_test() {
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let boundary_chip = VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
+    let mut boundary_chip =
+        VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
 
     let mut final_memory = TimestampedEquipartition::new();
 
@@ -104,35 +109,30 @@ fn boundary_air_test() {
         6,
     );
 
-    let boundary_trace = boundary_chip.generate_trace(&final_memory, None);
+    boundary_chip.finalize(final_memory.clone());
+    let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+        boundary_chip.generate_air_proof_input();
     // test trace height override
     {
-        let overridden_height = boundary_trace.height() * 2;
+        let overridden_height = boundary_api.main_trace_height() * 2;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let boundary_chip =
+        let mut boundary_chip =
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
-        let boundary_trace = boundary_chip.generate_trace(&final_memory, Some(overridden_height));
+        boundary_chip.set_overridden_height(overridden_height);
+        boundary_chip.finalize(final_memory.clone());
+        let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+            boundary_chip.generate_air_proof_input();
         assert_eq!(
-            boundary_trace.height(),
+            boundary_api.main_trace_height(),
             overridden_height.next_power_of_two()
         );
     }
 
-    let range_checker_trace = range_checker.generate_trace();
-
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![
-            boundary_chip.air,
-            range_checker.air,
-            init_memory_dummy_air,
-            final_memory_dummy_air
-        ],
-        vec![
-            boundary_trace,
-            range_checker_trace,
-            init_memory_trace,
-            final_memory_trace,
-        ],
-    )
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        boundary_api,
+        range_checker.generate_air_proof_input(),
+        AirProofInput::simple_no_pis(Arc::new(init_memory_dummy_air), init_memory_trace),
+        AirProofInput::simple_no_pis(Arc::new(final_memory_dummy_air), final_memory_trace),
+    ])
     .expect("Verification failed");
 }
