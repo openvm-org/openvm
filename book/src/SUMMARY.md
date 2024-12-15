@@ -19,7 +19,7 @@
 
 # Using Extensions
 
-- [Customizable Extensions](./custom-extensions/customizable-extensions.md)
+- [Customizable Extensions](./custom-extensions/overview.md)
 
 # Advanced Usage
 

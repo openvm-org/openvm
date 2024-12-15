@@ -1,6 +1,8 @@
-# `openvm-algebra`
+# OpenVM Algebra
 
-The `openvm-algebra` crate provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if $p$ is prime, `openvm-algebra` can handle modular arithmetic in $\mathbb{F}_p$​ and its quadratic extension fields $\mathbb{F}_p[x]/(x^2 + 1)$.
+The OpenVM Algebra extension provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if $p$ is prime, OpenVM Algebra can handle modular arithmetic in $\mathbb{F}_p$​ and its quadratic extension fields $\mathbb{F}_p[x]/(x^2 + 1)$.
+
+The functional part is provided by the `openvm-algebra-guest` crate, which is a guest library that can be used in any OpenVM program. The macros for creating corresponding structs are in the `openvm-algebra-moduli-setup` and `openvm-algebra-complex-macros` crates.
 
 ## Available traits and methods
 
@@ -16,7 +18,7 @@ The `openvm-algebra` crate provides tools to create and manipulate modular arith
 
 ## Modular arithmetic
 
-To leverage compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
+To [leverage](./overview.md) compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
 
 1. **Declare**: Use the `moduli_declare!` macro to define a modular arithmetic struct. This can be done multiple times in various crates or modules:
 
@@ -27,7 +29,7 @@ moduli_declare! {
 }
 ```
 
-This creates `Bls12381_Fp` and `Bn254_Fp` structs, each implementing `Add`, `Sub`, and other operations defined by `IntMod`. The modulus parameter must be a string literal in decimal or hexadecimal format.
+This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod` trait. The modulus parameter must be a string literal in decimal or hexadecimal format.
 
 2. **Init**: Use the `moduli_init!` macro exactly once in the final binary:
 
@@ -55,17 +57,33 @@ Complex extensions, such as $\mathbb{F}_p[x]/(x^2 + 1)$, are defined similarly u
 
 ```rust
 complex_declare! {
-    Bn254_Fp2 { mod_type = Bn254_Fp }
+    Bn254Fp2 { mod_type = Bn254Fp }
 }
 ```
 
-This creates a `Bn254_Fp2` struct, representing a complex extension field. The `mod_type` must implement `IntMod`.
+This creates a `Bn254Fp2` struct, representing a complex extension field. The `mod_type` must implement `IntMod`.
 
 2. **Init**: Called once, after `moduli_init!`, to enumerate these extensions and generate corresponding instructions:
 
 ```rust
 complex_init! {
-    Bn254_Fp2 { mod_idx = 0 },
+    Bn254Fp2 { mod_idx = 0 },
+}
+```
+
+Note that you need to use the same type name in `complex_declare!` and `complex_init!`. For example, the following code will **fail** to compile:
+
+```rust
+// moduli related macros...
+
+complex_declare! {
+    Bn254Fp2 { mod_type = Bn254Fp },
+}
+
+pub type Fp2 = Bn254Fp2;
+
+complex_init! {
+    Fp2 { mod_idx = 0 },
 }
 ```
 
@@ -112,6 +130,9 @@ openvm_algebra_complex_macros::complex_init! {
 }
 
 pub fn main() {
+    // Since we only use an arithmetic operation with `Mod1` and not `Mod2`,
+    // we only need to call `setup_0()` here.
+    setup_0();
     setup_all_complex_extensions();
     let a = Complex1::new(Mod1::ZERO, Mod1::from_u32(0x3b8) * Mod1::from_u32(0x100000)); // a = -i in the corresponding field
     let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding field

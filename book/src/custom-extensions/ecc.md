@@ -1,4 +1,4 @@
-# `openvm-ecc`
+# OpenVM ECC
 
 For elliptic curve cryptography, the `openvm-ecc` crate provides macros similar to those in [`openvm-algebra`](./algebra.md):
 

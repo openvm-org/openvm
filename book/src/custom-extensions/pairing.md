@@ -1,1 +1,1 @@
-# `openvm-pairing`
+# OpenVM Pairing

@@ -1,1 +1,1 @@
-# `openvm-keccak`
+# OpenVM Keccak

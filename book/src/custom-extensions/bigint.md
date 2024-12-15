@@ -1,1 +1,1 @@
-# `openvm-bigint`
+# OpenVM BigInt
