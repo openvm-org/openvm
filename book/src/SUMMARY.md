@@ -20,6 +20,7 @@
 # Using Extensions
 
 - [Customizable Extensions](./using-extensions/customizable-extensions.md)
+- [Pairing](./using-extensions/pairing.md)
 
 # Advanced Usage
 
