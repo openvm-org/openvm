@@ -55,7 +55,7 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 
 ## `I256`
 
-The `I256` struct is a 256-bit signed integer type. The `I256` struct is very similar to the `U256` struct.
+The `I256` struct is a 256-bit signed integer type and is very similar to the `U256` struct.
 
 ### Constants
 
