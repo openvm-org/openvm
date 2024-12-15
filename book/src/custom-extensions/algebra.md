@@ -14,8 +14,6 @@ The `openvm-algebra` crate provides tools to create and manipulate modular arith
 - `Field` trait:
     Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.
 
-<!-- TODO: exp_bytes is only intended for host? -->
-
 ## Modular arithmetic
 
 To leverage compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
