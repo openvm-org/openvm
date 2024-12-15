@@ -10,7 +10,7 @@ First, create a new Rust project.
 cargo init fibonacci
 ```
 
-Since we are using some nightly features, we need to specify the Rust version. Create a `rust-toolchain.toml` file with the following content:
+Since we are using some nightly features, we need to specify the Rust version. Run `rustup component add rust-src --toolchain nightly-2024-10-30` and create a `rust-toolchain.toml` file with the following content:
 
 ```toml
 [toolchain]
