@@ -10,9 +10,9 @@ The `U256` struct is a 256-bit unsigned integer type.
 
 The `U256` struct has the following constants:
 
-- `MAX`: The maximum value of a `U256` known at compile time.
-- `MIN`: The minimum value of a `U256` known at compile time.
-- `ZERO`: The zero constant known at compile time.
+- `MAX`: The maximum value of a `U256`.
+- `MIN`: The minimum value of a `U256`.
+- `ZERO`: The zero constant.
 
 ### Constructors
 
@@ -20,7 +20,7 @@ The `U256` struct implements the following constructors: `from_u8`, `from_u32`, 
 
 ### Binary Operations
 
-The `U256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, and `bitwise shift operations`. All operations will wrap the result when the result is outside the range of the `U256` type.
+The `U256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, `bitwise shift right`, and `bitwise shift left`. All operations will wrap the result when the result is outside the range of the `U256` type.
 
 All of the operations can be used in 6 different ways:
 `U256 op U256` or `U256 op &U256` or `&U256 op U256` or `&U256 op &U256` or `U256 op= U256` or `&U256 op= U256`.
@@ -31,12 +31,9 @@ When using the `U256` struct with target os `zkvm`, the struct utilizes efficien
 
 ### Example matrix multiplication using `U256`
 
+See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/matrix-power.rs).
+
 ```rust
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-use openvm_bigint_guest::U256;
-
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
 
@@ -56,6 +53,12 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     c
 }
 ```
+Add the following to your `Cargo.toml` file:
+
+```toml
+[dependencies]
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+```
 
 ## `I256`
 
@@ -65,13 +68,13 @@ The `I256` struct is a 256-bit signed integer type. The `I256` struct is very si
 
 The `I256` struct has the following constants:
 
-- `MAX`: The maximum value of a `I256` known at compile time.
-- `MIN`: The minimum value of a `I256` known at compile time.
-- `ZERO`: The zero constant known at compile time.
+- `MAX`: The maximum value of a `I256`.
+- `MIN`: The minimum value of a `I256`.
+- `ZERO`: The zero constant.
 
 ### Binary Operations
 
-The `I256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, and `bitwise shift operations`. All operations will wrap the result when the result is outside the range of the `I256` type. Also, unlike the `U256`, when performing the shift right operation `I256` will perform an arithmetic shift right (i.e. sign extends the result).
+The `I256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, `bitwise shift right`, and `bitwise shift left`. All operations will wrap the result when the result is outside the range of the `I256` type. Note that unlike the `U256`, when performing the shift right operation `I256` will perform an arithmetic shift right (i.e. sign extends the result).
 
 All of the operations can be used in 6 different ways:
 `I256 op I256` or `I256 op &I256` or `&I256 op I256` or `&I256 op &I256` or `I256 op= I256` or `&I256 op= I256`.
@@ -86,12 +89,9 @@ When using the `I256` struct with target os `zkvm`, the struct utilizes efficien
 
 ### Example matrix multiplication using `I256`
 
+See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/signed-matrix-power.rs).
+
 ```rust
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-use openvm_bigint_guest::I256;
-
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
 
@@ -112,6 +112,12 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 }
 ```
 
+Add the following to your `Cargo.toml` file:
+
+```toml
+[dependencies]
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+```
 
 ## External Functions
 
@@ -128,7 +134,7 @@ The Bigint Guest extension provides another way to use the native implementation
 - `zkvm_u256_arithmetic_shr_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a.arithmetic_shr(b)`.
 - `zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool`: takes in two pointers to the inputs. Returns `true` if `a == b`, otherwise `false`.
 - `zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering`: takes in two pointers to the inputs. Returns the ordering of `a` and `b`.
-- `zkvm_u256_clone_impl(result: *mut u8, a: *const u8)`: takes in a pointer to the result, and a pointer to the input. `result = a`.
+- `zkvm_u256_clone_impl(result: *mut u8, a: *const u8)`: takes in a pointer to the result buffer, and a pointer to the input. `result = a`.
 
 And in the external library, you can do the following:
 
@@ -137,13 +143,13 @@ extern "C" {
     fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8);
 }
 
-fn wrapping_add(a: &U256, b: &U256) -> U256 {
+fn wrapping_add(a: &Custom_U256, b: &Custom_U256) -> Custom_U256 {
     #[cfg(target_os = "zkvm")] {
-        let mut result = U256::ZERO;
+        let mut result: MaybeUninit<Custom_U256> = MaybeUninit::uninit();
         unsafe {
-            zkvm_u256_wrapping_add_impl(&mut result, a, b);
+            zkvm_u256_wrapping_add_impl(result.as_mut_ptr() as *mut u8, a as *const u8, b as *const u8);
         }
-        result
+        unsafe { result.assume_init() }
     }
     #[cfg(not(target_os = "zkvm"))] {
         // Regular wrapping add implementation
