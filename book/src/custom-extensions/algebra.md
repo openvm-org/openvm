@@ -1,18 +1,8 @@
-# Using Existing Extensions
-
-Certain arithmetic operations, particularly modular arithmetic, can be optimized significantly when the modulus is known at compile time.  This approach requires a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, three steps are involved:
-
-1. **Declare**: Introduce a modular arithmetic or related structure, along with its modulus and functionality. This can be done in any library or binary file.
-2. **Init**: Performed exactly once in the final binary. It aggregates all previously declared structures, assigns them stable indices, and sets up linkage so that they can be referenced in generated code.
-3. **Setup**: A one-time runtime procedure for security. This ensures that the compiled code matches the virtual machine’s expectations and that each instruction set is tied to the correct modulus or extension.
-
-These steps ensure both performance and security: performance because the modulus is known at compile time, and security because runtime checks confirm that the correct structures have been initialized.
-
-## `openvm-algebra`
+# `openvm-algebra`
 
 The `openvm-algebra` crate provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if $p$ is prime, `openvm-algebra` can handle modular arithmetic in $\mathbb{F}_p$​ and its quadratic extension fields $\mathbb{F}_p[x]/(x^2 + 1)$.
 
-### Available traits and methods
+## Available traits and methods
 
 - `IntMod` trait:
     Defines the type `Repr` and constants `MODULUS`, `NUM_LIMBS`, `ZERO`, and `ONE`. It also provides basic methods for constructing a modular arithmetic object and performing arithmetic operations.
@@ -26,7 +16,7 @@ The `openvm-algebra` crate provides tools to create and manipulate modular arith
 
 <!-- TODO: exp_bytes is only intended for host? -->
 
-### Modular arithmetic
+## Modular arithmetic
 
 To leverage compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
 
@@ -59,7 +49,7 @@ This step enumerates the declared moduli (e.g., `0` for the first one, `1` for t
 - `moduli_init!`: Called once in the final binary to assign and lock in the moduli.
 - `setup_<i>()`/`setup_all_moduli()`: Ensures at runtime that the correct modulus is in use, providing a security check and finalizing the environment for safe arithmetic operations.
 
-### Complex field extension
+## Complex field extension
 
 Complex extensions, such as $\mathbb{F}_p[x]/(x^2 + 1)$, are defined similarly using `complex_declare!` and `complex_init!`:
 
@@ -132,34 +122,3 @@ pub fn main() {
     // Note that these assertions would fail, have we provided the `mod_idx` parameters wrongly.
 }
 ```
-
-## `openvm-ecc`
-
-For elliptic curve cryptography, the `openvm-ecc` crate provides similar macros:
-
-1. **Declare**: Use `sw_declare!` to define elliptic curves over the previously declared moduli. For example:
-
-```rust
-sw_declare! {
-    Bls12_381G1Affine { mod_type = Bls12_381Fp, b = BLS12_381_B },
-    Bn254G1Affine { mod_type = Bn254Fp, b = BN254_B },
-}
-```
-
-Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation $y^2 = x^3 + b$.
-
-2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:
-
-```rust
-sw_init! {
-    Bls12_381Fp, Bn254Fp,
-}
-```
-
-3. **Setup**: Similar to the moduli and complex extensions, runtime setup instructions ensure that the correct curve parameters are being used, guaranteeing secure operation.
-
-**Summary**:
-
-- `sw_declare!`: Declares elliptic curve structures.
-- `sw_init!`: Initializes them once, linking them to the underlying moduli.
-- `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
