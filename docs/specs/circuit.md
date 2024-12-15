@@ -1,4 +1,4 @@
-# STARK Architecture
+# Circuit Architecture
 
 We build our virtual machines in a STARK proving system with a multi-matrix commitment scheme and shared verifier
 randomness between AIR matrices to enable permutation arguments such as log-up.
