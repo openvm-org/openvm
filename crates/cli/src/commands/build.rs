@@ -16,7 +16,10 @@ use openvm_sdk::{
 };
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler};
 
-use crate::{default::DEFAULT_MANIFEST_DIR, util::read_to_struct_toml};
+use crate::{
+    default::{DEFAULT_APP_EXE_PATH, DEFAULT_MANIFEST_DIR},
+    util::read_to_struct_toml,
+};
 
 #[derive(Parser)]
 #[command(name = "build", about = "Compile an OpenVM program")]
@@ -53,9 +56,9 @@ pub struct BuildArgs {
     #[arg(
         long,
         default_value = "false",
-        help = "Transpiles the program after building when set"
+        help = "Skips transpilation into exe when set"
     )]
-    pub transpile: bool,
+    pub no_transpile: bool,
 
     #[arg(
         long,
@@ -65,9 +68,10 @@ pub struct BuildArgs {
 
     #[arg(
         long,
-        help = "Output path for the transpiled program (default: <ELF base path>.vmexe)"
+        default_value = DEFAULT_APP_EXE_PATH,
+        help = "Output path for the transpiled program"
     )]
-    pub transpile_to: Option<PathBuf>,
+    pub exe_output: Option<PathBuf>,
 
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
@@ -75,7 +79,7 @@ pub struct BuildArgs {
 
 impl BuildArgs {
     pub fn exe_path(&self, elf_path: &Path) -> PathBuf {
-        self.transpile_to
+        self.exe_output
             .clone()
             .unwrap_or_else(|| elf_path.with_extension("vmexe"))
     }
@@ -129,7 +133,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         }
     };
 
-    if build_args.transpile {
+    if !build_args.no_transpile {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
         let output_path = build_args.exe_path(&elf_path);

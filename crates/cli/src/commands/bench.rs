@@ -43,8 +43,7 @@ impl BenchCmd {
         if self.profile {
             setup_tracing();
         }
-        let mut build_args = self.build_args.clone();
-        build_args.transpile = true;
+        let build_args = self.build_args.clone();
         let elf_path = build(&self.build_args)?.unwrap();
         let exe_path = build_args.exe_path(&elf_path);
         let exe = read_exe_from_file(&exe_path)?;

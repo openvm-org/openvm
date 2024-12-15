@@ -8,12 +8,15 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::util::{read_to_stdin, read_to_struct_toml, Input};
+use crate::{
+    default::DEFAULT_APP_EXE_PATH,
+    util::{read_to_stdin, read_to_struct_toml, Input},
+};
 
 #[derive(Parser)]
 #[command(name = "run", about = "Run an OpenVM program")]
 pub struct RunCmd {
-    #[clap(long, action, help = "Path to OpenVM executable")]
+    #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
     exe: PathBuf,
 
     #[clap(long, action, help = "Path to app config TOML file")]

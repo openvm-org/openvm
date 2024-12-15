@@ -4,6 +4,8 @@ pub const DEFAULT_AGG_PK_PATH: &str = concat!(env!("HOME"), "/.openvm/agg.pk");
 pub const DEFAULT_VERIFIER_PATH: &str = concat!(env!("HOME"), "/.openvm/verifier.sol");
 pub const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
 
+pub const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
+pub const DEFAULT_APP_EXE_PATH: &str = "./openvm/app.vmexe";
 pub const DEFAULT_APP_PK_PATH: &str = "./openvm/app.pk";
 pub const DEFAULT_APP_VK_PATH: &str = "./openvm/app.vk";
 pub const DEFAULT_APP_PROOF_PATH: &str = "./openvm/app.proof";
