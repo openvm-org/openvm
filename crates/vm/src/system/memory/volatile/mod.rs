@@ -209,7 +209,7 @@ where
         let trace_height = trace_height.next_power_of_two();
 
         // Collect into Vec to sort from BTreeMap and also so we can look at adjacent entries
-        let sorted_final_memory: Vec<_> = final_memory.into_iter().collect();
+        let sorted_final_memory: Vec<_> = final_memory.into_par_iter().collect();
         let memory_len = sorted_final_memory.len();
 
         let mut rows = Val::<SC>::zero_vec(trace_height * width);

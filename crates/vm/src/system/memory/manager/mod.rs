@@ -22,6 +22,7 @@ use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
+    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     rap::AnyRap,
@@ -483,7 +484,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 let (final_partition, records) = self.memory.finalize::<CHUNK>();
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
-                    .into_iter()
+                    .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
                 let initial_node = MemoryNode::tree_from_memory(
