@@ -3580,6 +3580,7 @@ dependencies = [
  "parking_lot",
  "rand",
  "rand_xoshiro",
+ "rayon",
  "rustc-hash 2.1.0",
  "serde",
  "static_assertions",

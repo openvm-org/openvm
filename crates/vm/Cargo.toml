@@ -38,6 +38,7 @@ derivative.workspace = true
 static_assertions.workspace = true
 async-trait.workspace = true
 getset.workspace = true
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 p3-dft = { workspace = true }
@@ -70,7 +71,7 @@ hex.workspace = true
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "dep:rayon"]
 test-utils = ["openvm-ecc-guest/halo2curves", "dep:openvm-stark-sdk"]
 bench-metrics = [
     "dep:metrics",

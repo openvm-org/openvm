@@ -11,6 +11,8 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
+#[cfg(feature = "parallel")]
+use rayon::iter::ParallelExtend;
 
 use super::{columns::*, Poseidon2Chip};
 
@@ -39,9 +41,16 @@ where
             .into_par_iter()
             .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())
             .collect();
+        #[cfg(feature = "parallel")]
         flat_rows.par_extend(
             vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
                 .into_par_iter()
+                .flatten(),
+        );
+        #[cfg(not(feature = "parallel"))]
+        flat_rows.extend(
+            vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
+                .into_iter()
                 .flatten(),
         );
 
