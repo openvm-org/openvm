@@ -61,6 +61,10 @@ pub(crate) fn write_status(style: &dyn Display, status: &str, msg: &str) {
     println!("{style}{status:>12}{style:#} {msg}");
 }
 
+pub(crate) fn classical_exe_path(elf_path: &Path) -> PathBuf {
+    elf_path.with_extension("vmexe")
+}
+
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {
     let toml = read_to_string(path.as_ref() as &Path)?;
     let ret = toml::from_str(&toml)?;

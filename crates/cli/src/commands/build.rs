@@ -1,7 +1,4 @@
-use std::{
-    fs::read,
-    path::{Path, PathBuf},
-};
+use std::{fs::read, path::PathBuf};
 
 use clap::Parser;
 use eyre::Result;
@@ -67,18 +64,10 @@ pub struct BuildArgs {
         default_value = DEFAULT_APP_EXE_PATH,
         help = "Output path for the transpiled program"
     )]
-    pub exe_output: Option<PathBuf>,
+    pub exe_output: PathBuf,
 
     #[arg(long, default_value = "release", help = "Build profile")]
     pub profile: String,
-}
-
-impl BuildArgs {
-    pub fn exe_path(&self, elf_path: &Path) -> PathBuf {
-        self.exe_output
-            .clone()
-            .unwrap_or_else(|| elf_path.with_extension("vmexe"))
-    }
 }
 
 #[derive(Clone, clap::Args)]
@@ -132,14 +121,14 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
     if !build_args.no_transpile {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
-        let output_path = build_args.exe_path(&elf_path);
+        let output_path = &build_args.exe_output;
         let app_config = read_config_toml_or_default(&build_args.transpiler_config)?;
         let transpiler = app_config.app_vm_config.transpiler();
 
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
         let exe = Sdk.transpile(elf, transpiler)?;
-        write_exe_to_file(exe, &output_path)?;
+        write_exe_to_file(exe, output_path)?;
 
         println!(
             "[openvm] Successfully transpiled to {}",
