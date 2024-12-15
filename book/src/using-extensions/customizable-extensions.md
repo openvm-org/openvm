@@ -10,8 +10,8 @@ To declare a modular arithmetic struct, one needs to use the `moduli_declare!` m
 
 ```rust
 moduli_declare! {
-    Bls12381_Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
-    Bn254_Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
+    Bls12_381Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
+    Bn254Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 }
 ```
 
@@ -48,7 +48,7 @@ To declare an elliptic curve struct, one needs to use the `sw_declare!` macro. A
 ```rust
 sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = BLS12_381_B },
-    Bn254 { mod_type = Bn254Fp, b = BN254_B },
+    Bn254G1Affine { mod_type = Bn254Fp, b = BN254_B },
 }
 ```
 
