@@ -17,15 +17,14 @@ The OpenVM Keccak256 Guest extension provides two functions for using in your gu
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use openvm::io::read_vec;
 use openvm_keccak256_guest::keccak256;
 
 openvm::entry!(main);
 
 pub fn main() {
-    let input = Vec::read_vec();
-    let expected_output = Vec::read_vec();
+    let input = read_vec();
+    let expected_output = read_vec();
     let output = keccak256(&input);
     if output != *expected_output {
         panic!();
