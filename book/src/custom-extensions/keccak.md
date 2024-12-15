@@ -15,8 +15,6 @@ The OpenVM Keccak256 Guest extension provides two functions for using in your gu
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-extern crate alloc;
-
 use openvm::io::read_vec;
 use openvm_keccak256_guest::keccak256;
 
