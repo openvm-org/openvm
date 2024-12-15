@@ -47,6 +47,7 @@ jobs:
         run: |
           cargo doc --workspace --no-deps --exclude "openvm-benchmarks" --target-dir target/doc-nodeps
           cp target/doc-nodeps/doc/index.html target/doc/
+          cp target/doc-nodeps/doc/crates.js target/doc/
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
