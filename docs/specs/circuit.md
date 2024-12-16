@@ -169,9 +169,3 @@ where we allow `N` to be different powers of two.
 The values of $a, v_i$ that appear in the trace of the access adapter chip are generated on-demand based on the needs of the
 runtime memory access. In other words, the converter inserts additional writes into the MEMORY_BUS when needed in order
 to link up accesses of different word sizes.
-
-## Acknowledgements
-
-- Plonky3
-- Valida
-- SP1

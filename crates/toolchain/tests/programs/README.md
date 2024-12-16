@@ -4,7 +4,7 @@ To see list of all available built-in targets:
 rustc --print target-list
 ```
 
-We will currently use the risc0 target until we fork Rust to provide our own RISC-V target.
+We will currently use the risc0 target until we contribute to Rust our own RISC-V target.
 
 WARNING: to prevent from building for your host machine, make sure you do not have `rustflags = ["-Ctarget-cpu=native"]` in your `~/.cargo/config.toml`.
 
