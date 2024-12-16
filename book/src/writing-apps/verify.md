@@ -24,6 +24,7 @@ cargo openvm verify evm --proof <path_to_proof>
 
 If `proof` is omitted, the command will search for the proof at `./openvm/evm.proof`.
 
-As with all other EVM-level commands, `cargo openvm setup` is a prerequisite for `verify`.
+As with all other EVM-level commands, `cargo openvm setup` is a prerequisite for `verify`. It generates the aggregation proving key and verifier contract at `~/.openvm/agg.pk` and `~/.openvm/verifier.sol` respectively.
+
 > ⚠️ **WARNING**  
 > `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
