@@ -147,7 +147,7 @@ assert!(success);
 > ⚠️ **WARNING**  
 > The aggregation proving key `agg_pk` above is large. Avoid cloning it if possible.
 
-Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the [onchain verify](../writing-apps/onchain-verify.md) doc.
+Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the `EVM Level` section of the [verify](../writing-apps/verify.md) doc.
 
 > ⚠️ **WARNING**  
 > `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
