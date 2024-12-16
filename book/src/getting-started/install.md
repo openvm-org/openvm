@@ -1,13 +1,13 @@
 # Install
 
-To use OpenVM for generating proofs, you must install the OpenVM cli tool `cargo-openvm`.
+To use OpenVM for generating proofs, you must install the OpenVM command line tool `cargo-openvm`.
 
-`cargo-openvm` can be installed in two different ways. You can either install via git url or build from source.
+`cargo-openvm` can be installed in two different ways. You can either install via git URL or build from source.
 
-## Install Via Git Url (Recommended)
+## Install Via Git URL (Recommended)
 
 ```bash
-cargo install --git ssh://git@github.com/openvm-org/openvm.git cargo-openvm --branch main --locked --force
+cargo install --git http://github.com/openvm-org/openvm.git cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
