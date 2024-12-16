@@ -55,8 +55,7 @@ mod tests {
 
     #[test]
     fn test_complex_two_moduli_runtime() -> Result<()> {
-        let elf =
-            build_example_program_at_path(get_programs_dir!(), "complex-two-modulos")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "complex-two-modulos")?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

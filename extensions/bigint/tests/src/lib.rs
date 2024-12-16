@@ -33,8 +33,7 @@ mod tests {
 
     #[test]
     fn test_matrix_power_signed_runtime() -> Result<()> {
-        let elf =
-            build_example_program_at_path(get_programs_dir!(), "matrix-power-signed")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-signed")?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
