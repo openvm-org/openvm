@@ -145,7 +145,7 @@ assert!(success);
 > Generating an EVM proof will require a substantial amount of computation and memory. If you have run `cargo openvm setup` and don't need a specialized aggregation configuration, consider deserializing the proving key from the file `~/.openvm/agg.pk` instead of generating it.
 
 > ⚠️ **WARNING**  
-> The aggregation proving key `agg_pk` above is large. Avoidå cloning it if possible.
+> The aggregation proving key `agg_pk` above is large. Avoid cloning it if possible.
 
 Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the [onchain verify](../writing-apps/onchain-verify.md) doc.
 
