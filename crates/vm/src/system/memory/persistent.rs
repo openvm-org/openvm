@@ -1,15 +1,22 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     iter,
+    sync::Arc,
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
+#[allow(unused_imports)]
+use openvm_stark_backend::p3_maybe_rayon::prelude::IndexedParallelIterator;
 use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator, ParallelSliceMut},
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 
@@ -115,7 +122,49 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 #[derive(Debug)]
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: FxHashSet<(F, usize)>,
+    touched_labels: TouchedLabels<F, CHUNK>,
+    overridden_height: Option<usize>,
+}
+
+#[derive(Debug)]
+enum TouchedLabels<F, const CHUNK: usize> {
+    Running(FxHashSet<(F, usize)>),
+    Final(Vec<FinalTouchedLabel<F, CHUNK>>),
+}
+
+#[derive(Debug)]
+struct FinalTouchedLabel<F, const CHUNK: usize> {
+    address_space: F,
+    label: usize,
+    init_values: [F; CHUNK],
+    final_values: [F; CHUNK],
+    init_exists: bool,
+    init_hash: [F; CHUNK],
+    final_hash: [F; CHUNK],
+    final_timestamp: u32,
+}
+
+impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
+    fn default() -> Self {
+        Self::Running(FxHashSet::default())
+    }
+}
+
+impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
+    fn touch(&mut self, address_space: F, label: usize) {
+        match self {
+            TouchedLabels::Running(touched_labels) => {
+                touched_labels.insert((address_space, label));
+            }
+            _ => panic!("Cannot touch after finalization"),
+        }
+    }
+    fn len(&self) -> usize {
+        match self {
+            TouchedLabels::Running(touched_labels) => touched_labels.len(),
+            TouchedLabels::Final(touched_labels) => touched_labels.len(),
+        }
+    }
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
@@ -132,78 +181,133 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 merkle_bus,
                 compression_bus,
             },
-            touched_labels: FxHashSet::default(),
+            touched_labels: Default::default(),
+            overridden_height: None,
         }
+    }
+
+    pub fn set_overridden_height(&mut self, overridden_height: usize) {
+        self.overridden_height = Some(overridden_height);
     }
 
     pub fn touch_address(&mut self, address_space: F, pointer: F) {
         let label = pointer.as_canonical_u32() as usize / CHUNK;
-        self.touched_labels.insert((address_space, label));
+        self.touched_labels.touch(address_space, label);
     }
 
-    pub fn current_height(&self) -> usize {
-        2 * self.touched_labels.len()
-    }
-
-    pub fn generate_trace(
-        &self,
+    pub fn finalize(
+        &mut self,
         initial_memory: &Equipartition<F, CHUNK>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
-        overridden_height: Option<usize>,
-    ) -> RowMajorMatrix<F> {
-        let width = PersistentBoundaryCols::<F, CHUNK>::width();
-        // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-        let mut height = (2 * self.touched_labels.len()).next_power_of_two();
-        if let Some(mut oh) = overridden_height {
-            oh = oh.next_power_of_two();
-            assert!(
-                oh >= height,
-                "Overridden height is less than the required height"
-            );
-            height = oh;
+    ) {
+        match &mut self.touched_labels {
+            TouchedLabels::Running(touched_labels) => {
+                // TODO: parallelize this.
+                let final_touched_labels = touched_labels
+                    .iter()
+                    .map(|touched_label| {
+                        let (init_exists, initial_hash, init_values) =
+                            match initial_memory.get(touched_label) {
+                                Some(values) => (true, hasher.hash_and_record(values), *values),
+                                None => (
+                                    true,
+                                    hasher.hash_and_record(&[F::ZERO; CHUNK]),
+                                    [F::ZERO; CHUNK],
+                                ),
+                            };
+                        let timestamped_values = final_memory.get(touched_label).unwrap();
+                        let final_hash = hasher.hash_and_record(&timestamped_values.values);
+                        FinalTouchedLabel {
+                            address_space: touched_label.0,
+                            label: touched_label.1,
+                            init_values,
+                            final_values: timestamped_values.values,
+                            init_exists,
+                            init_hash: initial_hash,
+                            final_hash,
+                            final_timestamp: timestamped_values.timestamp,
+                        }
+                    })
+                    .collect();
+                self.touched_labels = TouchedLabels::Final(final_touched_labels);
+            }
+            _ => panic!("Cannot finalize after finalization"),
         }
-        let mut rows = F::zero_vec(height * width);
+    }
+}
 
-        for (row, &(address_space, label)) in
-            rows.chunks_mut(2 * width).zip(self.touched_labels.iter())
-        {
-            let (initial_row, final_row) = row.split_at_mut(width);
-            *initial_row.borrow_mut() = match initial_memory.get(&(address_space, label)) {
-                Some(values) => {
-                    let initial_hash = hasher.hash_and_record(values);
-                    PersistentBoundaryCols {
-                        expand_direction: F::ONE,
-                        address_space,
-                        leaf_label: F::from_canonical_usize(label),
-                        values: *values,
-                        hash: initial_hash,
-                        timestamp: F::from_canonical_u32(INITIAL_TIMESTAMP),
-                    }
-                }
-                None => {
-                    let initial_hash = hasher.hash_and_record(&[F::ZERO; CHUNK]);
-                    PersistentBoundaryCols {
-                        expand_direction: F::ONE,
-                        address_space,
-                        leaf_label: F::from_canonical_usize(label),
-                        values: [F::ZERO; CHUNK],
-                        hash: initial_hash,
-                        timestamp: F::ZERO,
-                    }
-                }
+impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for PersistentBoundaryChip<Val<SC>, CHUNK>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = Arc::new(self.air);
+        let trace = {
+            let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
+            // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
+            let mut height = (2 * self.touched_labels.len()).next_power_of_two();
+            if let Some(mut oh) = self.overridden_height {
+                oh = oh.next_power_of_two();
+                assert!(
+                    oh >= height,
+                    "Overridden height is less than the required height"
+                );
+                height = oh;
+            }
+            let mut rows = Val::<SC>::zero_vec(height * width);
+
+            let touched_labels = match self.touched_labels {
+                TouchedLabels::Final(touched_labels) => touched_labels,
+                _ => panic!("Cannot generate trace before finalization"),
             };
-            let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
-            let final_hash = hasher.hash_and_record(&timestamped_values.values);
-            *final_row.borrow_mut() = PersistentBoundaryCols {
-                expand_direction: F::NEG_ONE,
-                address_space,
-                leaf_label: F::from_canonical_usize(label),
-                values: timestamped_values.values,
-                hash: final_hash,
-                timestamp: F::from_canonical_u32(timestamped_values.timestamp),
-            };
-        }
-        RowMajorMatrix::new(rows, width)
+
+            rows.par_chunks_mut(2 * width)
+                .zip(touched_labels.into_par_iter())
+                .for_each(|(row, touched_label)| {
+                    let (initial_row, final_row) = row.split_at_mut(width);
+                    *initial_row.borrow_mut() = PersistentBoundaryCols {
+                        expand_direction: Val::<SC>::ONE,
+                        address_space: touched_label.address_space,
+                        leaf_label: Val::<SC>::from_canonical_usize(touched_label.label),
+                        values: touched_label.init_values,
+                        hash: touched_label.init_hash,
+                        timestamp: if touched_label.init_exists {
+                            Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP)
+                        } else {
+                            Val::<SC>::ZERO
+                        },
+                    };
+
+                    *final_row.borrow_mut() = PersistentBoundaryCols {
+                        expand_direction: Val::<SC>::NEG_ONE,
+                        address_space: touched_label.address_space,
+                        leaf_label: Val::<SC>::from_canonical_usize(touched_label.label),
+                        values: touched_label.final_values,
+                        hash: touched_label.final_hash,
+                        timestamp: Val::<SC>::from_canonical_u32(touched_label.final_timestamp),
+                    };
+                });
+            RowMajorMatrix::new(rows, width)
+        };
+        AirProofInput::simple_no_pis(air, trace)
+    }
+}
+
+impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for PersistentBoundaryChip<F, CHUNK> {
+    fn air_name(&self) -> String {
+        "Boundary".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        2 * self.touched_labels.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        PersistentBoundaryCols::<F, CHUNK>::width()
     }
 }

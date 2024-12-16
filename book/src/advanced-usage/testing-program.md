@@ -1,4 +1,3 @@
-
 ## Testing the program
 
 ### Running on the host machine

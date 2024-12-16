@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
@@ -21,7 +19,14 @@ pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
     touched_nodes: FxHashSet<(usize, usize, usize)>,
     num_touched_nonleaves: usize,
-    _marker: PhantomData<F>,
+    final_state: Option<FinalState<CHUNK, F>>,
+    overridden_height: Option<usize>,
+}
+#[derive(Debug)]
+struct FinalState<const CHUNK: usize, F> {
+    rows: Vec<MemoryMerkleCols<F, CHUNK>>,
+    init_root: [F; CHUNK],
+    final_root: [F; CHUNK],
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
@@ -43,8 +48,12 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             },
             touched_nodes,
             num_touched_nonleaves: 1,
-            _marker: PhantomData,
+            final_state: None,
+            overridden_height: None,
         }
+    }
+    pub fn set_overridden_height(&mut self, override_height: usize) {
+        self.overridden_height = Some(override_height);
     }
 
     fn touch_node(&mut self, height: usize, as_label: usize, address_label: usize) {
@@ -67,9 +76,5 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             (address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset,
             (address.as_canonical_u32() as usize) / CHUNK,
         );
-    }
-
-    pub fn current_height(&self) -> usize {
-        2 * self.num_touched_nonleaves
     }
 }

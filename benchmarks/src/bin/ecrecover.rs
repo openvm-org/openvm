@@ -121,7 +121,8 @@ fn main() -> Result<()> {
     )?;
     // TODO: update sw_setup macros and read it from elf.
     let vm_config = AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup)
+            .into(),
         app_vm_config: Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
         leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
             .into(),

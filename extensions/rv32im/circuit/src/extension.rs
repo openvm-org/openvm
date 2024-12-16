@@ -133,15 +133,20 @@ pub struct Rv32Io;
 /// RISC-V 32-bit Multiplication Extension (RV32M) Extension
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Rv32M {
+    #[serde(default = "default_range_tuple_checker_sizes")]
     pub range_tuple_checker_sizes: [u32; 2],
 }
 
 impl Default for Rv32M {
     fn default() -> Self {
         Self {
-            range_tuple_checker_sizes: [1 << 8, 8 * (1 << 8)],
+            range_tuple_checker_sizes: default_range_tuple_checker_sizes(),
         }
     }
+}
+
+fn default_range_tuple_checker_sizes() -> [u32; 2] {
+    [1 << 8, 8 * (1 << 8)]
 }
 
 // ============ Executor and Periphery Enums for Extension ============

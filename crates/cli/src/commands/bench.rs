@@ -17,7 +17,7 @@ use openvm_stark_sdk::{
 };
 
 use super::build::{build, BuildArgs};
-use crate::util::{write_status, Input};
+use crate::util::{classical_exe_path, write_status, Input};
 
 #[derive(Clone, Parser)]
 #[command(name = "bench", about = "(default) Build and prove a program")]
@@ -43,10 +43,8 @@ impl BenchCmd {
         if self.profile {
             setup_tracing();
         }
-        let mut build_args = self.build_args.clone();
-        build_args.transpile = true;
         let elf_path = build(&self.build_args)?.unwrap();
-        let exe_path = build_args.exe_path(&elf_path);
+        let exe_path = classical_exe_path(&elf_path);
         let exe = read_exe_from_file(&exe_path)?;
 
         // TODO: read from openvm.toml

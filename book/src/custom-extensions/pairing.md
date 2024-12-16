@@ -26,7 +26,7 @@ use openvm_algebra_guest::IntMod;
 use openvm::io::read;
 ```
 
-Additionally, we'll need to initialize our moduli and `Fp2` struct via the following macros. For a more in-depth description of these macros, please see the [Customizable Extensions](./customizable-extensions.md) section.
+Additionally, we'll need to initialize our moduli and `Fp2` struct via the following macros. For a more in-depth description of these macros, please see the [OpenVM Algebra](./algebra.md) section.
 
 ```rust
 // These correspond to the BLS12-381 coordinate and scalar moduli, respectively

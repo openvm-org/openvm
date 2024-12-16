@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
     var_range::VariableRangeCheckerChip, TraceSubRowGenerator,
 };
-use openvm_circuit_primitives_derive::ChipUsageGetter;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -31,6 +31,7 @@ mod tests;
 #[derive(Debug, Clone)]
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
+    air_names: Vec<String>,
 }
 
 impl<F> AccessAdapterInventory<F> {
@@ -44,19 +45,19 @@ impl<F> AccessAdapterInventory<F> {
         let mb = memory_bus;
         let cmb = clk_max_bits;
         let maan = max_access_adapter_n;
-        Self {
-            chips: [
-                Self::create_access_adapter_chip::<2>(rc.clone(), mb, cmb, maan),
-                Self::create_access_adapter_chip::<4>(rc.clone(), mb, cmb, maan),
-                Self::create_access_adapter_chip::<8>(rc.clone(), mb, cmb, maan),
-                Self::create_access_adapter_chip::<16>(rc.clone(), mb, cmb, maan),
-                Self::create_access_adapter_chip::<32>(rc.clone(), mb, cmb, maan),
-                Self::create_access_adapter_chip::<64>(rc.clone(), mb, cmb, maan),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-        }
+        let chips: Vec<_> = [
+            Self::create_access_adapter_chip::<2>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<4>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<8>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<16>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<32>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<64>(rc.clone(), mb, cmb, maan),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let air_names = (0..chips.len()).map(|i| air_name(1 << (i + 1))).collect();
+        Self { chips, air_names }
     }
     pub fn num_access_adapters(&self) -> usize {
         self.chips.len()
@@ -80,8 +81,15 @@ impl<F> AccessAdapterInventory<F> {
             .map(|chip| chip.current_trace_height())
             .collect()
     }
+    #[allow(dead_code)]
     pub fn get_widths(&self) -> Vec<usize> {
         self.chips.iter().map(|chip| chip.trace_width()).collect()
+    }
+    pub fn get_cells(&self) -> Vec<usize> {
+        self.chips
+            .iter()
+            .map(|chip| chip.current_trace_cells())
+            .collect()
     }
     pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
     where
@@ -90,23 +98,16 @@ impl<F> AccessAdapterInventory<F> {
     {
         self.chips.iter().map(|chip| chip.air()).collect()
     }
-    pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>>
-    where
-        F: PrimeField32,
-    {
-        self.chips
-            .into_par_iter()
-            .map(|chip| chip.generate_trace())
-            .collect()
+    pub fn air_names(&self) -> Vec<String> {
+        self.air_names.clone()
     }
-    #[allow(dead_code)]
-    pub fn generate_air_proof_input<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.chips
-            .into_par_iter()
+            .into_iter()
             .map(|chip| chip.generate_air_proof_input())
             .collect()
     }
@@ -157,8 +158,9 @@ pub trait GenericAccessAdapterChipTrait<F> {
         F: PrimeField32;
 }
 
-#[derive(Debug, Clone, ChipUsageGetter)]
+#[derive(Debug, Clone, Chip, ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
+#[chip(where = "F: PrimeField32")]
 enum GenericAccessAdapterChip<F> {
     N2(AccessAdapterChip<F, 2>),
     N4(AccessAdapterChip<F, 4>),
@@ -166,33 +168,6 @@ enum GenericAccessAdapterChip<F> {
     N16(AccessAdapterChip<F, 16>),
     N32(AccessAdapterChip<F, 32>),
     N64(AccessAdapterChip<F, 64>),
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for GenericAccessAdapterChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        match self {
-            GenericAccessAdapterChip::N2(chip) => chip.air(),
-            GenericAccessAdapterChip::N4(chip) => chip.air(),
-            GenericAccessAdapterChip::N8(chip) => chip.air(),
-            GenericAccessAdapterChip::N16(chip) => chip.air(),
-            GenericAccessAdapterChip::N32(chip) => chip.air(),
-            GenericAccessAdapterChip::N64(chip) => chip.air(),
-        }
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        match self {
-            GenericAccessAdapterChip::N2(chip) => chip.generate_air_proof_input(),
-            GenericAccessAdapterChip::N4(chip) => chip.generate_air_proof_input(),
-            GenericAccessAdapterChip::N8(chip) => chip.generate_air_proof_input(),
-            GenericAccessAdapterChip::N16(chip) => chip.generate_air_proof_input(),
-            GenericAccessAdapterChip::N32(chip) => chip.generate_air_proof_input(),
-            GenericAccessAdapterChip::N64(chip) => chip.generate_air_proof_input(),
-        }
-    }
 }
 
 impl<F> GenericAccessAdapterChip<F> {
@@ -313,7 +288,7 @@ where
 
 impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     fn air_name(&self) -> String {
-        format!("AccessAdapter<{}>", N)
+        air_name(N)
     }
 
     fn current_trace_height(&self) -> usize {
@@ -323,4 +298,9 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     fn trace_width(&self) -> usize {
         BaseAir::<F>::width(&self.air)
     }
+}
+
+#[inline]
+fn air_name(n: usize) -> String {
+    format!("AccessAdapter<{}>", n)
 }

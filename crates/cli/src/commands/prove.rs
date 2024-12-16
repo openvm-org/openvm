@@ -16,8 +16,8 @@ use openvm_sdk::{
 
 use crate::{
     default::{
-        DEFAULT_AGG_PK_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH, DEFAULT_EVM_PROOF_PATH,
-        DEFAULT_PARAMS_DIR,
+        DEFAULT_AGG_PK_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH,
+        DEFAULT_EVM_PROOF_PATH, DEFAULT_PARAMS_DIR,
     },
     util::{read_to_stdin, Input},
 };
@@ -35,7 +35,7 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable")]
+        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
         #[clap(long, value_parser, help = "Input to OpenVM program")]
@@ -48,7 +48,7 @@ enum ProveSubCommand {
         #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable")]
+        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
         #[clap(long, value_parser, help = "Input to OpenVM program")]

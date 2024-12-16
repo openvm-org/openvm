@@ -7,6 +7,7 @@ use crate::system::memory::{
     Equipartition, CHUNK,
 };
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum MemoryInterface<F> {
     Volatile {

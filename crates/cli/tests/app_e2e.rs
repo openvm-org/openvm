@@ -18,11 +18,10 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "build",
             "--manifest-dir",
-            "../sdk/example",
-            "--transpile",
-            "--transpiler-config",
-            "example/app_config.toml",
-            "--transpile-to",
+            "example",
+            "--config",
+            "example/openvm.toml",
+            "--exe-output",
             temp_exe.to_str().unwrap(),
         ],
     )?;
@@ -33,7 +32,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "keygen",
             "--config",
-            "example/app_config.toml",
+            "example/openvm.toml",
             "--output",
             temp_pk.to_str().unwrap(),
             "--vk-output",
@@ -49,7 +48,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--exe",
             temp_exe.to_str().unwrap(),
             "--config",
-            "example/app_config.toml",
+            "example/openvm.toml",
         ],
     )?;
 
@@ -86,55 +85,12 @@ fn test_cli_app_e2e() -> Result<()> {
 
 #[test]
 fn test_cli_app_e2e_default_paths() -> Result<()> {
-    let temp_dir = tempdir()?;
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    let temp_exe = temp_dir.path().join("example.vmexe");
-
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "build",
-            "--manifest-dir",
-            "../sdk/example",
-            "--transpile",
-            "--transpiler-config",
-            "example/app_config.toml",
-            "--transpile-to",
-            temp_exe.to_str().unwrap(),
-        ],
-    )?;
-
-    run_cmd(
-        "cargo",
-        &["openvm", "keygen", "--config", "example/app_config.toml"],
-    )?;
-
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "run",
-            "--exe",
-            temp_exe.to_str().unwrap(),
-            "--config",
-            "example/app_config.toml",
-        ],
-    )?;
-
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "prove",
-            "app",
-            "--exe",
-            temp_exe.to_str().unwrap(),
-        ],
-    )?;
-
+    run_cmd("cargo", &["openvm", "build", "--manifest-dir", "example"])?;
+    run_cmd("cargo", &["openvm", "keygen"])?;
+    run_cmd("cargo", &["openvm", "run"])?;
+    run_cmd("cargo", &["openvm", "prove", "app"])?;
     run_cmd("cargo", &["openvm", "verify", "app"])?;
-
     Ok(())
 }
 

@@ -9,7 +9,6 @@ use std::{
 };
 
 use getset::Getters;
-use itertools::{izip, zip_eq};
 pub use memory::{MemoryReadRecord, MemoryWriteRecord};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
@@ -21,13 +20,13 @@ use openvm_circuit_primitives::{
 use openvm_instructions::exe::MemoryImage;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
-    p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     rap::AnyRap,
+    Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,12 +65,6 @@ pub struct TimestampedValues<T, const N: usize> {
     pub values: [T; N],
 }
 
-#[derive(Clone, Debug)]
-pub struct MemoryControllerResult<F> {
-    traces: Vec<RowMajorMatrix<F>>,
-    public_values: Vec<Vec<F>>,
-}
-
 pub type MemoryControllerRef<F> = Rc<RefCell<MemoryController<F>>>;
 
 /// A equipartition of memory, with timestamps and values.
@@ -106,11 +99,26 @@ pub struct MemoryController<F> {
     memory: Memory<F>,
 
     access_adapters: AccessAdapterInventory<F>,
-    /// If set, the height of the traces will be overridden.
-    overridden_heights: Option<MemoryTraceHeights>,
 
     // Filled during finalization.
-    result: Option<MemoryControllerResult<F>>,
+    final_state: Option<FinalState<F>>,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+enum FinalState<F> {
+    Volatile(VolatileFinalState<F>),
+    #[allow(dead_code)]
+    Persistent(PersistentFinalState<F>),
+}
+#[derive(Debug, Default)]
+struct VolatileFinalState<F> {
+    _marker: PhantomData<F>,
+}
+#[allow(dead_code)]
+#[derive(Debug)]
+struct PersistentFinalState<F> {
+    final_memory: Equipartition<F, CHUNK>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -236,8 +244,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            result: None,
-            overridden_heights: None,
+            final_state: None,
         }
     }
 
@@ -279,29 +286,34 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            result: None,
-            overridden_heights: None,
+            final_state: None,
         }
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => match &overridden_heights {
+        match &mut self.interface_chip {
+            MemoryInterface::Volatile { boundary_chip } => match overridden_heights {
                 MemoryTraceHeights::Volatile(oh) => {
+                    boundary_chip.set_overridden_height(oh.boundary);
                     self.access_adapters
-                        .set_override_trace_heights(oh.access_adapters.clone());
+                        .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
             },
-            MemoryInterface::Persistent { .. } => match &overridden_heights {
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => match overridden_heights {
                 MemoryTraceHeights::Persistent(oh) => {
+                    boundary_chip.set_overridden_height(oh.boundary);
+                    merkle_chip.set_overridden_height(oh.merkle);
                     self.access_adapters
-                        .set_override_trace_heights(oh.access_adapters.clone());
+                        .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
             },
         }
-        self.overridden_heights = Some(overridden_heights);
     }
 
     pub fn set_initial_memory(&mut self, memory: Equipartition<F, CHUNK>) {
@@ -451,27 +463,15 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         hasher: Option<&mut impl HasherChip<CHUNK, F>>,
     ) -> Option<Equipartition<F, CHUNK>> {
-        if self.result.is_some() {
+        if self.final_state.is_some() {
             panic!("Cannot finalize more than once");
         }
-        let mut traces = vec![];
-        let mut pvs = vec![];
 
         let (records, final_memory) = match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                let overridden_heights = self.overridden_heights.as_ref().map(|oh| match oh {
-                    MemoryTraceHeights::Volatile(oh) => oh,
-                    _ => unreachable!(),
-                });
                 let (final_memory, records) = self.memory.finalize::<1>();
-                debug_assert_eq!(traces.len(), BOUNDARY_AIR_OFFSET);
-                traces.push(
-                    boundary_chip
-                        .generate_trace(&final_memory, overridden_heights.map(|oh| oh.boundary)),
-                );
-                debug_assert_eq!(pvs.len(), BOUNDARY_AIR_OFFSET);
-                pvs.push(vec![]);
-
+                boundary_chip.finalize(final_memory);
+                self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
                 (records, None)
             }
             MemoryInterface::Persistent {
@@ -479,62 +479,30 @@ impl<F: PrimeField32> MemoryController<F> {
                 boundary_chip,
                 initial_memory,
             } => {
-                let overridden_heights = self.overridden_heights.as_ref().map(|oh| match oh {
-                    MemoryTraceHeights::Persistent(oh) => oh,
-                    _ => unreachable!(),
-                });
                 let hasher = hasher.unwrap();
 
-                let (final_partition, records) = self.memory.finalize::<8>();
-                traces.push(boundary_chip.generate_trace(
-                    initial_memory,
-                    &final_partition,
-                    hasher,
-                    overridden_heights.map(|oh| oh.boundary),
-                ));
-                pvs.push(vec![]);
-
+                let (final_partition, records) = self.memory.finalize::<CHUNK>();
+                boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
-                    .iter()
-                    .map(|(key, value)| (*key, value.values))
+                    .into_par_iter()
+                    .map(|(key, value)| (key, value.values))
                     .collect();
-
                 let initial_node = MemoryNode::tree_from_memory(
                     merkle_chip.air.memory_dimensions,
                     initial_memory,
                     hasher,
                 );
-                let (expand_trace, final_node) = merkle_chip.generate_trace_and_final_tree(
-                    &initial_node,
-                    &final_memory_values,
-                    hasher,
-                    overridden_heights.map(|oh| oh.merkle),
-                );
-
-                debug_assert_eq!(traces.len(), MERKLE_AIR_OFFSET);
-                traces.push(expand_trace);
-                let mut expand_pvs = vec![];
-                expand_pvs.extend(initial_node.hash());
-                expand_pvs.extend(final_node.hash());
-                debug_assert_eq!(pvs.len(), MERKLE_AIR_OFFSET);
-                pvs.push(expand_pvs);
+                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+                    final_memory: final_memory_values.clone(),
+                }));
+                // FIXME: avoid clone here.
                 (records, Some(final_memory_values))
             }
         };
         for record in records {
             self.access_adapters.add_record(record);
         }
-
-        // FIXME: avoid clone.
-        let aa_traces = self.access_adapters.clone().generate_traces();
-        let aa_pvs = vec![vec![]; aa_traces.len()];
-        traces.extend(aa_traces);
-        pvs.extend(aa_pvs);
-
-        self.result = Some(MemoryControllerResult {
-            traces,
-            public_values: pvs,
-        });
 
         final_memory
     }
@@ -543,18 +511,30 @@ impl<F: PrimeField32> MemoryController<F> {
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        let airs = self.airs();
-        let MemoryControllerResult {
-            traces,
-            public_values,
-        } = self.result.unwrap();
-        izip!(airs, traces, public_values)
-            .map(|(air, trace, pvs)| AirProofInput::simple(air, trace, pvs))
-            .collect()
-    }
+        let mut ret = Vec::new();
 
-    pub fn generate_traces(self) -> Vec<RowMajorMatrix<F>> {
-        self.result.unwrap().traces
+        let Self {
+            interface_chip,
+            access_adapters,
+            ..
+        } = self;
+        match interface_chip {
+            MemoryInterface::Volatile { boundary_chip } => {
+                ret.push(boundary_chip.generate_air_proof_input());
+            }
+            MemoryInterface::Persistent {
+                merkle_chip,
+                boundary_chip,
+                ..
+            } => {
+                debug_assert_eq!(ret.len(), BOUNDARY_AIR_OFFSET);
+                ret.push(boundary_chip.generate_air_proof_input());
+                debug_assert_eq!(ret.len(), MERKLE_AIR_OFFSET);
+                ret.push(merkle_chip.generate_air_proof_input());
+            }
+        }
+        ret.extend(access_adapters.generate_air_proof_inputs());
+        ret
     }
 
     pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<Arc<dyn AnyRap<SC>>>
@@ -566,7 +546,7 @@ impl<F: PrimeField32> MemoryController<F> {
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
-                airs.push(Arc::new(boundary_chip.air.clone()))
+                airs.push(boundary_chip.air())
             }
             MemoryInterface::Persistent {
                 boundary_chip,
@@ -574,9 +554,9 @@ impl<F: PrimeField32> MemoryController<F> {
                 ..
             } => {
                 debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
-                airs.push(Arc::new(boundary_chip.air.clone()));
+                airs.push(boundary_chip.air());
                 debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
-                airs.push(Arc::new(merkle_chip.air.clone()));
+                airs.push(merkle_chip.air());
             }
         }
         airs.extend(self.access_adapters.airs());
@@ -590,11 +570,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             num_airs += 1;
         }
-        for n in [2, 4, 8, 16, 32, 64] {
-            if self.mem_config.max_access_adapter_n >= n {
-                num_airs += 1;
-            }
-        }
+        num_airs += self.access_adapters.num_access_adapters();
         num_airs
     }
 
@@ -603,11 +579,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             air_names.push("Merkle".to_string());
         }
-        for n in [2, 4, 8, 16, 32, 64] {
-            if self.mem_config.max_access_adapter_n >= n {
-                air_names.push(format!("AccessAdapter<{}>", n));
-            }
-        }
+        air_names.extend(self.access_adapters.air_names());
         air_names
     }
 
@@ -620,7 +592,7 @@ impl<F: PrimeField32> MemoryController<F> {
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                    boundary: boundary_chip.current_height(),
+                    boundary: boundary_chip.current_trace_height(),
                     access_adapters,
                 })
             }
@@ -629,8 +601,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 ..
             } => MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
-                boundary: boundary_chip.current_height(),
-                merkle: merkle_chip.current_height(),
+                boundary: boundary_chip.current_trace_height(),
+                merkle: merkle_chip.current_trace_height(),
                 access_adapters,
             }),
         }
@@ -654,33 +626,23 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    fn trace_widths(&self) -> Vec<usize> {
-        let mut widths = vec![];
+    pub fn current_trace_cells(&self) -> Vec<usize> {
+        let mut ret = Vec::new();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                widths.push(BaseAir::<F>::width(&boundary_chip.air));
+                ret.push(boundary_chip.current_trace_cells())
             }
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
                 ..
             } => {
-                widths.push(BaseAir::<F>::width(&boundary_chip.air));
-                widths.push(BaseAir::<F>::width(&merkle_chip.air));
+                ret.push(boundary_chip.current_trace_cells());
+                ret.push(merkle_chip.current_trace_cells());
             }
-        };
-        widths.extend(self.access_adapters.get_widths());
-        widths
-    }
-
-    pub fn current_trace_cells(&self) -> Vec<usize> {
-        zip_eq(self.current_trace_heights(), self.trace_widths())
-            .map(|(h, w)| h * w)
-            .collect()
-    }
-
-    pub fn generate_public_values_per_air(&self) -> Vec<Vec<F>> {
-        self.result.as_ref().unwrap().public_values.clone()
+        }
+        ret.extend(self.access_adapters.get_cells());
+        ret
     }
 }
 

@@ -1,16 +1,12 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use itertools::izip;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
+    p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
     verifier::VerificationError,
     Chip,
@@ -267,21 +263,15 @@ where
             let range_checker = memory_controller.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             {
-                let memory = memory_controller.borrow();
-                let public_values = memory.generate_public_values_per_air();
-                let airs = memory.airs();
-                drop(memory);
-                let traces = Rc::try_unwrap(memory_controller)
+                let air_proof_inputs = Rc::try_unwrap(memory_controller)
                     .unwrap()
                     .into_inner()
-                    .generate_traces();
-
-                for (pvs, air, trace) in izip!(public_values, airs, traces) {
-                    if trace.height() > 0 {
-                        self.air_proof_inputs
-                            .push(AirProofInput::simple(air, trace, pvs));
-                    }
-                }
+                    .generate_air_proof_inputs();
+                self.air_proof_inputs.extend(
+                    air_proof_inputs
+                        .into_iter()
+                        .filter(|api| api.main_trace_height() > 0),
+                );
             }
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
         }
