@@ -9,7 +9,7 @@ For more information on the basic CLI flow, see [Overview of Basic Usage](./over
 The SDK provides lower-level control over the building and transpiling process. The following should be done in a **host program**.
 
 ```rust
-use openvm::transpiler::{openvm_platform::memory::MEM_SIZE, elf::Elf};
+use openvm::{platform::memory::MEM_SIZE, transpiler::elf::Elf};
 use openvm_circuit::arch::instructions::exe::OpenVmExe
 use openvm_circuit::arch::VmExecutor;
 use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
