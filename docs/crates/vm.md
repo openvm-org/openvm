@@ -186,13 +186,13 @@ pub trait VmAdapterChip<F: Field> {
 
     fn preprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
     ) -> Result<(<Self::Interface as VmAdapterInterface<F>>::Reads, Self::ReadRecord)>;
 
     fn postprocess(
         &mut self,
-        memory: &mut MemoryChip<F>,
+        memory: &mut MemoryController<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
         ctx: AdapterRuntimeContext<F, Self::Interface<F>>,
@@ -295,7 +295,7 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
     // For accessing memory
-    memory: MemoryChipRef<F>,
+    memory: MemoryControllerRef<F>,
 }
 
 pub struct VmAirWrapper<A, C> {
@@ -358,3 +358,18 @@ pub struct ImmInstruction<T> {
     pub imm: T
 }
 ```
+<<<<<<< Updated upstream
+=======
+
+### Interacting with other chips
+
+At the AIR-level, to interact with other chips (constrain memory, read the instruction from the program, etc.), an AIR
+communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
+execution bus. The memory bus is used to access memory, the program bus is used to read instructions from the program,
+and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
+which is provided when building a `VmInventory`.
+
+The buses are not meant to be sent interactions directly. "Bridges" are provided to provide a cleaner interface for
+sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
+`MemoryBridge` and `ExecutionBridge`.
+>>>>>>> Stashed changes
