@@ -65,7 +65,7 @@ For the basic operations provided by the `WeierstrassPoint` trait, the scalar fi
 
 See a working example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/ec.rs).
 
-One can define their own ECC structs but we will use the Secp256k1 struct from `openvm-ecc-guest` and thus the `k256` feature should be enabled.
+To use the ECC extension, add the following dependencies to `Cargo.toml`:
 
 ```toml
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
