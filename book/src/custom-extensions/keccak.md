@@ -70,5 +70,5 @@ fn keccak256(input: &[u8]) -> [u8; 32] {
 For the guest program to build successfully add the following to your `.toml` file:
 
 ```toml
-[app_vm_config.keccak256]
+[app_vm_config.keccak]
 ```
