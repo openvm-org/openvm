@@ -20,13 +20,17 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 
-use crate::modular_chip::{
-    ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
-    ModularMulDivChip, ModularMulDivCoreChip,
+use crate::{
+    modular_chip::{
+        ModularAddSubChip, ModularAddSubCoreChip, ModularIsEqualChip, ModularIsEqualCoreChip,
+        ModularMulDivChip, ModularMulDivCoreChip,
+    },
+    util::deserialize_vec_biguint_from_str,
 };
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct ModularExtension {
+    #[serde(deserialize_with = "deserialize_vec_biguint_from_str")]
     pub supported_modulus: Vec<BigUint>,
 }
 

@@ -39,7 +39,8 @@ fn main() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension),
     )?;
     let app_config = AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
+        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup)
+            .into(),
         app_vm_config: Keccak256Rv32Config::default(),
         leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
             .into(),
