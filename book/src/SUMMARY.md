@@ -12,7 +12,7 @@
 
 - [Overview](./writing-apps/overview.md)
 - [Writing a Program](./writing-apps/write-program.md)
-- [Cross-Compilation](./writing-apps/compile.md)
+- [Cross-Compilation](./writing-apps/build.md)
 - [Testing](./writing-apps/testing.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Onchain Verification](./writing-apps/verify.md)
