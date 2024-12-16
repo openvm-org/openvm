@@ -111,7 +111,7 @@ When using the `I256` struct with `target_os = "zkvm"`, the struct utilizes effi
 
 ### Example matrix multiplication using `I256`
 
-See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/signed-matrix-power.rs).
+See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/matrix-power-signed.rs).
 
 ```rust
 #![cfg_attr(not(feature = "std"), no_main)]
