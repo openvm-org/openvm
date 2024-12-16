@@ -5,21 +5,18 @@ use openvm_poseidon2_air::poseidon2::Poseidon2Config;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+// TODO[jpw]: re-exporting hardcoded bus constants for tests. Import paths should be
+// updated directly but it changes many files.
+#[cfg(any(test, feature = "test-utils"))]
+pub use super::testing::{
+    BITWISE_OP_LOOKUP_BUS, BYTE_XOR_BUS, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
+    POSEIDON2_DIRECT_BUS, RANGE_TUPLE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+};
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
-
-pub const EXECUTION_BUS: usize = 0;
-pub const MEMORY_BUS: usize = 1;
-pub const POSEIDON2_DIRECT_BUS: usize = 6;
-pub const READ_INSTRUCTION_BUS: usize = 8;
-pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
-pub const BYTE_XOR_BUS: usize = 10;
-//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
-pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
-pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2

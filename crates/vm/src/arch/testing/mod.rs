@@ -25,7 +25,7 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::{ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS},
+    arch::{ExecutionState, MemoryConfig},
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
@@ -42,6 +42,15 @@ pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2Chip};
+
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
+pub const BYTE_XOR_BUS: usize = 10;
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const RANGE_CHECKER_BUS: usize = 4;
 
