@@ -15,17 +15,10 @@ If you omit `--app_vk` and/or `--proof`, the command will search for those files
 Once again, if you omitted `--output` and `--vk_output` in the `keygen` and `prove` commands, you can omit `--app_vk` and `--proof` in the `verify` command.
 
 ## EVM Level
-
-### Setup
 EVM level proof setup requires large amounts of computation and memory (~200GB). It is recommended to run this process on a server.
 
-For example, on Ubuntu, install `build-essential`
-```bash
-sudo apt update
-sudo apt install build-essential
-```
-
-install `solc 0.8.19` using `svm`
+### Install Solc
+Install  `solc` `0.8.19` using `svm`
 ```bash
 # Install svm
 cargo install --version 0.5.7 svm-rs
@@ -37,6 +30,18 @@ svm install 0.8.19
 svm use 0.8.19
 ```
 
+### Generating the Aggregation Proving Key and EVM Verifier Contract
+Gnenerate the aggregation proving key and verifier contract at `~/.openvm/agg.pk` and `~/.openvm/verifier.sol` respectively by running
+
+```bash
+cargo openvm setup
+```
+> ⚠️ **WARNING**  
+> This command requires very large amounts of computation and memory (~200 GB).
+
+This command can take ~20mins on a `m6a.16xlarge` instance due to the keygen time.
+
+### Verify proof
 Verifying a proof at the EVM level requires just the proof, as the command uses the verifier generated when `cargo openvm setup` was called.
 
 ```bash
@@ -44,8 +49,3 @@ cargo openvm verify evm --proof <path_to_proof>
 ```
 
 If `proof` is omitted, the command will search for the proof at `./openvm/evm.proof`.
-
-As with all other EVM-level commands, `cargo openvm setup` is a prerequisite for `verify`. It generates the aggregation proving key and verifier contract at `~/.openvm/agg.pk` and `~/.openvm/verifier.sol` respectively.
-
-> ⚠️ **WARNING**  
-> `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
