@@ -137,4 +137,4 @@ a = "0"
 b = "7"
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
+The `supported_modulus` parameter is a list of moduli that the guest program will use. The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections.
