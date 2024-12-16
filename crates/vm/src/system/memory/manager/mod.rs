@@ -67,22 +67,22 @@ pub struct TimestampedValues<T, const N: usize> {
 
 pub type MemoryControllerRef<F> = Rc<RefCell<MemoryController<F>>>;
 
-/// A equipartition of memory, with timestamps and values.
+/// An equipartition of memory, with timestamps and values.
 ///
 /// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
 /// partition. I.e., the starting address of the block is `(address_space, label * N)`.
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type TimestampedEquipartition<F, const N: usize> =
-    BTreeMap<(F, usize), TimestampedValues<F, N>>;
+    BTreeMap<(usize, usize), TimestampedValues<F, N>>;
 
-/// A equipartition of memory values.
+/// An equipartition of memory values.
 ///
 /// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
 /// partition. I.e., the starting address of the block is `(address_space, label * N)`.
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
-pub type Equipartition<F, const N: usize> = BTreeMap<(F, usize), [F; N]>;
+pub type Equipartition<F, const N: usize> = BTreeMap<(usize, usize), [F; N]>;
 
 #[derive(Debug, Getters)]
 pub struct MemoryController<F> {
@@ -346,6 +346,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
+        let address_space_usize = address_space.as_canonical_u32() as usize;
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
             address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
@@ -367,16 +368,15 @@ impl<F: PrimeField32> MemoryController<F> {
             };
         }
 
-        let (record, adapter_records) = self
-            .memory
-            .read::<N>(address_space.as_canonical_u32() as usize, ptr_u32 as usize);
+        let (record, adapter_records) =
+            self.memory.read::<N>(address_space_usize, ptr_u32 as usize);
         for record in adapter_records {
             self.access_adapters.add_record(record);
         }
 
-        for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(ptr_u32 + i);
-            self.interface_chip.touch_address(address_space, ptr);
+        for i in 0..N {
+            self.interface_chip
+                .touch_address(address_space_usize, ptr_u32 as usize + i);
         }
 
         record
@@ -409,24 +409,23 @@ impl<F: PrimeField32> MemoryController<F> {
         data: [F; N],
     ) -> MemoryWriteRecord<F, N> {
         assert_ne!(address_space, F::ZERO);
+        let address_space_usize = address_space.as_canonical_u32() as usize;
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
             ptr_u32 < (1 << self.mem_config.pointer_max_bits),
             "memory out of bounds: {ptr_u32:?}",
         );
 
-        let (record, adapter_records) = self.memory.write(
-            address_space.as_canonical_u32() as usize,
-            ptr_u32 as usize,
-            data,
-        );
+        let (record, adapter_records) =
+            self.memory
+                .write(address_space_usize, ptr_u32 as usize, data);
         for record in adapter_records {
             self.access_adapters.add_record(record);
         }
 
-        for i in 0..N as u32 {
-            let ptr = F::from_canonical_u32(ptr_u32 + i);
-            self.interface_chip.touch_address(address_space, ptr);
+        for i in 0..N {
+            self.interface_chip
+                .touch_address(address_space_usize, ptr_u32 as usize + i);
         }
 
         record
@@ -718,9 +717,8 @@ pub fn memory_image_to_equipartition<F: PrimeField32, const N: usize>(
 ) -> Equipartition<F, { N }> {
     let mut result = Equipartition::new();
     for ((addr_space, addr), word) in memory_image {
-        let addr_usize = addr.as_canonical_u32() as usize;
-        let shift = addr_usize % N;
-        let key = (addr_space, addr_usize / N);
+        let shift = addr % N;
+        let key = (addr_space, addr / N);
         result.entry(key).or_insert([F::ZERO; N])[shift] = word;
     }
     result

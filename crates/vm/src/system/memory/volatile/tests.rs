@@ -2,10 +2,7 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
-    p3_field::{AbstractField, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    Chip,
+    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -39,8 +36,8 @@ fn boundary_air_test() {
     let num_addresses = 10;
     let mut distinct_addresses = HashSet::new();
     while distinct_addresses.len() < num_addresses {
-        let addr_space = Val::from_canonical_usize(rng.gen_range(0..MAX_ADDRESS_SPACE));
-        let pointer = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
+        let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
+        let pointer = rng.gen_range(0..MAX_VAL);
         distinct_addresses.insert((addr_space, pointer));
     }
 
@@ -56,7 +53,7 @@ fn boundary_air_test() {
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
         final_memory.insert(
-            (addr_space, pointer.as_canonical_u32() as usize),
+            (addr_space, pointer),
             TimestampedValues {
                 values: [final_data],
                 timestamp: final_clk,
@@ -75,8 +72,8 @@ fn boundary_air_test() {
             .flat_map(|(addr_space, pointer)| {
                 vec![
                     Val::ONE,
-                    *addr_space,
-                    *pointer,
+                    Val::from_canonical_usize(*addr_space),
+                    Val::from_canonical_usize(*pointer),
                     Val::ZERO,
                     Val::ZERO,
                     Val::ONE,
@@ -91,14 +88,12 @@ fn boundary_air_test() {
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
-                let timestamped_value = final_memory
-                    .get(&(*addr_space, pointer.as_canonical_u32() as usize))
-                    .unwrap();
+                let timestamped_value = final_memory.get(&(*addr_space, *pointer)).unwrap();
 
                 vec![
                     Val::ONE,
-                    *addr_space,
-                    *pointer,
+                    Val::from_canonical_usize(*addr_space),
+                    Val::from_canonical_usize(*pointer),
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
                     Val::ONE,

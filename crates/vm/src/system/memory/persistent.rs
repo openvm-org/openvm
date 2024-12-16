@@ -128,13 +128,13 @@ pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
 
 #[derive(Debug)]
 enum TouchedLabels<F, const CHUNK: usize> {
-    Running(FxHashSet<(F, usize)>),
+    Running(FxHashSet<(usize, usize)>),
     Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
 #[derive(Debug)]
 struct FinalTouchedLabel<F, const CHUNK: usize> {
-    address_space: F,
+    address_space: usize,
     label: usize,
     init_values: [F; CHUNK],
     final_values: [F; CHUNK],
@@ -151,7 +151,7 @@ impl<F: PrimeField32, const CHUNK: usize> Default for TouchedLabels<F, CHUNK> {
 }
 
 impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
-    fn touch(&mut self, address_space: F, label: usize) {
+    fn touch(&mut self, address_space: usize, label: usize) {
         match self {
             TouchedLabels::Running(touched_labels) => {
                 touched_labels.insert((address_space, label));
@@ -190,8 +190,8 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         self.overridden_height = Some(overridden_height);
     }
 
-    pub fn touch_address(&mut self, address_space: F, pointer: F) {
-        let label = pointer.as_canonical_u32() as usize / CHUNK;
+    pub fn touch_address(&mut self, address_space: usize, pointer: usize) {
+        let label = pointer / CHUNK;
         self.touched_labels.touch(address_space, label);
     }
 
@@ -272,7 +272,7 @@ where
                     let (initial_row, final_row) = row.split_at_mut(width);
                     *initial_row.borrow_mut() = PersistentBoundaryCols {
                         expand_direction: Val::<SC>::ONE,
-                        address_space: touched_label.address_space,
+                        address_space: Val::<SC>::from_canonical_usize(touched_label.address_space),
                         leaf_label: Val::<SC>::from_canonical_usize(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
@@ -285,7 +285,7 @@ where
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {
                         expand_direction: Val::<SC>::NEG_ONE,
-                        address_space: touched_label.address_space,
+                        address_space: Val::<SC>::from_canonical_usize(touched_label.address_space),
                         leaf_label: Val::<SC>::from_canonical_usize(touched_label.label),
                         values: touched_label.final_values,
                         hash: touched_label.final_hash,

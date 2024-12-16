@@ -133,8 +133,7 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            let address_space =
-                F::from_canonical_usize(as_label + self.memory_dimensions.as_offset);
+            let address_space = as_label + self.memory_dimensions.as_offset;
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))

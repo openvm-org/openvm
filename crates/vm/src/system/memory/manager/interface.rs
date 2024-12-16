@@ -21,7 +21,7 @@ pub enum MemoryInterface<F> {
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn touch_address(&mut self, addr_space: F, pointer: F) {
+    pub fn touch_address(&mut self, addr_space: usize, pointer: usize) {
         match self {
             MemoryInterface::Volatile { boundary_chip } => {
                 boundary_chip.touch_address(addr_space, pointer);

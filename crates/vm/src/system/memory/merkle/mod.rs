@@ -70,11 +70,11 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         }
     }
 
-    pub fn touch_address(&mut self, address_space: F, address: F) {
+    pub fn touch_address(&mut self, address_space: usize, address: usize) {
         self.touch_node(
             0,
-            (address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset,
-            (address.as_canonical_u32() as usize) / CHUNK,
+            address_space - self.air.memory_dimensions.as_offset,
+            address / CHUNK,
         );
     }
 }

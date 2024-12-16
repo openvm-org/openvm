@@ -6,11 +6,8 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    interaction::InteractionType,
-    p3_field::{AbstractField, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    Chip, ChipUsageGetter,
+    interaction::InteractionType, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput, Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -40,7 +37,7 @@ const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIR
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
     initial_memory: &Equipartition<BabyBear, CHUNK>,
-    touched_labels: BTreeSet<(BabyBear, usize)>,
+    touched_labels: BTreeSet<(usize, usize)>,
     final_memory: &Equipartition<BabyBear, CHUNK>,
 ) {
     let MemoryDimensions {
@@ -52,7 +49,7 @@ fn test<const CHUNK: usize>(
 
     // checking validity of test data
     for (&(address_space, label), value) in final_memory {
-        assert!((address_space.as_canonical_u32() as usize) - as_offset < (1 << as_height));
+        assert!(address_space - as_offset < (1 << as_height));
         assert!(label < (1 << address_height));
         if initial_memory.get(&(address_space, label)) != Some(value) {
             assert!(touched_labels.contains(&(address_space, label)));
@@ -76,10 +73,7 @@ fn test<const CHUNK: usize>(
         MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
     for &(address_space, label) in touched_labels.iter() {
         for i in 0..CHUNK {
-            chip.touch_address(
-                address_space,
-                BabyBear::from_canonical_usize(label * CHUNK + i),
-            );
+            chip.touch_address(address_space, label * CHUNK + i);
         }
     }
 
@@ -121,7 +115,7 @@ fn test<const CHUNK: usize>(
         let initial_values = *initial_memory
             .get(&(address_space, address_label))
             .unwrap_or(&[BabyBear::ZERO; CHUNK]);
-        let as_label = address_space.as_canonical_u32() as usize - as_offset;
+        let as_label = address_space - as_offset;
         interaction(
             InteractionType::Send,
             false,
@@ -176,7 +170,7 @@ fn random_test<const CHUNK: usize>(
     let mut touched_labels = BTreeSet::new();
 
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
-        let address_space = BabyBear::from_canonical_usize((next_usize() & 1) + 1);
+        let address_space = (next_usize() & 1) + 1;
         let label = next_usize() % (1 << height);
 
         if seen_labels.insert(label) {

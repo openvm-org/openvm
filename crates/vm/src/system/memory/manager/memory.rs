@@ -76,7 +76,6 @@ impl<F: PrimeField32> Memory<F> {
         let mut block_data = FxHashMap::default();
         let mut data = FxHashMap::default();
         for (&(address_space, block_idx), values) in initial_memory {
-            let address_space_usize = address_space.as_canonical_u32() as usize;
             let pointer = block_idx * N;
             let block = BlockData {
                 pointer,
@@ -84,8 +83,8 @@ impl<F: PrimeField32> Memory<F> {
                 timestamp: INITIAL_TIMESTAMP,
             };
             for (i, value) in values.iter().enumerate() {
-                data.insert((address_space_usize, pointer + i), *value);
-                block_data.insert((address_space_usize, pointer + i), block);
+                data.insert((address_space, pointer + i), *value);
+                block_data.insert((address_space, pointer + i), block);
             }
         }
         Self {
@@ -197,7 +196,7 @@ impl<F: PrimeField32> Memory<F> {
             debug_assert_eq!(block.size, N);
 
             equipartition.insert(
-                (F::from_canonical_usize(address_space), pointer / N),
+                (address_space, pointer / N),
                 TimestampedValues {
                     timestamp: block.timestamp,
                     values: self.range_array::<N>(address_space, pointer),
@@ -811,7 +810,7 @@ mod tests {
         let (final_memory, records) = memory.finalize::<8>();
         assert_eq!(final_memory.len(), 4);
         assert_eq!(
-            final_memory.get(&(bb!(1), 0)),
+            final_memory.get(&(1, 0)),
             Some(&TimestampedValues {
                 values: bba![1, 2, 3, 4, 0, 0, 0, 0],
                 timestamp: 1,
@@ -819,7 +818,7 @@ mod tests {
         );
         // start_index = 16 corresponds to label = 2
         assert_eq!(
-            final_memory.get(&(bb!(1), 2)),
+            final_memory.get(&(1, 2)),
             Some(&TimestampedValues {
                 values: bba![1, 1, 1, 1, 1, 1, 1, 1],
                 timestamp: 2,
@@ -827,7 +826,7 @@ mod tests {
         );
         // start_index = 24 corresponds to label = 3
         assert_eq!(
-            final_memory.get(&(bb!(1), 3)),
+            final_memory.get(&(1, 3)),
             Some(&TimestampedValues {
                 values: bba![1, 1, 1, 1, 1, 1, 1, 1],
                 timestamp: 2,
@@ -835,7 +834,7 @@ mod tests {
         );
         // start_index = 64 corresponds to label = 8
         assert_eq!(
-            final_memory.get(&(bb!(2), 8)),
+            final_memory.get(&(2, 8)),
             Some(&TimestampedValues {
                 values: bba![8, 7, 6, 5, 4, 3, 2, 1],
                 timestamp: 3,
@@ -852,8 +851,8 @@ mod tests {
 
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = Equipartition::<F, 8>::new();
-        initial_memory.insert((F::ONE, 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
-        initial_memory.insert((F::ONE, 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
+        initial_memory.insert((1, 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
+        initial_memory.insert((1, 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
 
         let mut memory = Memory::new(&initial_memory);
 
