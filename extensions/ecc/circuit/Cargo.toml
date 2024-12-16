@@ -26,6 +26,7 @@ once_cell = { workspace = true }
 eyre = { workspace = true }
 num-integer = { workspace = true }
 serde = { workspace = true }
+serde_with = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

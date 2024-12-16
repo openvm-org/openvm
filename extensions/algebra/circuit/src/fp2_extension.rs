@@ -17,16 +17,15 @@ use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use crate::{
-    fp2_chip::{Fp2AddSubChip, Fp2MulDivChip},
-    util::deserialize_vec_biguint_from_str,
-};
+use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};
 
+#[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct Fp2Extension {
-    #[serde(deserialize_with = "deserialize_vec_biguint_from_str")]
+    #[serde_as(as = "Vec<DisplayFromStr>")]
     pub supported_modulus: Vec<BigUint>,
 }
 
