@@ -76,6 +76,12 @@ pub fn main() {
 }
 ```
 
+To be able to import the `U256` struct, add the following to your `Cargo.toml` file:
+
+```toml
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+```
+
 ## `I256`
 
 The `I256` struct is a 256-bit signed integer type. The `I256` struct is very similar to the `U256` struct.
@@ -148,6 +154,12 @@ pub fn main() {
     let c: Matrix = mult(&a, &b);
     assert_eq!(c, b);
 }
+```
+
+To be able to import the `I256` struct, add the following to your `Cargo.toml` file:
+
+```toml
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
 ```
 
 ## External Functions

@@ -32,6 +32,12 @@ pub fn main() {
 }
 ```
 
+To be able to import the `keccak256` function, add the following to your `Cargo.toml` file:
+
+```toml
+openvm-keccak256-guest = { git = "https://github.com/openvm-org/openvm.git" }
+```
+
 ## Native Keccak256
 
 Keccak guest extension also provides another way to use the native Keccak-256 implementation. It provides a function that is meant to be linked to other external libraries. The external libraries can use this function as a hook for the Keccak-256 native implementation. Enabled only when the target is `zkvm`.
