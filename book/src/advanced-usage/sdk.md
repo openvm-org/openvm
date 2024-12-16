@@ -9,12 +9,19 @@ For more information on the basic CLI flow, see [Overview of Basic Usage](./over
 If you have a guest program and would like to try running the **host program** specified below, you can do so by adding the following imports and setup at the top of the file. You may need to modify the imports and/or the `SomeStruct` struct to match your program.
 
 ```rust
-use openvm::{platform::memory::MEM_SIZE, transpiler::elf::Elf};
-use openvm_circuit::arch::instructions::exe::OpenVmExe
-use openvm_circuit::arch::VmExecutor;
-use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
-
-let sdk = Sdk;
+use std::{fs, sync::Arc};
+use eyre::Result;
+use openvm::platform::memory::MEM_SIZE;
+use openvm_build::{GuestOptions, TargetFilter};
+use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
+use openvm_sdk::{
+    config::{AggConfig, AppConfig, SdkVmConfig},
+    prover::AppProver,
+    Sdk, StdIn,
+};
+use openvm_stark_sdk::config::FriParameters;
+use openvm_transpiler::elf::Elf;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct SomeStruct {
@@ -29,6 +36,7 @@ The SDK provides lower-level control over the building and transpiling process.
 
 ```rust
 // 1. Build the VmConfig with the extensions needed.
+let sdk = Sdk;
 let vm_config = SdkVmConfig::builder()
     .system(Default::default())
     .rv32i(Default::default())
@@ -40,7 +48,8 @@ let guest_opts = GuestOptions::default().with_features(vec!["parallel"]);
 let target_filter = TargetFilter::default().with_kind("bin".to_string());
 let elf = sdk.build(guest_opts, "your_path_project_root", &target_filter)?;
 // 2b. Load the ELF from a file
-let elf = Elf::decode("your_path_to_elf", MEM_SIZE as u32)?;
+let elf_bytes = fs::read("your_path_to_elf")?;
+let elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
 
 // 3. Transpile the ELF into a VmExe
 let exe = sdk.transpile(elf, vm_config.transpiler())?;
@@ -55,12 +64,13 @@ To run your program and see the public value output, you can do the following:
 
 ```rust
 // 4. Format your input into StdIn
-let my_input = SomeStruct; // anything that can be serialized
+let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
 let mut stdin = StdIn::default();
 stdin.write(&my_input);
 
 // 5. Run the program
-let output = sdk.execute(exe, vm_config, input)?;
+let output = sdk.execute(exe.clone(), vm_config.clone(), stdin.clone())?;
+println!("public values output: {:?}", output);
 ```
 
 ### Using `StdIn`
@@ -84,15 +94,14 @@ let app_config = AppConfig::new(app_fri_params, vm_config);
 let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
 
 // 8. Generate an AppProvingKey
-let app_pk = sdk.app_keygen(app_config)?;
+let app_pk = Arc::new(sdk.app_keygen(app_config)?);
 
 // 9a. Generate a proof
-let proof = sdk.generate_app_proof(app_pk, app_committed_exe, stdin)?;
+let proof = sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), stdin.clone())?;
 // 9b. Generate a proof with an AppProver with custom fields
-let mut app_prover =
-    AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe)
-        .with_program_name(program_name);
-let proof = app_prover.generate_app_proof(stdin);
+let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe.clone())
+    .with_program_name("test_program");
+let proof = app_prover.generate_app_proof(stdin.clone());
 ```
 
 ## Verifying Proofs
@@ -111,19 +120,32 @@ Generating and verifying an EVM proof is an extension of the above process.
 ```rust
 // 11. Generate the aggregation proving key
 const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
-let halo2_params_reader = Halo2ParamsReader::new(DEFAULT_PARAMS_DIR);
+let halo2_params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
 let agg_config = AggConfig::default();
 let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
 
-// 12. Generate an EVM proof
-let proof = sdk.generate_evm_proof(&halo2_params_reader, app_pk, app_committed_exe, agg_pk, stdin)?;
-
-// 13. Generate the SNARK verifier contract
+// 12. Generate the SNARK verifier contract
 let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
 
+// 13. Generate an EVM proof
+let proof = sdk.generate_evm_proof(
+    &halo2_params_reader,
+    app_pk,
+    app_committed_exe,
+    agg_pk,
+    stdin,
+)?;
+
 // 14. Verify the EVM proof
-sdk.verify_evm_proof(&verifier, &proof)?;
+let success = sdk.verify_evm_proof(&verifier, &proof);
+assert!(success);
 ```
+
+> ⚠️ **WARNING**  
+> Generating an EVM proof will require a substantial amount of computation and memory. If you have run `cargo openvm setup` and don't need a specialized aggregation configuration, consider deserializing the proving key from the file `~/.openvm/agg.pk` instead of generating it.
+
+> ⚠️ **WARNING**  
+> The aggregation proving key `agg_pk` above is large. Avoidå cloning it if possible.
 
 Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup` CLI command. For more information on the setup process, see the [onchain verify](../writing-apps/onchain-verify.md) doc.
 
