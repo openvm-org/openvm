@@ -18,7 +18,7 @@ OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused
 
 The following chapters will guide you through:
 
-- [Getting started](./getting-started/install.md)
+- [Getting started](./getting-started/install.md).
 - [Writing applications](./writing-apps/overview.md) in Rust targeting OpenVM and generating proofs.
 - [Using existing extensions](./custom-extensions/overview.md) to optimize your Rust programs.
-- How to add custom VM extensions
+- [How to add custom VM extensions](./advanced-usage/new-extension.md).

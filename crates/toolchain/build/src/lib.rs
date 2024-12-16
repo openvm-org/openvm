@@ -333,6 +333,20 @@ pub struct TargetFilter {
     pub kind: Option<String>,
 }
 
+impl TargetFilter {
+    /// Set substring of target name to match.
+    pub fn with_name_substr(mut self, name_substr: String) -> Self {
+        self.name_substr = Some(name_substr);
+        self
+    }
+
+    /// Set kind of target to match.
+    pub fn with_kind(mut self, kind: String) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+}
+
 /// Finds the unique executable target in the given package and target directory,
 /// using the given target filter.
 pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
