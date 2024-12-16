@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-algebra-extension-test-programs"
+name = "openvm-algebra-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

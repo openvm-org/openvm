@@ -1,6 +1,6 @@
 [package]
-name = "openvm-bigint-extension-tests"
-description = "Tests for the OpenVM bigint"
+name = "openvm-bigint-integration-tests"
+description = "Integration tests for the OpenVM bigint extension"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

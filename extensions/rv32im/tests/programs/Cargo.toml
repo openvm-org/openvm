@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-rv32im-circuit-test-programs"
+name = "openvm-rv32im-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

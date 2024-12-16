@@ -1,6 +1,6 @@
 [package]
-name = "openvm-pairing-tests"
-description = "Tests for the OpenVM pairing extension"
+name = "openvm-pairing-integration-tests"
+description = "Integration tests for the OpenVM pairing extension"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

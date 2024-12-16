@@ -1,4 +1,4 @@
-# How to write toolchain tests for an extension
+# How to write integration tests for an extension
 
 Make a `test` crate inside the extension folder. As an example, here is the structure of the `rv32im-extension-test` crate:
 
@@ -12,6 +12,7 @@ extensions/rv32im/tests/
 │   └── examples
 │       └── example1.rs
 │       └── example2.rs
+│       └── ...
 ```
 
 The `examples` folder contains the test programs in `rust`. 
@@ -42,6 +43,7 @@ pub fn main() {
 And then to `transpile`, `run`, and `prove` the above program, in the `src/lib.rs` file, you can do:
 
 ```rust
+#[test]
 fn test_fibonacci_prove() -> Result<()> {
     let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci")?;
     let exe = VmExe::from_elf(

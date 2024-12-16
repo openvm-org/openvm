@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-keccak256-circuit-test-programs"
+name = "openvm-keccak256-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

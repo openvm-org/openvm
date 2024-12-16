@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-bigint-circuit-test-programs"
+name = "openvm-bigint-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

@@ -1,6 +1,6 @@
 [package]
-name = "openvm-ecc-tests"
-description = "Tests for the OpenVM ecc extension"
+name = "openvm-ecc-integration-tests"
+description = "Integration tests for the OpenVM ecc extension"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

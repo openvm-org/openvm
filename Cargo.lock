@@ -3582,7 +3582,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-bigint-extension-tests"
+name = "openvm-bigint-guest"
+version = "0.1.0-alpha"
+dependencies = [
+ "num-bigint-dig",
+ "num-traits",
+ "openvm",
+ "openvm-platform",
+ "serde",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-bigint-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
  "eyre",
@@ -3599,18 +3611,6 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
-]
-
-[[package]]
-name = "openvm-bigint-guest"
-version = "0.1.0-alpha"
-dependencies = [
- "num-bigint-dig",
- "num-traits",
- "openvm",
- "openvm-platform",
- "serde",
- "strum_macros",
 ]
 
 [[package]]
@@ -3807,16 +3807,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-ecc-sw-setup"
-version = "0.1.0-alpha"
-dependencies = [
- "openvm-macros-common",
- "quote",
- "syn 2.0.90",
-]
-
-[[package]]
-name = "openvm-ecc-tests"
+name = "openvm-ecc-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
  "derive_more 1.0.0",
@@ -3841,6 +3832,15 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "serde",
+]
+
+[[package]]
+name = "openvm-ecc-sw-setup"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -3916,7 +3916,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-keccak256-extension-tests"
+name = "openvm-keccak256-guest"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm-platform",
+ "serde",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "openvm-keccak256-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
  "eyre",
@@ -3932,15 +3941,6 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
-]
-
-[[package]]
-name = "openvm-keccak256-guest"
-version = "0.1.0-alpha"
-dependencies = [
- "openvm-platform",
- "serde",
- "tiny-keccak",
 ]
 
 [[package]]
@@ -4150,7 +4150,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-pairing-tests"
+name = "openvm-pairing-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
  "eyre",
@@ -4269,7 +4269,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-rv32im-extension-tests"
+name = "openvm-rv32im-guest"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm-platform",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-rv32im-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
  "eyre",
@@ -4286,14 +4294,6 @@ dependencies = [
  "openvm-transpiler",
  "serde",
  "test-case",
-]
-
-[[package]]
-name = "openvm-rv32im-guest"
-version = "0.1.0-alpha"
-dependencies = [
- "openvm-platform",
- "strum_macros",
 ]
 
 [[package]]

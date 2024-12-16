@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-ecc-extension-test-programs"
+name = "openvm-ecc-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

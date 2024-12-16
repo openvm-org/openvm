@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-pairing-extension-test-programs"
+name = "openvm-pairing-integration-test-programs"
 version = "0.0.0"
 edition = "2021"
 

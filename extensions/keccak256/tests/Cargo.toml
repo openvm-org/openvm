@@ -1,6 +1,6 @@
 [package]
-name = "openvm-keccak256-extension-tests"
-description = "Tests for the OpenVM keccak256"
+name = "openvm-keccak256-integration-tests"
+description = "Integration tests for the OpenVM keccak256 extension"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

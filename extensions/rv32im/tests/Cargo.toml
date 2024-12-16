@@ -1,6 +1,6 @@
 [package]
-name = "openvm-rv32im-extension-tests"
-description = "Tests for the OpenVM rv32im extension"
+name = "openvm-rv32im-integration-tests"
+description = "Integration tests for the OpenVM rv32im extension"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
