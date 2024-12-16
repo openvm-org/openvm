@@ -1,9 +1,11 @@
 [package]
 name = "openvm-keccak256-transpiler"
+description = "OpenVM transpiler extension for keccak256"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for Keccak256"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

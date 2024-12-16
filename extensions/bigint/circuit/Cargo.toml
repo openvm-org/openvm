@@ -1,9 +1,11 @@
 [package]
 name = "openvm-bigint-circuit"
+description = "OpenVM circuit extension for uint256 and int256"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuit extension for uint256 and int256"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

@@ -1,8 +1,11 @@
 [package]
 name = "openvm-native-compiler-derive"
-version.workspace = true
-edition.workspace = true
 description = "Procedural macros for OpenVM native compiler."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true

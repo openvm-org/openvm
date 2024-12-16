@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 description = "Procedural macros for OpenVM circuits."
+license.workspace = true
 
 [lib]
 proc-macro = true

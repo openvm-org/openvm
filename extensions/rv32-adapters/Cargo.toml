@@ -1,9 +1,11 @@
 [package]
 name = "openvm-rv32-adapters"
+description = "OpenVM adapters for rv32 intrinsics"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM adapters for rv32 intrinsics"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

@@ -1,9 +1,11 @@
 [package]
 name = "openvm-rv32im-transpiler"
+description = "OpenVM transpiler extension for RISC-V 32-bit IM instruction set"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for RISC-V32IM"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

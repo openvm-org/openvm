@@ -1,9 +1,11 @@
 [package]
 name = "openvm-ecc-guest"
+description = "OpenVM guest library for elliptic curve cryptography"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM guest elliptic curve cryptography library."
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }

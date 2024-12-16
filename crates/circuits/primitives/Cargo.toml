@@ -1,9 +1,12 @@
 [package]
 name = "openvm-circuit-primitives"
+description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Library of plonky3 primitives for general purpose use in other ZK circuits."
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

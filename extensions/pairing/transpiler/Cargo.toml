@@ -1,9 +1,11 @@
 [package]
 name = "openvm-pairing-transpiler"
+description = "OpenVM transpiler extension for elliptic curve pairing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for pairing"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

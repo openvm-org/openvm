@@ -2,9 +2,10 @@
 version = "0.1.0-alpha"
 edition = "2021"
 rust-version = "1.82"
-authors = ["Intrinsic Technologies"]
+authors = ["OpenVM Authors"]
 homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
+license = "MIT"
 
 [workspace]
 members = [

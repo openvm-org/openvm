@@ -1,11 +1,12 @@
 [package]
 name = "openvm-build"
+description = "OpenVM build tools"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "OpenVM build tools"
+license.workspace = true
 
 [dependencies]
 openvm-platform = { workspace = true }

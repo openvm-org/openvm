@@ -1,7 +1,10 @@
 [package]
 name = "openvm-ecc-sw-setup"
-version = { workspace = true }
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 syn = { version = "2.0", features = ["full"] }

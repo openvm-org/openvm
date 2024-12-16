@@ -3,6 +3,8 @@ name = "openvm-native-recursion"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

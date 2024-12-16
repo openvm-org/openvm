@@ -1,9 +1,11 @@
 [package]
 name = "openvm-circuit"
+description = "OpenVM circuits"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuits"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 p3-symmetric = { workspace = true }

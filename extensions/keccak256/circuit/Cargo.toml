@@ -1,9 +1,11 @@
 [package]
 name = "openvm-keccak256-circuit"
+description = "OpenVM circuit extension for keccak256"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuit extension for keccak256"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

@@ -1,9 +1,11 @@
 [package]
 name = "openvm-native-circuit"
+description = "OpenVM circuit extension for native instructions"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuit extension for native VM"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

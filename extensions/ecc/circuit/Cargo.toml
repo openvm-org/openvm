@@ -1,8 +1,11 @@
 [package]
 name = "openvm-ecc-circuit"
-version = "0.1.0"
-edition = "2021"
-description = "Elliptic curve circuits."
+description = "OpenVM circuit extension for elliptic curve cryptography"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-circuit-primitives-derive = { workspace = true }

@@ -1,11 +1,11 @@
 [package]
 name = "openvm-toolchain-tests"
+description = "Tests for the OpenVM toolchain starting from Rust"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Tests for the OpenVM toolchain starting from Rust"
 
 [dependencies]
 openvm-circuit-primitives-derive.workspace = true

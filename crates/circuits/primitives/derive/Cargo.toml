@@ -1,8 +1,12 @@
 [package]
 name = "openvm-circuit-primitives-derive"
-version.workspace = true
-edition.workspace = true
 description = "Procedural macros for writing circuits as AIRs."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
