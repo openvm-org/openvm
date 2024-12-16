@@ -53,7 +53,7 @@ This step enumerates the declared moduli (e.g., `0` for the first one, `1` for t
 
 ## Complex field extension
 
-Complex extensions, such as \\(\mathbb{F}\_p[x]/(x^2 + 1)\\), are defined similarly using `complex_declare!` and `complex_init!`:
+Complex extensions, such as \\(\mathbb{F}_p[x]/(x^2 + 1)\\), are defined similarly using `complex_declare!` and `complex_init!`:
 
 1. **Declare**:
 
