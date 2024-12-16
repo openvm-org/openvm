@@ -12,7 +12,7 @@ This modular architecture means the extension cleanly adds new capabilities whil
 Conceptually, a new extension consists of three parts:
 - **Guest**: High-level Rust code that defines and uses the new operations.
 - **Transpiler**: Logic that converts custom RISC-V instructions into corresponding OpenVM instructions.
-- **Circuit**: The zero-knowledge-friendly computations (chips) that enforce correctness through polynomial constraints.
+- **Circuit**: The special chips that enforce correctness of instruction execution through polynomial constraints.
 
 ## Guest
 
