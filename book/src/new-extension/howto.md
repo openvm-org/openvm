@@ -39,4 +39,4 @@ The circuit component is where the extension’s logic is enforced in a zero-kno
 
 The size and complexity of these polynomial constraints should be kept within security parameters, as they directly affect proof size and generation time.
 
-For more technical details on writing circuits and constraints, consult the OpenVM [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/README.md), which provides specifications and guidelines for integrating your extension into the OpenVM ecosystem.
+For more technical details on writing circuits and constraints, consult the OpenVM [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/README.md), which provides specifications and guidelines for integrating your extension into the OpenVM framework.
