@@ -74,6 +74,7 @@ pub fn main() {
     let c: Matrix = mult(&a, &b);
     assert_eq!(c, b);
 }
+```
 
 ## `I256`
 
