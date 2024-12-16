@@ -40,7 +40,6 @@ pub struct KeccakVmAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,
-    // TODO: add configuration for enabling direct non-memory interactions
     pub(super) offset: usize,
 }
 

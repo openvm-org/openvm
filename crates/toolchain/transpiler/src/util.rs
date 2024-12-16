@@ -98,8 +98,6 @@ pub fn from_s_type<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruct
     )
 }
 
-// TODO: implement J and U, prove or disprove that the address spaces are currently correct
-
 /// Create a new [`Instruction`] from a B-type instruction.
 pub fn from_b_type<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
     Instruction::new(

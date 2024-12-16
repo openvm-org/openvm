@@ -227,4 +227,3 @@ fn rand_native_loadstore_test() {
     tester.simple_test().expect("Verification failed");
 }
 
-// TODO[yi]: Add negative tests after clarifying ISA spec

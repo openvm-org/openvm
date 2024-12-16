@@ -78,7 +78,6 @@ fn run_rv32_branch_lt_rand_execute<E: InstructionExecutor<F>>(
     let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
-    // TODO: update the default increment (i.e. 4) when opcodes are updated
     let pc_inc = if cmp_result { imm } else { 4 };
 
     assert_eq!(to_pc, from_pc + pc_inc);

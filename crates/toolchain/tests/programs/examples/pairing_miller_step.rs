@@ -37,7 +37,7 @@ mod bn254 {
         let mut pt_bytes = [0u8; 32 * 4];
         let mut l_bytes = [0u8; 32 * 4];
 
-        // TODO: if we ever need to change this, we should switch to using `bincode` to serialize
+        // TODO: if we ever need to change this, we should switch to using `StdIn::write` to serialize
         //       for us and use `read()` instead of `read_vec()`
         pt_bytes[0..32].copy_from_slice(pt_cmp.x.c0.as_le_bytes());
         pt_bytes[32..2 * 32].copy_from_slice(pt_cmp.x.c1.as_le_bytes());
@@ -67,7 +67,7 @@ mod bn254 {
         let mut l0_bytes = [0u8; 32 * 4];
         let mut l1_bytes = [0u8; 32 * 4];
 
-        // TODO: if we ever need to change this, we should switch to using `bincode` to serialize
+        // TODO: if we ever need to change this, we should switch to using `StdIn::write` to serialize
         //       for us and use `read()` instead of `read_vec()`
         pt_bytes[0..32].copy_from_slice(pt_cmp.x.c0.as_le_bytes());
         pt_bytes[32..2 * 32].copy_from_slice(pt_cmp.x.c1.as_le_bytes());

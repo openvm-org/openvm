@@ -739,7 +739,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
     }
 
-    // TODO[jpw]: find better way to handle public values chip. It is an executor but
     // we always need to special case it because we need to fix the air id.
     fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
