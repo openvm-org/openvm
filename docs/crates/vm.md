@@ -148,8 +148,8 @@ Most chips in the VM satisfy this, with notable exceptions being Keccak and Pose
 - `VmCoreChip<F, I: VmAdapterInterface<F>>`
 - `VmCoreAir<AB, I: VmAdapterInterface<AB::Expr>>`
 
-[!WARNING]
-The word **core** will be banned from usage outside of this context.
+> [!WARNING]
+> The word **core** will be banned from usage outside of this context.
 
 Main idea: each VM chip is created from an `AdapterChip` and a `CoreChip`. Analogously, the VM AIR is created from an
 `AdapterAir` and `CoreAir` so that the columns of the VM AIR are formed by concatenating the columns from the
