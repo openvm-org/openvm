@@ -112,7 +112,8 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
 
 fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
     AppConfig {
-        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup),
+        app_fri_params: standard_fri_params_with_100_bits_conjectured_security(app_log_blowup)
+            .into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
                 .with_max_segment_len(200)

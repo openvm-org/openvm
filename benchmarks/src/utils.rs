@@ -89,8 +89,8 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    counter!("fri.log_blowup").absolute(app_config.app_fri_params.log_blowup as u64);
-    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params);
+    counter!("fri.log_blowup").absolute(app_config.app_fri_params.fri_params.log_blowup as u64);
+    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
     let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = time(gauge!("keygen_time_ms"), || {
@@ -98,7 +98,7 @@ where
     });
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-        commit_app_exe(app_config.app_fri_params, exe)
+        commit_app_exe(app_config.app_fri_params.fri_params, exe)
     });
     // 3. Executes runtime once with full metric collection for flamegraphs (slow).
     // 4. Executes runtime again without metric collection and generate trace.

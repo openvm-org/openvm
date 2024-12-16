@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     let max_segment_length = cli_args.max_segment_length.unwrap_or(1_000_000);
 
     let app_config = AppConfig {
-        app_fri_params,
+        app_fri_params: app_fri_params.into(),
         app_vm_config: Rv32ImConfig::with_public_values_and_segment_len(
             NUM_PUBLIC_VALUES,
             max_segment_length,

@@ -16,7 +16,7 @@ pub const DEFAULT_EVM_PROOF_PATH: &str = "./openvm/evm.proof";
 
 pub fn default_app_config() -> AppConfig<SdkVmConfig> {
     AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(2),
+        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(2).into(),
         app_vm_config: SdkVmConfig::builder()
             .system(Default::default())
             .rv32i(Default::default())

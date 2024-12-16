@@ -19,7 +19,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "build",
             "--manifest-dir",
             "example",
-            "--transpiler-config",
+            "--config",
             "example/openvm.toml",
             "--exe-output",
             temp_exe.to_str().unwrap(),

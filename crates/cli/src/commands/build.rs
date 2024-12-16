@@ -57,7 +57,7 @@ pub struct BuildArgs {
         default_value = DEFAULT_APP_CONFIG_PATH,
         help = "Path to the SDK config .toml file that specifies the transpiler extensions"
     )]
-    pub transpiler_config: PathBuf,
+    pub config: PathBuf,
 
     #[arg(
         long,
@@ -122,7 +122,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         let elf_path = elf_path?;
         println!("[openvm] Transpiling the package...");
         let output_path = &build_args.exe_output;
-        let app_config = read_config_toml_or_default(&build_args.transpiler_config)?;
+        let app_config = read_config_toml_or_default(&build_args.config)?;
         let transpiler = app_config.app_vm_config.transpiler();
 
         let data = read(elf_path.clone())?;
