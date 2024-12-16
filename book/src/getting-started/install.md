@@ -6,8 +6,16 @@ To use OpenVM for generating proofs, you must install the OpenVM command line to
 
 ## Option 1: Install Via Git URL (Recommended)
 
+You will need the nightly toolchain. You can install it with:
+
 ```bash
-cargo install --git http://github.com/openvm-org/openvm.git cargo-openvm
+rustup toolchain install nightly
+```
+
+Then, begin the installation.
+
+```bash
+cargo +nightly install --git http://github.com/openvm-org/openvm.git cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -29,7 +37,7 @@ Then, clone the repository and begin the installation.
 ```bash
 git clone https://github.com/openvm-org/openvm.git
 cd openvm
-cargo install --force --path crates/cli
+cargo +nightly install --force --path crates/cli
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
