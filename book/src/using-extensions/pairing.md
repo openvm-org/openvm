@@ -51,6 +51,8 @@ There are two moduli defined internally in the Bls12_381 feature. The `moduli_in
 
 ## Input values
 
+Note that this section pertains to running the test via the advanced section's [Testing the program](../advanced-usage/testing-program.md) page.
+
 The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathbb{F}_{p^2}$. They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
 
 We can create a new struct outside of our guest program that will hold these `AffinePoint`s and import it into our guest program:
@@ -113,11 +115,11 @@ let (c, s) = Bls12_381::assert_final_exp_is_one(
 
 Where $c$ is the residue witness and $s$ is the scaling factor (BLS12-381) or cubic non-residue power (BN254), and the input $f$ is the result of the multi-Miller loop. The `p0`, `p1`, `q0`, `q1` points are the same as those used in the multi_miller_loop function.
 
-## CLI
+## Running via CLI
 
-### Configuration
+### Config parameters
 
-In order to run the pairing check in CLI, we'll need to create an `openvm.toml` configuration file somewhere. Its contents contains all of the necessary configuration information for enabling the OpenVM components that are used in the pairing check.
+For the guest program to build successfully, we'll need to create an `openvm.toml` configuration file somewhere. It contains all of the necessary configuration information for enabling the OpenVM components that are used in the pairing check.
 
 ```toml
 # openvm.toml
@@ -137,14 +139,67 @@ supported_modulus = [
 ]
 ```
 
-### Inputs
+### Full example code
 
-### Prove
+This example code contains hardcoded values and no inputs as an example that can be run via the CLI.
 
-Proving can be run via this CLI command.
+```rust
+#![no_main]
+#![no_std]
 
-```bash
+use hex_literal::hex;
+use openvm_algebra_guest::{field::FieldExtension, IntMod};
+use openvm_ecc_guest::AffinePoint;
+use openvm_pairing_guest::{
+    bls12_381::{Bls12_381, Fp, Fp2},
+    pairing::PairingCheck,
+};
 
+openvm::entry!(main);
+
+openvm_algebra_moduli_setup::moduli_init! {
+    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+}
+
+openvm_algebra_complex_macros::complex_init! {
+    Bls12_381Fp2 { mod_idx = 0 },
+}
+
+pub fn main() {
+    setup_0();
+    setup_all_complex_extensions();
+
+    let p0 = AffinePoint::new(
+        Fp::from_be_bytes(&hex!("17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb")),
+        Fp::from_be_bytes(&hex!("08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1"))
+    );
+    let p1 = AffinePoint::new(
+        Fp2::from_coeffs([
+            Fp::from_be_bytes(&hex!("1638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053")),
+            Fp::from_be_bytes(&hex!("0a4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c33577"))
+        ]),
+        Fp2::from_coeffs([
+            Fp::from_be_bytes(&hex!("0468fb440d82b0630aeb8dca2b5256789a66da69bf91009cbfe6bd221e47aa8ae88dece9764bf3bd999d95d71e4c9899")),
+            Fp::from_be_bytes(&hex!("0f6d4552fa65dd2638b361543f887136a43253d9c66c411697003f7a13c308f5422e1aa0a59c8967acdefd8b6e36ccf3"))
+        ]),
+    );
+    let q0 = AffinePoint::new(
+        Fp::from_be_bytes(&hex!("0572cbea904d67468808c8eb50a9450c9721db309128012543902d0ac358a62ae28f75bb8f1c7c42c39a8c5529bf0f4e")),
+        Fp::from_be_bytes(&hex!("166a9d8cabc673a322fda673779d8e3822ba3ecb8670e461f73bb9021d5fd76a4c56d9d4cd16bd1bba86881979749d28"))
+    );
+    let q1 = AffinePoint::new(
+        Fp2::from_coeffs([
+            Fp::from_be_bytes(&hex!("024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8")),
+            Fp::from_be_bytes(&hex!("13e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e"))
+        ]),
+        Fp2::from_coeffs([
+            Fp::from_be_bytes(&hex!("0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801")),
+            Fp::from_be_bytes(&hex!("0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be"))
+        ]),
+    );
+
+    let res = Bls12_381::pairing_check(&[p0, -q0], &[p1, q1]);
+    assert!(res.is_ok());
+}
 ```
-
-### Verify

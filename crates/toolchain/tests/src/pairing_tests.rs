@@ -515,32 +515,28 @@ mod bls12_381 {
             G2Affine::from(Q * Fr::from(2)),
             G2Affine::from(Q * Fr::from(1)),
         ];
-        println!("Fq2::one(): {:#?}", Fq2::one());
-        println!("S_mul: {:#?}", S_mul);
-        println!("Q_mul: {:#?}", Q_mul);
+        let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
+        let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
-        // let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
-        // let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
+        // Gather inputs
+        let io0 = s
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
 
-        // // Gather inputs
-        // let io0 = s
-        //     .into_iter()
-        //     .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-        //     .map(AbstractField::from_canonical_u8)
-        //     .collect::<Vec<_>>();
+        let io1 = q
+            .into_iter()
+            .flat_map(|pt| [pt.x, pt.y].into_iter())
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .map(AbstractField::from_canonical_u8)
+            .collect::<Vec<_>>();
 
-        // let io1 = q
-        //     .into_iter()
-        //     .flat_map(|pt| [pt.x, pt.y].into_iter())
-        //     .flat_map(|fp2| fp2.to_coeffs())
-        //     .flat_map(|fp| fp.to_bytes())
-        //     .map(AbstractField::from_canonical_u8)
-        //     .collect::<Vec<_>>();
+        let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
-
-        // // Always run proving for just pairing check
-        // new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
+        // Always run proving for just pairing check
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 
