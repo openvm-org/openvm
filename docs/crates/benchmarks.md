@@ -1,5 +1,16 @@
 # Benchmarks
 
+### Latest Benchmark Results
+
+Latest benchmark results can be found [here](https://github.com/openvm-org/openvm/blob/benchmark-results/index.md).
+These are run via [github workflows](./.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.
+
+### Adding a Benchmark
+
+See [How to Add a Benchmark](../../benchmarks/README.md#how-to-add-a-benchmark).
+
+### Running Benchmarks Locally
+
 To run benchmarks, install python3 and run (from root of repo):
 
 ```bash
@@ -18,7 +29,9 @@ Currently the processing is done automatically at the end of `bench.py`. The scr
 
 ### Flamegraphs
 
-Flamegraphs to visualize the metrics collected by the VM cycle tracker can be generated if you have [inferno-flamegraph](https://crates.io/crates/inferno) installed. Install via
+While traditional flamegraphs generated from instrumenting a proving binary run on the host machine are useful,
+for more detailed profiling we generate special flamegraphs that visualize VM-specific metrics such as cycle counts and trace cell usage with stack traces.
+These flamegraphs can be generated if you have [inferno-flamegraph](https://crates.io/crates/inferno) installed. Install via
 
 ```bash
 cargo install inferno
@@ -31,8 +44,3 @@ python ci/scripts/metric_unify/flamegraph.py <path to json>
 ```
 
 The flamegraphs will be written to `*.svg` files in `.bench_metrics/flamegraphs` with respect to the repo root.
-
-### Latest Benchmark Results
-
-Latest benchmark results can be found [here](https://github.com/openvm-org/openvm/blob/benchmark-results/index.md).
-These are run via [github workflows](./.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.

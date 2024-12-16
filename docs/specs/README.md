@@ -20,6 +20,19 @@ The framework is designed to be extendable via external crates _without forking_
 VM extensions provide a way to simultaneously extend the VM with new chips, opcodes, and toolchain support for these opcodes.
 A new extension of the overall architecture consists of three components:
 
-- Library: the guest library that compiles program code (usually in Rust) into RISC-V assembly with custom instructions.
+- Guest library: the guest library that compiles program code (usually in Rust) into RISC-V assembly with custom instructions.
 - Transpiler extension: extend the transpiler to specify how newly introduced custom RISC-V instructions should be transpiled into custom OpenVM instructions.
-- VM extension: define new chips and assign them to handle the new opcodes.
+- Circuit extension: define new chips and assign them to handle the new opcodes.
+
+These three components should be organized into three separate crates. When introducing a new extension with name `$name`, we recommend naming the crates as follows:
+
+- `openvm-$name-guest`: the guest library crate. This crate specifies the custom RISC-V instructions to be added. To avoid opcode collisions, we keep a list of currently supported custom instructions in [this](./RISCV.md) file.
+- `openvm-$name-transpiler`: the transpiler extension crate. This crate needs to import `openvm-$name-guest` to get the custom RISC-V instruction definitions. The `openvm-$name-transpiler` crate specifies the new OpenVM instruction definitions (represented in field elements) as well as the transpiler extension.
+- `openvm-$name-circuit`: the circuit extension crate that defines new chips. This crate needs to import `openvm-$name-transpiler` to get the new OpenVM instruction definitions.
+
+## Specifications
+
+- [Circuit Architecture](./circuit.md)
+- [Instruction Set Architecture](./ISA.md)
+- [RISC-V custom instructions and transpiler](./RISCV.md)
+- [Continuations](./continuations.md)
