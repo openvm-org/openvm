@@ -7,6 +7,4 @@ title = "OpenVM Book"
 
 [output.html]
 site-url = "https://book.openvm.dev/"
-additional-head = [
-    "<script async src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js\" id=\"MathJax-script\"></script>"
-]
+mathjax-support = true

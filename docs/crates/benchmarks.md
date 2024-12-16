@@ -3,19 +3,15 @@
 To run benchmarks, install python3 and run (from root of repo):
 
 ```bash
-python ci/scripts/bench.py <name>
+python ci/scripts/bench.py <name> --instance_type <string> --memory_allocator <mimalloc | jemalloc>
 ```
 
-where `<name>` is a benchmark implemented as a rust binary (located in `src/bin` in a crate). Current benchmark options are:
-
-- `verify_fibair`
-- `fibonacci`
-- `regex`
-  in the `benchmarks` crate.
-  The benchmark outputs a JSON of metrics. You can process this into markdown with:
+where `<name>` is a benchmark implemented as a rust binary (located in `src/bin` in the `openvm-benchmarks` crate).
+For local benchmarking, the `--instance_type` flag can take an arbitrary string.
+The benchmark outputs a JSON of metrics. You can process this into markdown with:
 
 ```bash
-python ci/scripts/metric_unify/main.py <path to json>
+python ci/scripts/metric_unify/main.py <path to json> --aggregation-json ci/scripts/metric_unify/aggregation.json <path to metric json>
 ```
 
 Currently the processing is done automatically at the end of `bench.py`. The script automatically detects if you have a previously saved metric file for the same benchmark and includes the diff report in the output.

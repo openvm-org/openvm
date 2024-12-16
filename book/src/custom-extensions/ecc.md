@@ -38,7 +38,7 @@ sw_declare! {
 }
 ```
 
-Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation $y^2 = x^3 + b$.
+Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + b\\).
 This creates `Bls12_381G1Affine` and `Bn254G1Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `Bn254Fp` structs, respectively.
 
 2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:

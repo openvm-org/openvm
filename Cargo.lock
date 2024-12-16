@@ -1082,6 +1082,7 @@ dependencies = [
  "eyre",
  "goblin",
  "hex",
+ "num-bigint-dig",
  "openvm-build",
  "openvm-circuit",
  "openvm-cli-example-test",
