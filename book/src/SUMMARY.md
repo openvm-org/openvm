@@ -12,7 +12,7 @@
 
 - [Overview](./writing-apps/overview.md)
 - [Writing a Program](./writing-apps/write-program.md)
-- [Cross-Compilation](./writing-apps/build.md)
+- [Compiling](./writing-apps/build.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Onchain Verification](./writing-apps/verify.md)
 
@@ -21,7 +21,7 @@
 - [Overview](./custom-extensions/overview.md)
 - [Keccak](./custom-extensions/keccak.md)
 - [Big Integer](./custom-extensions/bigint.md)
-- [Algebra](./custom-extensions/algebra.md)
+- [Algebra (Modular Arithmetic)](./custom-extensions/algebra.md)
 - [Elliptic Curve Cryptography](./custom-extensions/ecc.md)
 - [Elliptic Curve Pairing](./custom-extensions/pairing.md)
 

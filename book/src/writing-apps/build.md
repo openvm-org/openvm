@@ -1,4 +1,4 @@
-# Cross-Compilation
+# Compiling a Program
 
 First let's define some key terms used in cross-compilation:
 
