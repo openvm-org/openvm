@@ -33,5 +33,23 @@ The template `openvm.toml` file is as follows:
 [app_vm_config.rv32i]
 [app_vm_config.rv32m]
 [app_vm_config.io]
-# ...
+[app_vm_config.keccak]
+[app_vm_config.native]
+[app_vm_config.bigint]
+[app_vm_config.modular]
+supported_modulus = ["<modulus_1>", "<modulus_2>"]
+[app_vm_config.fp2]
+supported_modulus = ["<modulus_1>", "<modulus_2>"]
+[app_vm_config.pairing]
+supported_curves = ["Bls12_381", "Bn254"]
+[[app_vm_config.ecc.supported_curves]]
+modulus = "<modulus_1>"
+scalar = "<scalar_1>"
+a = "<a_1>"
+b = "<b_1>"
+[[app_vm_config.ecc.supported_curves]]
+modulus = "<modulus_2>"
+scalar = "<scalar_2>"
+a = "<a_2>"
+b = "<b_2>"
 ```
