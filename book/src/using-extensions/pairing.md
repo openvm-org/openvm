@@ -112,3 +112,39 @@ let (c, s) = Bls12_381::assert_final_exp_is_one(
 ```
 
 Where $c$ is the residue witness and $s$ is the scaling factor (BLS12-381) or cubic non-residue power (BN254), and the input $f$ is the result of the multi-Miller loop. The `p0`, `p1`, `q0`, `q1` points are the same as those used in the multi_miller_loop function.
+
+## CLI
+
+### Configuration
+
+In order to run the pairing check in CLI, we'll need to create an `openvm.toml` configuration file somewhere. Its contents contains all of the necessary configuration information for enabling the OpenVM components that are used in the pairing check.
+
+```toml
+# openvm.toml
+[app_vm_config.pairing]
+supported_curves = ["Bls12_381"]
+
+[app_vm_config.weierstrass]
+
+[app_vm_config.modular]
+supported_modulus = [
+    "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+]
+
+[app_vm_config.fp2]
+supported_modulus = [
+    "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+]
+```
+
+### Inputs
+
+### Prove
+
+Proving can be run via this CLI command.
+
+```bash
+
+```
+
+### Verify
