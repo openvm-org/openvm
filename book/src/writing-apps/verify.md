@@ -1,22 +1,29 @@
 # Verifying Proofs
-## SDK
-After generating a proof, you can verify it using the SDK. To do so, you need to your verifying key (which you can get from your `AppProvingKey`) and the output of your `generate_app_proof` call.
-```rust
-// 0. Get your AppProvingKey and proof
-let app_pk = ...
-let proof = ...
 
-// 1. Verify your program
-let result = sdk.verify_app_proof(app_pk.get_vk(), proof)?;
-```
-If the call returns `Ok(())`, then your proof is valid.
+## Application Level
 
-## CLI
-To verify a proof using the CLI, you need to provide the verifying key and the proof.
+Verifying a proof at the application level requires both the proof and application verifying key.
+
 ```bash
-cargo openvvm verify app --app_vk <path_to_app_vk> --proof <path_to_proof>
+cargo openvm verify app
+    --app_vk <path_to_app_vk>
+    --proof <path_to_proof>
 ```
-Once again, if you ommitted `--output` and `--vk_output` in the `keygen` and `prove` commands, you can omit `--app_vk` and `--proof` in the `verify` command.
+
+If you omit `--app_vk` and/or `--proof`, the command will search for those files at `./openvm/app.vk` and `./openvm/app.proof` respectively.
+
+Once again, if you omitted `--output` and `--vk_output` in the `keygen` and `prove` commands, you can omit `--app_vk` and `--proof` in the `verify` command.
+
+## EVM Level
+
+Verifying a proof at the EVM level requires just the proof, as the command uses the verifier generated when `cargo openvm setup` was called.
+
 ```bash
-cargo openvvm verify app
+cargo openvm verify evm --proof <path_to_proof>
 ```
+
+If `proof` is omitted, the command will search for the proof at `./openvm/evm.proof`.
+
+As with all other EVM-level commands, `cargo openvm setup` is a prerequisite for `verify`.
+> ⚠️ **WARNING**  
+> `cargo openvm setup` requires very large amounts of computation and memory (~200 GB).
