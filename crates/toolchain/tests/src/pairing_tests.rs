@@ -515,7 +515,6 @@ mod bls12_381 {
             G2Affine::from(Q * Fr::from(2)),
             G2Affine::from(Q * Fr::from(1)),
         ];
-
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
