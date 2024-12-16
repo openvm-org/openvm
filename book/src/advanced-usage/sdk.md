@@ -65,7 +65,10 @@ let output = sdk.execute(exe, vm_config, input)?;
 
 ### Using `StdIn`
 
-The `StdIn` struct allows you to format any serializable type into a VM-readable format.
+The `StdIn` struct allows you to format any serializable type into a VM-readable format by passing in a reference to your struct into `StdIn::write` as above. You also have the option to pass in a `&[u8]` into `StdIn::write_bytes`, or a `&[F]` into `StdIn::write_field` where `F` is the `openvm_stark_sdk::p3_baby_bear::BabyBear` field type.
+
+> **Generating CLI Bytes**  
+> To get the VM byte representation of a serializable struct `data` (i.e. for use in the CLI), you can print out the result of `openvm::serde::to_vec(data).unwrap()` in a Rust host program.
 
 ## Generating Proofs
 
