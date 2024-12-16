@@ -126,8 +126,6 @@ For the guest program to build successfully, we'll need to create an `openvm.tom
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381"]
 
-[app_vm_config.weierstrass]
-
 [app_vm_config.modular]
 supported_modulus = [
     "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
