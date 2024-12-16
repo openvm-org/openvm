@@ -272,8 +272,8 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 ```
 
-[!WARNING]
-You do not need to implement `Air` on the struct you implement `VmAdapterAir` or `VmCoreAir` on.
+> [!WARNING]
+> You do not need to implement `Air` on the struct you implement `VmAdapterAir` or `VmCoreAir` on.
 
 ### Creating a Chip from Adapter and Core
 
