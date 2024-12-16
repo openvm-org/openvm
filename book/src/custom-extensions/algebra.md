@@ -115,20 +115,20 @@ Here is a toy example using both the modular arithmetic and complex field extens
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, moduli_setup::*};
 
 openvm::entry!(main);
 
 // This macro will create two structs, `Mod1` and `Mod2`,
 // one for arithmetic modulo 998244353, and the other for arithmetic modulo 1000000007.
-openvm_algebra_moduli_setup::moduli_declare! {
+moduli_declare! {
     Mod1 { modulus = "998244353" },
     Mod2 { modulus = "1000000007" }
 }
 
 // This macro will initialize the moduli.
 // Now, `Mod1` is the "zeroth" modular struct, and `Mod2` is the "first" one.
-openvm_algebra_moduli_setup::moduli_init! {
+moduli_init! {
     "998244353", "1000000007"
 }
 
@@ -166,7 +166,6 @@ To have the correct imports for the above example, add the following to the `Car
 openvm = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-moduli-setup = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
 serde = { version = "1.0.216", default-features = false }
 ```
