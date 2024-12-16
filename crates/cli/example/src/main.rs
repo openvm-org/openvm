@@ -3,12 +3,12 @@
 
 use core::hint::black_box;
 
+use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm, Group,
 };
-use hex_literal::hex;
 
 openvm::entry!(main);
 

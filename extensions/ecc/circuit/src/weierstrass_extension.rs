@@ -27,13 +27,25 @@ use super::{EcAddNeChip, EcDoubleChip};
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
+    #[serde(deserialize_with = "deserialize_biguint_from_str")]
     pub modulus: BigUint,
     /// The scalar field modulus of the curve.
+    #[serde(deserialize_with = "deserialize_biguint_from_str")]
     pub scalar: BigUint,
     /// The coefficient a of y^2 = x^3 + ax + b.
+    #[serde(deserialize_with = "deserialize_biguint_from_str")]
     pub a: BigUint,
     /// The coefficient b of y^2 = x^3 + ax + b.
+    #[serde(deserialize_with = "deserialize_biguint_from_str")]
     pub b: BigUint,
+}
+
+fn deserialize_biguint_from_str<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
 }
 
 pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {

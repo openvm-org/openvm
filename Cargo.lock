@@ -3639,7 +3639,14 @@ dependencies = [
 name = "openvm-cli-example-test"
 version = "0.0.0"
 dependencies = [
+ "hex-literal",
  "openvm",
+ "openvm-algebra-guest",
+ "openvm-algebra-moduli-setup",
+ "openvm-bigint-guest",
+ "openvm-ecc-guest",
+ "openvm-ecc-sw-setup",
+ "openvm-platform",
 ]
 
 [[package]]
