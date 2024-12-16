@@ -27,6 +27,5 @@
 
 # Advanced Usage
 
-- [Overview](./advanced-usage/overview.md)
 - [SDK](./advanced-usage/sdk.md)
-- [Testing](./advanced-usage/testing-program.md)
+- [Creating a New Extension](./advanced-usage/new-extension.md)
