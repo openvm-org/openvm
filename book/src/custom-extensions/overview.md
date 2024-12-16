@@ -37,9 +37,9 @@ The template `openvm.toml` file is as follows:
 [app_vm_config.native]
 [app_vm_config.bigint]
 [app_vm_config.modular]
-supported_modulus = ["<modulus_1>", "<modulus_2>"]
+supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
 [app_vm_config.fp2]
-supported_modulus = ["<modulus_1>", "<modulus_2>"]
+supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381", "Bn254"]
 [[app_vm_config.ecc.supported_curves]]
@@ -54,4 +54,5 @@ a = "<a_2>"
 b = "<b_2>"
 ```
 
-Here all moduli and scalars must be provided in decimal format. And for `pairing` supported curves only pre-defined `Bls12_381` and `Bn254` are currently supported.
+`rv32i`, `io`, and `rv32m` need to be always included if you make an `openvm.toml` file while the rest are optional and should be included if you want to use the corresponding extension.
+All moduli and scalars must be provided in decimal format. Currently  `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_curves]]` entries.
