@@ -16,7 +16,7 @@ Conceptually, a new extension consists of three parts:
 
 ## Guest
 
-In the guest component, your goal is to produce the instructions that represent the new operations. When you want to perform an operation (for example, “calculate _this_ new function of _these_ arguments and write the result _here_”), you generate a custom instruction. You can use the helper macros `custom_insn_r!` and `custom_insn_i!` from `openvm_platform` to ensure these instructions follow the [RISC-V specification](https://www.cs.sfu.ca/~ashriram/Courses/CS295/assets/notebooks/RISCV/RISCV_CARD.pdf). For more details, see the RISC-V [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/RISCV.md).
+In the guest component, your goal is to produce the instructions that represent the new operations. When you want to perform an operation (for example, “calculate _this_ new function of _these_ arguments and write the result _here_”), you generate a custom instruction. You can use the helper macros `custom_insn_r!` and `custom_insn_i!` from `openvm_platform` to ensure these instructions follow the [RISC-V specification](https://riscv.org/specifications/ratified/). For more details, see the RISC-V [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/RISCV.md).
 
 ## Transpiler
 
@@ -34,7 +34,8 @@ Note that almost always the valid instruction consists of a single 32-bit RISC-V
 
 The circuit component is where the extension’s logic is enforced in a zero-knowledge proof context. Here, you create a chip that:
 
-- Correctly computes the result of the new operations.
-- Imposes polynomial constraints to prevent any cheating. If someone tries to produce incorrect results, they won’t be able to satisfy these constraints.
+- Implements the computing logic, so that the output always corresponds to the correct result of the new operation. The chip has access to the memory shared with the other chips from the VM via [our special architecture](https://github.com/openvm-org/openvm/blob/main/docs/specs/ISA.md).
+- Properly constrains all the inputs, outputs and intermediate variables using polynomial equations in such a way that there is no way to fill these variables with values that correspond to an incorrect output while fitting the constraints.
+
 
 For more technical details on writing circuits and constraints, consult the OpenVM [contributor documentation](https://github.com/openvm-org/openvm/blob/main/docs/specs/README.md), which provides specifications and guidelines for integrating your extension into the OpenVM framework.
