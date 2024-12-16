@@ -36,7 +36,7 @@ To use the Keccak256 Guest extension, you need to add the following to your `ope
 [app_vm_config.keccak256]
 ```
 
-See the another example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/keccak.rs).
+See another example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/keccak.rs).
 
 ## Native Keccak256
 
