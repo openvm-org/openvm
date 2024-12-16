@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fs::File, io::Write, str::FromStr};
 
 use derive_more::derive::From;
 use eyre::Result;
@@ -31,6 +31,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sdk::config::SdkVmConfig;
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -116,6 +117,21 @@ fn test_complex_two_moduli_runtime() -> Result<()> {
 #[test]
 fn test_ec_runtime() -> Result<()> {
     let elf = build_example_program_with_features("ec", ["k256"])?;
+    let vm_config = SdkVmConfig::builder()
+        .system(SystemConfig::default().with_continuations().into())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .modular(ModularExtension::new(vec![SECP256K1_CONFIG.modulus.clone(), SECP256K1_CONFIG.scalar.clone()]))
+        .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+        .build();
+    // Convert to TOML string
+    let toml_string = toml::to_string(&vm_config)?;
+
+    // Write to file
+    let mut file = File::create("vm_config.toml")?;
+    file.write_all(toml_string.as_bytes())?;
+
     let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
@@ -125,8 +141,8 @@ fn test_ec_runtime() -> Result<()> {
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
-    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+    // let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+    new_air_test_with_min_segments(vm_config, openvm_exe, vec![], 1, false);
     Ok(())
 }
 
