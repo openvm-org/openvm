@@ -72,6 +72,7 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 - [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit): Circuit extension for RV32IM instructions and IO instructions.
 - [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
 - [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
+- [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
 
 #### Native Recursion
 
