@@ -153,3 +153,5 @@ supported_modulus = ["1157920892373161954235709850086879078532699846656405640394
 [app_vm_config.fp2]
 supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
 ```
+
+The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
