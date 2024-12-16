@@ -72,6 +72,8 @@ openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["k256"] }
 ```
 
+One can define their own ECC structs but we will use the Secp256k1 struct from `openvm-ecc-guest` and thus the `k256` feature should be enabled.
+
 ```rust
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
