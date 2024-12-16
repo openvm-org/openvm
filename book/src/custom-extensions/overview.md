@@ -53,3 +53,5 @@ scalar = "<scalar_2>"
 a = "<a_2>"
 b = "<b_2>"
 ```
+
+Here all moduli and scalars must be provided in decimal format. And for `pairing` supported curves only pre-defined `Bls12_381` and `Bn254` are currently supported.
