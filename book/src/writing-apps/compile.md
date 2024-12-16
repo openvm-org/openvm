@@ -7,3 +7,18 @@ First let's define some key terms used in cross-compilation:
 There are multiple things happening in the `cargo openvm build` command as in the section [here](./write-program.md). In short, this command compiles on host to an executable for guest target.
 It first compiles the program normally on your *host* platform with RISC-V and then transpiles it to a different target. See here for some explanation of [cross-compilation](https://rust-lang.github.io/rustup/cross-compilation.html).
 Right now we use `riscv32im-risc0-zkvm-elf` target which is available in the [Rust toolchain](https://doc.rust-lang.org/rustc/platform-support/riscv32im-risc0-zkvm-elf.html), but we will contribute an OpenVM target to Rust in the future.
+
+## Running a Program
+
+After building and transpiling a program, you can execute it using the `run` command. The `run` command has the following arguments:
+
+```bash
+cargo openvm run
+    --exe <path_to_transpiled_program>
+    --config <path_to_app_config>
+    --input <path_to_input>
+```
+
+If `--exe` and/or `--config` are not provided, the command will search for these files in `./openvm/app.vmexe` and `./openvm.toml` respectively. If `./openvm.toml` is not present, a default configuration will be used.
+
+If your program doesn't require inputs, you can (and should) omit the `--input` flag.

@@ -2,7 +2,7 @@
 
 ## Writing a Program
 
-See the [Writing a Program](./write-program.md) chapter for more information.
+The first step to using OpenVM is to write a Rust program that can be executed by an OpenVM virtual machine. Writing a program for OpenVM is very similar to writing a standard Rust program, with a few key differences necessary to support the OpenVM environment. For more detailed information about writing programs, see the [Writing Programs](./write-program.md) guide.
 
 ## Building and Transpiling a Program
 
@@ -17,12 +17,16 @@ cargo openvm build
 By default this will build the project located in the current directory. To see if it runs correctly, you can try executing it with the following:
 
 ```bash
-cargo openvm run --input <path_to_input | hex string>
+cargo openvm run --input <path_to_input | hex_string>
 ```
 
 Note if your program doesn't require inputs, you can omit the `--input` flag.
 
 For more information on both commands, see the [build](./build.md) docs.
+
+### Inputs
+
+The `--input` field needs to either be a hex string or a file path to a file that will be read as bytes. Note that if your hex string represents a single number, it should be written in little-endian format (as this is what the VM expects). To see how more complex inputs can be converted into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk.md) doc.
 
 ## Generating a Proof
 
@@ -35,7 +39,7 @@ cargo openvm keygen
 After generating the keys, you can generate a proof by running:
 
 ```bash
-cargo openvm prove app --input <path_to_input>
+cargo openvm prove app --input <path_to_input | hex_string>
 ```
 
 Again, if your program doesn't require inputs, you can omit the `--input` flag.
@@ -68,6 +72,6 @@ cargo openvm setup
 To do (b), you simply need to replace `app` in `cargo openvm prove` and `cargo openvm verify` as such:
 
 ```bash
-cargo openvm prove evm --input <path_to_input>
+cargo openvm prove evm --input <path_to_input | hex_string>
 cargo openvm verify evm
 ```
