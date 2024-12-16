@@ -67,6 +67,11 @@ See a working example [here](https://github.com/openvm-org/openvm/blob/main/crat
 
 One can define their own ECC structs but we will use the Secp256k1 struct from `openvm-ecc-guest` and thus the `k256` feature should be enabled.
 
+```toml
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["k256"] }
+```
+
 ```rust
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
@@ -112,11 +117,22 @@ pub fn main() {
 For the guest program to build successfully, all used moduli must be declared in the `.toml` config file in the following format:
 
 ```toml
-[app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+[app_vm_config.rv32i]
 
-[app_vm_config.ecc]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+[app_vm_config.io]
+
+[app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 2048]
+
+
+[app_vm_config.modular]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
+
+[[app_vm_config.ecc.supported_curves]]
+modulus = "115792089237316195423570985008687907853269984665640564039457584007908834671663"
+scalar = "115792089237316195423570985008687907852837564279074904382605163141518161494337"
+a = "0"
+b = "7"
 ```
 
 The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
