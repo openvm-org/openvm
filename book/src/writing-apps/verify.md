@@ -31,7 +31,7 @@ svm use 0.8.19
 ```
 
 ### Generating the Aggregation Proving Key and EVM Verifier Contract
-Gnenerate the aggregation proving key and verifier contract at `~/.openvm/agg.pk` and `~/.openvm/verifier.sol` respectively by running
+Generate the aggregation proving key and verifier contract at `~/.openvm/agg.pk` and `~/.openvm/verifier.sol` respectively by running
 
 ```bash
 cargo openvm setup
