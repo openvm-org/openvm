@@ -10,7 +10,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_toolchain_tests::utils::decode_elf;
+use openvm_toolchain_tests::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 type F = BabyBear;

@@ -3480,6 +3480,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-algebra-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+]
+
+[[package]]
 name = "openvm-algebra-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -3558,6 +3579,26 @@ dependencies = [
  "serde",
  "test-case",
  "test-log",
+]
+
+[[package]]
+name = "openvm-bigint-extension-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
 ]
 
 [[package]]
@@ -3775,6 +3816,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-ecc-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "derive_more 1.0.0",
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "serde",
+]
+
+[[package]]
 name = "openvm-ecc-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -3844,6 +3913,25 @@ dependencies = [
  "test-log",
  "tiny-keccak",
  "tracing",
+]
+
+[[package]]
+name = "openvm-keccak256-extension-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
 ]
 
 [[package]]
@@ -4062,6 +4150,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-pairing-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "rand",
+]
+
+[[package]]
 name = "openvm-pairing-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -4152,6 +4266,26 @@ dependencies = [
  "test-case",
  "test-log",
  "tracing",
+]
+
+[[package]]
+name = "openvm-rv32im-extension-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "serde",
+ "test-case",
 ]
 
 [[package]]
