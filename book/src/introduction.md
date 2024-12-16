@@ -29,3 +29,14 @@ The following chapters will guide you through:
 - [Writing applications](./writing-apps/overview.md) in Rust targeting OpenVM and generating proofs.
 - [Using existing extensions](./custom-extensions/overview.md) to optimize your Rust programs.
 - [How to add custom VM extensions](./advanced-usage/new-extension.md).
+
+## Security Status
+
+As of December 2024, OpenVM has not been audited and is currently not recommended for production use. We plan to continue development towards a production-ready release in 2025.
+
+> 📖 **About this book**
+>
+> The book is continuously rendered [here](https://book.openvm.dev/)!
+> You can contribute to this book on [GitHub][gh-book].
+
+[gh-book]: https://github.com/openvm-org/openvm/tree/main/book
