@@ -65,13 +65,6 @@ For the basic operations provided by the `WeierstrassPoint` trait, the scalar fi
 
 See a working example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/ec.rs).
 
-To use the ECC extension, add the following dependencies to `Cargo.toml`:
-
-```toml
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["k256"] }
-```
-
 One can define their own ECC structs but we will use the Secp256k1 struct from `openvm-ecc-guest` and thus the `k256` feature should be enabled.
 
 ```rust
@@ -113,3 +106,17 @@ pub fn main() {
     let p3 = &p1 + &p2;
 }
 ```
+
+### Config parameters
+
+For the guest program to build successfully, all used moduli must be declared in the `.toml` config file in the following format:
+
+```toml
+[app_vm_config.modular]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+
+[app_vm_config.ecc]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+```
+
+The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
