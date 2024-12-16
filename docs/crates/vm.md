@@ -37,6 +37,18 @@ Together, these provide the following functionalities:
   execution records and then `Chip::<SC>::generate_air_proof_input()` which generates the trace using the corresponding
   records.
 
+### VM AIR Integration
+
+At the AIR-level, for an AIR to integrate with the OpenVM architecture (constrain memory, read the instruction from the program, etc.), the AIR
+communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
+execution bus. The memory bus is used to access memory, the program bus is used to read instructions from the program,
+and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
+which is provided by the `VmInventoryBuilder`.
+
+The buses have very low-level APIs and are not intended to be used directly. "Bridges" are provided to provide a cleaner interface for
+sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
+`MemoryBridge` and `ExecutionBridge`, which should respectively be used to constrain memory accesses and execution flow.
+
 ### Phantom Sub-Instructions
 
 You can specify phantom sub-instruction executors by implementing the trait:
@@ -358,18 +370,3 @@ pub struct ImmInstruction<T> {
     pub imm: T
 }
 ```
-<<<<<<< Updated upstream
-=======
-
-### Interacting with other chips
-
-At the AIR-level, to interact with other chips (constrain memory, read the instruction from the program, etc.), an AIR
-communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
-execution bus. The memory bus is used to access memory, the program bus is used to read instructions from the program,
-and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
-which is provided when building a `VmInventory`.
-
-The buses are not meant to be sent interactions directly. "Bridges" are provided to provide a cleaner interface for
-sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
-`MemoryBridge` and `ExecutionBridge`.
->>>>>>> Stashed changes
