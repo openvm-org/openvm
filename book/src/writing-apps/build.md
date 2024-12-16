@@ -11,6 +11,8 @@ Right now we use `riscv32im-risc0-zkvm-elf` target which is available in the [Ru
 
 ## Build flags
 
+The following flags are available for the `cargo openvm build` command:
+
 - `--manifest-dir <MANIFEST_DIR>`
 
   **Description**: Specifies the directory containing the `Cargo.toml` file for the guest code.
@@ -77,19 +79,23 @@ Right now we use `riscv32im-risc0-zkvm-elf` target which is available in the [Ru
 
 - `--config <CONFIG>`
 
-  **Description**: Specifies the path to a .toml configuration file that defines which transpiler extensions to use.
+  **Description**: Specifies the path to a .toml configuration file that defines which VM extensions to use.
+
+  **Default**: `./openvm.toml` if `--config` flag is not provided.
 
   **Usage Example**:
 
   ```bash
-  cargo openvm build --config path/to/transpiler_config.toml
+  cargo openvm build --config path/to/openvm.toml
   ```
 
-  This allows you to customize the extensions.
+  This allows you to customize the extensions. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](../custom-extensions/overview.md) section. To use other extensions, use the [SDK](../advanced-usage/sdk.md).
 
 - `--exe-output <EXE_OUTPUT>`
 
-  **Description**: Sets the output path for the transpiled program. By default, the transpiled file is placed under `./openvm/app.vmexe`.
+  **Description**: Sets the output path for the transpiled program.
+
+  **Default**: `./openvm/app.vmexe` if `--exe-output` flag is not provided.
 
   **Usage Example**: To specify a custom output filename:
 
