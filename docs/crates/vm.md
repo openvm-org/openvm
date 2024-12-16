@@ -7,8 +7,8 @@ runtime for an opcode is encapsulated in the following trait:
 
 ```rust
 pub trait InstructionExecutor<F> {
-  /// Runtime execution of the instruction, if the instruction is owned by the
-  /// current instance. May internally store records of this call for later trace generation.
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
         instruction: Instruction<F>,
