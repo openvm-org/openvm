@@ -16,6 +16,27 @@ Once again, if you omitted `--output` and `--vk_output` in the `keygen` and `pro
 
 ## EVM Level
 
+### Setup
+EVM level proof setup requires large amounts of computation and memory (~200GB). It is recommended to run this process on a server.
+
+For example, on Ubuntu, install `build-essential`
+```bash
+sudo apt update
+sudo apt install build-essential
+```
+
+install `solc 0.8.19` using `svm`
+```bash
+# Install svm
+cargo install --version 0.5.7 svm-rs
+# Add the binary to your path
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Install solc 0.8.19
+svm install 0.8.19
+svm use 0.8.19
+```
+
 Verifying a proof at the EVM level requires just the proof, as the command uses the verifier generated when `cargo openvm setup` was called.
 
 ```bash
