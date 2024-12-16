@@ -12,8 +12,7 @@
 
 - [Overview](./writing-apps/overview.md)
 - [Writing a Program](./writing-apps/write-program.md)
-- [Cross-Compilation](./writing-apps/compile.md)
-- [Testing](./writing-apps/testing.md)
+- [Cross-Compilation](./writing-apps/build.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Onchain Verification](./writing-apps/verify.md)
 
@@ -29,4 +28,5 @@
 # Advanced Usage
 
 - [Overview](./advanced-usage/overview.md)
-- [Testing the program](./advanced-usage/testing-program.md)
+- [SDK](./advanced-usage/sdk.md)
+- [Testing](./advanced-usage/testing-program.md)
