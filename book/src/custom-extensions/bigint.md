@@ -27,13 +27,20 @@ All of the operations can be used in 6 different ways:
 
 ### Other
 
-When using the `U256` struct with target os `zkvm`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+When using the `U256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
 
 ### Example matrix multiplication using `U256`
 
 See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/matrix-power.rs).
 
 ```rust
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+use core::array;
+use openvm_bigint_guest::U256;
+
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
 
@@ -52,12 +59,21 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     }
     c
 }
-```
-Add the following to your `openvm.toml` file:
 
-```toml
-[app_vm_config.bigint]
-```
+pub fn get_identity_matrix() -> Matrix {
+    let mut res = get_matrix(0);
+    for i in 0..N {
+        res[i][i] = U256::from_u8(1);
+    }
+    res
+}
+
+pub fn main() {
+    let a: Matrix = get_identity_matrix();
+    let b: Matrix = get_matrix(28);
+    let c: Matrix = mult(&a, &b);
+    assert_eq!(c, b);
+}
 
 ## `I256`
 
@@ -84,18 +100,25 @@ The `I256` struct implements the following constructors: `from_i8`, `from_i32`, 
 
 ### Other
 
-When using the `I256` struct with target os `zkvm`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+When using the `I256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
 
 ### Example matrix multiplication using `I256`
 
 See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/signed-matrix-power.rs).
 
 ```rust
+#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+use core::array;
+use openvm_bigint_guest::I256;
+
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
 
-pub fn get_matrix(val: i8) -> Matrix {
-    array::from_fn(|_| array::from_fn(|_| I256::from_i8(val)))
+pub fn get_matrix(val: i32) -> Matrix {
+    array::from_fn(|_| array::from_fn(|_| I256::from_i32(val)))
 }
 
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
@@ -109,17 +132,26 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     }
     c
 }
-```
 
-Add the following to your `openvm.toml` file:
+pub fn get_identity_matrix() -> Matrix {
+    let mut res = get_matrix(0);
+    for i in 0..N {
+        res[i][i] = I256::from_i32(1);
+    }
+    res
+}
 
-```toml
-[app_vm_config.bigint]
+pub fn main() {
+    let a: Matrix = get_identity_matrix();
+    let b: Matrix = get_matrix(-28);
+    let c: Matrix = mult(&a, &b);
+    assert_eq!(c, b);
+}
 ```
 
 ## External Functions
 
-The Bigint Guest extension provides another way to use the native implementation. It provides external functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for the 256 bit integer native implementations. Enabled only when the target is `zkvm`. All of the functions are defined as `unsafe extern "C" fn`.
+The Bigint Guest extension provides another way to use the native implementation. It provides external functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for the 256 bit integer native implementations. Enabled only when the `target_os = "zkvm"`. All of the functions are defined as `unsafe extern "C" fn`. Also, note that you must enable the feature `export-intrinsics` to make them globally linkable.
 
 - `zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a + b`.
 - `zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a - b`.
@@ -153,4 +185,12 @@ fn wrapping_add(a: &Custom_U256, b: &Custom_U256) -> Custom_U256 {
         // Regular wrapping add implementation
     }
 }
+```
+
+### Config parameters
+
+For the guest program to build successfully add the following to your `.toml` file:
+
+```toml
+[app_vm_config.bigint]
 ```

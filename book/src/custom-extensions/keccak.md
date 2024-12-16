@@ -32,12 +32,6 @@ pub fn main() {
 }
 ```
 
-To use the Keccak256 Guest extension, you need to add the following to your `openvm.toml` file:
-
-```toml
-[app_vm_config.keccak256]
-```
-
 ## Native Keccak256
 
 Keccak guest extension also provides another way to use the native Keccak-256 implementation. It provides a function that is meant to be linked to other external libraries. The external libraries can use this function as a hook for the Keccak-256 native implementation. Enabled only when the target is `zkvm`.
@@ -65,3 +59,10 @@ fn keccak256(input: &[u8]) -> [u8; 32] {
 }
 ```
 
+### Config parameters
+
+For the guest program to build successfully add the following to your `.toml` file:
+
+```toml
+[app_vm_config.keccak256]
+```
