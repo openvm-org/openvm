@@ -51,11 +51,9 @@ There are two moduli defined internally in the Bls12_381 feature. The `moduli_in
 
 ## Input values
 
-Note that this section pertains to running the test via the advanced section's [Testing the program](../advanced-usage/testing-program.md) page.
-
 The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathbb{F}_{p^2}$. They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
 
-We can create a new struct outside of our guest program that will hold these `AffinePoint`s and import it into our guest program:
+We can create a new struct to hold these `AffinePoint`s for the purpose of this guide. You may instead put them into a custom struct to serve your use case.
 
 ```rust
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -65,12 +63,6 @@ pub struct PairingCheckInput {
     q0: AffinePoint<Fp>,
     q1: AffinePoint<Fp2>,
 }
-```
-
-Our guest program imports the struct and can read it in via:
-
-```rust
-let io: PairingCheckInput = read();
 ```
 
 ## Pairing check
@@ -99,21 +91,6 @@ let f = Bls12_381::multi_miller_loop(
     &[q0, q1],
 );
 ```
-
-### Final exponentiation
-
-Final exponentiation can be run separately by importing the `FinalExp` trait.
-
-```rust
-use openvm_pairing_guest::pairing::FinalExp;
-let (c, s) = Bls12_381::assert_final_exp_is_one(
-    &f,
-    &[p0, p1],
-    &[q0, q1],
-);
-```
-
-Where $c$ is the residue witness and $s$ is the scaling factor (BLS12-381) or cubic non-residue power (BN254), and the input $f$ is the result of the multi-Miller loop. The `p0`, `p1`, `q0`, `q1` points are the same as those used in the multi_miller_loop function.
 
 ## Running via CLI
 
