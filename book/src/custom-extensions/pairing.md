@@ -114,6 +114,11 @@ supported_modulus = [
 ]
 ```
 
+Also note that since this is a complicated computation, the `keygen` step requires quite a lot of memory. Run it with `RUST_MIN_STACK` set to a large value, e.g.
+```bash
+RUST_MIN_STACK=8388608 cargo openvm keygen
+```
+
 ### Full example code
 
 This example code contains hardcoded values and no inputs as an example that can be run via the CLI.
