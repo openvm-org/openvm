@@ -28,13 +28,6 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      # TEMPORARY
-      - name: Give GitHub Actions access to private repositories
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-
       - name: Cargo check
         run: cargo check
 
