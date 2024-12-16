@@ -1,6 +1,6 @@
 # OpenVM Algebra
 
-The OpenVM Algebra extension provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if $p$ is prime, OpenVM Algebra can handle modular arithmetic in $\mathbb{F}_p$​ and its quadratic extension fields $\mathbb{F}_p[x]/(x^2 + 1)$.
+The OpenVM Algebra extension provides tools to create and manipulate modular arithmetic structures and their complex extensions. For example, if \\(p\\) is prime, OpenVM Algebra can handle modular arithmetic in \\(\mathbb{F}_p\\)​ and its quadratic extension fields \\(\mathbb{F}_p[x]/(x^2 + 1)\\).
 
 The functional part is provided by the `openvm-algebra-guest` crate, which is a guest library that can be used in any OpenVM program. The macros for creating corresponding structs are in the `openvm-algebra-moduli-setup` and `openvm-algebra-complex-macros` crates.
 
@@ -8,7 +8,7 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 
 - `IntMod` trait:
     Defines the type `Repr` and constants `MODULUS`, `NUM_LIMBS`, `ZERO`, and `ONE`. It also provides basic methods for constructing a modular arithmetic object and performing arithmetic operations.
-    - `Repr` typically is `[u8; NUM_LIMBS]`, representing the number’s underlying storage.
+    - `Repr` typically is `[u8; NUM_LIMBS]`, representing the number's underlying storage.
     - `MODULUS` is the compile-time known modulus.
     - `ZERO` and `ONE` represent the additive and multiplicative identities, respectively.
     - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, and `from_u64`.
@@ -21,7 +21,6 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 To [leverage](./overview.md) compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
 
 1. **Declare**: Use the `moduli_declare!` macro to define a modular arithmetic struct. This can be done multiple times in various crates or modules:
-
 ```rust
 moduli_declare! {
     Bls12_381Fp { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
@@ -42,7 +41,7 @@ moduli_init! {
 
 This step enumerates the declared moduli (e.g., `0` for the first one, `1` for the second one) and sets up internal linkage so the compiler can generate the appropriate RISC-V instructions associated with each modulus.
 
-3. **Setup**: At runtime, before performing arithmetic, a setup instruction must be sent to ensure security and correctness. For the $i$-th modulus, you call `setup_<i>()` (e.g., `setup_0()` or `setup_1()`). Alternatively, `setup_all_moduli()` can be used to handle all declared moduli.
+3. **Setup**: At runtime, before performing arithmetic, a setup instruction must be sent to ensure security and correctness. For the \\(i\\)-th modulus, you call `setup_<i>()` (e.g., `setup_0()` or `setup_1()`). Alternatively, `setup_all_moduli()` can be used to handle all declared moduli.
 
 **Summary**:
 - `moduli_declare!`: Declares modular arithmetic structures and can be done multiple times.
@@ -51,7 +50,7 @@ This step enumerates the declared moduli (e.g., `0` for the first one, `1` for t
 
 ## Complex field extension
 
-Complex extensions, such as $\mathbb{F}_p[x]/(x^2 + 1)$, are defined similarly using `complex_declare!` and `complex_init!`:
+Complex extensions, such as \\(\mathbb{F}_p[x]/(x^2 + 1)\\), are defined similarly using `complex_declare!` and `complex_init!`:
 
 1. **Declare**:
 
