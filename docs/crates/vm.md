@@ -17,6 +17,9 @@ pub trait InstructionExecutor<F> {
 }
 ```
 
+There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode
+supported in a given VM.
+
 ### Chips for Opcode Groups
 
 Opcodes are partitioned into groups, each of which is handled by a single **chip**. A chip should be a struct of
@@ -33,8 +36,6 @@ Together, these provide the following functionalities:
 - **Trace Generation:** This is done by calling `InstructionExecutor::<F>::execute()` which computes and stores
   execution records and then `Chip::<SC>::generate_air_proof_input()` which generates the trace using the corresponding
   records.
-
-There is a `struct VmOpcode(usize)` to protect the global opcode usize.
 
 ### Phantom Sub-Instructions
 
