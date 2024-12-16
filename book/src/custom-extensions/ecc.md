@@ -1,30 +1,31 @@
 # OpenVM ECC
 
-The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations.
+The OpenVM Elliptic Curve Cryptography Extension provides support for elliptic curve operations through the `openvm-ecc-guest` crate.
 
 ## Available traits and methods
 
 - `Group` trait:
-    This represents an element of a algebraic additive group. Therefore it should implements `add`, `sub`, and `double`.
+    This represents an element of a [group](https://en.wikipedia.org/wiki/Group_(mathematics)) where the operation is addition. Therefore the trait includes functions for `add`, `sub`, and `double`.
     - `IDENTITY` is the identity element of the group.
 
 - `CyclicGroup` trait:
     It's a group that has a generator, so it defines `GENERATOR` and `NEG_GENERATOR`.
 
 - `WeierstrassPoint` trait:
-    It's represents a point on a Weierstrass curve, so it extends `Group`.
+    It represents an affine point on a Weierstrass elliptic curve and it extends `Group`.
     - `Coordinate` type is the type of the coordinates of the point, and it implements `IntMod`.
-    - `x`, `y`, `from_xy` methods are used to get the coordinates and construct a point.
-    - The point supports elliptic curve operations with `add_ne_nonidentity` and `double_nonidentity`.
+    - `x()`, `y()` are used to get the affine coordinates
+    - `from_xy` is a constructor for the point, which checks if the point is either identity or on the affine curve.
+    - The point supports elliptic curve operations through intrinsic functions `add_ne_nonidentity` and `double_nonidentity`.
     - `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
 
 - `msm`: for multi-scalar multiplication.
 
-- `ecdsa`: for doing ECDSA public key recovery.
+- `ecdsa`: for doing ECDSA signature verification and public key recovery from signature.
 
 ## Macros
 
-For elliptic curve cryptography, the `openvm-ecc` crate provides macros similar to those in [`openvm-algebra`](./algebra.md):
+For elliptic curve cryptography, the `openvm-ecc-guest` crate provides macros similar to those in [`openvm-algebra-guest`](./algebra.md):
 
 1. **Declare**: Use `sw_declare!` to define elliptic curves over the previously declared moduli. For example:
 
@@ -55,7 +56,7 @@ sw_init! {
 
 ## Example program
 
-See a working example [here](https://github.com/openvm-org/openvm/blob/c19c9ac60b135bb0f38fc997df5eb149db8144b4/crates/toolchain/tests/programs/examples/ec.rs).
+See a working example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/ec.rs).
 
 To use the ECC extension, add the following dependencies to `Cargo.toml`:
 
