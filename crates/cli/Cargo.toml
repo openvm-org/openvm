@@ -58,7 +58,7 @@ openvm-cli-example-test = { path = "example" }
 
 [features]
 default = ["parallel", "mimalloc"]
-parallel = ["openvm-circuit/parallel"]
+parallel = ["openvm-circuit/parallel", "openvm-stark-sdk/parallel"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
