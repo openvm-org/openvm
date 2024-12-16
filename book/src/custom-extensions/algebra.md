@@ -141,3 +141,15 @@ pub fn main() {
     // Note that these assertions would fail, have we provided the `mod_idx` parameters wrongly.
 }
 ```
+
+### Config parameters
+
+For the guest program to build successfully, all used moduli must be declared in the `.toml` config file in the following format:
+
+```toml
+[app_vm_config.modular]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+
+[app_vm_config.fp2]
+supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+```
