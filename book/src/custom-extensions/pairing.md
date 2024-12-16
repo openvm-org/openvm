@@ -1,10 +1,10 @@
 # Elliptic Curve Pairing
 
-The pairing extension enables usage of the optimal Ate pairing check on the BN254 and BLS12-381 elliptic curves. The following field extension tower for $\mathbb{F}_{p^{12}}$ is used for pairings in this crate:
+The pairing extension enables usage of the optimal Ate pairing check on the BN254 and BLS12-381 elliptic curves. The following field extension tower for \\(\mathbb{F}\_{p^{12}}\\) is used for pairings in this crate:
 
 $$
-\mathbb{F_{p^2}} = \mathbb{F_{p}}[u]/(u^2 - \beta)\\
-\mathbb{F_{p^6}} = \mathbb{F_{p^2}}[v]/(v^3 - \xi)\\
+\mathbb{F_{p^2}} = \mathbb{F_{p}}[u]/(u^2 - \beta)\\\\
+\mathbb{F_{p^6}} = \mathbb{F_{p^2}}[v]/(v^3 - \xi)\\\\
 \mathbb{F_{p^{12}}} = \mathbb{F_{p^6}}[w]/(w^2 - v)
 $$
 
@@ -47,11 +47,11 @@ setup_0();
 setup_all_complex_extensions();
 ```
 
-There are two moduli defined internally in the Bls12_381 feature. The `moduli_init!` macro thus requires both of them to be initialized. However, we do not need the scalar field of BLS12-381 (which is at index 1), and thus we only initialize the modulus from index 0, thus we only use `setup_0()` (as opposed to `setup_all_moduli()`, which will save us some columns when generating the trace).
+There are two moduli defined internally in the `Bls12_381` feature. The `moduli_init!` macro thus requires both of them to be initialized. However, we do not need the scalar field of BLS12-381 (which is at index 1), and thus we only initialize the modulus from index 0, thus we only use `setup_0()` (as opposed to `setup_all_moduli()`, which will save us some columns when generating the trace).
 
 ## Input values
 
-The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathbb{F}_{p^2}$. They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
+The inputs to the pairing check are `AffinePoint`s in \\(\mathbb{F}\_p\\) and \\(\mathbb{F}\_{p^2}\\). They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.
 
 We can create a new struct to hold these `AffinePoint`s for the purpose of this guide. You may instead put them into a custom struct to serve your use case.
 
