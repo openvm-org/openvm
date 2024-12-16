@@ -5,7 +5,7 @@
 | [Contributor Docs](./docs)
 | [Crate Docs](https://docs.openvm.dev/openvm)
 
-OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.
+OpenVM is a performant and modular zkVM framework built for customization and extensibility.
 
 ## Key Features
 
