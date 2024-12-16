@@ -5,3 +5,10 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../toolchain/openvm" }
+openvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
+openvm-algebra-moduli-setup = { path = "../../../extensions/algebra/moduli-setup" }
+openvm-ecc-sw-setup = { path = "../../../extensions/ecc/sw-setup" }
+openvm-platform = { path = "../../toolchain/platform" }
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", features = ["k256"] }
+openvm-bigint-guest = { path = "../../../extensions/bigint/guest" }
+hex-literal = { version = "0.4.1", default-features = false }
