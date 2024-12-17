@@ -58,7 +58,9 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
-        let const_a = const_a.expect("constant a coefficient is required");
+        // const_a is optional, default to 0
+        let const_a = const_a
+            .unwrap_or(syn::parse_quote!(<#intmod_type as openvm_algebra_guest::IntMod>::ZERO));
         let const_b = const_b.expect("constant b coefficient is required");
 
         macro_rules! create_extern_func {

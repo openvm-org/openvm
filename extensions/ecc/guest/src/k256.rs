@@ -36,7 +36,7 @@ openvm_algebra_moduli_setup::moduli_declare! {
 }
 
 openvm_ecc_sw_setup::sw_declare! {
-    Secp256k1Point { mod_type = Secp256k1Coord, a = <Secp256k1Coord as IntMod>::ZERO, b = CURVE_B },
+    Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 
 impl CyclicGroup for Secp256k1Point {
