@@ -4,7 +4,7 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_build::{build_guest_package, get_package, is_debug, GuestOptions};
+use openvm_build::{build_guest_package, get_package, is_debug, GuestOptions, TargetFilter};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
@@ -41,10 +41,17 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
-        .with_options(["--example", example_name])
         .with_features(features)
         .with_target_dir(target_dir.path());
-    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None) {
+    if let Err(Some(code)) = build_guest_package(
+        &pkg,
+        &guest_opts,
+        None,
+        &Some(TargetFilter {
+            name: example_name.to_string(),
+            kind: "example".to_string(),
+        }),
+    ) {
         std::process::exit(code);
     }
     // Assumes the package has a single target binary

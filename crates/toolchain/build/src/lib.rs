@@ -69,11 +69,20 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
 }
 
 /// Returns the target executable directory given `target_dir` and `profile`.
-pub fn get_dir_with_profile(target_dir: impl AsRef<Path>, profile: &str) -> PathBuf {
-    target_dir
+pub fn get_dir_with_profile(
+    target_dir: impl AsRef<Path>,
+    profile: &str,
+    examples: bool,
+) -> PathBuf {
+    let res = target_dir
         .as_ref()
         .join("riscv32im-risc0-zkvm-elf")
-        .join(profile)
+        .join(profile);
+    if examples {
+        res.join("examples")
+    } else {
+        res
+    }
 }
 
 /// When called from a build.rs, returns the current package being built.
@@ -241,6 +250,7 @@ pub fn build_guest_package(
     pkg: &Package,
     guest_opts: &GuestOptions,
     runtime_lib: Option<&str>,
+    target_filter: &Option<TargetFilter>,
 ) -> Result<PathBuf, Option<i32>> {
     if is_skip_build() {
         return Err(None);
@@ -278,6 +288,13 @@ pub fn build_guest_package(
         "--target-dir",
         target_dir.to_str().unwrap(),
     ]);
+
+    if let Some(target_filter) = target_filter {
+        cmd.args([
+            format!("--{}", target_filter.kind).as_str(),
+            target_filter.name.as_str(),
+        ]);
+    }
 
     let profile = if let Some(profile) = &guest_opts.profile {
         profile
@@ -320,31 +337,24 @@ pub fn build_guest_package(
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(get_dir_with_profile(&target_dir, profile))
+        Ok(get_dir_with_profile(
+            &target_dir,
+            profile,
+            target_filter
+                .as_ref()
+                .map(|t| t.kind == "example")
+                .unwrap_or(false),
+        ))
     }
 }
 
 /// A filter for selecting a target from a package.
 #[derive(Default)]
 pub struct TargetFilter {
-    /// A substring of the target name to match.
-    pub name_substr: Option<String>,
+    /// The target name to match.
+    pub name: String,
     /// The kind of target to match.
-    pub kind: Option<String>,
-}
-
-impl TargetFilter {
-    /// Set substring of target name to match.
-    pub fn with_name_substr(mut self, name_substr: String) -> Self {
-        self.name_substr = Some(name_substr);
-        self
-    }
-
-    /// Set kind of target to match.
-    pub fn with_kind(mut self, kind: String) -> Self {
-        self.kind = Some(kind);
-        self
-    }
+    pub kind: String,
 }
 
 /// Finds the unique executable target in the given package and target directory,
@@ -352,22 +362,16 @@ impl TargetFilter {
 pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
     pkg_dir: P,
     target_dir: Q,
-    target_filter: &TargetFilter,
+    target_filter: &Option<TargetFilter>,
 ) -> eyre::Result<PathBuf> {
     let pkg = get_package(pkg_dir.as_ref());
     let elf_paths = pkg
         .targets
         .into_iter()
         .filter(move |target| {
-            if let Some(name_substr) = &target_filter.name_substr {
-                if !target.name.contains(name_substr) {
-                    return false;
-                }
-            }
-            if let Some(kind) = &target_filter.kind {
-                if !target.kind.iter().any(|k| k == kind) {
-                    return false;
-                }
+            if let Some(target_filter) = target_filter {
+                return target.kind.iter().any(|k| k == &target_filter.kind)
+                    && target.name == target_filter.name;
             }
             true
         })
