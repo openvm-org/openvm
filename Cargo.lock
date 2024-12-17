@@ -4292,7 +4292,6 @@ dependencies = [
  "num-bigint-dig",
  "openvm",
  "openvm-algebra-circuit",
- "openvm-algebra-guest",
  "openvm-algebra-transpiler",
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
