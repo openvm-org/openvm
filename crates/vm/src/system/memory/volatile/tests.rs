@@ -27,9 +27,9 @@ fn boundary_air_test() {
 
     const MEMORY_BUS: usize = 1;
     const RANGE_CHECKER_BUS: usize = 3;
-    const MAX_ADDRESS_SPACE: usize = 4;
+    const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
-    const MAX_VAL: usize = 1 << LIMB_BITS;
+    const MAX_VAL: u32 = 1 << LIMB_BITS;
     const DECOMP: usize = 8;
     let memory_bus = MemoryBus(MEMORY_BUS);
 
@@ -49,7 +49,7 @@ fn boundary_air_test() {
     let mut final_memory = TimestampedEquipartition::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-        let final_data = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
+        let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
         final_memory.insert(
@@ -72,8 +72,8 @@ fn boundary_air_test() {
             .flat_map(|(addr_space, pointer)| {
                 vec![
                     Val::ONE,
-                    Val::from_canonical_usize(*addr_space),
-                    Val::from_canonical_usize(*pointer),
+                    Val::from_canonical_u32(*addr_space),
+                    Val::from_canonical_u32(*pointer),
                     Val::ZERO,
                     Val::ZERO,
                     Val::ONE,
@@ -92,8 +92,8 @@ fn boundary_air_test() {
 
                 vec![
                     Val::ONE,
-                    Val::from_canonical_usize(*addr_space),
-                    Val::from_canonical_usize(*pointer),
+                    Val::from_canonical_u32(*addr_space),
+                    Val::from_canonical_u32(*pointer),
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
                     Val::ONE,

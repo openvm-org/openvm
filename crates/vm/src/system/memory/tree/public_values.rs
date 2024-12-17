@@ -8,7 +8,7 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Equipartition},
 };
 
-pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: usize = 2;
+pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
 
 /// Merkle proof for user public values in the memory state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -120,7 +120,7 @@ pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
             value
                 .iter()
                 .enumerate()
-                .map(|(i, &v)| (*block_id * CHUNK + i, v))
+                .map(|(i, &v)| (*block_id as usize * CHUNK + i, v))
         })
         .collect();
     if let Some(last_pv) = used_pvs.last() {

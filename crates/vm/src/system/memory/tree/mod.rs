@@ -66,9 +66,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     fn from_memory(
-        memory: &BTreeMap<usize, [F; CHUNK]>,
+        memory: &BTreeMap<u64, [F; CHUNK]>,
         height: usize,
-        from: usize,
+        from: u64,
         hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));

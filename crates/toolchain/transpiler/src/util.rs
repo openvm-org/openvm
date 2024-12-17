@@ -166,7 +166,7 @@ pub fn elf_memory_image_to_openvm_memory_image<F: PrimeField32>(
     let mut result = MemoryImage::new();
     for (addr, word) in memory_image {
         for (i, byte) in word.to_le_bytes().into_iter().enumerate() {
-            result.insert((2, addr as usize + i), F::from_canonical_u8(byte));
+            result.insert((2, addr + i as u32), F::from_canonical_u8(byte));
         }
     }
     result
