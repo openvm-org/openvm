@@ -142,14 +142,8 @@ fn test_ec_weierstrass_runtime() -> Result<()> {
             .with_extension(EccTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    use openvm_algebra_guest::IntMod;
-    let p = openvm_ecc_guest::p256::P256_MODULUS.clone();
-    let aa = openvm_ecc_guest::p256::CURVE_A.as_biguint();
-    println!("yo p: {}", p);
-    println!("yo a1: {}", aa);
-    println!("yo a: {}", P256_CONFIG.a);
     let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
-    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, true);
     Ok(())
 }
 

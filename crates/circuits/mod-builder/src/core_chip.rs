@@ -289,7 +289,8 @@ where
             return;
         }
         // We will copy over the core part of last row to padded rows (all rows after num_records).
-        let adapter_width = trace.width() - <Self::Air as BaseAir<F>>::width(&self.air);
+        let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
+        let adapter_width = trace.width() - core_width;
         let last_row = trace
             .rows()
             .nth(num_records - 1)
@@ -301,6 +302,12 @@ where
             // The same as last row, except "is_valid" (the first element of core part) is zero.
             core_row.copy_from_slice(last_row_core);
             core_row[0] = F::ZERO;
+            if self.air.expr.needs_setup() {
+                // Setup will be derived by `is_valid - sum(all_flags)`, so we need to also set all the flags to 0.
+                for i in 0..self.air.num_flags() {
+                    core_row[core_width - 1 - i] = F::ZERO;
+                }
+            }
         }
     }
 }
