@@ -22,7 +22,8 @@ mod tests {
 
     #[test]
     fn test_ec() -> Result<()> {
-        let elf = build_example_program_at_path_with_features(get_programs_dir!(), "ecc", ["k256"])?;
+        let elf =
+            build_example_program_at_path_with_features(get_programs_dir!(), "ecc", ["k256"])?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
