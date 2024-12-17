@@ -8,7 +8,7 @@ use num_bigint_dig::BigUint;
 use openvm_algebra_guest::IntMod;
 
 use super::group::{CyclicGroup, Group};
-use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
+use crate::weierstrass::IntrinsicCurve;
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -65,16 +65,5 @@ impl IntrinsicCurve for P256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
-        // heuristic
-        if coeffs.len() < 25 {
-            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
-            table.windowed_mul(coeffs)
-        } else {
-            crate::msm(coeffs, bases)
-        }
-    }
+    // TODO: msm optimization if needed
 }
