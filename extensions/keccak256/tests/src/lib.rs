@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use openvm_circuit::arch::VmExecutor;
+    use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
     use openvm_keccak256_circuit::Keccak256Rv32Config;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -15,7 +15,7 @@ mod tests {
     type F = BabyBear;
 
     #[test]
-    fn test_keccak256_runtime() -> Result<()> {
+    fn test_keccak256() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "keccak")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -25,8 +25,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let executor = VmExecutor::<F, Keccak256Rv32Config>::new(Keccak256Rv32Config::default());
-        executor.execute(openvm_exe, vec![])?;
+        air_test(Keccak256Rv32Config::default(), openvm_exe);
         Ok(())
     }
 }

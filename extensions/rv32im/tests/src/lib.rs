@@ -4,7 +4,7 @@ mod tests {
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, VmExecutor},
         system::memory::tree::public_values::UserPublicValuesProof,
-        utils::new_air_test_with_min_segments,
+        utils::{air_test, air_test_with_min_segments},
     };
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
@@ -24,7 +24,7 @@ mod tests {
     type F = BabyBear;
 
     #[test_case("fibonacci", 1)]
-    fn test_rv32i_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name)?;
         let exe = VmExe::from_elf(
             elf,
@@ -34,12 +34,12 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32IConfig::default();
-        new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
+        air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test_case("collatz", 1)]
-    fn test_rv32im_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name)?;
         let exe = VmExe::from_elf(
             elf,
@@ -49,13 +49,13 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension),
         )?;
         let config = Rv32ImConfig::default();
-        new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
+        air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
 
     // #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
-    fn test_rv32im_std_prove(example_name: &str, min_segments: usize) -> Result<()> {
+    fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -69,12 +69,12 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension),
         )?;
         let config = Rv32ImConfig::default();
-        new_air_test_with_min_segments(config, exe, vec![], min_segments, true);
+        air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
 
     #[test]
-    fn test_read_vec_runtime() -> Result<()> {
+    fn test_read_vec() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "hint")?;
         let exe = VmExe::from_elf(
             elf,
@@ -84,13 +84,13 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32IConfig::default();
-        let executor = VmExecutor::<F, _>::new(config);
-        executor.execute(exe, vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()])?;
+        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
+        air_test_with_min_segments(config, exe, input, 1);
         Ok(())
     }
 
     #[test]
-    fn test_read_runtime() -> Result<()> {
+    fn test_read() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "read")?;
         let exe = VmExe::from_elf(
             elf,
@@ -100,7 +100,6 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32IConfig::default();
-        let executor = VmExecutor::<F, _>::new(config);
 
         #[derive(serde::Serialize)]
         struct Foo {
@@ -117,12 +116,12 @@ mod tests {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        executor.execute(exe, vec![input]).unwrap();
+        air_test_with_min_segments(config, exe, vec![input], 1);
         Ok(())
     }
 
     #[test]
-    fn test_reveal_runtime() -> Result<()> {
+    fn test_reveal() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal")?;
         let exe = VmExe::from_elf(
             elf,
@@ -153,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_print_runtime() -> Result<()> {
+    fn test_print() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "print")?;
         let exe = VmExe::from_elf(
             elf,
@@ -163,13 +162,12 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32IConfig::default();
-        let executor = VmExecutor::<F, _>::new(config);
-        executor.execute(exe, vec![])?;
+        air_test(config, exe);
         Ok(())
     }
 
     #[test]
-    fn test_tiny_mem_test_runtime() -> Result<()> {
+    fn test_tiny_mem_test() -> Result<()> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -183,8 +181,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32ImConfig::default();
-        let executor = VmExecutor::<F, _>::new(config);
-        executor.execute(exe, vec![])?;
+        air_test(config, exe);
         Ok(())
     }
 }

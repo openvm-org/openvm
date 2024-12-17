@@ -3,7 +3,7 @@ use std::{fs::read_dir, path::PathBuf};
 use eyre::Result;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmExecutor},
-    utils::new_air_test_with_min_segments,
+    utils::air_test,
 };
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -80,7 +80,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                new_air_test_with_min_segments(config.clone(), exe, vec![], 1, true);
+                air_test(config.clone(), exe);
             });
 
             match result {

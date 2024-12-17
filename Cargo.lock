@@ -3810,28 +3810,21 @@ dependencies = [
 name = "openvm-ecc-integration-tests"
 version = "0.1.0-alpha"
 dependencies = [
- "derive_more 1.0.0",
  "eyre",
- "num-bigint-dig",
- "openvm",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
- "openvm-build",
  "openvm-circuit",
  "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-ecc-transpiler",
  "openvm-instructions",
- "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
- "openvm-platform",
- "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
- "serde",
 ]
 
 [[package]]

@@ -3,7 +3,7 @@ mod tests {
     use eyre::Result;
     use openvm_bigint_circuit::Int256Rv32Config;
     use openvm_bigint_transpiler::Int256TranspilerExtension;
-    use openvm_circuit::arch::VmExecutor;
+    use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -15,7 +15,7 @@ mod tests {
     type F = BabyBear;
 
     #[test]
-    fn test_matrix_power_runtime() -> Result<()> {
+    fn test_matrix_power() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -26,13 +26,12 @@ mod tests {
                 .with_extension(Int256TranspilerExtension),
         )?;
         let config = Int256Rv32Config::default();
-        let executor = VmExecutor::<F, _>::new(config);
-        executor.execute(openvm_exe, vec![])?;
+        air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
-    fn test_matrix_power_signed_runtime() -> Result<()> {
+    fn test_matrix_power_signed() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-signed")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -43,8 +42,7 @@ mod tests {
                 .with_extension(Int256TranspilerExtension),
         )?;
         let config = Int256Rv32Config::default();
-        let executor = VmExecutor::<F, _>::new(config);
-        executor.execute(openvm_exe, vec![])?;
+        air_test(config, openvm_exe);
         Ok(())
     }
 }

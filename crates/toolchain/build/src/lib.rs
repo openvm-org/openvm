@@ -25,17 +25,7 @@ const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
 pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
-    println!(
-        "manifest_dir: {:?}",
-        manifest_dir.as_ref().join("Cargo.toml")
-    );
     let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
-    println!(
-        "manifest_path: {:?}",
-        MetadataCommand::new()
-            .manifest_path(&manifest_path)
-            .no_deps()
-    );
     let manifest_meta = MetadataCommand::new()
         .manifest_path(&manifest_path)
         .no_deps()

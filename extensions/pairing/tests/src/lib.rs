@@ -7,7 +7,7 @@ mod bn254 {
     use eyre::Result;
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::{arch::SystemConfig, utils::new_air_test_with_min_segments};
+    use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
         algebra::field::FieldExtension,
@@ -80,7 +80,7 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -136,7 +136,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -183,7 +183,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -234,7 +234,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -289,8 +289,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // Always run proving for just pairing check
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 }
@@ -302,7 +301,7 @@ mod bls12_381 {
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::{instructions::exe::VmExe, SystemConfig},
-        utils::new_air_test_with_min_segments,
+        utils::air_test_with_min_segments,
     };
     use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
@@ -374,7 +373,7 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -431,7 +430,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -478,7 +477,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -535,7 +534,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -589,8 +588,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // Always run proving for just pairing check
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -643,7 +641,7 @@ mod bls12_381 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 }

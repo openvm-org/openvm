@@ -6,7 +6,7 @@ mod tests {
     use num_bigint_dig::BigUint;
     use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularWithFp2Config};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::utils::new_air_test_with_min_segments;
+    use openvm_circuit::utils::air_test;
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
@@ -19,7 +19,7 @@ mod tests {
     type F = BabyBear;
 
     #[test]
-    fn test_moduli_setup_runtime() -> Result<()> {
+    fn test_moduli_setup() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "moduli_setup")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -33,12 +33,12 @@ mod tests {
         let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
             .map(|s| BigUint::from_str(s).unwrap());
         let config = Rv32ModularConfig::new(moduli.to_vec());
-        new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+        air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
-    fn test_modular_runtime() -> Result<()> {
+    fn test_modular() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "little")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -49,12 +49,12 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config = Rv32ModularConfig::new(vec![SECP256K1_CONFIG.modulus.clone()]);
-        new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+        air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
-    fn test_complex_two_moduli_runtime() -> Result<()> {
+    fn test_complex_two_moduli() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "complex-two-modulos")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -69,12 +69,12 @@ mod tests {
             BigUint::from_str("998244353").unwrap(),
             BigUint::from_str("1000000007").unwrap(),
         ]);
-        new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+        air_test(config, openvm_exe);
         Ok(())
     }
 
     #[test]
-    fn test_complex_runtime() -> Result<()> {
+    fn test_complex() -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), "complex")?;
         let openvm_exe = VmExe::from_elf(
             elf,
@@ -86,8 +86,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         let config = Rv32ModularWithFp2Config::new(vec![SECP256K1_CONFIG.modulus.clone()]);
-        // Always run prove, as this caught a bug before.
-        new_air_test_with_min_segments(config, openvm_exe, vec![], 1, true);
+        air_test(config, openvm_exe);
         Ok(())
     }
 }

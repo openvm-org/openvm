@@ -54,9 +54,9 @@ fn test_fibonacci_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32IConfig::default();
-    new_air_test_with_min_segments(config, exe, vec![], 1, true);
+    air_test(config, exe, vec![]);
     Ok(())
 }
 ```
 
-Note: If the crate with example is not in `./programs`, specify the path with `get_programs_dir!("path to the programs crate")`. 
+Note: If the crate with example is not in `./programs`, specify the relative path with `get_programs_dir!("path to the programs crate")`. 
