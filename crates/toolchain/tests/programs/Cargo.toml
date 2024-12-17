@@ -41,6 +41,7 @@ std = [
 bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
+p256 = ["openvm-ecc-guest/p256"]
 heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
 
 [profile.release]
@@ -59,3 +60,7 @@ required-features = ["k256"]
 [[example]]
 name = "final_exp_hint"
 required-features = ["bls12_381"]
+
+[[example]]
+name = "ec_weierstrass"
+required-features = ["p256"]

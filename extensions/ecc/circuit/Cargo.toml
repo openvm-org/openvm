@@ -39,4 +39,9 @@ openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-openvm-ecc-guest = { workspace = true, features = ["halo2curves", "k256"] }
+openvm-ecc-guest = { workspace = true, features = [
+    "halo2curves",
+    "k256",
+    "p256",
+] }
+openvm-algebra-guest = { workspace = true }

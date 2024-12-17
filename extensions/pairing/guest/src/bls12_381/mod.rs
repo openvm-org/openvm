@@ -54,7 +54,7 @@ const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_bytes(hex!(
 ));
 
 openvm_ecc_sw_setup::sw_declare! {
-    Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
+    Bls12_381G1Affine { mod_type = Bls12_381Fp, a = <Bls12_381Fp as IntMod>::ZERO, b = CURVE_B },
 }
 
 pub type Fp = Bls12_381Fp;

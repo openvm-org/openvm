@@ -96,7 +96,7 @@ const CURVE_B: Bn254Fp = Bn254Fp::from_const_bytes(hex!(
 ));
 
 openvm_ecc_sw_setup::sw_declare! {
-    Bn254G1Affine { mod_type = Bn254Fp, b = CURVE_B },
+    Bn254G1Affine { mod_type = Bn254Fp, a = <Bn254Fp as IntMod>::ZERO, b = CURVE_B },
 }
 
 pub type Fp = Bn254Fp;

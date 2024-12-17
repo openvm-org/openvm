@@ -19,7 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::{
     CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
-    WeierstrassExtensionPeriphery, SECP256K1_CONFIG,
+    WeierstrassExtensionPeriphery, P256_CONFIG, SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -126,6 +126,29 @@ fn test_ec_runtime() -> Result<()> {
             .with_extension(ModularTranspilerExtension),
     )?;
     let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
+    Ok(())
+}
+
+#[test]
+fn test_ec_weierstrass_runtime() -> Result<()> {
+    let elf = build_example_program_with_features("ec_weierstrass", ["p256"])?;
+    let openvm_exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(EccTranspilerExtension)
+            .with_extension(ModularTranspilerExtension),
+    )?;
+    use openvm_algebra_guest::IntMod;
+    let p = openvm_ecc_guest::p256::P256_MODULUS.clone();
+    let aa = openvm_ecc_guest::p256::CURVE_A.as_biguint();
+    println!("yo p: {}", p);
+    println!("yo a1: {}", aa);
+    println!("yo a: {}", P256_CONFIG.a);
+    let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
     new_air_test_with_min_segments(config, openvm_exe, vec![], 1, false);
     Ok(())
 }

@@ -30,6 +30,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_type: Option<syn::Path> = None;
+        let mut const_a: Option<syn::Expr> = None;
         let mut const_b: Option<syn::Expr> = None;
         for param in item.params {
             match param.name.to_string().as_str() {
@@ -42,6 +43,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             .into();
                     }
                 }
+                "a" => {
+                    // We currently leave it to the compiler to check if the expression is actually a constant
+                    const_a = Some(param.value);
+                }
                 "b" => {
                     // We currently leave it to the compiler to check if the expression is actually a constant
                     const_b = Some(param.value);
@@ -53,6 +58,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
 
         let intmod_type = intmod_type.expect("mod_type parameter is required");
+        let const_a = const_a.expect("constant a coefficient is required");
         let const_b = const_b.expect("constant b coefficient is required");
 
         macro_rules! create_extern_func {
@@ -196,6 +202,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
+                const CURVE_A: #intmod_type = #const_a;
                 const CURVE_B: #intmod_type = #const_b;
                 type Coordinate = #intmod_type;
 
