@@ -10,6 +10,12 @@ on:
       - "crates/vm/**"
       - "crates/sdk/**"
       - "crates/cli/**"
+      - "extensions/algebra/tests/programs/**"
+      - "extensions/bigint/tests/programs/**"
+      - "extensions/ecc/tests/programs/**"
+      - "extensions/keccak256/tests/programs/**"
+      - "extensions/pairing/tests/programs/**"
+      - "extensions/rv32im/tests/programs/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -64,3 +70,51 @@ jobs:
           export RUST_BACKTRACE=1
           cargo build
           cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
+
+      - name: Build algebra tests with CLI
+        working-directory: extensions/algebra/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done
+
+      - name: Build bigint tests with CLI
+        working-directory: extensions/bigint/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done
+
+      - name: Build ecc tests with CLI
+        working-directory: extensions/ecc/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done
+
+      - name: Build keccak256 tests with CLI
+        working-directory: extensions/keccak256/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done
+
+      - name: Build pairing tests with CLI
+        working-directory: extensions/pairing/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done
+
+      - name: Build rv32im tests with CLI
+        working-directory: extensions/rv32im/tests
+        run: |
+          for file in $(ls ./programs); do
+            echo "building $file..."
+            cargo openvm build --example --name $file
+          done

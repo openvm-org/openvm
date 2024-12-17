@@ -69,7 +69,7 @@ jobs:
         run: |
           cargo openvm build --no-transpile
 
-      - name: Ecc integration tests
+      - name: Run ecc integration tests
         working-directory: extensions/ecc/tests
         run: |
           rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu

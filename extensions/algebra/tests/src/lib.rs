@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_complex() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "complex")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "complex-secp256k1")?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

@@ -16,7 +16,7 @@ mod tests {
 
     #[test]
     fn test_matrix_power() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power")?;
+        let elf = build_example_program_at_path(get_programs_dir!(), "matrix-power-unsigned")?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
