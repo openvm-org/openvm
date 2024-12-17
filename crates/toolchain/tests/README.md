@@ -6,7 +6,7 @@ This crate includes tests for OpenVM toolchain that involve starting from a Rust
 
 1. Add a new guest program file to [programs/examples](./programs/examples).
 
-See [Writing the Guest Program](../../benchmarks/README.md#writing-the-guest-program) for more detailed instructions.
+See [Writing the Guest Program](../../../benchmarks/README.md#writing-the-guest-program) for more detailed instructions.
 
 The `programs` directory is a single crate to make it easier to add small test programs. The crate is **not** part of the main workspace.
 Your IDE will likely not lint or use rust-analyzer on the crate while in the workspace, so you should open a separate IDE workspace from `programs` while writing your guest program.
