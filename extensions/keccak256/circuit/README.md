@@ -25,7 +25,7 @@ It seems to handle padding in a single AIR row there is no alternate to having `
 The absorb step must correctly constrain that the input bytes are XORed with the end-state in the last round and equals the next permutation's `preimage`. The end-state is accessed via `a_prime_prime_prime()`. Note that both `preimage` and `a_prime_prime_prime()` are represented as `u16`s. However we can only XOR at most 8-bit limbs. Without changing the `keccak-f` AIR itself, we can use a trick:
 if we already have a 16-bit limb `x` and we also provide a 8-bit limb `hi = x >> 8`, assuming `x` and `hi` have been range checked, we can use the expression `lo = x - hi * 256` for the low byte. If `lo` is range checked to `8`-bits, this constrains a valid byte decomposition of `x` into `hi, lo`. This means in terms of trace cells, it is equivalent to provide `x, hi` versus `hi, lo`.
 
-The constraints are in [air.rs](./air.rs). Notably we use an XOR lookup table for byte XORs in the absorb step.
+The constraints are in [air.rs](./src/air.rs). Notably we use an XOR lookup table for byte XORs in the absorb step.
 
 ## Future Improvement
 
