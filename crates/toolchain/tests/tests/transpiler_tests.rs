@@ -17,7 +17,8 @@ use openvm_circuit::{
         SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExecutor,
         VmInventoryError,
     },
-    derive::{AnyEnum, InstructionExecutor, VmConfig}, utils::air_test,
+    derive::{AnyEnum, InstructionExecutor, VmConfig},
+    utils::air_test,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
