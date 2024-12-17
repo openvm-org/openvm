@@ -219,7 +219,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 

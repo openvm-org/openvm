@@ -287,8 +287,8 @@ impl<F: PrimeField32> Memory<F> {
         for i in 0..size as u32 {
             let block = self
                 .block_data
-                .get_mut(&(address_space, pointer + i))
-                .unwrap();
+                .entry((address_space, pointer + i))
+                .or_insert_with(|| Self::initial_block_data(pointer + i, self.initial_block_size));
             debug_assert!(i == 0 || prev_timestamp == Some(block.timestamp));
             prev_timestamp = Some(block.timestamp);
             block.timestamp = self.timestamp;
@@ -310,15 +310,7 @@ impl<F: PrimeField32> Memory<F> {
             .block_data
             .get(&(address_space, pointer))
             .copied()
-            .unwrap_or_else(|| {
-                for i in 0..size {
-                    self.block_data.insert(
-                        (address_space, pointer + i as u32),
-                        self.initial_block_data(pointer + i as u32),
-                    );
-                }
-                self.initial_block_data(pointer)
-            });
+            .unwrap_or_else(|| Self::initial_block_data(pointer, self.initial_block_size));
 
         if block_data.pointer == pointer && block_data.size == size {
             return;
@@ -348,10 +340,12 @@ impl<F: PrimeField32> Memory<F> {
         pointer: u32,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
-        let left_block = self.block_data.get(&(address_space, pointer)).unwrap();
+        let left_block = self.block_data.get(&(address_space, pointer));
 
-        let left_timestamp = left_block.timestamp;
-        let size = left_block.size;
+        let left_timestamp = left_block.map(|b| b.timestamp).unwrap_or(INITIAL_TIMESTAMP);
+        let size = left_block
+            .map(|b| b.size)
+            .unwrap_or(self.initial_block_size);
 
         let right_timestamp = self
             .block_data
@@ -386,16 +380,15 @@ impl<F: PrimeField32> Memory<F> {
         if let Some(block_data) = self.block_data.get(&(address_space, pointer)) {
             *block_data
         } else {
-            self.initial_block_data(pointer)
+            Self::initial_block_data(pointer, self.initial_block_size)
         }
     }
 
-    fn initial_block_data(&self, pointer: u32) -> BlockData {
-        let aligned_pointer =
-            (pointer / self.initial_block_size as u32) * self.initial_block_size as u32;
+    fn initial_block_data(pointer: u32, initial_block_size: usize) -> BlockData {
+        let aligned_pointer = (pointer / initial_block_size as u32) * initial_block_size as u32;
         BlockData {
             pointer: aligned_pointer,
-            size: self.initial_block_size,
+            size: initial_block_size,
             timestamp: INITIAL_TIMESTAMP,
         }
     }
