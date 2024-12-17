@@ -12,6 +12,7 @@ on:
       - "extensions/ecc/**"
       - "extensions/native/compiler/**"
       - "extensions/pairing/**"
+      - "extensions/pairing/tests/**"
       - "extensions/ecc/tests/**"
 
 concurrency:
@@ -51,6 +52,12 @@ jobs:
         run: |
           RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
 
+      - name: Run pairing integration tests
+        working-directory: extensions/pairing/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
+
       - name: Install cargo-openvm
         working-directory: crates/cli
         run: |
@@ -61,3 +68,9 @@ jobs:
         working-directory: extensions/ecc/guest
         run: |
           cargo openvm build --no-transpile
+
+      - name: Ecc integration tests
+        working-directory: extensions/ecc/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+          cargo nextest run --cargo-profile=fast

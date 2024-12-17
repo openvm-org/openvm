@@ -31,9 +31,3 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
-
-      - name: Run toolchain tests
-        working-directory: crates/toolchain/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
-          RUST_MIN_STACK=8388608 cargo nextest run --cargo-profile=fast
