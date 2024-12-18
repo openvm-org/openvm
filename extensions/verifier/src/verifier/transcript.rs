@@ -20,25 +20,25 @@ use snark_verifier::{
 };
 
 use super::{
-    loader::{AxVmLoader, LOADER},
-    traits::{AxVmEcPoint, AxVmScalar},
+    loader::{OpenVmLoader, LOADER},
+    traits::{OpenVmEcPoint, OpenVmScalar},
 };
 
 #[derive(Debug)]
-pub struct AxVmTranscript<C: CurveAffine, S, B> {
+pub struct OpenVmTranscript<C: CurveAffine, S, B> {
     stream: S,
     buf: B,
     _marker: PhantomData<C>,
 }
 
-impl<S> Transcript<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>> {
-    fn loader(&self) -> &AxVmLoader {
+impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec<u8>> {
+    fn loader(&self) -> &OpenVmLoader {
         &LOADER
     }
 
     fn squeeze_challenge(
         &mut self,
-    ) -> <super::loader::AxVmLoader as snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
+    ) -> <super::loader::OpenVmLoader as snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
     {
         let data = self
             .buf
@@ -52,11 +52,13 @@ impl<S> Transcript<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>
             .collect_vec();
         let hash = keccak256(&data);
         self.buf = hash.to_vec();
-        AxVmScalar(Fr::from_be_bytes(&hash), PhantomData)
+        OpenVmScalar(Fr::from_be_bytes(&hash), PhantomData)
     }
 
-    // is this sus?
-    fn common_ec_point(&mut self, ec_point: &AxVmEcPoint<G1Affine, EcPoint>) -> Result<(), Error> {
+    fn common_ec_point(
+        &mut self,
+        ec_point: &OpenVmEcPoint<G1Affine, EcPoint>,
+    ) -> Result<(), Error> {
         let mut x = [0; 32];
         let mut y = [0; 32];
         x.copy_from_slice(ec_point.0.x.as_le_bytes());
@@ -78,35 +80,29 @@ impl<S> Transcript<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>
         Ok(())
     }
 
-    fn common_scalar(&mut self, scalar: &AxVmScalar<Halo2Fr, Fr>) -> Result<(), Error> {
+    fn common_scalar(&mut self, scalar: &OpenVmScalar<Halo2Fr, Fr>) -> Result<(), Error> {
         self.buf.extend(scalar.0.to_be_bytes());
 
         Ok(())
     }
 }
 
-impl<S> TranscriptRead<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>>
+impl<S> TranscriptRead<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec<u8>>
 where
     S: Read,
 {
-    fn read_scalar(&mut self) -> Result<AxVmScalar<Halo2Fr, Fr>, Error> {
+    fn read_scalar(&mut self) -> Result<OpenVmScalar<Halo2Fr, Fr>, Error> {
         let mut data = [0; 32];
         self.stream
             .read_exact(data.as_mut())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
         let scalar = Fr::from_be_bytes(&data);
-        let scalar = AxVmScalar(scalar, PhantomData);
-        // let scalar = AxVmScalar::<Halo2Fr, Fr>::from_repr_vartime(data).ok_or_else(|| {
-        //     Error::Transcript(
-        //         io::ErrorKind::Other,
-        //         "Invalid scalar encoding in proof".to_string(),
-        //     )
-        // })?;
+        let scalar = OpenVmScalar(scalar, PhantomData);
         self.common_scalar(&scalar)?;
         Ok(scalar)
     }
 
-    fn read_ec_point(&mut self) -> Result<AxVmEcPoint<G1Affine, EcPoint>, Error> {
+    fn read_ec_point(&mut self) -> Result<OpenVmEcPoint<G1Affine, EcPoint>, Error> {
         let [mut x, mut y] = [[0; 32]; 2];
         for repr in [&mut x, &mut y] {
             self.stream
@@ -116,7 +112,7 @@ where
         }
         let x = Fp::from_be_bytes(&x);
         let y = Fp::from_be_bytes(&y);
-        let ec_point = AxVmEcPoint(EcPoint { x, y }, PhantomData);
+        let ec_point = OpenVmEcPoint(EcPoint { x, y }, PhantomData);
         self.common_ec_point(&ec_point)?;
         Ok(ec_point)
     }

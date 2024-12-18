@@ -774,27 +774,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ax-snark-verifier"
-version = "0.1.0-alpha"
-dependencies = [
- "ff 0.13.0",
- "group 0.13.0",
- "halo2curves-axiom 0.7.0",
- "itertools 0.13.0",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "openvm-ecc-guest",
- "openvm-keccak256-guest",
- "openvm-pairing-guest",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rng",
- "snark-verifier 0.1.7",
- "subtle",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4247,6 +4226,27 @@ name = "openvm-sdk-example-test"
 version = "0.0.0"
 dependencies = [
  "openvm",
+]
+
+[[package]]
+name = "openvm-snark-verifier"
+version = "0.1.0-alpha"
+dependencies = [
+ "ff 0.13.0",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.0",
+ "itertools 0.13.0",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "openvm-ecc-guest",
+ "openvm-keccak256-guest",
+ "openvm-pairing-guest",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rng",
+ "snark-verifier 0.1.7",
+ "subtle",
 ]
 
 [[package]]
