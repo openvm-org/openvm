@@ -62,6 +62,19 @@ jobs:
       - name: Install cargo-openvm
         working-directory: crates/cli
         run: |
+          arch=$(uname -m)
+          case $arch in
+            arm64|aarch64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
+              ;;
+            x86_64|amd64)
+              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
+              ;;
+            *)
+              echo "Unsupported architecture: $arch"
+              exit 1
+              ;;
+          esac
           cargo install --force --locked --path .
 
       - name: Build book examples
