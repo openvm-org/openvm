@@ -1,8 +1,11 @@
 use std::collections::BTreeMap;
 
 use openvm_instructions::{
-    exe::MemoryImage, instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS,
-    utils::isize_to_field, SystemOpcode, VmOpcode,
+    exe::MemoryImage,
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+    utils::isize_to_field,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
@@ -167,7 +170,7 @@ pub fn elf_memory_image_to_openvm_memory_image<F: PrimeField32>(
     for (addr, word) in memory_image {
         for (i, byte) in word.to_le_bytes().into_iter().enumerate() {
             result.insert(
-                (F::TWO, F::from_canonical_u32(addr + i as u32)),
+                (RV32_MEMORY_AS, addr + i as u32),
                 F::from_canonical_u8(byte),
             );
         }

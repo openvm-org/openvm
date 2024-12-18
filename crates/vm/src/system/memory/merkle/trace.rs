@@ -119,7 +119,7 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
-    touched_nodes: &'a FxHashSet<(usize, usize, usize)>,
+    touched_nodes: &'a FxHashSet<(usize, u32, u32)>,
     trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
@@ -128,13 +128,12 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         &mut self,
         height: usize,
         initial_node: &MemoryNode<CHUNK, F>,
-        as_label: usize,
-        address_label: usize,
+        as_label: u32,
+        address_label: u32,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            let address_space =
-                F::from_canonical_usize(as_label + self.memory_dimensions.as_offset);
+            let address_space = as_label + self.memory_dimensions.as_offset;
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))
@@ -215,8 +214,8 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
     fn add_trace_row(
         &mut self,
         parent_height: usize,
-        as_label: usize,
-        address_label: usize,
+        as_label: u32,
+        address_label: u32,
         node: &MemoryNode<CHUNK, F>,
         direction_changes: Option<[bool; 2]>,
     ) {
@@ -232,8 +231,8 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                 height_section: F::from_bool(parent_height > self.memory_dimensions.address_height),
                 parent_height: F::from_canonical_usize(parent_height),
                 is_root: F::from_bool(parent_height == self.memory_dimensions.overall_height()),
-                parent_as_label: F::from_canonical_usize(as_label),
-                parent_address_label: F::from_canonical_usize(address_label),
+                parent_as_label: F::from_canonical_u32(as_label),
+                parent_address_label: F::from_canonical_u32(address_label),
                 parent_hash: *hash,
                 left_child_hash: left.hash(),
                 right_child_hash: right.hash(),

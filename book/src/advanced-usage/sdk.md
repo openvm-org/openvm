@@ -2,7 +2,7 @@
 
 While the CLI provides a convenient way to build, prove, and verify programs, you may want more fine-grained control over the process. The OpenVM Rust SDK allows you to customize various aspects of the workflow programmatically.
 
-For more information on the basic CLI flow, see [Overview of Basic Usage](./overview.md). Writing a guest program is the same as in the CLI.
+For more information on the basic CLI flow, see [Overview of Basic Usage](../writing-apps/overview.md). Writing a guest program is the same as in the CLI.
 
 ## Imports and Setup
 
