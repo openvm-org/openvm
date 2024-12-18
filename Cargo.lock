@@ -4225,7 +4225,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.0-alpha#83b0d048c00bbfba60a5b0732cf923bed5dd6e76"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4242,6 +4242,7 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "rayon",
+ "rustc-hash 2.1.0",
  "serde",
  "thiserror 1.0.69",
  "tikv-jemallocator",
@@ -4251,7 +4252,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.0-alpha#83b0d048c00bbfba60a5b0732cf923bed5dd6e76"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",
