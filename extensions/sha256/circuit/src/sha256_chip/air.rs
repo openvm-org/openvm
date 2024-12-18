@@ -9,8 +9,8 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_sha256_air::{
-    compose, contains_flag, contains_flag_range, flag_with_val, Sha256Air, SHA256_BLOCK_U8S,
-    SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW, SHA256_WORD_U16S, SHA256_WORD_U8S,
+    compose, Sha256Air, SHA256_BLOCK_U8S, SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW,
+    SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
@@ -117,8 +117,7 @@ impl Sha256VmAir {
         self.padding_encoder
             .eval(builder, &local_cols.control.pad_flags);
 
-        builder.assert_one(contains_flag_range::<AB>(
-            &self.padding_encoder,
+        builder.assert_one(self.padding_encoder.contains_flag_range::<AB>(
             &local_cols.control.pad_flags,
             NotConsidered as usize,
             EntirePadding as usize,
@@ -161,19 +160,16 @@ impl Sha256VmAir {
         // Constrain the that the start of the padding is correct
         let next_is_first_padding_row =
             next.control.padding_occurred - local.control.padding_occurred;
-        let next_row_idx = flag_with_val::<AB>(
-            &self.sha256_subair.row_idx_encoder,
+        let next_row_idx = self.sha256_subair.row_idx_encoder.flag_with_val::<AB>(
             &next.inner.flags.row_idx,
             &(0..4).map(|x| (x, x)).collect::<Vec<_>>(),
         );
-        let next_padding_offset = flag_with_val::<AB>(
-            &self.padding_encoder,
+        let next_padding_offset = self.padding_encoder.flag_with_val::<AB>(
             &next.control.pad_flags,
             &(0..16)
                 .map(|i| (FirstPadding0 as usize + i, i))
                 .collect::<Vec<_>>(),
-        ) + flag_with_val::<AB>(
-            &self.padding_encoder,
+        ) + self.padding_encoder.flag_with_val::<AB>(
             &next.control.pad_flags,
             &(0..8)
                 .map(|i| (FirstPadding0_LastRow as usize + i, i))
@@ -193,43 +189,35 @@ impl Sha256VmAir {
         );
 
         // Constrain the padding flags are of correct type (eg is not padding or first padding)
-        let is_next_first_padding = contains_flag_range::<AB>(
-            &self.padding_encoder,
+        let is_next_first_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
             FirstPadding0 as usize,
             FirstPadding7_LastRow as usize,
         );
 
-        let is_next_last_padding = contains_flag_range::<AB>(
-            &self.padding_encoder,
+        let is_next_last_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
             FirstPadding0_LastRow as usize,
             EntirePaddingLastRow as usize,
         );
 
-        let is_next_entire_padding = contains_flag::<AB>(
-            &self.padding_encoder,
+        let is_next_entire_padding = self.padding_encoder.contains_flag::<AB>(
             &next.control.pad_flags,
             &[EntirePadding as usize, EntirePaddingLastRow as usize],
         );
 
-        let is_next_not_considered = contains_flag::<AB>(
-            &self.padding_encoder,
-            &next.control.pad_flags,
-            &[NotConsidered as usize],
-        );
+        let is_next_not_considered = self
+            .padding_encoder
+            .contains_flag::<AB>(&next.control.pad_flags, &[NotConsidered as usize]);
 
-        let is_next_not_padding = contains_flag::<AB>(
-            &self.padding_encoder,
-            &next.control.pad_flags,
-            &[NotPadding as usize],
-        );
+        let is_next_not_padding = self
+            .padding_encoder
+            .contains_flag::<AB>(&next.control.pad_flags, &[NotPadding as usize]);
 
-        let is_next_4th_row = contains_flag::<AB>(
-            &self.sha256_subair.row_idx_encoder,
-            &next.inner.flags.row_idx,
-            &[3],
-        );
+        let is_next_4th_row = self
+            .sha256_subair
+            .row_idx_encoder
+            .contains_flag::<AB>(&next.inner.flags.row_idx, &[3]);
 
         builder.assert_eq(
             not(next.inner.flags.is_first_4_rows),
@@ -273,19 +261,16 @@ impl Sha256VmAir {
             compose::<AB::Expr>(&word[byte_idx * 8..(byte_idx + 1) * 8], 1)
         };
 
-        let is_not_padding = contains_flag::<AB>(
-            &self.padding_encoder,
-            &local.control.pad_flags,
-            &[NotPadding as usize],
-        );
+        let is_not_padding = self
+            .padding_encoder
+            .contains_flag::<AB>(&local.control.pad_flags, &[NotPadding as usize]);
 
         // Check the `w`s on case by case basis
         for (i, message_byte) in message.iter().enumerate() {
             let w = get_ith_byte(i);
             let should_be_message = is_not_padding.clone()
                 + if i < 15 {
-                    contains_flag_range::<AB>(
-                        &self.padding_encoder,
+                    self.padding_encoder.contains_flag_range::<AB>(
                         &local.control.pad_flags,
                         FirstPadding0 as usize + i + 1,
                         FirstPadding15 as usize,
@@ -294,8 +279,7 @@ impl Sha256VmAir {
                     AB::Expr::ZERO
                 }
                 + if i < 7 {
-                    contains_flag_range::<AB>(
-                        &self.padding_encoder,
+                    self.padding_encoder.contains_flag_range::<AB>(
                         &local.control.pad_flags,
                         FirstPadding0_LastRow as usize + i + 1,
                         FirstPadding7_LastRow as usize,
@@ -307,55 +291,50 @@ impl Sha256VmAir {
                 .when(should_be_message)
                 .assert_eq(w.clone(), *message_byte);
 
-            let should_be_zero = contains_flag::<AB>(
-                &self.padding_encoder,
-                &local.control.pad_flags,
-                &[EntirePadding as usize],
-            ) + if i < 12 {
-                contains_flag::<AB>(
-                    &self.padding_encoder,
-                    &local.control.pad_flags,
-                    &[EntirePaddingLastRow as usize],
-                ) + if i > 0 {
-                    contains_flag_range::<AB>(
-                        &self.padding_encoder,
+            let should_be_zero = self
+                .padding_encoder
+                .contains_flag::<AB>(&local.control.pad_flags, &[EntirePadding as usize])
+                + if i < 12 {
+                    self.padding_encoder.contains_flag::<AB>(
                         &local.control.pad_flags,
-                        FirstPadding0_LastRow as usize,
-                        min(
-                            FirstPadding0_LastRow as usize + i - 1,
-                            FirstPadding7_LastRow as usize,
-                        ),
-                    )
+                        &[EntirePaddingLastRow as usize],
+                    ) + if i > 0 {
+                        self.padding_encoder.contains_flag_range::<AB>(
+                            &local.control.pad_flags,
+                            FirstPadding0_LastRow as usize,
+                            min(
+                                FirstPadding0_LastRow as usize + i - 1,
+                                FirstPadding7_LastRow as usize,
+                            ),
+                        )
+                    } else {
+                        AB::Expr::ZERO
+                    }
                 } else {
                     AB::Expr::ZERO
                 }
-            } else {
-                AB::Expr::ZERO
-            } + if i > 0 {
-                contains_flag_range::<AB>(
-                    &self.padding_encoder,
-                    &local.control.pad_flags,
-                    FirstPadding0 as usize,
-                    FirstPadding0 as usize + i - 1,
-                )
-            } else {
-                AB::Expr::ZERO
-            };
+                + if i > 0 {
+                    self.padding_encoder.contains_flag_range::<AB>(
+                        &local.control.pad_flags,
+                        FirstPadding0 as usize,
+                        FirstPadding0 as usize + i - 1,
+                    )
+                } else {
+                    AB::Expr::ZERO
+                };
             builder.when(should_be_zero).assert_zero(w.clone());
 
-            let should_be_128 = contains_flag::<AB>(
-                &self.padding_encoder,
-                &local.control.pad_flags,
-                &[FirstPadding0 as usize + i],
-            ) + if i < 8 {
-                contains_flag::<AB>(
-                    &self.padding_encoder,
-                    &local.control.pad_flags,
-                    &[FirstPadding0_LastRow as usize + i],
-                )
-            } else {
-                AB::Expr::ZERO
-            };
+            let should_be_128 = self
+                .padding_encoder
+                .contains_flag::<AB>(&local.control.pad_flags, &[FirstPadding0 as usize + i])
+                + if i < 8 {
+                    self.padding_encoder.contains_flag::<AB>(
+                        &local.control.pad_flags,
+                        &[FirstPadding0_LastRow as usize + i],
+                    )
+                } else {
+                    AB::Expr::ZERO
+                };
 
             builder
                 .when(should_be_128)
@@ -375,8 +354,7 @@ impl Sha256VmAir {
 
         let actual_len = local.control.len;
 
-        let is_last_padding_row = contains_flag_range::<AB>(
-            &self.padding_encoder,
+        let is_last_padding_row = self.padding_encoder.contains_flag_range::<AB>(
             &local.control.pad_flags,
             FirstPadding0_LastRow as usize,
             EntirePaddingLastRow as usize,

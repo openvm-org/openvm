@@ -14,10 +14,10 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    big_sig0_field, big_sig1_field, ch_field, compose, contains_flag, contains_flag_range,
-    flag_with_val, maj_field, small_sig0_field, small_sig1_field, u32_into_limbs, Sha256DigestCols,
-    Sha256RoundCols, SHA256_DIGEST_WIDTH, SHA256_H, SHA256_HASH_WORDS, SHA256_K,
-    SHA256_ROUNDS_PER_ROW, SHA256_ROUND_WIDTH, SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
+    big_sig0_field, big_sig1_field, ch_field, compose, maj_field, small_sig0_field,
+    small_sig1_field, u32_into_limbs, Sha256DigestCols, Sha256RoundCols, SHA256_DIGEST_WIDTH,
+    SHA256_H, SHA256_HASH_WORDS, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROUND_WIDTH,
+    SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
 
 #[derive(Clone, Debug)]
@@ -84,27 +84,30 @@ impl Sha256Air {
 
         self.row_idx_encoder
             .eval(builder, &local_cols.flags.row_idx);
-        builder.assert_one(contains_flag_range::<AB>(
-            &self.row_idx_encoder,
+        builder.assert_one(self.row_idx_encoder.contains_flag_range::<AB>(
             &local_cols.flags.row_idx,
             0,
             17,
         ));
         builder.assert_eq(
-            contains_flag_range::<AB>(&self.row_idx_encoder, &local_cols.flags.row_idx, 0, 3),
+            self.row_idx_encoder
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0, 3),
             flags.is_first_4_rows,
         );
         builder.assert_eq(
-            contains_flag_range::<AB>(&self.row_idx_encoder, &local_cols.flags.row_idx, 0, 15),
+            self.row_idx_encoder
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0, 15),
             flags.is_round_row,
         );
         builder.assert_eq(
-            contains_flag::<AB>(&self.row_idx_encoder, &local_cols.flags.row_idx, &[16]),
+            self.row_idx_encoder
+                .contains_flag::<AB>(&local_cols.flags.row_idx, &[16]),
             flags.is_digest_row,
         );
         // If invalid row we want the row_idx to be 17
         builder.assert_eq(
-            contains_flag::<AB>(&self.row_idx_encoder, &local_cols.flags.row_idx, &[17]),
+            self.row_idx_encoder
+                .contains_flag::<AB>(&local_cols.flags.row_idx, &[17]),
             not::<AB::Expr>(flags.is_digest_row + flags.is_round_row),
         );
 
@@ -275,13 +278,11 @@ impl Sha256Air {
             + local_cols.flags.is_digest_row * next_is_padding_row.clone() * AB::Expr::ONE
             + local_is_padding_row.clone() * AB::Expr::ZERO;
 
-        let local_row_idx = flag_with_val::<AB>(
-            &self.row_idx_encoder,
+        let local_row_idx = self.row_idx_encoder.flag_with_val::<AB>(
             &local_cols.flags.row_idx,
             &(0..18).map(|i| (i, i)).collect::<Vec<_>>(),
         );
-        let next_row_idx = flag_with_val::<AB>(
-            &self.row_idx_encoder,
+        let next_row_idx = self.row_idx_encoder.flag_with_val::<AB>(
             &next_cols.flags.row_idx,
             &(0..18).map(|i| (i, i)).collect::<Vec<_>>(),
         );
@@ -411,7 +412,8 @@ impl Sha256Air {
         // We will only constrain intermed_12 for rows [3, 14], and let it unconstrained for other rows
         // Other rows should put the needed value in intermed_12 to make the below summation constraint hold
         let is_row_3_14 =
-            contains_flag_range::<AB>(&self.row_idx_encoder, &next.flags.row_idx, 3, 14);
+            self.row_idx_encoder
+                .contains_flag_range::<AB>(&next.flags.row_idx, 3, 14);
         for i in 0..SHA256_ROUNDS_PER_ROW {
             // w_idx
             let w_idx = w[i].map(|x| x.into());
@@ -505,8 +507,7 @@ impl Sha256Air {
             for j in 0..SHA256_WORD_U16S {
                 let w_limb =
                     compose::<AB::Expr>(&w[j * 16..(j + 1) * 16], 1) * next.flags.is_round_row;
-                let k_limb = flag_with_val::<AB>(
-                    &self.row_idx_encoder,
+                let k_limb = self.row_idx_encoder.flag_with_val::<AB>(
                     &next.flags.row_idx,
                     &(0..16)
                         .map(|rw_idx| {

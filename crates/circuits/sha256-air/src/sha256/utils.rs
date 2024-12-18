@@ -4,7 +4,7 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
+use openvm_stark_backend::p3_field::AbstractField;
 use rand::{rngs::StdRng, Rng};
 
 use super::{Sha256DigestCols, Sha256RoundCols};
@@ -228,43 +228,4 @@ pub fn compose<F: AbstractField>(a: &[F], limb_size: usize) -> F {
 /// Wrapper of `get_flag_pt` to get the flag pointer as an array
 pub fn get_flag_pt_array<const N: usize>(encoder: &Encoder, flag_idx: usize) -> [u32; N] {
     encoder.get_flag_pt(flag_idx).try_into().unwrap()
-}
-
-/// TODO: make this as a method of [Encoder]
-/// Returns an expression that is 1 if `flag_idxs` contains the encoded flag and 0 otherwise
-pub fn contains_flag<AB: InteractionBuilder>(
-    encoder: &Encoder,
-    vars: &[AB::Var],
-    flag_idxs: &[usize],
-) -> AB::Expr {
-    flag_idxs.iter().fold(AB::Expr::ZERO, |acc, flag_idx| {
-        acc + encoder.get_flag_expr::<AB>(*flag_idx, vars)
-    })
-}
-
-/// TODO: make this as a method of [Encoder]
-/// Returns an expression that is 1 if (l..=r) contains the encoded flag and 0 otherwise
-pub fn contains_flag_range<AB: InteractionBuilder>(
-    encoder: &Encoder,
-    vars: &[AB::Var],
-    l: usize,
-    r: usize,
-) -> AB::Expr {
-    contains_flag::<AB>(encoder, vars, &(l..=r).collect::<Vec<_>>())
-}
-
-/// TODO: make this as a method of [Encoder]
-/// Returns an expression that is 0 if `flag_idxs` doesn't contain the encoded flag
-/// and the corresponding value if it does
-pub fn flag_with_val<AB: InteractionBuilder>(
-    encoder: &Encoder,
-    vars: &[AB::Var],
-    flag_idxs: &[(usize, usize)],
-) -> AB::Expr {
-    flag_idxs
-        .iter()
-        .fold(AB::Expr::ZERO, |acc, (flag_idx, val)| {
-            acc + encoder.get_flag_expr::<AB>(*flag_idx, vars)
-                * AB::Expr::from_canonical_usize(*val)
-        })
 }

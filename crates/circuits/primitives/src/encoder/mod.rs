@@ -22,6 +22,7 @@ impl Encoder {
     /// The zero point is reserved for the dummy row.
     /// `max_degree` is the upper bound for the flag expressions, but the `eval` function
     /// of the encoder itself will use some constraints of degree `max_degree + 1`.
+    /// `reserve_invalid` indicates if the encoder should reserve the (0, ..., 0) point as an invalid/dummy flag.
     pub fn new(cnt: usize, max_degree: u32, reserve_invalid: bool) -> Self {
         let binomial = |x: u32| {
             let mut res = 1;
@@ -123,6 +124,42 @@ impl Encoder {
 
     pub fn width(&self) -> usize {
         self.var_cnt
+    }
+
+    /// Returns an expression that is 1 if `flag_idxs` contains the encoded flag and 0 otherwise
+    pub fn contains_flag<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        flag_idxs: &[usize],
+    ) -> AB::Expr {
+        flag_idxs.iter().fold(AB::Expr::ZERO, |acc, flag_idx| {
+            acc + self.get_flag_expr::<AB>(*flag_idx, vars)
+        })
+    }
+
+    /// Returns an expression that is 1 if (l..=r) contains the encoded flag and 0 otherwise
+    pub fn contains_flag_range<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        l: usize,
+        r: usize,
+    ) -> AB::Expr {
+        self.contains_flag::<AB>(vars, &(l..=r).collect::<Vec<_>>())
+    }
+
+    /// Returns an expression that is 0 if `flag_idxs` doesn't contain the encoded flag
+    /// and the corresponding value if it does
+    pub fn flag_with_val<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        flag_idxs: &[(usize, usize)],
+    ) -> AB::Expr {
+        flag_idxs
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, (flag_idx, val)| {
+                acc + self.get_flag_expr::<AB>(*flag_idx, vars)
+                    * AB::Expr::from_canonical_usize(*val)
+            })
     }
 }
 
