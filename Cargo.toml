@@ -50,6 +50,7 @@ members = [
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
     "extensions/rv32-adapters",
+    "extensions/verifier",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
