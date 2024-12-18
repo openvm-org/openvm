@@ -1,0 +1,19 @@
+[package]
+name = "i256-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+
+[features]
+default = []
+std = [
+    "openvm/std",
+    "openvm-bigint-guest/std",
+]
