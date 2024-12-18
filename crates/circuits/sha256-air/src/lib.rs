@@ -1,4 +1,11 @@
-//! Standalone AIR implementation of a single SHA256 block
+//! Implementation of the SHA256 compression function without padding
+//! This this AIR doesn't constrain any of the message padding
 
-mod sha256;
-pub use sha256::*;
+mod air;
+mod columns;
+mod trace;
+mod utils;
+
+pub use air::*;
+pub use columns::*;
+pub use utils::*;

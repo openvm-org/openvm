@@ -19,6 +19,21 @@ pub struct Sha256RoundCols<T> {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
+pub struct Sha256DigestCols<T> {
+    pub flags: Sha256FlagsCols<T>,
+    /// Will serve as previous hash values for the next block
+    pub hash: Sha256WorkVarsCols<T>,
+    pub schedule_helper: Sha256MessageHelperCols<T>,
+    /// The actual final hash values of the given block
+    /// Note: the above `hash` will be equal to `final_hash` unless we are on the last block
+    pub final_hash: [[T; SHA256_WORD_U8S]; SHA256_HASH_WORDS],
+    /// The final hash of the previous block
+    /// Note: will be constrained using interactions with the chip itself
+    pub prev_hash: [[T; SHA256_WORD_U16S]; SHA256_HASH_WORDS],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct Sha256MessageScheduleCols<T> {
     /// The message schedule words as 32-bit intergers
     pub w: [[T; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW],
@@ -36,21 +51,6 @@ pub struct Sha256WorkVarsCols<T> {
     /// The carry's used for addition during each iteration when computing `a` and `e`
     pub carry_a: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW],
     pub carry_e: [[T; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, AlignedBorrow)]
-pub struct Sha256DigestCols<T> {
-    pub flags: Sha256FlagsCols<T>,
-    /// Will serve as previous hash values for the next block
-    pub hash: Sha256WorkVarsCols<T>,
-    pub schedule_helper: Sha256MessageHelperCols<T>,
-    /// The actual final hash values of the given block
-    /// Note: the above `hash` will be equal to `final_hash` unless we are on the last block
-    pub final_hash: [[T; SHA256_WORD_U8S]; SHA256_HASH_WORDS],
-    /// The final hash of the previous block
-    /// Note: will be constrained using interactions with the chip itself
-    pub prev_hash: [[T; SHA256_WORD_U16S]; SHA256_HASH_WORDS],
 }
 
 /// These are the columns that are used to help with the message schedule additions

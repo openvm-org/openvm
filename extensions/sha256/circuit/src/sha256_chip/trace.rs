@@ -209,14 +209,6 @@ where
             }
         }
 
-        println!(
-            "non_padded_height: {}, height: {}, width: {}, values.len(): {}",
-            non_padded_height,
-            height,
-            width,
-            values.len()
-        );
-
         // Fill in the padding rows
         for i in non_padded_height..height {
             let rows = &mut values[(i - 1) * width..(i + 1) * width];
@@ -280,6 +272,7 @@ where
         let next_cols: &mut Sha256VmRoundCols<Val<SC>> = first.borrow_mut();
         Sha256Air::generate_intermed_12::<Val<SC>>(&mut local_cols.inner, &next_cols.inner);
 
+        println!("SHA256 height: {}, # of cells: {}", height, values.len());
         AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![])
     }
 }

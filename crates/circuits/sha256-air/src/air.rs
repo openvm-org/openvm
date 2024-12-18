@@ -24,6 +24,7 @@ use super::{
 pub struct Sha256Air {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
+    /// Internal bus for self-interactions in this AIR.
     bus_idx: usize,
 }
 
@@ -84,19 +85,18 @@ impl Sha256Air {
 
         self.row_idx_encoder
             .eval(builder, &local_cols.flags.row_idx);
-        builder.assert_one(self.row_idx_encoder.contains_flag_range::<AB>(
-            &local_cols.flags.row_idx,
-            0,
-            17,
-        ));
+        builder.assert_one(
+            self.row_idx_encoder
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0..=17),
+        );
         builder.assert_eq(
             self.row_idx_encoder
-                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0, 3),
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0..=3),
             flags.is_first_4_rows,
         );
         builder.assert_eq(
             self.row_idx_encoder
-                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0, 15),
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0..=15),
             flags.is_round_row,
         );
         builder.assert_eq(
@@ -411,9 +411,9 @@ impl Sha256Air {
         // Constrain intermed
         // We will only constrain intermed_12 for rows [3, 14], and let it unconstrained for other rows
         // Other rows should put the needed value in intermed_12 to make the below summation constraint hold
-        let is_row_3_14 =
-            self.row_idx_encoder
-                .contains_flag_range::<AB>(&next.flags.row_idx, 3, 14);
+        let is_row_3_14 = self
+            .row_idx_encoder
+            .contains_flag_range::<AB>(&next.flags.row_idx, 3..=14);
         for i in 0..SHA256_ROUNDS_PER_ROW {
             // w_idx
             let w_idx = w[i].map(|x| x.into());

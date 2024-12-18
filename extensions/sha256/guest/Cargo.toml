@@ -9,7 +9,7 @@ description = "Guest extension for Sha256"
 openvm = { workspace = true }
 openvm-platform = { workspace = true }
 
-sha2 = { version = "0.10", default-features = false, optional = true }
+sha2 = { version = "0.10", default-features = false }
 
 [features]
 default = []

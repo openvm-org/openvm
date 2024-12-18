@@ -12,7 +12,7 @@ use super::{
     get_flag_pt_array, maj_field, small_sig0_field, small_sig1_field, SHA256_BLOCK_WORDS,
     SHA256_DIGEST_WIDTH, SHA256_HASH_WORDS, SHA256_ROUND_WIDTH, SHA256_WIDTH,
 };
-use crate::sha256::{
+use crate::{
     big_sig0, big_sig1, ch, columns::Sha256DigestCols, limbs_into_u32, maj, small_sig0, small_sig1,
     u32_into_limbs, SHA256_H, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK,
     SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,

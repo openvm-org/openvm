@@ -119,8 +119,7 @@ impl Sha256VmAir {
 
         builder.assert_one(self.padding_encoder.contains_flag_range::<AB>(
             &local_cols.control.pad_flags,
-            NotConsidered as usize,
-            EntirePadding as usize,
+            NotConsidered as usize..=EntirePadding as usize,
         ));
 
         Self::eval_padding_transitions(self, builder, local_cols, next_cols);
@@ -191,19 +190,17 @@ impl Sha256VmAir {
         // Constrain the padding flags are of correct type (eg is not padding or first padding)
         let is_next_first_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
-            FirstPadding0 as usize,
-            FirstPadding7_LastRow as usize,
+            FirstPadding0 as usize..=FirstPadding7_LastRow as usize,
         );
 
         let is_next_last_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
-            FirstPadding0_LastRow as usize,
-            EntirePaddingLastRow as usize,
+            FirstPadding0_LastRow as usize..=EntirePaddingLastRow as usize,
         );
 
-        let is_next_entire_padding = self.padding_encoder.contains_flag::<AB>(
+        let is_next_entire_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
-            &[EntirePadding as usize, EntirePaddingLastRow as usize],
+            EntirePadding as usize..=EntirePaddingLastRow as usize,
         );
 
         let is_next_not_considered = self
@@ -272,8 +269,7 @@ impl Sha256VmAir {
                 + if i < 15 {
                     self.padding_encoder.contains_flag_range::<AB>(
                         &local.control.pad_flags,
-                        FirstPadding0 as usize + i + 1,
-                        FirstPadding15 as usize,
+                        FirstPadding0 as usize + i + 1..=FirstPadding15 as usize,
                     )
                 } else {
                     AB::Expr::ZERO
@@ -281,8 +277,7 @@ impl Sha256VmAir {
                 + if i < 7 {
                     self.padding_encoder.contains_flag_range::<AB>(
                         &local.control.pad_flags,
-                        FirstPadding0_LastRow as usize + i + 1,
-                        FirstPadding7_LastRow as usize,
+                        FirstPadding0_LastRow as usize + i + 1..=FirstPadding7_LastRow as usize,
                     )
                 } else {
                     AB::Expr::ZERO
@@ -301,11 +296,11 @@ impl Sha256VmAir {
                     ) + if i > 0 {
                         self.padding_encoder.contains_flag_range::<AB>(
                             &local.control.pad_flags,
-                            FirstPadding0_LastRow as usize,
-                            min(
-                                FirstPadding0_LastRow as usize + i - 1,
-                                FirstPadding7_LastRow as usize,
-                            ),
+                            FirstPadding0_LastRow as usize
+                                ..=min(
+                                    FirstPadding0_LastRow as usize + i - 1,
+                                    FirstPadding7_LastRow as usize,
+                                ),
                         )
                     } else {
                         AB::Expr::ZERO
@@ -316,8 +311,7 @@ impl Sha256VmAir {
                 + if i > 0 {
                     self.padding_encoder.contains_flag_range::<AB>(
                         &local.control.pad_flags,
-                        FirstPadding0 as usize,
-                        FirstPadding0 as usize + i - 1,
+                        FirstPadding0 as usize..=FirstPadding0 as usize + i - 1,
                     )
                 } else {
                     AB::Expr::ZERO
@@ -356,8 +350,7 @@ impl Sha256VmAir {
 
         let is_last_padding_row = self.padding_encoder.contains_flag_range::<AB>(
             &local.control.pad_flags,
-            FirstPadding0_LastRow as usize,
-            EntirePaddingLastRow as usize,
+            FirstPadding0_LastRow as usize..=EntirePaddingLastRow as usize,
         );
 
         builder.when(is_last_padding_row.clone()).assert_eq(

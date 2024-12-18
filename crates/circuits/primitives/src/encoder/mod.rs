@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_field::{AbstractField, Field},
@@ -141,20 +143,20 @@ impl Encoder {
     pub fn contains_flag_range<AB: InteractionBuilder>(
         &self,
         vars: &[AB::Var],
-        l: usize,
-        r: usize,
+        range: RangeInclusive<usize>,
     ) -> AB::Expr {
-        self.contains_flag::<AB>(vars, &(l..=r).collect::<Vec<_>>())
+        self.contains_flag::<AB>(vars, &range.collect::<Vec<_>>())
     }
 
-    /// Returns an expression that is 0 if `flag_idxs` doesn't contain the encoded flag
-    /// and the corresponding value if it does
+    /// Returns an expression that is 0 if `flag_idxs_vals` doesn't contain the encoded flag
+    /// and the corresponding val if it does
+    /// `flag_idxs_vals` is a list of tuples (flag_idx, val)
     pub fn flag_with_val<AB: InteractionBuilder>(
         &self,
         vars: &[AB::Var],
-        flag_idxs: &[(usize, usize)],
+        flag_idx_vals: &[(usize, usize)],
     ) -> AB::Expr {
-        flag_idxs
+        flag_idx_vals
             .iter()
             .fold(AB::Expr::ZERO, |acc, (flag_idx, val)| {
                 acc + self.get_flag_expr::<AB>(*flag_idx, vars)
