@@ -2,15 +2,17 @@
 
 use std::{fmt::Debug, marker::PhantomData};
 
-use ax_ecc_execution::curves::bn254::Bn254 as Halo2Bn254;
-use axvm_ecc_guest::{algebra::IntMod, msm, sw::SwPoint, AffinePoint};
-use axvm_pairing_guest::{
-    affine_point::AffineCoords,
-    bn254::{Bn254Point, EcPoint, Fp, Fr},
-    pairing::{FinalExp, MultiMillerLoop},
-};
 use halo2curves_axiom::bn256::{Bn256, Fq as Halo2Fp, Fr as Halo2Fr, G1Affine, G2Affine};
 use lazy_static::lazy_static;
+use openvm_ecc_guest::{
+    algebra::{field::FieldExtension, IntMod},
+    msm, AffinePoint,
+};
+use openvm_pairing_guest::{
+    affine_point::AffineCoords,
+    bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
+    pairing::PairingCheck,
+};
 use snark_verifier::{
     loader::{EcPointLoader, Loader, ScalarLoader},
     pcs::{
@@ -80,7 +82,7 @@ impl EcPointLoader<G1Affine> for AxVmLoader {
             scalars.push(scalar.0.clone());
             base.push(point.0.clone());
         }
-        AxVmEcPoint(msm::<Bn254Point, Fr>(&scalars, &base), PhantomData)
+        AxVmEcPoint(msm::<EcPoint, Fr>(&scalars, &base), PhantomData)
     }
 }
 
@@ -127,60 +129,27 @@ where
 {
     type DecidingKey = KzgDecidingKey<Bn256>;
 
+    #[allow(non_snake_case)]
     fn decide(
         dk: &Self::DecidingKey,
         KzgAccumulator { lhs, rhs }: KzgAccumulator<G1Affine, AxVmLoader>,
     ) -> Result<(), Error> {
-        let terms: [(&Bn254Point, &G2Affine); 2] =
-            [(&lhs.0, &dk.g2().into()), (&rhs.0, &(-dk.s_g2()).into())];
-        // let P = Vec::with_capacity(2);
-        // let Q = Vec::with_capacity(2);
-        // for t in terms {
-        //     let point = AffinePoint {
-        //         x: t.0.x(),
-        //         y: t.0.y(),
-        //     };
-        //     P.push(point);
-        //     let x = t.1.x().to_bytes();
-        //     let y = t.1.y().to_bytes();
-        //     let point = AffinePoint {
-        //         x: Fp2::from_coeffs([Fp::from_le_bytes(&x[0..32]), Fp::from_le_bytes(&x[32..64])]),
-        //         y: Fp2::from_coeffs([Fp::from_le_bytes(&y[0..32]), Fp::from_le_bytes(&y[32..64])]),
-        //     };
-        //     Q.push(point);
-        // }
-        // let res = Bn254::pairing_check(&P, &Q);
+        let terms: [(EcPoint, G2Affine); 2] = [(lhs.0, dk.g2()), (rhs.0, (-dk.s_g2()))];
         let mut P = Vec::with_capacity(2);
         let mut Q = Vec::with_capacity(2);
         for t in terms {
-            let mut x = [0; 32];
-            x.copy_from_slice(t.0.x().as_le_bytes());
-            let mut y = [0; 32];
-            y.copy_from_slice(t.0.y().as_le_bytes());
-            let point = AffinePoint {
-                x: Halo2Fp::from_bytes(&x).unwrap(),
-                y: Halo2Fp::from_bytes(&y).unwrap(),
-            };
+            let x = t.1.x().to_bytes();
+            let y = t.1.y().to_bytes();
+            let point = AffinePoint { x: t.0.x, y: t.0.y };
             P.push(point);
             let point = AffinePoint {
-                x: t.1.x(),
-                y: t.1.y(),
+                x: Fp2::from_coeffs([Fp::from_le_bytes(&x[0..32]), Fp::from_le_bytes(&x[32..64])]),
+                y: Fp2::from_coeffs([Fp::from_le_bytes(&y[0..32]), Fp::from_le_bytes(&y[32..64])]),
             };
             Q.push(point);
         }
-        // let res = Bn254::pairing_check(&P, &Q);
-        // multi_miller_loop.final_exponentiation.assert_is_one();
-        // let c = Bn254::assert_final_exp_is_one(&res);
-        let f = Halo2Bn254::multi_miller_loop(&P, &Q);
-        Halo2Bn254::assert_final_exp_is_one(&f, &P, &Q);
+        Bn254::pairing_check(&P, &Q).unwrap();
         Ok(())
-        // bool::from(
-
-        //         .final_exponentiation()
-        //         .is_identity(),
-        // )
-        // .then_some(())
-        // .ok_or_else(|| Error::AssertionFailure("e(lhs, g2)·e(rhs, -s_g2) == O".to_string()))
     }
 
     fn decide_all(

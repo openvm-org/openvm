@@ -3,17 +3,17 @@ use std::{
     marker::PhantomData,
 };
 
-use axvm_ecc_guest::{algebra::IntMod, sw::SwPoint};
-use axvm_keccak256_guest::keccak256;
-use axvm_pairing_guest::{
-    affine_point::AffineCoords,
-    bn254::{Bn254Point, Fp, Fr},
-};
 use halo2curves_axiom::{
     bn256::{Fq, Fr as Halo2Fr, G1Affine},
     Coordinates, CurveAffine,
 };
 use itertools::Itertools;
+use openvm_ecc_guest::algebra::IntMod;
+use openvm_keccak256_guest::keccak256;
+use openvm_pairing_guest::{
+    affine_point::AffineCoords,
+    bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr},
+};
 use snark_verifier::{
     util::transcript::{Transcript, TranscriptRead},
     Error,
@@ -56,14 +56,11 @@ impl<S> Transcript<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>
     }
 
     // is this sus?
-    fn common_ec_point(
-        &mut self,
-        ec_point: &AxVmEcPoint<G1Affine, Bn254Point>,
-    ) -> Result<(), Error> {
+    fn common_ec_point(&mut self, ec_point: &AxVmEcPoint<G1Affine, EcPoint>) -> Result<(), Error> {
         let mut x = [0; 32];
         let mut y = [0; 32];
-        x.copy_from_slice(ec_point.0.x().as_le_bytes());
-        y.copy_from_slice(ec_point.0.y().as_le_bytes());
+        x.copy_from_slice(ec_point.0.x.as_le_bytes());
+        y.copy_from_slice(ec_point.0.y.as_le_bytes());
         let coordinates = Option::<Coordinates<G1Affine>>::from(
             G1Affine::new(Fq::from_bytes(&x).unwrap(), Fq::from_bytes(&y).unwrap()).coordinates(),
         )
@@ -82,7 +79,7 @@ impl<S> Transcript<G1Affine, AxVmLoader> for AxVmTranscript<G1Affine, S, Vec<u8>
     }
 
     fn common_scalar(&mut self, scalar: &AxVmScalar<Halo2Fr, Fr>) -> Result<(), Error> {
-        self.buf.extend(scalar.0.as_be_bytes());
+        self.buf.extend(scalar.0.to_be_bytes());
 
         Ok(())
     }
@@ -109,7 +106,7 @@ where
         Ok(scalar)
     }
 
-    fn read_ec_point(&mut self) -> Result<AxVmEcPoint<G1Affine, Bn254Point>, Error> {
+    fn read_ec_point(&mut self) -> Result<AxVmEcPoint<G1Affine, EcPoint>, Error> {
         let [mut x, mut y] = [[0; 32]; 2];
         for repr in [&mut x, &mut y] {
             self.stream
@@ -119,7 +116,7 @@ where
         }
         let x = Fp::from_be_bytes(&x);
         let y = Fp::from_be_bytes(&y);
-        let ec_point = AxVmEcPoint(Bn254Point { x, y }, PhantomData);
+        let ec_point = AxVmEcPoint(EcPoint { x, y }, PhantomData);
         self.common_ec_point(&ec_point)?;
         Ok(ec_point)
     }

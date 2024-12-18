@@ -5,14 +5,13 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-axvm-pairing-guest = { workspace = true, features = [
+openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bn254",
     "bls12_381",
 ] }
-ax-ecc-execution = { workspace = true }
-axvm-keccak256-guest = { workspace = true, default-features = false }
-axvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+openvm-keccak256-guest = { workspace = true, default-features = false }
+openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.7-git", default-features = false, features = ["halo2-axiom"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
@@ -27,4 +26,3 @@ group = "0.13.0"
 [dev-dependencies]
 rng = "0.1.0"
 subtle = "2.6.1"
-axvm-ecc-constants = { workspace = true }

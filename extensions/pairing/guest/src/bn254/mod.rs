@@ -679,33 +679,3 @@ impl PairingIntrinsics for Bn254 {
         ],
     ];
 }
-
-axvm_ecc_sw_setup::sw_setup! {
-    Bn254Point { mod_type = Bn254Fp },
-}
-
-pub type EcPoint = Bn254Point;
-
-impl CyclicGroup for Bn254Point {
-    const GENERATOR: Self = Bn254Point {
-        x: Bn254Fp::from_const_bytes(hex!(
-            "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
-        )),
-        y: Bn254Fp::from_const_bytes(hex!(
-            "B8D410FB8FD0479C195485A648B417FDA808110EFCFBA45D65C4A32677DA3A48"
-        )),
-    };
-    const NEG_GENERATOR: Self = Bn254Point {
-        x: Bn254Fp::from_const_bytes(hex!(
-            "9817F8165B81F259D928CE2DDBFC9B02070B87CE9562A055ACBBDCF97E66BE79"
-        )),
-        y: Bn254Fp::from_const_bytes(hex!(
-            "7727EF046F2FB863E6AB7A59B74BE80257F7EEF103045BA29A3B5CD98825C5B7"
-        )),
-    };
-}
-
-impl IntrinsicCurve for Bn254 {
-    type Scalar = Bn254Scalar;
-    type Point = Bn254Point;
-}
