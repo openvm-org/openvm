@@ -11,6 +11,7 @@ The main components of the repository are:
   - [Toolchain](#toolchain)
   - [Circuit Framework](#circuit-framework)
   - [Circuit Foundations](#circuit-foundations)
+  - [Examples](#examples)
   - [Extensions](#extensions)
     - [RV32IM](#rv32im)
     - [Native Recursion](#native-recursion)
@@ -62,6 +63,10 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-circuit-primitives-derive`](../../crates/circuits/primitives/derive): Procedural macros for use in circuit to derive traits.
 - [`openvm-poseidon2-air`](../../crates/circuits/poseidon2-air): Standalone poseidon2 AIR implementation which is configurable based on the desired maximum constraint degree.
 - [`openvm-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating a chip for any modular arithmetic expression for a modulus known at compile time.
+
+### Examples
+
+- [`examples`](../../examples): Examples of guest programs using the OpenVM framework. All of the examples can be built and run using the CLI.
 
 ### Extensions
 
