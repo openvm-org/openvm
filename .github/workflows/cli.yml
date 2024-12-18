@@ -59,6 +59,11 @@ jobs:
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
 
+      - name: Install cargo-openvm
+        working-directory: crates/cli
+        run: |
+          cargo install --force --locked --path .
+
       - name: Build book examples
         working-directory: examples
         run: |
@@ -66,7 +71,7 @@ jobs:
             if [ -f "${dir}Cargo.toml" ]; then
               echo "Building ${dir%/}"
               cd "$dir"
-              cargo run --bin cargo-openvm -- openvm build
+              cargo openvm build
               cd ..
             fi
           done
