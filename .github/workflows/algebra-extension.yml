@@ -7,7 +7,6 @@ on:
     branches: ["**"]
     paths:
       - "extensions/algebra/**"
-      - "extensions/algebra/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

@@ -12,8 +12,6 @@ on:
       - "extensions/ecc/**"
       - "extensions/native/compiler/**"
       - "extensions/pairing/**"
-      - "extensions/pairing/tests/**"
-      - "extensions/ecc/tests/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
