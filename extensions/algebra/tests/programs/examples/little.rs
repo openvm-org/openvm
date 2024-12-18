@@ -22,10 +22,10 @@ pub fn main() {
     let mut res = Secp256k1Coord::from_u32(1);
     let inv = res.clone().div_unsafe(&a);
 
-    for i in 0..32 {
+    for pow_bit in pow {
         for j in 0..8 {
-            if pow[i] & (1 << j) != 0 {
-                res = res * &a;
+            if pow_bit & (1 << j) != 0 {
+                res *= &a;
             }
             a *= a.clone();
         }

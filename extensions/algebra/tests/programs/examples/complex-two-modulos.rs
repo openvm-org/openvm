@@ -1,8 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// use openvm_algebra_guest::{field::ComplexConjugate, DivAssignUnsafe, DivUnsafe, IntMod};
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{DivUnsafe, IntMod};
 
 openvm::entry!(main);
 

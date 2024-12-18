@@ -11,7 +11,7 @@ openvm-platform = { path = "../../../../crates/toolchain/platform" }
 openvm-algebra-guest = { path = "../../guest" }
 openvm-algebra-moduli-setup = { path = "../../moduli-setup", default-features = false }
 openvm-algebra-complex-macros = { path = "../../guest/src/field/complex-macros", default-features = false }
-
+num-bigint-dig = "0.8"
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
