@@ -59,20 +59,6 @@ jobs:
         run: |
           bash ./extensions/native/recursion/trusted_setup_s3.sh
 
-      # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
-      - name: Run app-level CLI commands
-        working-directory: crates/cli
-        run: |
-          export RUST_BACKTRACE=1
-          cargo build
-          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
-
-      - name: Install cargo-openvm
-        working-directory: crates/cli
-        run: |
-          rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
-          cargo install --force --locked --path .
-
       - name: Build book examples
         working-directory: examples
         run: |
@@ -80,8 +66,15 @@ jobs:
             if [ -f "${dir}Cargo.toml" ]; then
               echo "Building ${dir%/}"
               cd "$dir"
-              cargo openvm build
-              cargo openvm build --features std
+              cargo run --bin cargo-openvm -- openvm build
               cd ..
             fi
           done
+
+      # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
+      - name: Run app-level CLI commands
+        working-directory: crates/cli
+        run: |
+          export RUST_BACKTRACE=1
+          cargo build
+          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
