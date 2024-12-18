@@ -9,11 +9,8 @@ description = "Guest extension for Sha256"
 openvm = { workspace = true }
 openvm-platform = { workspace = true }
 
-serde = { workspace = true, features = ["alloc"] }
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.10", default-features = false, optional = true }
 
 [features]
 default = []
-std = ["serde/std"]
+std = []

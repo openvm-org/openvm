@@ -5,19 +5,10 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-p3-monty-31 = { workspace = true }
-p3-symmetric = { workspace = true }
-p3-poseidon2 = { workspace = true }
-zkhash = { workspace = true }
-
 openvm-circuit-primitives = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
-openvm-circuit-derive = { workspace = true }
 
 rand.workspace = true
-lazy_static.workspace = true
-itertools.workspace = true
 
 [dev-dependencies]
 p3-symmetric = { workspace = true }
