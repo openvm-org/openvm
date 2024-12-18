@@ -20,7 +20,7 @@ openvm-circuit-primitives = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
-# disable jemalloc to be compatible with afs-starkbackend
+# disable jemalloc to be compatible with stark-backend
 snark-verifier-sdk = { workspace = true, optional = true }
 
 tracing.workspace = true

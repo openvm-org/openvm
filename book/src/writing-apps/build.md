@@ -37,34 +37,24 @@ The following flags are available for the `cargo openvm build` command:
   cargo openvm build --features my_feature
   ```
 
-- `--bin`
+- `--bin <NAME>`
 
-  **Description**: Restricts the build to binary targets. If your project has multiple target types (binaries, libraries, examples, etc.), using `--bin` ensures only binary targets are considered.
-
-  **Usage Example**:
-
-  ```bash
-  cargo openvm build --bin
-  ```
-
-- `--example`
-
-  **Description**: Restricts the build to example targets. Projects often include code samples or demos under the examples directory, and this flag focuses on compiling those.
+  **Description**: Restricts the build to the binary target with the given name, similar to `cargo build --bin <NAME>`. If your project has multiple target types (binaries, libraries, examples, etc.), using `--bin <NAME>` narrows down the build to the binary target with the given name.
 
   **Usage Example**:
 
   ```bash
-  cargo openvm build --example
+  cargo openvm build --bin my_bin
   ```
 
-- `--name <NAME>`
+- `--example <NAME>`
 
-  **Description**: Filters targets by name. Only targets whose names contain the given substring will be built.
+  **Description**: Restricts the build to the example target with the given name, similar to `cargo build --example <NAME>`. Projects often include code samples or demos under the examples directory, and this flag focuses on compiling a specific example.
 
-  **Usage Example**: To build only targets that have `client` in their name:
+  **Usage Example**:
 
   ```bash
-  cargo openvm build --name client
+  cargo openvm build --example my_example
   ```
 
 - `--no-transpile`
