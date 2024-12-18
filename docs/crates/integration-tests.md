@@ -5,7 +5,6 @@ Make a `test` crate inside the extension folder. As an example, here is the stru
 ```
 extensions/rv32im/tests/
 ├── Cargo.toml
-├── openvm.toml
 ├── src
 │   └── lib.rs
 ├── programs
@@ -61,10 +60,3 @@ fn test_fibonacci_prove() -> Result<()> {
 ```
 
 Note: If the crate with example is not in `./programs`, specify the relative path with `get_programs_dir!("path to the programs crate")`. 
-
-To build the program with CLI, you can go to the `extensions/rv32im/tests/programs` folder and do:
-
-```bash
-cargo openvm build --example --name example_name
-```
-Refer to the [overview of extensions](../../book/src/custom-extensions/overview.md) to see what needs to go into the `openvm.toml` file.
