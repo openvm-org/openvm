@@ -244,7 +244,8 @@ fn test_memory_controller() {
     });
     let memory_requester_trace = generate_trace(records, aux_factory);
 
-    memory_controller.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
+    memory_controller.finalize();
+    memory_controller.finalize_step2(None::<&mut Poseidon2Chip<BabyBear>>);
 
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
@@ -300,7 +301,8 @@ fn test_memory_controller_persistent() {
         0,
     );
 
-    memory_controller.finalize(Some(&mut poseidon_chip));
+    memory_controller.finalize();
+    memory_controller.finalize_step2(Some(&mut poseidon_chip));
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
         Arc::new(memory_requester_air),

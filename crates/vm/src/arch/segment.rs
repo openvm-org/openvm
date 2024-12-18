@@ -11,17 +11,14 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     metrics::cycle_tracker::CycleTracker,
-    system::{
-        memory::{Equipartition, CHUNK},
-        poseidon2::Poseidon2Chip,
-    },
+    system::memory::{Equipartition, CHUNK},
 };
 
 /// Check segment every 100 instructions.
@@ -258,23 +255,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         {
             // Need some partial borrows, so code is ugly:
             let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
-            self.final_memory = if self.system_config().continuation_enabled {
-                let chip = self
-                    .chip_complex
-                    .inventory
-                    .periphery
-                    .get_mut(
-                        VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
-                    )
-                    .expect("Poseidon2 chip required for persistent memory");
-                let hasher: &mut Poseidon2Chip<F> = chip
-                    .as_any_kind_mut()
-                    .downcast_mut()
-                    .expect("Poseidon2 chip required for persistent memory");
-                memory_controller.finalize(Some(hasher))
-            } else {
-                memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
-            };
+            self.final_memory = memory_controller.finalize();
         }
         #[cfg(feature = "bench-metrics")]
         if collect_metrics {

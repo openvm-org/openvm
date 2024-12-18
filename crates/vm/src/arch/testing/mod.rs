@@ -199,10 +199,12 @@ type TestSC = BabyBearBlake3Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
-        self.memory
-            .controller
-            .borrow_mut()
-            .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
+        {
+            let mut memory_controller = self.memory.controller.borrow_mut();
+            memory_controller.finalize();
+            memory_controller.finalize_step2(None::<&mut Poseidon2Chip<BabyBear>>);
+        }
+
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()

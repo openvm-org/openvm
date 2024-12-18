@@ -22,7 +22,7 @@ use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     rap::AnyRap,
@@ -113,12 +113,12 @@ enum FinalState<F> {
 }
 #[derive(Debug, Default)]
 struct VolatileFinalState<F> {
-    _marker: PhantomData<F>,
+    final_memory: TimestampedEquipartition<F, 1>,
 }
 #[allow(dead_code)]
 #[derive(Debug)]
 struct PersistentFinalState<F> {
-    final_memory: Equipartition<F, CHUNK>,
+    final_memory: TimestampedEquipartition<F, CHUNK>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -459,29 +459,62 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    pub fn finalize(
-        &mut self,
-        hasher: Option<&mut impl HasherChip<CHUNK, F>>,
-    ) -> Option<Equipartition<F, CHUNK>> {
+    pub fn finalize(&mut self) -> Option<Equipartition<F, CHUNK>> {
         if self.final_state.is_some() {
             panic!("Cannot finalize more than once");
         }
 
         let (records, final_memory) = match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
+            MemoryInterface::Volatile { .. } => {
                 let (final_memory, records) = self.memory.finalize::<1>();
-                boundary_chip.finalize(final_memory);
-                self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+                self.final_state = Some(FinalState::Volatile(VolatileFinalState {
+                    final_memory: final_memory.clone(),
+                }));
                 (records, None)
             }
-            MemoryInterface::Persistent {
-                merkle_chip,
-                boundary_chip,
-                initial_memory,
-            } => {
-                let hasher = hasher.unwrap();
-
+            MemoryInterface::Persistent { .. } => {
                 let (final_partition, records) = self.memory.finalize::<CHUNK>();
+                let final_memory_values = final_partition
+                    .par_iter()
+                    .map(|(&key, &value)| (key, value.values))
+                    .collect();
+                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+                    final_memory: final_partition,
+                }));
+                (records, Some(final_memory_values))
+            }
+        };
+        for record in records {
+            self.access_adapters.add_record(record);
+        }
+
+        final_memory
+    }
+
+    pub fn finalize_step2(&mut self, hasher: Option<&mut impl HasherChip<CHUNK, F>>) {
+        let Self {
+            ref mut interface_chip,
+            ref mut final_state,
+            ..
+        } = self;
+        let final_state = final_state.take().unwrap();
+        match (interface_chip, final_state) {
+            (
+                MemoryInterface::Volatile {
+                    ref mut boundary_chip,
+                },
+                FinalState::Volatile(fs),
+            ) => boundary_chip.finalize(fs.final_memory),
+            (
+                MemoryInterface::Persistent {
+                    merkle_chip,
+                    ref mut boundary_chip,
+                    initial_memory,
+                },
+                FinalState::Persistent(fs),
+            ) => {
+                let hasher = hasher.unwrap();
+                let final_partition = fs.final_memory;
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
@@ -493,18 +526,9 @@ impl<F: PrimeField32> MemoryController<F> {
                     hasher,
                 );
                 merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                    final_memory: final_memory_values.clone(),
-                }));
-                // FIXME: avoid clone here.
-                (records, Some(final_memory_values))
             }
-        };
-        for record in records {
-            self.access_adapters.add_record(record);
+            _ => unreachable!(),
         }
-
-        final_memory
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

@@ -922,9 +922,27 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     ) -> ProofInput<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        E: Chip<SC>,
-        P: Chip<SC>,
+        E: Chip<SC> + AnyEnum,
+        P: Chip<SC> + AnyEnum,
     {
+        if self.memory_controller().borrow().continuation_enabled() {
+            let chip = self
+                .inventory
+                .periphery
+                .get_mut(VmChipComplex::<F, E, P>::POSEIDON2_PERIPHERY_IDX)
+                .expect("Poseidon2 chip required for persistent memory");
+            let hasher: &mut Poseidon2Chip<F> = chip
+                .as_any_kind_mut()
+                .downcast_mut()
+                .expect("Poseidon2 chip required for persistent memory");
+            self.base.memory_controller
+                .borrow_mut()
+                .finalize_step2(Some(hasher));
+        } else {
+            self.memory_controller()
+                .borrow_mut()
+                .finalize_step2(None::<&mut Poseidon2Chip<F>>);
+        }
         let has_pv_chip = self.public_values_chip_idx().is_some();
         // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
         let mut builder = VmProofInputBuilder::new();
