@@ -12,7 +12,8 @@ pub trait VmExtension<F: PrimeField32> {
 }
 ```
 
-The `VmExtensionTrait` is a way to specify how to construct a collection of chips and all assign opcodes to be handled by them. This data is collected into a `VmInventory` struct, which is returned.
+The `VmExtension` trait is a way to specify how to construct a collection of chips and all assign opcodes to be handled
+by them. This data is collected into a `VmInventory` struct, which is returned.
 
 To handle previous chip dependencies necessary for chip construction and also automatic bus index management, we provide a `VmInventoryBuilder` api.
 
@@ -20,7 +21,7 @@ Due to strong types, we have **two** associated trait types `Executor, Periphery
 
 ### `VmInventory<Executor, Periphery>`
 
-Think of `VmInventory<Executor, Periphery>` as the collection of all chips, which can be either `Executor` or `Periphery`. It also has a lookup from `AxVmOpcode` to `Executor` which is how runtime execution knows how to route instructions to executors.
+Think of `VmInventory<Executor, Periphery>` as the collection of all chips, which can be either `Executor` or `Periphery`. It also has a lookup from `VmOpcode` to `Executor` which is how runtime execution knows how to route instructions to executors.
 
 `VmInventory` API relevant for `VmExtension`:
 
@@ -28,7 +29,7 @@ Think of `VmInventory<Executor, Periphery>` as the collection of all chips, whic
     pub fn add_executor(
         &mut self,
         executor: impl Into<Executor>,
-        opcodes: impl IntoIterator<Item = AxVmOpcode>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
     ) -> Result<(), VmInventoryError>;
 
     pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<Periphery>);
@@ -53,9 +54,9 @@ where you should specify all opcodes owned by an executor when you add it.
 For runtime execution in a segment, the `VmInventory` also provides the getter functions:
 
 ```rust
-    pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&Executor>;
+    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&Executor>;
 
-    pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut Executor>;
+    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut Executor>;
 ```
 
 ### `VmInventoryBuilder`
@@ -123,7 +124,7 @@ The macro will also make two big enums: one that is an enum of the `Ext*::Execut
 
 The macro will then generate a `create_chip_complex` function.
 
-For that we need to understand what `VmChipComplex` is: it replaces the role of the previous `VmChipSet` and consists of:
+For that we need to understand what `VmChipComplex` consists of:
 
 - System chips
 - `VmInventory`
@@ -152,19 +153,9 @@ function. What this does in words:
 
 For each extension's inventory generation, the `VmInventoryBuilder` is provided with a view of all current chips already inside the running chip complex. This means the inventory generation process is sequential in the order the extensions are specified, and each extension has borrow access to all chips constructed by any extension before it.
 
-### `VirtualMachine`
-
-The top level structs of `VirtualMachine`, `VmExecutor`, `SegmentExecutor` remain almost entirely the same, but now has `VmConfig` as a generic:
-
-```rust
-pub struct VirtualMachine<SC: StarkGenericConfig, E, VC>;
-```
-
-TODO: discuss usage
-
 ## Examples
 
-The `extensions/` folder contains extensions implementing all non-system functionality via several extensions.  For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`axvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
+The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
 
 # Design Choices
 

@@ -7,16 +7,8 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-};
-use axvm_circuit::{
+use itertools::izip;
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VecHeapAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -30,14 +22,22 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use axvm_rv32im_circuit::adapters::{
+use openvm_rv32im_circuit::adapters::{
     abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
-use itertools::izip;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+};
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -82,6 +82,10 @@ impl<
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
         let address_bits = memory_controller.mem_config().pointer_max_bits;
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
+            "address_bits={address_bits} needs to be large enough for high limb range check"
+        );
         Self {
             air: Rv32VecHeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -512,8 +516,8 @@ pub(super) fn vec_heap_generate_trace_row_impl<
         .map(|record| record.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
         .collect();
     debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-    let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits) as u32;
+    let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
     for pair in need_range_check.chunks_exact(2) {
-        bitwise_lookup_chip.request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+        bitwise_lookup_chip.request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
     }
 }

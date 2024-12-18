@@ -1,5 +1,5 @@
-use axvm_native_compiler::prelude::*;
 use itertools::Itertools;
+use openvm_native_compiler::prelude::*;
 
 use crate::vars::{MultiStarkVerificationAdviceVariable, StarkProofVariable};
 

@@ -1,20 +1,19 @@
 use std::{iter, sync::Arc};
 
-use ax_stark_backend::{rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError};
-use ax_stark_sdk::{
+use openvm_stark_backend::{
+    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
+};
+use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    utils::create_seeded_rng,
+    p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::*;
 use rand::Rng;
 
 use crate::xor::XorLookupChip;
 
-// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in ax-circuit-primitives
+// duplicated here from vm/src/system/vm/chip_set.rs to avoid importing vm in openvm-circuit-primitives
 const BYTE_XOR_BUS: usize = 10;
 
 #[test]
@@ -138,7 +137,7 @@ fn negative_test_xor_limbs_chip() {
     );
     assert_eq!(
         result.err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "Expected verification to fail, but it passed"
     );
 }

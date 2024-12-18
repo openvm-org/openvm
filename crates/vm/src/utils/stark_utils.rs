@@ -1,38 +1,43 @@
-use ax_stark_backend::Chip;
-use ax_stark_sdk::{
-    ax_stark_backend::{
-        config::{StarkGenericConfig, Val},
-        verifier::VerificationError,
-    },
+use std::borrow::Borrow;
+
+use openvm_instructions::{exe::VmExe, program::Program};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::{AbstractField, PrimeField32},
+    verifier::VerificationError,
+    Chip,
+};
+use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
     engine::{ProofInputForTest, StarkFriEngine, VerificationDataWithFriParams},
-};
-use axvm_instructions::{exe::AxVmExe, program::Program};
-use p3_baby_bear::BabyBear;
-use p3_field::PrimeField32;
-
-use crate::arch::{
-    vm::{VirtualMachine, VmExecutor},
-    VmConfig, VmMemoryState,
+    p3_baby_bear::BabyBear,
 };
 
-pub fn air_test<VC>(config: VC, exe: impl Into<AxVmExe<BabyBear>>)
+use crate::{
+    arch::{
+        vm::{VirtualMachine, VmExecutor},
+        ExitCode, Streams, VmConfig, VmMemoryState, CONNECTOR_AIR_ID,
+    },
+    system::connector::VmConnectorPvs,
+};
+
+pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
     VC: VmConfig<BabyBear>,
     VC::Executor: Chip<BabyBearPoseidon2Config>,
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
-    air_test_with_min_segments(config, exe, vec![], 1);
+    air_test_with_min_segments(config, exe, Streams::default(), 1);
 }
 
 /// Executes the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VC>(
     config: VC,
-    exe: impl Into<AxVmExe<BabyBear>>,
-    input: Vec<Vec<BabyBear>>,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
 ) -> Option<VmMemoryState<BabyBear>>
 where
@@ -57,9 +62,10 @@ where
 /// Executes the VM and returns the final memory state.
 pub fn new_air_test_with_min_segments<VC>(
     config: VC,
-    exe: impl Into<AxVmExe<BabyBear>>,
-    input: Vec<Vec<BabyBear>>,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
+    always_prove: bool,
 ) -> Option<VmMemoryState<BabyBear>>
 where
     VC: VmConfig<BabyBear>,
@@ -71,12 +77,24 @@ where
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let connector_pvs = &result.per_segment.last().unwrap().per_air[CONNECTOR_AIR_ID]
+        .1
+        .raw
+        .public_values[..];
+    let pvs: &VmConnectorPvs<_> = connector_pvs.borrow();
+    assert_eq!(
+        pvs.exit_code,
+        AbstractField::from_canonical_u32(ExitCode::Success as u32),
+        "Runtime did not exit successfully"
+    );
     let final_memory = result.final_memory.take();
-    let proofs = vm.prove(&pk, result);
+    if std::env::var("RUN_AIR_TEST_PROVING").is_ok() || always_prove {
+        let proofs = vm.prove(&pk, result);
 
-    assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs)
-        .expect("segment proofs should verify");
+        assert!(proofs.len() >= min_segments);
+        vm.verify(&pk.get_vk(), proofs)
+            .expect("segment proofs should verify");
+    }
     final_memory
 }
 
@@ -87,7 +105,7 @@ where
 /// The output AIRs and traces are sorted by height in descending order.
 pub fn gen_vm_program_test_proof_input<SC: StarkGenericConfig, VC>(
     program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
+    input_stream: impl Into<Streams<Val<SC>>> + Clone,
     #[allow(unused_mut)] mut config: VC,
 ) -> ProofInputForTest<SC>
 where
@@ -137,7 +155,7 @@ type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, Verif
 /// Executes program and runs simple STARK prover test (keygen, prove, verify).
 pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VC>(
     program: Program<Val<SC>>,
-    input_stream: Vec<Vec<Val<SC>>>,
+    input_stream: impl Into<Streams<Val<SC>>> + Clone,
     config: VC,
     engine: &E,
 ) -> ExecuteAndProveResult<SC>

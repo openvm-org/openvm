@@ -3,21 +3,21 @@
 
 use core::hint::black_box;
 
-use axvm_algebra_guest::IntMod;
-use axvm_ecc_guest::{
+use openvm_algebra_guest::IntMod;
+use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     msm, Group,
 };
 use hex_literal::hex;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
-axvm_algebra_moduli_setup::moduli_init! {
+openvm_algebra_moduli_setup::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 
-axvm_ecc_sw_setup::sw_init! {
+openvm_ecc_sw_setup::sw_init! {
     Secp256k1Coord,
 }
 

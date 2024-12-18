@@ -1,41 +1,41 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_stark_backend::{
+use derivative::Derivative;
+use itertools::Itertools;
+use openvm_instructions::{exe::VmExe, program::Program, SystemOpcode, VmOpcode};
+use openvm_stark_backend::{
     config::{Com, Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
+    p3_field::{Field, PrimeField64},
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     prover::{
         helper::AirProofInputTestHelper,
         types::{AirProofInput, AirProofRawInput, CommittedTraceData, TraceCommitter},
     },
 };
-use axvm_instructions::{exe::AxVmExe, program::Program, SystemOpcode, UsizeOpcode};
-use derivative::Derivative;
-use itertools::Itertools;
-use p3_field::{Field, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{Instruction, ProgramChip, ProgramExecutionCols, EXIT_CODE_FAIL};
 
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
-    serialize = "AxVmExe<Val<SC>>: Serialize, CommittedTraceData<SC>: Serialize",
-    deserialize = "AxVmExe<Val<SC>>: Deserialize<'de>, CommittedTraceData<SC>: Deserialize<'de>"
+    serialize = "VmExe<Val<SC>>: Serialize, CommittedTraceData<SC>: Serialize",
+    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, CommittedTraceData<SC>: Deserialize<'de>"
 ))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct AxVmCommittedExe<SC: StarkGenericConfig> {
+pub struct VmCommittedExe<SC: StarkGenericConfig> {
     /// Raw executable.
-    pub exe: AxVmExe<Val<SC>>,
+    pub exe: VmExe<Val<SC>>,
     /// Committed program trace.
     pub committed_program: CommittedTraceData<SC>,
 }
 
-impl<SC: StarkGenericConfig> AxVmCommittedExe<SC>
+impl<SC: StarkGenericConfig> VmCommittedExe<SC>
 where
     Val<SC>: PrimeField64,
 {
-    pub fn commit(exe: AxVmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
+    pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
         let cached_trace = generate_cached_trace(&exe.program);
         Self {
             committed_program: CommittedTraceData {
@@ -108,7 +108,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
                 pc: F::from_canonical_u32(pc),
-                opcode: F::from_canonical_usize(instruction.opcode),
+                opcode: instruction.opcode.to_field(),
                 a: instruction.a,
                 b: instruction.b,
                 c: instruction.c,
@@ -124,7 +124,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> Ro
 
 pub(super) fn padding_instruction<F: Field>() -> Instruction<F> {
     Instruction::from_usize(
-        SystemOpcode::TERMINATE.with_default_offset(),
+        VmOpcode::with_default_offset(SystemOpcode::TERMINATE),
         [0, 0, EXIT_CODE_FAIL],
     )
 }

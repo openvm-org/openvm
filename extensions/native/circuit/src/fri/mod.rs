@@ -5,24 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
-    is_zero::{IsZeroIo, IsZeroSubAir},
-    utils::{assert_array_eq, next_power_of_two_or_zero, not},
-    SubAir, TraceSubRowGenerator,
-};
-use ax_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    interaction::InteractionBuilder,
-    p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
-};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
         memory::{
@@ -35,8 +18,24 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, FriOpcode::FRI_REDUCED_OPENING,
+use openvm_circuit_primitives::{
+    is_zero::{IsZeroIo, IsZeroSubAir},
+    utils::{assert_array_eq, next_power_of_two_or_zero, not},
+    SubAir, TraceSubRowGenerator,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
 };
 
 use super::field_extension::{FieldExtension, EXT_DEG};

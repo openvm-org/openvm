@@ -1,12 +1,12 @@
 use alloc::vec::Vec;
 
-use axvm_algebra_guest::{field::FieldExtension, IntMod};
-use axvm_ecc_guest::AffinePoint;
 use group::{ff::Field, prime::PrimeCurveAffine};
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
     pairing::MillerLoopResult,
 };
+use openvm_algebra_guest::{field::FieldExtension, IntMod};
+use openvm_ecc_guest::AffinePoint;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};

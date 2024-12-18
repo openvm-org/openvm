@@ -1,8 +1,8 @@
-use ax_stark_backend::prover::types::Proof;
-use ax_stark_sdk::config::{
-    baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig, FriParameters,
+use openvm_native_compiler::ir::Builder;
+use openvm_stark_backend::prover::types::Proof;
+use openvm_stark_sdk::config::{
+    baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters,
 };
-use axvm_native_compiler::ir::Builder;
 
 use crate::{
     challenger::multi_field32::MultiField32ChallengerVariable, config::outer::OuterConfig,
@@ -13,7 +13,7 @@ use crate::{
 pub fn build_circuit_verify_operations(
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
-    proof: &Proof<BabyBearPoseidon2OuterConfig>,
+    proof: &Proof<BabyBearPoseidon2RootConfig>,
 ) -> DslOperations<OuterConfig> {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;

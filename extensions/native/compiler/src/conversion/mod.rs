@@ -1,14 +1,19 @@
-use axvm_circuit::arch::instructions::{program::Program, *};
-use axvm_instructions::{
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
-    program::DEFAULT_MAX_NUM_PUBLIC_VALUES,
-    FriOpcode::FRI_REDUCED_OPENING,
+    program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
+    PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SysPhantom, SystemOpcode, UsizeOpcode,
+    VmOpcode,
 };
-use p3_field::{ExtensionField, PrimeField32, PrimeField64};
-use program::DEFAULT_PC_STEP;
+use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use serde::{Deserialize, Serialize};
 
-use crate::asm::{AsmInstruction, AssemblyCode};
+use crate::{
+    asm::{AsmInstruction, AssemblyCode},
+    FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
+    NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct CompilerOptions {
@@ -33,13 +38,17 @@ impl Default for CompilerOptions {
 }
 
 impl CompilerOptions {
-    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> usize {
+    pub fn opcode_with_offset<Opcode: UsizeOpcode>(&self, opcode: Opcode) -> VmOpcode {
         let offset = Opcode::default_offset();
-        offset + opcode.as_usize()
+        VmOpcode::from_usize(offset + opcode.as_usize())
+    }
+    pub fn with_cycle_tracker(mut self) -> Self {
+        self.enable_cycle_tracker = true;
+        self
     }
 }
 
-fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
+fn inst<F: PrimeField64>(opcode: VmOpcode, a: F, b: F, c: F, d: AS, e: AS) -> Instruction<F> {
     Instruction {
         opcode,
         a,
@@ -54,7 +63,7 @@ fn inst<F: PrimeField64>(opcode: usize, a: F, b: F, c: F, d: AS, e: AS) -> Instr
 
 #[allow(clippy::too_many_arguments)]
 fn inst_med<F: PrimeField64>(
-    opcode: usize,
+    opcode: VmOpcode,
     a: F,
     b: F,
     c: F,
@@ -76,7 +85,7 @@ fn inst_med<F: PrimeField64>(
 
 #[allow(clippy::too_many_arguments)]
 fn inst_large<F: PrimeField64>(
-    opcode: usize,
+    opcode: VmOpcode,
     a: F,
     b: F,
     c: F,
@@ -106,7 +115,6 @@ enum AS {
 }
 
 impl AS {
-    // TODO[INT-1698]
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
             AS::Immediate => F::ZERO,
@@ -634,7 +642,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             AS::Memory,
         )],
         AsmInstruction::FriReducedOpening(a, b, res, len, alpha, alpha_pow) => vec![Instruction {
-            opcode: options.opcode_with_offset(FRI_REDUCED_OPENING),
+            opcode: options.opcode_with_offset(FriOpcode::FRI_REDUCED_OPENING),
             a: i32_f(a),
             b: i32_f(b),
             c: i32_f(res),

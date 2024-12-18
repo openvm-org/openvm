@@ -1,10 +1,20 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::{
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+        RANGE_TUPLE_CHECKER_BUS,
+    },
+    utils::generate_long_number,
+};
+use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
-use ax_stark_backend::{
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_rv32im_transpiler::DivRemOpcode;
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, Field},
     p3_matrix::{
@@ -15,16 +25,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
-    arch::{
-        testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
-        RANGE_TUPLE_CHECKER_BUS,
-    },
-    utils::generate_long_number,
-};
-use axvm_instructions::{instruction::Instruction, DivRemOpcode};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::core::run_divrem;
@@ -77,7 +78,7 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
         chip,
-        Instruction::from_usize(opcode as usize, [rd, rs1, rs2, 1, 0]),
+        Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [rd, rs1, rs2, 1, 0]),
     );
 
     assert_eq!(
@@ -262,11 +263,11 @@ fn run_rv32_divrem_negative_test(
     };
     tester.execute(
         &mut chip,
-        Instruction::from_usize(div_opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(VmOpcode::from_usize(div_opcode as usize), [0, 0, 0, 1, 1]),
     );
     tester.execute(
         &mut chip,
-        Instruction::from_usize(rem_opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(VmOpcode::from_usize(rem_opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let (q, r, b_sign, c_sign, q_sign, case) =
@@ -338,7 +339,7 @@ fn run_rv32_divrem_negative_test(
         .load(range_tuple_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     } else {
         VerificationError::OodEvaluationMismatch
     });

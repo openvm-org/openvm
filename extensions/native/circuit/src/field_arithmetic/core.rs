@@ -1,23 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use itertools::izip;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    FieldArithmeticOpcode,
-    FieldArithmeticOpcode::{ADD, DIV, MUL, SUB},
-    UsizeOpcode,
-};
-use itertools::izip;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -142,12 +138,13 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = FieldArithmeticOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode =
+            FieldArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; 1]; 2] = reads.into();
         let b = data[0][0];
         let c = data[1][0];
-        let a = FieldArithmetic::run_field_arithmetic(local_opcode_index, b, c).unwrap();
+        let a = FieldArithmetic::run_field_arithmetic(local_opcode, b, c).unwrap();
 
         let output: AdapterRuntimeContext<F, I> = AdapterRuntimeContext {
             to_pc: None,
@@ -155,7 +152,7 @@ where
         };
 
         let record = Self::Record {
-            opcode: local_opcode_index,
+            opcode: local_opcode,
             a,
             b,
             c,

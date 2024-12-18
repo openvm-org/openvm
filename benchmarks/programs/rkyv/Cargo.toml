@@ -1,0 +1,18 @@
+[workspace]
+[package]
+name = "openvm-rkyv-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm" }
+rand = { version = "0.8.5", default-features = false }
+rand_pcg = "0.3.1"
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "alloc",
+    "unaligned",
+] }
+
+[features]
+default = []
+std = ["openvm/std"]

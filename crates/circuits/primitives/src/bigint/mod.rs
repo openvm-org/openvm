@@ -4,7 +4,7 @@ use std::{
 };
 
 use num_bigint_dig::BigUint;
-use p3_util::log2_ceil_usize;
+use openvm_stark_backend::p3_util::log2_ceil_usize;
 
 pub mod check_carry_mod_to_zero;
 pub mod check_carry_to_zero;
@@ -134,7 +134,6 @@ impl OverflowInt<isize> {
     }
 }
 
-// TODO: this doesn't work for references automatically?
 impl<T> Add for OverflowInt<T>
 where
     T: Add<Output = T> + Clone + Default,

@@ -1,4 +1,4 @@
-use p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::prelude::{MemIndex, RVar};
 

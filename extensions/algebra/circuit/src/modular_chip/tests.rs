@@ -1,31 +1,29 @@
 use std::{array::from_fn, sync::Arc};
 
-use ax_circuit_primitives::{
+use num_bigint_dig::BigUint;
+use num_traits::Zero;
+use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_circuit::arch::{
+    instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+};
+use openvm_circuit_primitives::{
     bigint::utils::{
         big_uint_mod_inverse, big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
     },
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
 };
-use ax_mod_circuit_builder::ExprBuilderConfig;
-use ax_stark_sdk::utils::create_seeded_rng;
-use axvm_circuit::{
-    arch::{
-        instructions::UsizeOpcode, testing::VmChipTestBuilder, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
-    },
-    utils::{biguint_to_limbs, generate_field_element},
+use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
+use openvm_mod_circuit_builder::{
+    test_utils::{biguint_to_limbs, generate_field_element},
+    ExprBuilderConfig,
 };
-use axvm_ecc_constants::BLS12381;
-use axvm_instructions::{
-    instruction::Instruction, riscv::RV32_CELL_BITS, Rv32ModularArithmeticOpcode,
-};
-use axvm_rv32_adapters::{
+use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
+use openvm_rv32_adapters::{
     rv32_write_heap_default, write_ptr_reg, Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip,
 };
-use axvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
-use num_bigint_dig::BigUint;
-use num_traits::Zero;
-use p3_baby_bear::BabyBear;
-use p3_field::AbstractField;
+use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{
@@ -134,7 +132,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         let data_as = 2;
         let address1 = 0u32;
         let address2 = 128u32;
-        let address3 = 256u32;
+        let address3 = (1 << 28) + 1234; // a large memory address to test heap adapter
 
         write_ptr_reg(&mut tester, ptr_as, addr_ptr1, address1);
         write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
@@ -148,7 +146,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            chip.core.air.offset + op,
+            VmOpcode::from_usize(chip.core.air.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -277,7 +275,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            chip.core.air.offset + op,
+            VmOpcode::from_usize(chip.core.air.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -377,5 +375,5 @@ fn test_modular_is_equal_1x32() {
 
 #[test]
 fn test_modular_is_equal_3x16() {
-    test_is_equal::<3, 16, 48>(17, BLS12381.MODULUS.clone(), 100);
+    test_is_equal::<3, 16, 48>(17, BLS12_381_MODULUS.clone(), 100);
 }

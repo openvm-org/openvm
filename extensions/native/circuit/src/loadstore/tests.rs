@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
-use axvm_instructions::{
-    instruction::Instruction,
-    NativeLoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use parking_lot::Mutex;
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    super::adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip, KernelLoadStoreChip,
-    KernelLoadStoreCoreChip,
+    super::adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip, NativeLoadStoreChip,
+    NativeLoadStoreCoreChip,
 };
 
 type F = BabyBear;
@@ -36,7 +33,7 @@ struct TestData {
     is_hint: bool,
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelLoadStoreChip<F, 1>) {
+fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeLoadStoreChip<F, 1>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
 
@@ -46,9 +43,9 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelLoadStoreChip<F, 1>) {
         tester.memory_controller(),
         NativeLoadStoreOpcode::default_offset(),
     );
-    let mut inner = KernelLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset());
+    let mut inner = NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset());
     inner.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let chip = KernelLoadStoreChip::<F, 1>::new(adapter, inner, tester.memory_controller());
+    let chip = NativeLoadStoreChip::<F, 1>::new(adapter, inner, tester.memory_controller());
     (rng, tester, chip)
 }
 
@@ -122,7 +119,7 @@ fn get_data_pointer(data: &TestData) -> F {
 
 fn set_values(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut KernelLoadStoreChip<F, 1>,
+    chip: &mut NativeLoadStoreChip<F, 1>,
     data: &TestData,
 ) {
     if data.d != F::ZERO {
@@ -191,7 +188,7 @@ fn check_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut KernelLoadStoreChip<F, 1>,
+    chip: &mut NativeLoadStoreChip<F, 1>,
     rng: &mut StdRng,
     is_immediate: bool,
     opcode: NativeLoadStoreOpcode,
@@ -202,7 +199,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         Instruction::from_usize(
-            opcode as usize + NativeLoadStoreOpcode::default_offset(),
+            VmOpcode::with_default_offset(opcode),
             [data.a, data.b, data.c, data.d, data.e, data.f, data.g]
                 .map(|x| x.as_canonical_u32() as usize),
         ),
@@ -229,5 +226,3 @@ fn rand_native_loadstore_test() {
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
-
-// TODO[yi]: Add negative tests after clarifying ISA spec

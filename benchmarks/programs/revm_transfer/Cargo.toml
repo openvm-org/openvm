@@ -1,12 +1,13 @@
 [workspace]
 [package]
-name = "axvm-revm-transfer"
+name = "openvm-revm-transfer"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
 revm = { version = "18.0.0", default-features = false }
-axvm = { path = "../../../crates/toolchain/axvm" }
+openvm = { path = "../../../crates/toolchain/openvm" }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [
     "native-keccak",
@@ -14,7 +15,7 @@ alloy-primitives = { version = "0.8.10", default-features = false, features = [
 
 [features]
 default = []
-std = ["axvm/std", "revm/std"]
+std = ["openvm/std", "revm/std"]
 
 [profile.release]
 lto = true

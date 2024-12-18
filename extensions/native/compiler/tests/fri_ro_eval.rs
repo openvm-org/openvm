@@ -1,11 +1,11 @@
-use axvm_native_circuit::execute_program;
-use axvm_native_compiler::{
+use openvm_native_circuit::execute_program;
+use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
     ir::{Array, Ext, Felt},
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{thread_rng, Rng};
 
 type F = BabyBear;

@@ -1,15 +1,20 @@
-use ax_stark_backend::keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey};
-use ax_stark_sdk::config::baby_bear_poseidon2_outer::BabyBearPoseidon2OuterConfig;
-use axvm_native_compiler::ir::Config;
-use p3_baby_bear::BabyBear;
-use p3_bn254_fr::{Bn254Fr, Poseidon2Bn254};
-use p3_challenger::MultiField32Challenger;
-use p3_commit::ExtensionMmcs;
+use openvm_native_compiler::ir::Config;
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
+    p3_challenger::MultiField32Challenger,
+    p3_commit::ExtensionMmcs,
+    p3_field::extension::BinomialExtensionField,
+};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
+    p3_baby_bear::BabyBear,
+    p3_bn254_fr::{Bn254Fr, Poseidon2Bn254},
+};
 use p3_dft::Radix2DitParallel;
-use p3_field::extension::BinomialExtensionField;
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{MultiField32PaddingFreeSponge, TruncatedPermutation};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     digest::DigestVal,
@@ -23,7 +28,7 @@ const WIDTH: usize = 3;
 const RATE: usize = 16;
 const DIGEST_WIDTH: usize = 1;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct OuterConfig;
 
 impl Config for OuterConfig {
@@ -52,13 +57,14 @@ pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, 
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(
-    vk: StarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
+    vk: StarkVerifyingKey<BabyBearPoseidon2RootConfig>,
 ) -> StarkVerificationAdvice<OuterConfig> {
     let StarkVerifyingKey {
         preprocessed_data,
         params,
         quotient_degree,
         symbolic_constraints,
+        rap_phase_seq_kind: _,
     } = vk;
     StarkVerificationAdvice {
         preprocessed_data: preprocessed_data.map(|data| {
@@ -78,10 +84,10 @@ pub(crate) fn new_from_outer_vkv2(
 
 /// Create MultiStarkVerificationAdvice for the outer config.
 pub fn new_from_outer_multi_vk(
-    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2OuterConfig>,
+    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2RootConfig>,
 ) -> MultiStarkVerificationAdvice<OuterConfig> {
     let num_challenges_to_sample = vk.num_challenges_per_phase();
-    let MultiStarkVerifyingKey::<BabyBearPoseidon2OuterConfig> { per_air } = vk;
+    let MultiStarkVerifyingKey::<BabyBearPoseidon2RootConfig> { per_air } = vk;
     MultiStarkVerificationAdvice {
         per_air: per_air
             .clone()

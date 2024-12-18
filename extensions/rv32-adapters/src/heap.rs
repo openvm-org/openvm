@@ -1,14 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{Field, PrimeField32},
-};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -22,11 +14,19 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use axvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+};
+use openvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{Field, PrimeField32},
+};
 
 use super::{
     vec_heap_generate_trace_row_impl, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols,
@@ -124,6 +124,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
         let address_bits = memory_controller.mem_config().pointer_max_bits;
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
+            "address_bits={address_bits} needs to be large enough for high limb range check"
+        );
         Self {
             air: Rv32HeapAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),

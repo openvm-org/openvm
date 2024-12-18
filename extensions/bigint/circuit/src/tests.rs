@@ -1,31 +1,31 @@
 use std::sync::Arc;
 
-use ax_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
-};
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         testing::VmChipTestBuilder, InstructionExecutor, BITWISE_OP_LOOKUP_BUS,
         RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
 };
-use axvm_instructions::{
-    program::PC_BITS, riscv::RV32_CELL_BITS, BaseAluOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode, UsizeOpcode,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip},
 };
-use axvm_rv32_adapters::{
+use openvm_instructions::{program::PC_BITS, riscv::RV32_CELL_BITS, UsizeOpcode};
+use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterChip,
     Rv32HeapBranchAdapterChip,
 };
-use axvm_rv32im_circuit::{
+use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
     BaseAluCoreChip, BranchEqualCoreChip, BranchLessThanCoreChip, LessThanCoreChip,
     MultiplicationCoreChip, ShiftCoreChip,
 };
+use openvm_rv32im_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
+};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{

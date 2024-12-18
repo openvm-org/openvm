@@ -31,14 +31,14 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
 
     let impl_generics = {
         let params = &ast.generics.params;
-        quote! { < C: axvm_native_compiler::prelude::Config, #params >}
+        quote! { < C: openvm_native_compiler::prelude::Config, #params >}
     };
     let input_struct_tokens: Vec<_> = field_names
         .iter()
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                pub #name: <#field_type as axvm_native_recursion::hints::Hintable<C> >::HintVariable,
+                pub #name: <#field_type as openvm_native_recursion::hints::Hintable<C> >::HintVariable,
             }
         })
         .collect();
@@ -48,7 +48,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .zip(field_types.iter())
         .map(|(name, field_type)| {
             quote! {
-                let #name = <#field_type as axvm_native_recursion::hints::Hintable<C>>::read(builder);
+                let #name = <#field_type as openvm_native_recursion::hints::Hintable<C>>::read(builder);
             }
         })
         .collect();
@@ -57,21 +57,21 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
         .iter()
         .map(|name| {
             quote! {
-                stream.extend(axvm_native_recursion::hints::Hintable::<C>::write(&self.#name));
+                stream.extend(openvm_native_recursion::hints::Hintable::<C>::write(&self.#name));
             }
         })
         .collect();
 
     Ok(quote! {
-        #[derive(axvm_native_compiler_derive::DslVariable, Debug, Clone)]
+        #[derive(openvm_native_compiler_derive::DslVariable, Debug, Clone)]
         pub struct #name_var_ident #impl_generics  {
             #(#input_struct_tokens)*
         }
 
-        impl #impl_generics axvm_native_recursion::hints::Hintable<C> for #name #ty_generics #where_clause {
+        impl #impl_generics openvm_native_recursion::hints::Hintable<C> for #name #ty_generics #where_clause {
             type HintVariable = #name_var_ident<C>;
 
-            fn read(builder: &mut axvm_native_compiler::prelude::Builder<C>) -> Self::HintVariable {
+            fn read(builder: &mut openvm_native_compiler::prelude::Builder<C>) -> Self::HintVariable {
                 #(#read_tokens)*
 
                 #name_var_ident {
@@ -79,7 +79,7 @@ pub fn create_new_struct_and_impl_hintable(ast: &ItemStruct) -> Result<TokenStre
                 }
             }
 
-            fn write(&self) -> Vec<Vec<<C as axvm_native_compiler::prelude::Config>::N>> {
+            fn write(&self) -> Vec<Vec<<C as openvm_native_compiler::prelude::Config>::N>> {
                 let mut stream = Vec::new();
 
                 #(#write_tokens)*

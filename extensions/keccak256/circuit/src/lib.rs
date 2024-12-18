@@ -2,8 +2,8 @@
 //! variable length inputs read from VM memory.
 use std::{array::from_fn, cmp::min, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-use ax_stark_backend::p3_field::PrimeField32;
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -19,18 +19,18 @@ pub use extension::*;
 mod tests;
 
 pub use air::KeccakVmAir;
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
         memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS,
-    Rv32KeccakOpcode, UsizeOpcode,
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, UsizeOpcode,
 };
-use axvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_rv32im_circuit::adapters::read_rv32_register;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len
@@ -138,7 +138,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode = Rv32KeccakOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
         let mut memory = self.memory_controller.borrow_mut();

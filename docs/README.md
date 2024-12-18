@@ -1,4 +1,4 @@
-## axVM Contributor Documentation
+## OpenVM Contributor Documentation
 
 This directory contains documentation for contributors.
 
@@ -6,4 +6,4 @@ This directory contains documentation for contributors.
 - [Design and Specification](./specs)
 - [Crates](./crates)
 
-![](../assets/modularity.svg)
+![](../assets/modularity.png)

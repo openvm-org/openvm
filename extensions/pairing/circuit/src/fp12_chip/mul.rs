@@ -1,15 +1,15 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
-use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
-    arch::{instructions::Fp12Opcode, VmChipWrapper},
-    system::memory::MemoryControllerRef,
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_pairing_transpiler::Fp12Opcode;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp12;
 // Input: Fp12 * 2
@@ -41,6 +41,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "Fp12Mul",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -68,25 +69,22 @@ pub fn fp12_mul_expr(
 mod tests {
     use std::sync::Arc;
 
-    use ax_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    };
-    use ax_mod_circuit_builder::{
-        test_utils::{bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec},
-        ExprBuilderConfig,
-    };
-    use ax_stark_backend::p3_field::AbstractField;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::{
-        arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        utils::biguint_to_limbs,
-    };
-    use axvm_ecc_constants::BN254;
-    use axvm_ecc_guest::algebra::field::FieldExtension;
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_rv32_adapters::rv32_write_heap_default_with_increment;
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use itertools::Itertools;
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit_primitives::bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    };
+    use openvm_ecc_guest::algebra::field::FieldExtension;
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_mod_circuit_builder::{
+        test_utils::{biguint_to_limbs, bn254_fq12_to_biguint_vec, bn254_fq2_to_biguint_vec},
+        ExprBuilderConfig,
+    };
+    use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
+    use openvm_rv32_adapters::rv32_write_heap_default_with_increment;
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
@@ -101,7 +99,7 @@ mod tests {
 
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
+            modulus: BN254_MODULUS.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
@@ -120,7 +118,7 @@ mod tests {
             adapter,
             tester.memory_controller(),
             config,
-            BN254.XI,
+            BN254_XI_ISIZE,
             Fp12Opcode::default_offset(),
         );
 

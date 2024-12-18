@@ -1,33 +1,29 @@
 [workspace]
 [package]
-name = "axvm-ecdsa-recover-key-program"
+name = "openvm-ecdsa-recover-key-program"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-# This cannot be local path because we need axvm version to be consistent with revm's axvm.
-axvm = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-axvm-platform = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-axvm-algebra-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false }
-axvm-ecc-guest = { git = "ssh://git@github.com/axiom-crypto/afs-prototype.git", default-features = false, features = [
+k256 = { version = "0.13.3", default-features = false, features = ["ecdsa"] }
+openvm = { path = "../../../crates/toolchain/openvm", default-features = false }
+openvm-platform = { path = "../../../crates/toolchain/platform", default-features = false }
+openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false, features = [
     "k256",
 ] }
-revm-precompile = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false, features = [
-    "axvm",
-] }
-revm-primitives = { git = "ssh://git@github.com/axiom-crypto/revm.git", branch = "axiom", default-features = false }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
+# We do not patch revm-precompile so that the benchmark only depends on this repo.
+revm-precompile = { version = "14.0.0", default-features = false }
+alloy-primitives = { version = "0.8.10", default-features = false, features = [
+    "native-keccak",
+] } # revm does not re-export this feature so we enable it here
 
 [features]
 default = []
-std = ["axvm/std"]
-
-[patch."ssh://git@github.com/axiom-crypto/afs-prototype.git"]
-axvm = { path = "../../../crates/toolchain/axvm" }
-axvm-platform = { path = "../../../crates/toolchain/platform" }
-axvm-algebra-guest = { path = "../../../extensions/algebra/guest" }
-axvm-ecc-guest = { path = "../../../extensions/ecc/guest" }
-axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
+std = ["openvm/std", "k256/std", "revm-precompile/std", "alloy-primitives/std"]
 
 [profile.release]
 panic = "abort"
-lto = "fat"     # decrease binary size
+lto = "thin"    # faster compile time
+debug = 2       # for flamegraph

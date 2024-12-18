@@ -19,6 +19,9 @@
 //! - [is_less_than_array]
 //! - [is_zero]
 
+/// Derive macros
+pub use openvm_circuit_primitives_derive::*;
+
 pub mod assert_less_than;
 pub mod bigint;
 pub mod bitwise_op_lookup;

@@ -1,6 +1,10 @@
 [book]
-authors = ["Yi Sun"]
+authors = ["OpenVM Contributors"]
 language = "en"
 multilingual = false
 src = "src"
-title = "axVM Book"
+title = "OpenVM Book"
+
+[output.html]
+site-url = "https://book.openvm.dev/"
+mathjax-support = true

@@ -1,8 +1,8 @@
-use axvm_instructions::instruction::Instruction;
+use openvm_instructions::instruction::Instruction;
 
-/// Trait to add custom RISC-V instruction transpilation to axVM instruction format.
+/// Trait to add custom RISC-V instruction transpilation to OpenVM instruction format.
 /// RISC-V instructions always come in 32-bit chunks.
-/// An important feature is that multiple 32-bit RISC-V instructions can be transpiled into a single axVM instruction.
+/// An important feature is that multiple 32-bit RISC-V instructions can be transpiled into a single OpenVM instruction.
 /// See `process_custom` for details.
 pub trait TranspilerExtension<F> {
     /// The `instruction_stream` provides a view of the remaining RISC-V instructions to be processed,

@@ -1,6 +1,13 @@
 use std::borrow::BorrowMut;
 
-use ax_stark_backend::{
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    UsizeOpcode, VmOpcode,
+};
+use openvm_native_compiler::NativeJalOpcode::{self, *};
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -8,25 +15,18 @@ use ax_stark_backend::{
     verifier::VerificationError,
     Chip, ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
-use axvm_instructions::{
-    instruction::Instruction,
-    program::{DEFAULT_PC_STEP, PC_BITS},
-    NativeJalOpcode::{self, *},
-    UsizeOpcode,
-};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
     super::adapters::jal_native_adapter::JalNativeAdapterChip, JalCoreChip, JalCoreCols,
-    KernelJalChip,
+    NativeJalChip,
 };
 type F = BabyBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut KernelJalChip<F>,
+    chip: &mut NativeJalChip<F>,
     rng: &mut StdRng,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
@@ -38,7 +38,7 @@ fn set_and_execute(
     tester.execute_with_pc(
         chip,
         Instruction::from_usize(
-            JAL as usize + NativeJalOpcode::default_offset(),
+            VmOpcode::with_default_offset(JAL),
             [a, imm as usize, 0, d, 0, 0, 0],
         ),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
@@ -53,7 +53,7 @@ fn set_and_execute(
     assert_eq!(rd_data, tester.read::<1>(d, a)[0].as_canonical_u32());
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelJalChip<F>) {
+fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
     let rng = create_seeded_rng();
     let tester = VmChipTestBuilder::default();
 
@@ -63,7 +63,7 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, KernelJalChip<F>) {
         tester.memory_controller(),
     );
     let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
-    let chip = KernelJalChip::<F>::new(adapter, inner, tester.memory_controller());
+    let chip = NativeJalChip::<F>::new(adapter, inner, tester.memory_controller());
     (rng, tester, chip)
 }
 
@@ -99,12 +99,12 @@ fn negative_jal_test() {
     let tester = tester.build().load_air_proof_input(chip_input).finalize();
     let msg = format!(
         "Expected verification to fail with {:?}, but it didn't",
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     );
     let result = tester.simple_test();
     assert_eq!(
         result.err(),
-        Some(VerificationError::NonZeroCumulativeSum),
+        Some(VerificationError::ChallengePhaseError),
         "{}",
         msg
     );

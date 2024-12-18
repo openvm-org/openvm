@@ -1,15 +1,16 @@
-use ax_stark_backend::config::{Domain, StarkGenericConfig};
-use ax_stark_sdk::{
-    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
-    engine::ProofInputForTest,
+use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecutor};
+use openvm_native_circuit::{Native, NativeConfig};
+use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
+use openvm_native_recursion::testing_utils::inner::run_recursive_test;
+use openvm_stark_backend::{
+    config::{Domain, StarkGenericConfig},
+    p3_commit::PolynomialSpace,
+    p3_field::{extension::BinomialExtensionField, AbstractField},
 };
-use axvm_circuit::arch::{instructions::program::Program, SystemConfig, VmExecutor};
-use axvm_native_circuit::{Native, NativeConfig};
-use axvm_native_compiler::{asm::AsmBuilder, ir::Felt};
-use axvm_native_recursion::testing_utils::inner::run_recursive_test;
-use p3_baby_bear::BabyBear;
-use p3_commit::PolynomialSpace;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_sdk::{
+    config::fri_params::standard_fri_params_with_100_bits_conjectured_security,
+    engine::ProofInputForTest, p3_baby_bear::BabyBear,
+};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -71,7 +72,7 @@ fn test_fibonacci_program_verify() {
 #[test]
 #[ignore = "slow"]
 fn test_fibonacci_program_halo2_verify() {
-    use axvm_native_recursion::halo2::testing_utils::run_static_verifier_test;
+    use openvm_native_recursion::halo2::testing_utils::run_static_verifier_test;
 
     let fib_program_stark = fibonacci_program_test_proof_input(0, 1, 32);
     run_static_verifier_test(

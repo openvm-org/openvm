@@ -1,18 +1,17 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, UsizeOpcode};
+use openvm_native_compiler::NativeJalOpcode;
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
-};
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, NativeJalOpcode, UsizeOpcode,
 };
 
 #[repr(C)]
@@ -99,7 +98,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, b, .. } = instruction;
         assert_eq!(
-            NativeJalOpcode::from_usize(opcode - self.air.offset),
+            NativeJalOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             NativeJalOpcode::JAL
         );
 

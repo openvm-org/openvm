@@ -6,9 +6,11 @@
 extern crate alloc;
 
 use alloy_primitives::{address, TxKind, U256};
+#[allow(unused_imports, clippy::single_component_path_imports)]
+use openvm_keccak256_guest; // export native keccak
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 fn main() {
     let mut evm = Evm::builder()

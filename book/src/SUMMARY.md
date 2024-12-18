@@ -1,11 +1,31 @@
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**
-
-- [Summary](#summary)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 # Summary
 
-- [Chapter 1](./chapter_1.md)
+[Introduction](./introduction.md)
+
+# Getting Started
+
+- [Install](./getting-started/install.md)
+
+- [Quickstart](./getting-started/quickstart.md)
+
+# Writing Apps
+
+- [Overview](./writing-apps/overview.md)
+- [Writing a Program](./writing-apps/write-program.md)
+- [Compiling](./writing-apps/build.md)
+- [Generating Proofs](./writing-apps/prove.md)
+- [Onchain Verification](./writing-apps/verify.md)
+
+# Using Extensions
+
+- [Overview](./custom-extensions/overview.md)
+- [Keccak](./custom-extensions/keccak.md)
+- [Big Integer](./custom-extensions/bigint.md)
+- [Algebra (Modular Arithmetic)](./custom-extensions/algebra.md)
+- [Elliptic Curve Cryptography](./custom-extensions/ecc.md)
+- [Elliptic Curve Pairing](./custom-extensions/pairing.md)
+
+# Advanced Usage
+
+- [SDK](./advanced-usage/sdk.md)
+- [Creating a New Extension](./advanced-usage/new-extension.md)

@@ -4,22 +4,26 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
+use num_bigint_dig::BigUint;
+use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
     SubAir, TraceSubRowGenerator,
 };
-use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    rap::BaseAirWithPublicValues,
 };
-use axvm_instructions::{instruction::Instruction, Rv32ModularArithmeticOpcode, UsizeOpcode};
-use num_bigint_dig::BigUint;
-use p3_air::{AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
 
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
@@ -292,7 +296,7 @@ where
         let c = data[1].map(|y| y.as_canonical_u32());
         let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.air.modulus_limbs);
         let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.air.modulus_limbs);
-        let is_setup = instruction.opcode - self.air.offset
+        let is_setup = instruction.opcode.local_opcode_idx(self.air.offset)
             == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
         if !is_setup {

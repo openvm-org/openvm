@@ -1,11 +1,9 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashSet,
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
+use openvm_circuit_primitives::{
     is_less_than_array::{
         IsLtArrayAuxCols, IsLtArrayIo, IsLtArraySubAir, IsLtArrayWhenTransitionAir,
     },
@@ -13,14 +11,19 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
+    prover::types::AirProofInput,
+    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip, ChipUsageGetter,
 };
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
+use rustc_hash::FxHashSet;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{
@@ -130,8 +133,10 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
 #[derive(Debug)]
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
-    touched_addresses: HashSet<(F, F)>,
+    touched_addresses: FxHashSet<(u32, u32)>,
     range_checker: Arc<VariableRangeCheckerChip>,
+    overridden_height: Option<usize>,
+    final_memory: Option<TimestampedEquipartition<F, 1>>,
 }
 
 impl<F: Field> VolatileBoundaryChip<F> {
@@ -149,33 +154,50 @@ impl<F: Field> VolatileBoundaryChip<F> {
                 pointer_max_bits,
                 range_bus,
             ),
-            touched_addresses: HashSet::new(),
+            touched_addresses: FxHashSet::default(),
             range_checker,
+            overridden_height: None,
+            final_memory: None,
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F) {
+    pub fn touch_address(&mut self, addr_space: u32, pointer: u32) {
         self.touched_addresses.insert((addr_space, pointer));
     }
 
-    pub fn all_addresses(&self) -> Vec<(F, F)> {
+    pub fn all_addresses(&self) -> Vec<(u32, u32)> {
         self.touched_addresses.iter().cloned().collect()
-    }
-
-    pub fn current_height(&self) -> usize {
-        self.touched_addresses.len()
     }
 }
 
 impl<F: PrimeField32> VolatileBoundaryChip<F> {
+    pub fn set_overridden_height(&mut self, overridden_height: usize) {
+        self.overridden_height = Some(overridden_height);
+    }
     /// Volatile memory requires the starting and final memory to be in equipartition with block size `1`.
     /// When block size is `1`, then the `label` is the same as the address pointer.
-    pub fn generate_trace(
-        &self,
-        final_memory: &TimestampedEquipartition<F, 1>,
-        overridden_height: Option<usize>,
-    ) -> RowMajorMatrix<F> {
-        let trace_height = if let Some(height) = overridden_height {
+    pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, 1>) {
+        self.final_memory = Some(final_memory);
+    }
+}
+
+impl<SC: StarkGenericConfig> Chip<SC> for VolatileBoundaryChip<Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        // Volatile memory requires the starting and final memory to be in equipartition with block size `1`.
+        // When block size is `1`, then the `label` is the same as the address pointer.
+        let width = self.trace_width();
+        let air = Arc::new(self.air);
+        let final_memory = self
+            .final_memory
+            .expect("Trace generation should be called after finalize");
+        let trace_height = if let Some(height) = self.overridden_height {
             assert!(
                 height >= final_memory.len(),
                 "Overridden height is less than the required height"
@@ -184,65 +206,74 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         } else {
             final_memory.len()
         };
-        self.generate_trace_with_height(final_memory, trace_height.next_power_of_two())
-    }
-
-    fn generate_trace_with_height(
-        &self,
-        final_memory: &TimestampedEquipartition<F, 1>,
-        trace_height: usize,
-    ) -> RowMajorMatrix<F> {
-        assert!(trace_height.is_power_of_two());
-        let width = BaseAir::<F>::width(&self.air);
+        let trace_height = trace_height.next_power_of_two();
 
         // Collect into Vec to sort from BTreeMap and also so we can look at adjacent entries
-        let sorted_final_memory: Vec<_> = final_memory.iter().collect();
-        assert!(sorted_final_memory.len() <= trace_height);
+        let sorted_final_memory: Vec<_> = final_memory.into_par_iter().collect();
+        let memory_len = sorted_final_memory.len();
 
-        let mut rows = F::zero_vec(trace_height * width);
+        let mut rows = Val::<SC>::zero_vec(trace_height * width);
         rows.par_chunks_mut(width)
-            .zip(&sorted_final_memory)
+            .zip(sorted_final_memory.par_iter())
             .enumerate()
             .for_each(|(i, (row, ((addr_space, ptr), timestamped_values)))| {
                 // `pointer` is the same as `label` since the equipartition has block size 1
                 let [data] = timestamped_values.values;
                 let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
-                row.addr_space = *addr_space;
-                row.pointer = F::from_canonical_usize(*ptr);
-                row.initial_data = F::ZERO;
+                row.addr_space = Val::<SC>::from_canonical_u32(*addr_space);
+                row.pointer = Val::<SC>::from_canonical_u32(*ptr);
+                row.initial_data = Val::<SC>::ZERO;
                 row.final_data = data;
-                row.final_timestamp = F::from_canonical_u32(timestamped_values.timestamp);
-                row.is_valid = F::ONE;
+                row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
+                row.is_valid = Val::<SC>::ONE;
 
                 // If next.is_valid == 1:
-                if i != sorted_final_memory.len() - 1 {
-                    let (next_addr_space, next_ptr) = *sorted_final_memory[i + 1].0;
-                    let mut out = F::ZERO;
-                    self.air.addr_lt_air.0.generate_subrow(
+                if i != memory_len - 1 {
+                    let (next_addr_space, next_ptr) = sorted_final_memory[i + 1].0;
+                    let mut out = Val::<SC>::ZERO;
+                    air.addr_lt_air.0.generate_subrow(
                         (
                             &self.range_checker,
                             &[row.addr_space, row.pointer],
-                            &[next_addr_space, F::from_canonical_usize(next_ptr)],
+                            &[
+                                Val::<SC>::from_canonical_u32(next_addr_space),
+                                Val::<SC>::from_canonical_u32(next_ptr),
+                            ],
                         ),
                         ((&mut row.addr_lt_aux).into(), &mut out),
                     );
-                    debug_assert_eq!(out, F::ONE, "Addresses are not sorted");
+                    debug_assert_eq!(out, Val::<SC>::ONE, "Addresses are not sorted");
                 }
             });
         // Always do a dummy range check on the last row due to wraparound
-        if !sorted_final_memory.is_empty() {
-            let mut out = F::ZERO;
+        if memory_len > 0 {
+            let mut out = Val::<SC>::ZERO;
             let row: &mut VolatileBoundaryCols<_> = rows[width * (trace_height - 1)..].borrow_mut();
-            self.air.addr_lt_air.0.generate_subrow(
+            air.addr_lt_air.0.generate_subrow(
                 (
                     &self.range_checker,
-                    &[F::ZERO, F::ZERO],
-                    &[F::ZERO, F::ZERO],
+                    &[Val::<SC>::ZERO, Val::<SC>::ZERO],
+                    &[Val::<SC>::ZERO, Val::<SC>::ZERO],
                 ),
                 ((&mut row.addr_lt_aux).into(), &mut out),
             );
         }
 
-        RowMajorMatrix::new(rows, width)
+        let trace = RowMajorMatrix::new(rows, width);
+        AirProofInput::simple_no_pis(air, trace)
+    }
+}
+
+impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
+    fn air_name(&self) -> String {
+        "Boundary".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.touched_addresses.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        VolatileBoundaryCols::<F>::width()
     }
 }

@@ -3,22 +3,19 @@ use std::{
     fmt::Debug,
     marker::PhantomData,
     panic::{catch_unwind, AssertUnwindSafe},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
-use axvm_circuit::metrics::cycle_tracker::CycleTracker;
 use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_bn254_fr::Bn254Fr;
-use p3_field::{ExtensionField, PrimeField, PrimeField32};
+use openvm_circuit::metrics::cycle_tracker::CycleTracker;
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
-        gates::{
-            circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip, RangeInstructions,
-        },
+        gates::{circuit::builder::BaseCircuitBuilder, GateInstructions, RangeChip},
         halo2_proofs::halo2curves::bn256::Fr,
         utils::{biguint_to_fe, ScalarField},
-        Context, QuantumCell,
+        Context,
     },
     util::arithmetic::PrimeField as _,
 };
@@ -28,17 +25,66 @@ use crate::{
     constraints::halo2::{
         baby_bear::{
             AssignedBabyBear, AssignedBabyBearExt4, BabyBearChip, BabyBearExt4, BabyBearExt4Chip,
-            BABYBEAR_MAX_BITS,
         },
         poseidon2_perm::{Poseidon2Params, Poseidon2State},
     },
     ir::{Config, DslIr, TracedVec, Witness},
 };
 
+const POSEIDON2_T: usize = 3;
+static POSEIDON2_PARAMS: LazyLock<Poseidon2Params<Fr, POSEIDON2_T>> = LazyLock::new(|| {
+    use zkhash::{
+        ark_ff::{BigInteger, PrimeField as _},
+        fields::bn256::FpBN256 as ark_FpBN256,
+        poseidon2::poseidon2_instance_bn256::{MAT_DIAG3_M_1, RC3},
+    };
+
+    fn convert_fr(input: ark_FpBN256) -> Fr {
+        Fr::from_bytes_le(&input.into_bigint().to_bytes_le())
+    }
+    const T: usize = 3;
+    let rounds_f = 8;
+    let rounds_p = 56;
+    let mut round_constants: Vec<[Fr; T]> = RC3
+        .iter()
+        .map(|vec| {
+            vec.iter()
+                .cloned()
+                .map(convert_fr)
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+
+    let rounds_f_beginning = rounds_f / 2;
+    let p_end = rounds_f_beginning + rounds_p;
+    let internal_round_constants = round_constants
+        .drain(rounds_f_beginning..p_end)
+        .map(|vec| vec[0])
+        .collect::<Vec<_>>();
+    let external_round_constants = round_constants;
+    Poseidon2Params {
+        rounds_f,
+        rounds_p,
+        mat_internal_diag_m_1: MAT_DIAG3_M_1
+            .iter()
+            .copied()
+            .map(convert_fr)
+            .collect_vec()
+            .try_into()
+            .unwrap(),
+        external_rc: external_round_constants,
+        internal_rc: internal_round_constants,
+    }
+});
+
 /// The backend for the Halo2 constraint compiler.
 #[derive(Debug, Clone)]
 pub struct Halo2ConstraintCompiler<C: Config> {
     pub num_public_values: usize,
+    #[allow(unused_variables)]
+    pub collect_metrics: bool,
     pub phantom: PhantomData<C>,
 }
 
@@ -71,8 +117,13 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     pub fn new(num_public_values: usize) -> Self {
         Self {
             num_public_values,
+            collect_metrics: false,
             phantom: PhantomData,
         }
+    }
+    pub fn with_collect_metrics(mut self) -> Self {
+        self.collect_metrics = true;
+        self
     }
     // Create halo2-lib constraints from a list of operations in the DSL.
     // Assume: C::N = C::F = C::EF is type Fr
@@ -95,10 +146,13 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
 
         let mut vkey_hash = None;
         let mut committed_values_digest = None;
-
+        #[cfg(feature = "bench-metrics")]
+        let mut old_stats = stats_snapshot(ctx, range.clone());
         for (instruction, backtrace) in operations {
             #[cfg(feature = "bench-metrics")]
-            let old_stats = stats_snapshot(ctx, range.clone());
+            if self.collect_metrics {
+                old_stats = stats_snapshot(ctx, range.clone());
+            }
             let res = catch_unwind(AssertUnwindSafe(|| {
                 match instruction {
                     DslIr::ImmV(a, b) => {
@@ -251,21 +305,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     }
                     DslIr::CastFV(a, b) => {
                         let felt = felts[&b.0];
-                        #[allow(clippy::comparison_chain)]
-                        let reduced_felt = if felt.max_bits > BABYBEAR_MAX_BITS {
-                            f_chip.reduce(ctx, felt)
-                        } else if felt.max_bits == BABYBEAR_MAX_BITS {
-                            // Ensure cast is canonical
-                            f_chip.range.check_less_than(
-                                ctx,
-                                felt.value,
-                                QuantumCell::Constant(Fr::from(BabyBear::ORDER_U32 as u64)),
-                                BABYBEAR_MAX_BITS,
-                            );
-                            felt
-                        } else {
-                            felt
-                        };
+                        let reduced_felt = f_chip.reduce(ctx, felt);
                         vars.insert(a.0, reduced_felt.value);
                     }
                     DslIr::CircuitNum2BitsV(value, bits, output) => {
@@ -286,55 +326,10 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         }
                     }
                     DslIr::CircuitPoseidon2Permute(state_vars) => {
-                        use zkhash::{
-                            ark_ff::{BigInteger, PrimeField as _},
-                            fields::bn256::FpBN256 as ark_FpBN256,
-                            poseidon2::poseidon2_instance_bn256::{MAT_DIAG3_M_1, RC3},
-                        };
-
-                        fn convert_fr(input: ark_FpBN256) -> Fr {
-                            Fr::from_bytes_le(&input.into_bigint().to_bytes_le())
-                        }
-                        const T: usize = 3;
-                        let rounds_f = 8;
-                        let rounds_p = 56;
-                        let mut round_constants: Vec<[Fr; T]> = RC3
-                            .iter()
-                            .map(|vec| {
-                                vec.iter()
-                                    .cloned()
-                                    .map(convert_fr)
-                                    .collect::<Vec<_>>()
-                                    .try_into()
-                                    .unwrap()
-                            })
-                            .collect();
-
-                        let rounds_f_beginning = rounds_f / 2;
-                        let p_end = rounds_f_beginning + rounds_p;
-                        let internal_round_constants = round_constants
-                            .drain(rounds_f_beginning..p_end)
-                            .map(|vec| vec[0])
-                            .collect::<Vec<_>>();
-                        let external_round_constants = round_constants;
-                        let params = Poseidon2Params {
-                            rounds_f,
-                            rounds_p,
-                            mat_internal_diag_m_1: MAT_DIAG3_M_1
-                                .iter()
-                                .copied()
-                                .map(convert_fr)
-                                .collect_vec()
-                                .try_into()
-                                .unwrap(),
-                            external_rc: external_round_constants,
-                            internal_rc: internal_round_constants,
-                        };
-
                         let mut state =
-                            Poseidon2State::<Fr, T>::new(state_vars.map(|x| vars[&x.0]));
-                        state.permutation(ctx, gate, &params);
-                        for i in 0..T {
+                            Poseidon2State::<Fr, POSEIDON2_T>::new(state_vars.map(|x| vars[&x.0]));
+                        state.permutation(ctx, gate, &*POSEIDON2_PARAMS);
+                        for i in 0..POSEIDON2_T {
                             *vars.get_mut(&state_vars[i].0).unwrap() = state.s[i];
                         }
                     }
@@ -432,12 +427,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
             if res.is_err() {
                 if let Some(mut backtrace) = backtrace {
                     backtrace.resolve();
-                    eprintln!("axvm circuit failure; backtrace:\n{:?}", backtrace);
+                    eprintln!("openvm circuit failure; backtrace:\n{:?}", backtrace);
                 }
                 res.unwrap();
             }
             #[cfg(feature = "bench-metrics")]
-            {
+            if self.collect_metrics {
                 let mut new_stats = stats_snapshot(ctx, range.clone());
                 new_stats.diff(&old_stats);
                 new_stats.increment(cell_tracker.get_full_name());

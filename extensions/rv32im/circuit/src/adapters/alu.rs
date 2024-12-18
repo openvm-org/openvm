@@ -4,14 +4,7 @@ use std::{
     marker::PhantomData,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::not;
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
-};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -26,9 +19,16 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
 };
 
 use super::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};

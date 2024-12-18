@@ -6,16 +6,8 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-};
-use axvm_circuit::{
+use itertools::izip;
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -30,12 +22,22 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use axvm_rv32im_circuit::adapters::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use itertools::izip;
+use openvm_rv32im_circuit::adapters::{
+    read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+};
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -138,7 +140,6 @@ impl<
         // Compose the u32 register value into single field element, with
         // a range check on the highest limb.
         let rs_val_f = cols.rs_val.map(|decomp| {
-            // TODO: range check
             decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
                 acc * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS) + limb
             })
@@ -258,6 +259,10 @@ impl<
         let memory_controller = RefCell::borrow(&memory_controller);
         let memory_bridge = memory_controller.memory_bridge();
         let address_bits = memory_controller.mem_config().pointer_max_bits;
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
+            "address_bits={address_bits} needs to be large enough for high limb range check"
+        );
         Self {
             air: Rv32IsEqualModAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
@@ -413,10 +418,10 @@ impl<
                 0
             }
         });
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits;
         self.bitwise_lookup_chip.request_range(
-            need_range_check[0] * limb_shift,
-            need_range_check[1] * limb_shift,
+            need_range_check[0] << limb_shift_bits,
+            need_range_check[1] << limb_shift_bits,
         );
     }
 

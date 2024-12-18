@@ -3,12 +3,12 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use axvm_algebra_guest::field::Field;
+use openvm_algebra_guest::field::Field;
 #[cfg(target_os = "zkvm")]
 use {
     super::shifted_funct7,
-    axvm_platform::constants::{Custom1Funct3, PairingBaseFunct7, CUSTOM_1},
-    axvm_platform::custom_insn_r,
+    crate::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
+    openvm_platform::custom_insn_r,
 };
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 - \xi`.
@@ -69,6 +69,7 @@ impl<'a, F: Field> Sub<&'a SexticExtField<F>> for &SexticExtField<F> {
 ///
 /// When `target_os = "zkvm"`, this function calls an intrinsic instruction,
 /// which is assumed to be supported by the VM.
+#[allow(dead_code)]
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
@@ -77,8 +78,8 @@ pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
     rhs: *const u8,
 ) {
     custom_insn_r!(
-        CUSTOM_1,
-        Custom1Funct3::Pairing as usize,
+        OPCODE,
+        PAIRING_FUNCT3,
         shifted_funct7::<P>(PairingBaseFunct7::Fp12Mul),
         dst,
         lhs,

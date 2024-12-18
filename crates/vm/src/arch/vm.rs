@@ -1,16 +1,16 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
-use ax_stark_backend::{
+use openvm_instructions::exe::VmExe;
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     prover::types::{CommittedTraceData, Proof, ProofInput},
     verifier::VerificationError,
     Chip,
 };
-use axvm_instructions::exe::AxVmExe;
-use p3_field::PrimeField32;
 use thiserror::Error;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
@@ -19,7 +19,7 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
-        program::trace::AxVmCommittedExe,
+        program::trace::VmCommittedExe,
     },
 };
 
@@ -38,6 +38,18 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
         }
+    }
+}
+
+impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
+    fn from(value: VecDeque<Vec<F>>) -> Self {
+        Streams::new(value)
+    }
+}
+
+impl<F> From<Vec<Vec<F>>> for Streams<F> {
+    fn from(value: Vec<Vec<F>>) -> Self {
+        Streams::new(value)
     }
 }
 
@@ -93,14 +105,14 @@ where
 
     pub fn execute_segments(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
 
         let exe = exe.into();
-        let streams = Streams::new(input);
+        let streams = input.into();
         let mut segments = vec![];
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -115,8 +127,8 @@ where
         let mut pc = exe.pc_start;
 
         loop {
-            println!("Executing segment: {}", segments.len());
-            let state = segment.execute_from_pc(pc)?;
+            let state = tracing::info_span!("execute_segment", segment = segments.len())
+                .in_scope(|| segment.execute_from_pc(pc))?;
             pc = state.pc;
 
             if state.is_terminated {
@@ -158,14 +170,16 @@ where
         tracing::debug!("Number of continuation segments: {}", segments.len());
         #[cfg(feature = "bench-metrics")]
         metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
+        #[cfg(feature = "bench-metrics")]
+        tracing::info!("execute_time [all segments]: {:?}", start.elapsed());
 
         Ok(segments)
     }
 
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         let mut results = self.execute_segments(exe, input)?;
         let last = results.last_mut().unwrap();
@@ -184,20 +198,21 @@ where
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        self.execute_and_generate_impl(exe.into(), None, input.into())
+        self.execute_and_generate_impl(exe.into(), None, input)
     }
+
     pub fn execute_and_generate_with_cached_program<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        commited_exe: Arc<VmCommittedExe<SC>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -207,14 +222,14 @@ where
         self.execute_and_generate_impl(
             commited_exe.exe.clone(),
             Some(commited_exe.committed_program.clone()),
-            input.into(),
+            input,
         )
     }
     fn execute_and_generate_impl<SC: StarkGenericConfig>(
         &self,
-        exe: AxVmExe<F>,
+        exe: VmExe<F>,
         committed_program: Option<CommittedTraceData<SC>>,
-        input: VecDeque<Vec<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -230,13 +245,8 @@ where
                 .into_iter()
                 .enumerate()
                 .map(|(seg_idx, seg)| {
-                    #[cfg(feature = "bench-metrics")]
-                    let start = std::time::Instant::now();
-                    let ret = seg.generate_proof_input(committed_program.clone());
-                    #[cfg(feature = "bench-metrics")]
-                    metrics::gauge!("execute_and_trace_gen_time_ms", "segment" => seg_idx.to_string())
-                        .set(start.elapsed().as_millis() as f64);
-                    ret
+                    tracing::info_span!("trace_gen", segment = seg_idx)
+                        .in_scope(|| seg.generate_proof_input(committed_program.clone()))
                 })
                 .collect(),
             final_memory,
@@ -292,10 +302,10 @@ where
     /// Executes a program and returns the public values. None means the public value is not set.
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: Vec<Vec<F>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = self.execute_impl(exe.into(), input.into())?;
+        let segment = self.execute_impl(exe.into(), input)?;
         let air_heights = segment.chip_complex.current_trace_heights();
         let internal_heights = segment.chip_complex.get_internal_trace_heights();
         let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
@@ -313,28 +323,33 @@ where
     /// Executes a program and returns its proof input.
     pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
-        commited_exe: Arc<AxVmCommittedExe<SC>>,
-        input: Vec<Vec<F>>,
+        commited_exe: Arc<VmCommittedExe<SC>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<ProofInput<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_impl(commited_exe.exe.clone(), input.into())?;
-        Ok(segment.generate_proof_input(Some(commited_exe.committed_program.clone())))
+        let segment = self.execute_impl(commited_exe.exe.clone(), input)?;
+        let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
+            segment.generate_proof_input(Some(commited_exe.committed_program.clone()))
+        });
+        Ok(proof_input)
     }
 
     fn execute_impl(
         &self,
-        exe: AxVmExe<F>,
-        input: VecDeque<Vec<F>>,
+        exe: VmExe<F>,
+        input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
             exe.program.clone(),
-            Streams::new(input),
+            input.into(),
             None,
             exe.fn_bounds,
         );
@@ -342,6 +357,12 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
         segment.execute_from_pc(pc_start)?;
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
+        #[cfg(feature = "bench-metrics")]
+        tracing::info!("execute_time [single]: {:?}", start.elapsed());
+
         Ok(segment)
     }
 }
@@ -423,31 +444,31 @@ where
         keygen_builder.generate_pk()
     }
 
-    pub fn commit_exe(&self, exe: impl Into<AxVmExe<F>>) -> Arc<AxVmCommittedExe<SC>> {
+    pub fn commit_exe(&self, exe: impl Into<VmExe<F>>) -> Arc<VmCommittedExe<SC>> {
         let exe = exe.into();
-        Arc::new(AxVmCommittedExe::commit(exe, self.engine.config().pcs()))
+        Arc::new(VmCommittedExe::commit(exe, self.engine.config().pcs()))
     }
 
     pub fn execute(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<Option<VmMemoryState<F>>, ExecutionError> {
         self.executor.execute(exe, input)
     }
 
     pub fn execute_and_generate(
         &self,
-        exe: impl Into<AxVmExe<F>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError> {
         self.executor.execute_and_generate(exe, input)
     }
 
     pub fn execute_and_generate_with_cached_program(
         &self,
-        committed_exe: Arc<AxVmCommittedExe<SC>>,
-        input: impl Into<VecDeque<Vec<F>>>,
+        committed_exe: Arc<VmCommittedExe<SC>>,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, ExecutionError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -461,8 +482,7 @@ where
         pk: &MultiStarkProvingKey<SC>,
         proof_input: ProofInput<SC>,
     ) -> Proof<SC> {
-        tracing::info_span!("prove_segment", segment = 0)
-            .in_scope(|| self.engine.prove(pk, proof_input))
+        self.engine.prove(pk, proof_input)
     }
 
     pub fn prove(

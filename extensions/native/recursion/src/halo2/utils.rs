@@ -1,9 +1,16 @@
-use std::{cmp::Reverse, sync::Arc};
+use std::{
+    cmp::Reverse,
+    collections::HashMap,
+    io::BufReader,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 
-use ax_stark_backend::{config::StarkGenericConfig, prover::types::AirProofInput};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use p3_matrix::Matrix;
+use openvm_stark_backend::{
+    config::StarkGenericConfig, p3_matrix::Matrix, prover::types::AirProofInput,
+};
 use rand::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},
@@ -24,10 +31,14 @@ use snark_verifier_sdk::{
     NativeLoader, PlonkVerifier, Snark, SHPLONK,
 };
 
-static KZG_PARAMS_23: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+use crate::halo2::Halo2Params;
+pub const DEFAULT_PARAMS_DIR: &str = "./params";
+static TESTING_KZG_PARAMS_23: Lazy<Halo2Params> = Lazy::new(|| gen_kzg_params(23));
+
+pub(crate) fn gen_kzg_params(k: u32) -> Halo2Params {
     let mut rng = StdRng::seed_from_u64(42);
-    ParamsKZG::setup(23, &mut rng)
-});
+    ParamsKZG::setup(k, &mut rng)
+}
 
 lazy_static! {
     // TODO: this should be dynamic. hard code for now.
@@ -49,10 +60,10 @@ lazy_static! {
           }
        "#).unwrap();
     /// Hacking because of bad interface. This is to construct a fake KZG params to pass Svk(which only requires ParamsKZG.g[0]) to AggregationCircuit.
-    static ref FAKE_KZG_PARAMS: ParamsKZG<Bn256> = KZGCommitmentScheme::new_params(1);
+    static ref FAKE_KZG_PARAMS: Halo2Params = KZGCommitmentScheme::new_params(1);
 }
 
-pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
+pub static KZG_PARAMS_FOR_SVK: Lazy<Halo2Params> = Lazy::new(|| {
     if std::env::var("RANDOM_SRS").is_ok() {
         read_params(1).as_ref().clone()
     } else {
@@ -60,7 +71,7 @@ pub static KZG_PARAMS_FOR_SVK: Lazy<ParamsKZG<Bn256>> = Lazy::new(|| {
     }
 });
 
-fn build_kzg_params_for_svk(g: G1Affine) -> ParamsKZG<Bn256> {
+fn build_kzg_params_for_svk(g: G1Affine) -> Halo2Params {
     FAKE_KZG_PARAMS.from_parts(
         1,
         vec![g],
@@ -81,9 +92,52 @@ pub(crate) fn verify_snark(dk: &KzgDecidingKey<Bn256>, snark: &Snark) {
         .expect("PlonkVerifier failed");
 }
 
-pub(crate) fn read_params(k: u32) -> Arc<ParamsKZG<Bn256>> {
+pub trait Halo2ParamsReader {
+    fn read_params(&self, k: usize) -> Arc<Halo2Params>;
+}
+
+pub struct CacheHalo2ParamsReader {
+    params_dir: PathBuf,
+    cached_params: Arc<Mutex<HashMap<usize, Arc<Halo2Params>>>>,
+}
+
+impl Halo2ParamsReader for CacheHalo2ParamsReader {
+    fn read_params(&self, k: usize) -> Arc<Halo2Params> {
+        self.cached_params
+            .lock()
+            .unwrap()
+            .entry(k)
+            .or_insert_with(|| Arc::new(self.read_params_from_folder(k)))
+            .clone()
+    }
+}
+impl CacheHalo2ParamsReader {
+    pub fn new(params_dir: impl AsRef<Path>) -> Self {
+        Self {
+            params_dir: params_dir.as_ref().to_path_buf(),
+            cached_params: Default::default(),
+        }
+    }
+    pub fn new_with_default_params_dir() -> Self {
+        Self {
+            params_dir: PathBuf::from(DEFAULT_PARAMS_DIR),
+            cached_params: Default::default(),
+        }
+    }
+    fn read_params_from_folder(&self, k: usize) -> Halo2Params {
+        ParamsKZG::<Bn256>::read(&mut BufReader::new(
+            std::fs::File::open(self.params_dir.as_path().join(format!("kzg_bn254_{k}.srs")))
+                .expect("Params file does not exist"),
+        ))
+        .unwrap()
+    }
+}
+
+/// When `RANDOM_SRS` is set, this function will return a random params which should only be used
+/// for testing purpose.
+fn read_params(k: u32) -> Arc<Halo2Params> {
     if std::env::var("RANDOM_SRS").is_ok() {
-        let mut ret = KZG_PARAMS_23.clone();
+        let mut ret = TESTING_KZG_PARAMS_23.clone();
         ret.downsize(k);
         Arc::new(ret)
     } else {

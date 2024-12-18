@@ -1,14 +1,17 @@
 [package]
-name = "axvm-pairing-transpiler"
+name = "openvm-pairing-transpiler"
+description = "OpenVM transpiler extension for elliptic curve pairing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for pairing"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-axvm-instructions = { workspace = true }
-axvm-transpiler = { workspace = true }
-p3-field = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
-strum_macros = { workspace = true }
+openvm-pairing-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }

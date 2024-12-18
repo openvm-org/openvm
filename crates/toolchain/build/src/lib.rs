@@ -12,21 +12,20 @@ use std::{
     process::{Command, Stdio},
 };
 
-use axvm_platform::memory;
 use cargo_metadata::{MetadataCommand, Package};
-use config::GuestBuildOptions;
+use openvm_platform::memory;
 
-pub use self::config::{DockerOptions, GuestOptions};
+pub use self::config::GuestOptions;
 
 mod config;
 
 #[allow(dead_code)]
-const RUSTUP_TOOLCHAIN_NAME: &str = "axiom";
+const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
 pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
-    let manifest_path = manifest_dir.as_ref().join("Cargo.toml");
+    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
     let manifest_meta = MetadataCommand::new()
         .manifest_path(&manifest_path)
         .no_deps()
@@ -69,19 +68,36 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
         .into()
 }
 
+/// Returns the target executable directory given `target_dir` and `profile`.
+pub fn get_dir_with_profile(
+    target_dir: impl AsRef<Path>,
+    profile: &str,
+    examples: bool,
+) -> PathBuf {
+    let res = target_dir
+        .as_ref()
+        .join("riscv32im-risc0-zkvm-elf")
+        .join(profile);
+    if examples {
+        res.join("examples")
+    } else {
+        res
+    }
+}
+
 /// When called from a build.rs, returns the current package being built.
 pub fn current_package() -> Package {
     get_package(env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
-/// Reads the value of the environment variable `AXIOM_BUILD_DEBUG` and returns true if it is set to 1.
+/// Reads the value of the environment variable `OPENVM_BUILD_DEBUG` and returns true if it is set to 1.
 pub fn is_debug() -> bool {
-    get_env_var("AXIOM_BUILD_DEBUG") == "1"
+    get_env_var("OPENVM_BUILD_DEBUG") == "1"
 }
 
-/// Reads the value of the environment variable `AXIOM_SKIP_BUILD` and returns true if it is set to 1.
+/// Reads the value of the environment variable `OPENVM_SKIP_BUILD` and returns true if it is set to 1.
 pub fn is_skip_build() -> bool {
-    !get_env_var("AXIOM_SKIP_BUILD").is_empty()
+    !get_env_var("OPENVM_SKIP_BUILD").is_empty()
 }
 
 fn get_env_var(name: &str) -> String {
@@ -136,7 +152,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = sanitized_cmd("rustup")
-        .args(["+nightly", "which", "rustc"]) // TODO: switch +nightly to +axiom
+        .args(["+nightly-2024-10-30", "which", "rustc"]) // TODO: switch +nightly to +openvm once we make a toolchain
         .output()
         .expect("rustup failed to find nightly toolchain")
         .stdout;
@@ -147,15 +163,20 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     let mut cmd = sanitized_cmd("cargo");
     // TODO[jpw]: remove +nightly
-    let mut args = vec!["+nightly", subcmd, "--target", "riscv32im-risc0-zkvm-elf"];
+    let mut args = vec![
+        "+nightly-2024-10-30",
+        subcmd,
+        "--target",
+        "riscv32im-risc0-zkvm-elf",
+    ];
 
-    if std::env::var("AXIOM_BUILD_LOCKED").is_ok() {
+    if std::env::var("OPENVM_BUILD_LOCKED").is_ok() {
         args.push("--locked");
     }
 
-    // let rust_src = get_env_var("AXIOM_RUST_SRC");
+    // let rust_src = get_env_var("OPENVM_RUST_SRC");
     // if !rust_src.is_empty() {
-    // TODO[jpw]: only do this for custom src once we make axiom toolchain
+    // TODO[jpw]: only do this for custom src once we make openvm toolchain
     args.push("-Z");
     args.push("build-std=alloc,core,proc_macro,panic_abort,std");
     args.push("-Z");
@@ -206,7 +227,7 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
 // progress messages from the inner cargo so the user doesn't
 // think it's just hanging.
 fn tty_println(msg: &str) {
-    let tty_file = env::var("AXIOM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
+    let tty_file = env::var("OPENVM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
 
     let mut tty = fs::OpenOptions::new()
         .read(true)
@@ -225,19 +246,22 @@ fn tty_println(msg: &str) {
 
 /// Builds a package that targets the riscv guest into the specified target
 /// directory.
-pub fn build_guest_package<P>(
+pub fn build_guest_package(
     pkg: &Package,
-    target_dir: P,
-    guest_opts: &GuestBuildOptions,
+    guest_opts: &GuestOptions,
     runtime_lib: Option<&str>,
-) where
-    P: AsRef<Path>,
-{
+    target_filter: &Option<TargetFilter>,
+) -> Result<PathBuf, Option<i32>> {
     if is_skip_build() {
-        return;
+        return Err(None);
     }
 
-    fs::create_dir_all(target_dir.as_ref()).unwrap();
+    let target_dir = guest_opts
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| get_target_dir(pkg.manifest_path.clone()));
+
+    fs::create_dir_all(&target_dir).unwrap();
 
     let runtime_rust_flags = runtime_lib
         .map(|lib| vec![String::from("-C"), format!("link_arg={}", lib)])
@@ -262,15 +286,36 @@ pub fn build_guest_package<P>(
         "--manifest-path",
         pkg.manifest_path.as_str(),
         "--target-dir",
-        target_dir.as_ref().to_str().unwrap(),
+        target_dir.to_str().unwrap(),
     ]);
 
-    if !is_debug() {
-        cmd.args(["--release"]);
+    if let Some(target_filter) = target_filter {
+        cmd.args([
+            format!("--{}", target_filter.kind).as_str(),
+            target_filter.name.as_str(),
+        ]);
     }
 
+    let profile = if let Some(profile) = &guest_opts.profile {
+        profile
+    } else if is_debug() {
+        "dev"
+    } else {
+        "release"
+    };
+    cmd.args(["--profile", profile]);
+
     cmd.args(&guest_opts.options);
-    tty_println(&format!("cargo command: {:?}", cmd));
+
+    let command_string = format!(
+        "{} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    tty_println(&format!("cargo command: {command_string}"));
 
     let mut child = cmd
         .stderr(Stdio::piped())
@@ -290,7 +335,55 @@ pub fn build_guest_package<P>(
 
     let res = child.wait().expect("Guest 'cargo build' failed");
     if !res.success() {
-        std::process::exit(res.code().unwrap());
+        Err(res.code())
+    } else {
+        Ok(get_dir_with_profile(
+            &target_dir,
+            profile,
+            target_filter
+                .as_ref()
+                .map(|t| t.kind == "example")
+                .unwrap_or(false),
+        ))
+    }
+}
+
+/// A filter for selecting a target from a package.
+#[derive(Default)]
+pub struct TargetFilter {
+    /// The target name to match.
+    pub name: String,
+    /// The kind of target to match.
+    pub kind: String,
+}
+
+/// Finds the unique executable target in the given package and target directory,
+/// using the given target filter.
+pub fn find_unique_executable<P: AsRef<Path>, Q: AsRef<Path>>(
+    pkg_dir: P,
+    target_dir: Q,
+    target_filter: &Option<TargetFilter>,
+) -> eyre::Result<PathBuf> {
+    let pkg = get_package(pkg_dir.as_ref());
+    let elf_paths = pkg
+        .targets
+        .into_iter()
+        .filter(move |target| {
+            if let Some(target_filter) = target_filter {
+                return target.kind.iter().any(|k| k == &target_filter.kind)
+                    && target.name == target_filter.name;
+            }
+            true
+        })
+        .collect::<Vec<_>>();
+    if elf_paths.len() != 1 {
+        Err(eyre::eyre!(
+            "Expected 1 target, got {}: {:#?}",
+            elf_paths.len(),
+            elf_paths
+        ))
+    } else {
+        Ok(target_dir.as_ref().join(&elf_paths[0].name))
     }
 }
 

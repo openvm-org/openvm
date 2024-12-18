@@ -1,5 +1,7 @@
-use ax_stark_backend::interaction::InteractionBuilder;
-use p3_field::{AbstractField, Field};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_field::{AbstractField, Field},
+};
 
 use crate::SubAir;
 

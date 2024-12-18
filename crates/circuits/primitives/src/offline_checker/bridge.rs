@@ -1,4 +1,4 @@
-use ax_stark_backend::interaction::InteractionBuilder;
+use openvm_stark_backend::interaction::InteractionBuilder;
 use itertools::Itertools;
 
 use super::{columns::OfflineCheckerCols, OfflineChecker};

@@ -1,14 +1,14 @@
-use ax_stark_backend::{
+use backtrace::Backtrace;
+#[cfg(feature = "function-span")]
+use openvm_instructions::exe::FnBound;
+use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
     Chip,
 };
-#[cfg(feature = "function-span")]
-use axvm_instructions::exe::FnBound;
-use axvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
-use backtrace::Backtrace;
-use p3_field::PrimeField32;
 
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
@@ -145,7 +145,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 vec![]
             };
 
-            if opcode == SystemOpcode::TERMINATE.with_default_offset() {
+            if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
                 did_terminate = true;
                 self.chip_complex.connector_chip_mut().end(
                     ExecutionState::new(pc, timestamp),
@@ -155,7 +155,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             }
 
             // Some phantom instruction handling is more convenient to do here than in PhantomChip.
-            if opcode == SystemOpcode::PHANTOM as usize {
+            if opcode == VmOpcode::with_default_offset(SystemOpcode::PHANTOM) {
                 // Note: the discriminant is the lower 16 bits of the c operand.
                 let discriminant = instruction.c.as_canonical_u32() as u16;
                 let phantom = SysPhantom::from_repr(discriminant);
@@ -164,9 +164,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     Some(SysPhantom::DebugPanic) => {
                         if let Some(mut backtrace) = prev_backtrace {
                             backtrace.resolve();
-                            eprintln!("axvm program failure; backtrace:\n{:?}", backtrace);
+                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
                         } else {
-                            eprintln!("axvm program failure; no backtrace");
+                            eprintln!("openvm program failure; no backtrace");
                         }
                         return Err(ExecutionError::Fail { pc });
                     }
@@ -214,8 +214,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 )?;
                 assert!(next_state.timestamp > timestamp);
                 #[cfg(feature = "bench-metrics")]
-                if collect_metrics {
-                    opcode_name = Some(executor.get_opcode_name(opcode));
+                {
+                    metrics::counter!("total_cycles").increment(1u64);
+                    if collect_metrics {
+                        opcode_name = Some(executor.get_opcode_name(opcode.as_usize()));
+                    }
                 }
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;
@@ -279,10 +282,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
 
             self.collected_metrics.emit();
-            if did_terminate {
-                metrics::counter!("total_cells_used")
-                    .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-            }
+            metrics::counter!("total_cells_used")
+                .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
         }
 
         Ok(ExecutionSegmentState {
@@ -301,7 +302,15 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        self.chip_complex.generate_proof_input(cached_program)
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
+        let proof_input = self.chip_complex.generate_proof_input(cached_program);
+
+        #[cfg(feature = "bench-metrics")]
+        metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
+
+        proof_input
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.

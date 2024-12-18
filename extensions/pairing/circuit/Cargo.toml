@@ -1,25 +1,31 @@
 [package]
-name = "axvm-pairing-circuit"
-version = "0.1.0"
-edition = "2021"
-description = "Elliptic curve pairing circuits."
+name = "openvm-pairing-circuit"
+description = "OpenVM circuit extension for elliptic curve pairing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-ax-circuit-derive = { workspace = true }
-ax-circuit-primitives = { workspace = true }
-axvm-circuit-derive = { workspace = true }
-axvm-circuit = { workspace = true }
-axvm-ecc-guest = { workspace = true }
-axvm-pairing-guest = { workspace = true }
-ax-ecc-execution = { workspace = true }
-axvm-ecc-constants = { workspace = true }
-axvm-instructions = { workspace = true }
-ax-mod-circuit-builder = { workspace = true }
-ax-stark-backend = { workspace = true }
-axvm-rv32im-circuit = { workspace = true }
-axvm-algebra-circuit = { workspace = true }
-axvm-rv32-adapters = { workspace = true }
-axvm-ecc-circuit = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-circuit-derive = { workspace = true }
+openvm-circuit = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+openvm-pairing-guest = { workspace = true, features = [
+    "halo2curves",
+    "bls12_381",
+    "bn254",
+] }
+openvm-instructions = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
+openvm-algebra-circuit = { workspace = true }
+openvm-rv32-adapters = { workspace = true }
+openvm-ecc-circuit = { workspace = true }
+openvm-pairing-transpiler = { workspace = true }
 
 num-bigint-dig = { workspace = true }
 num-traits = { workspace = true }
@@ -30,13 +36,20 @@ once_cell = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 eyre = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+openvm-pairing-guest = { workspace = true }
 
 [dev-dependencies]
-ax-stark-sdk = { workspace = true }
-ax-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
-axvm-circuit = { workspace = true, features = ["test-utils"] }
-axvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
-axvm-ecc-guest = { workspace = true }
-axvm-pairing-guest = { workspace = true }
-ax-ecc-execution = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+openvm-pairing-guest = { workspace = true, features = [
+    "halo2curves",
+    "bls12_381",
+    "bn254",
+] }

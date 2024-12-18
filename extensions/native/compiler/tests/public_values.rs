@@ -1,8 +1,8 @@
-use axvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
-use axvm_native_circuit::{execute_program, Native, NativeConfig};
-use axvm_native_compiler::{asm::AsmBuilder, prelude::*};
-use p3_baby_bear::BabyBear;
-use p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
+use openvm_native_circuit::{execute_program, Native, NativeConfig};
+use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

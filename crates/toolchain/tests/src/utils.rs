@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use axvm_build::{build_guest_package, get_package, is_debug, GuestOptions};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use eyre::Result;
+use openvm_build::{build_guest_package, get_package, is_debug, GuestOptions, TargetFilter};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
 fn get_programs_dir() -> PathBuf {
@@ -29,14 +29,31 @@ pub fn build_example_program_with_features<S: AsRef<str>>(
     features: impl IntoIterator<Item = S>,
 ) -> Result<Elf> {
     let manifest_dir = get_programs_dir();
+    build_example_program_at_path_with_features(manifest_dir, example_name, features)
+}
+
+pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
+    manifest_dir: PathBuf,
+    example_name: &str,
+    features: impl IntoIterator<Item = S>,
+) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
-        .with_options(["--example", example_name])
         .with_features(features)
-        .into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+        .with_target_dir(target_dir.path());
+    if let Err(Some(code)) = build_guest_package(
+        &pkg,
+        &guest_opts,
+        None,
+        &Some(TargetFilter {
+            name: example_name.to_string(),
+            kind: "example".to_string(),
+        }),
+    ) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let profile = if is_debug() { "debug" } else { "release" };
     let elf_path = pkg

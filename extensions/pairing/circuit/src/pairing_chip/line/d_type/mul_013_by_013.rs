@@ -1,14 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
-use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_circuit::Fp2;
-use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_instructions::PairingOpcode;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_algebra_circuit::Fp2;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
+};
+use openvm_pairing_transpiler::PairingOpcode;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: line0.b, line0.c, line1.b, line1.c <Fp2>: 2 x 4 field elements
 // Output: 5 Fp2 coefficients -> 10 field elements
@@ -56,6 +58,7 @@ impl<
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "Mul013By013",
+            true,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

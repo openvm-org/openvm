@@ -1,27 +1,33 @@
 use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
 
-use p3_field::PrimeField32;
-use p3_matrix::dense::RowMajorMatrix;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput,
+    rap::AnyRap,
+    Chip, ChipUsageGetter,
+};
 use rustc_hash::FxHashSet;
 
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
         manager::dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleChip, MemoryMerkleCols},
+        merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
         tree::MemoryNode::{self, NonLeaf},
         Equipartition,
     },
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    pub fn generate_trace_and_final_tree(
+    pub fn finalize(
         &mut self,
         initial_tree: &MemoryNode<CHUNK, F>,
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
-        overridden_height: Option<usize>,
-    ) -> (RowMajorMatrix<F>, MemoryNode<CHUNK, F>) {
+    ) {
+        assert!(self.final_state.is_none(), "Merkle chip already finalized");
         // there needs to be a touched node with `height_section` = 0
         // shouldn't be a leaf because
         // trace generation will expect an interaction from MemoryInterfaceChip in that case
@@ -43,13 +49,41 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             0,
             hasher,
         );
+        self.final_state = Some(FinalState {
+            rows,
+            init_root: initial_tree.hash(),
+            final_root: final_tree.hash(),
+        });
+    }
+}
+
+impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+where
+    Val<SC>: PrimeField32,
+{
+    fn air(&self) -> Arc<dyn AnyRap<SC>> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = Arc::new(self.air);
+        assert!(
+            self.final_state.is_some(),
+            "Merkle chip must finalize before trace generation"
+        );
+        let FinalState {
+            mut rows,
+            init_root,
+            final_root,
+        } = self.final_state.unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
+        // TODO: do we only need find all height == 0 instead of sorting?
         rows.sort_by_key(|row| Reverse(row.parent_height));
 
-        let width = MemoryMerkleCols::<F, CHUNK>::width();
+        let width = MemoryMerkleCols::<Val<SC>, CHUNK>::width();
         let mut height = rows.len().next_power_of_two();
-        if let Some(mut oh) = overridden_height {
+        if let Some(mut oh) = self.overridden_height {
             oh = oh.next_power_of_two();
             assert!(
                 oh >= height,
@@ -57,21 +91,35 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             );
             height = oh;
         }
-        let mut trace = F::zero_vec(width * height);
+        let mut trace = Val::<SC>::zero_vec(width * height);
 
         for (trace_row, row) in trace.chunks_exact_mut(width).zip(rows) {
             *trace_row.borrow_mut() = row;
         }
 
         let trace = RowMajorMatrix::new(trace, width);
-        (trace, final_tree)
+        let pvs = init_root.into_iter().chain(final_root).collect();
+        AirProofInput::simple(air, trace, pvs)
+    }
+}
+impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
+    fn air_name(&self) -> String {
+        "Merkle".to_string()
+    }
+
+    fn current_trace_height(&self) -> usize {
+        2 * self.num_touched_nonleaves
+    }
+
+    fn trace_width(&self) -> usize {
+        MemoryMerkleCols::<F, CHUNK>::width()
     }
 }
 
 struct TreeHelper<'a, const CHUNK: usize, F: PrimeField32> {
     memory_dimensions: MemoryDimensions,
     final_memory: &'a Equipartition<F, CHUNK>,
-    touched_nodes: &'a FxHashSet<(usize, usize, usize)>,
+    touched_nodes: &'a FxHashSet<(usize, u32, u32)>,
     trace_rows: &'a mut Vec<MemoryMerkleCols<F, CHUNK>>,
 }
 
@@ -80,13 +128,12 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
         &mut self,
         height: usize,
         initial_node: &MemoryNode<CHUNK, F>,
-        as_label: usize,
-        address_label: usize,
+        as_label: u32,
+        address_label: u32,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         if height == 0 {
-            let address_space =
-                F::from_canonical_usize(as_label + self.memory_dimensions.as_offset);
+            let address_space = as_label + self.memory_dimensions.as_offset;
             let leaf_values = *self
                 .final_memory
                 .get(&(address_space, address_label))
@@ -167,8 +214,8 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
     fn add_trace_row(
         &mut self,
         parent_height: usize,
-        as_label: usize,
-        address_label: usize,
+        as_label: u32,
+        address_label: u32,
         node: &MemoryNode<CHUNK, F>,
         direction_changes: Option<[bool; 2]>,
     ) {
@@ -184,8 +231,8 @@ impl<const CHUNK: usize, F: PrimeField32> TreeHelper<'_, CHUNK, F> {
                 height_section: F::from_bool(parent_height > self.memory_dimensions.address_height),
                 parent_height: F::from_canonical_usize(parent_height),
                 is_root: F::from_bool(parent_height == self.memory_dimensions.overall_height()),
-                parent_as_label: F::from_canonical_usize(as_label),
-                parent_address_label: F::from_canonical_usize(address_label),
+                parent_as_label: F::from_canonical_u32(as_label),
+                parent_address_label: F::from_canonical_u32(address_label),
                 parent_hash: *hash,
                 left_child_hash: left.hash(),
                 right_child_hash: right.hash(),

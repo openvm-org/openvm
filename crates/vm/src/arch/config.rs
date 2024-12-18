@@ -1,26 +1,22 @@
-use ax_poseidon2_air::poseidon2::Poseidon2Config;
-use ax_stark_backend::ChipUsageGetter;
-use axvm_circuit::system::memory::MemoryTraceHeights;
-use axvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use derive_new::new;
-use p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
+use openvm_circuit::system::memory::MemoryTraceHeights;
+use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_poseidon2_air::poseidon2::Poseidon2Config;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+// TODO[jpw]: re-exporting hardcoded bus constants for tests. Import paths should be
+// updated directly but it changes many files.
+#[cfg(any(test, feature = "test-utils"))]
+pub use super::testing::{
+    BITWISE_OP_LOOKUP_BUS, BYTE_XOR_BUS, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
+    POSEIDON2_DIRECT_BUS, RANGE_TUPLE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+};
 use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
-
-pub const EXECUTION_BUS: usize = 0;
-pub const MEMORY_BUS: usize = 1;
-pub const POSEIDON2_DIRECT_BUS: usize = 6;
-pub const READ_INSTRUCTION_BUS: usize = 8;
-pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
-pub const BYTE_XOR_BUS: usize = 10;
-//pub const BYTE_XOR_BUS: XorBus = XorBus(8);
-pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
-pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
@@ -33,7 +29,7 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH
     Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
 }
 
-pub trait VmConfig<F: PrimeField32>: Clone {
+pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
     type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
@@ -51,7 +47,7 @@ pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
     pub as_height: usize,
     /// The offset of the address space.
-    pub as_offset: usize,
+    pub as_offset: u32,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     /// Limb size used by the range checker

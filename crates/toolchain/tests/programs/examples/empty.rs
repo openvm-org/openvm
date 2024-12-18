@@ -1,6 +1,6 @@
 #![no_main]
 #![no_std]
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {}

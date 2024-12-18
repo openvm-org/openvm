@@ -3,22 +3,27 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::io::read_vec;
-use axvm_algebra_guest::IntMod;
-use axvm_ecc_guest::AffinePoint;
-use axvm_pairing_guest::pairing::MillerStep;
+use openvm::io::read_vec;
+use openvm_algebra_guest::IntMod;
+use openvm_ecc_guest::AffinePoint;
+use openvm_pairing_guest::pairing::MillerStep;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
-    use axvm_pairing_guest::bn254::{Bn254, Fp2};
+    use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
 
-    axvm_algebra_moduli_setup::moduli_init!(
-        "21888242871839275222246405745257275088696311157297823662689037894645226208583"
-    );
+    openvm_algebra_moduli_setup::moduli_init! {
+        "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
+        "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+    }
+
+    openvm_algebra_complex_macros::complex_init! {
+        Bn254Fp2 { mod_idx = 0 },
+    }
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 32 * 12);
@@ -32,7 +37,7 @@ mod bn254 {
         let mut pt_bytes = [0u8; 32 * 4];
         let mut l_bytes = [0u8; 32 * 4];
 
-        // TODO: if we ever need to change this, we should switch to using `bincode` to serialize
+        // TODO: if we ever need to change this, we should switch to using `StdIn::write` to serialize
         //       for us and use `read()` instead of `read_vec()`
         pt_bytes[0..32].copy_from_slice(pt_cmp.x.c0.as_le_bytes());
         pt_bytes[32..2 * 32].copy_from_slice(pt_cmp.x.c1.as_le_bytes());
@@ -62,7 +67,7 @@ mod bn254 {
         let mut l0_bytes = [0u8; 32 * 4];
         let mut l1_bytes = [0u8; 32 * 4];
 
-        // TODO: if we ever need to change this, we should switch to using `bincode` to serialize
+        // TODO: if we ever need to change this, we should switch to using `StdIn::write` to serialize
         //       for us and use `read()` instead of `read_vec()`
         pt_bytes[0..32].copy_from_slice(pt_cmp.x.c0.as_le_bytes());
         pt_bytes[32..2 * 32].copy_from_slice(pt_cmp.x.c1.as_le_bytes());
@@ -85,11 +90,18 @@ mod bn254 {
 
 #[cfg(feature = "bls12_381")]
 mod bls12_381 {
-    use axvm_pairing_guest::bls12_381::{Bls12_381, Fp2};
+    use openvm_pairing_guest::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
 
-    axvm_algebra_moduli_setup::moduli_init!("0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab");
+    openvm_algebra_moduli_setup::moduli_init! {
+        "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+        "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    }
+
+    openvm_algebra_complex_macros::complex_init! {
+        Bls12_381Fp2 { mod_idx = 0 },
+    }
 
     pub fn test_miller_step(io: &[u8]) {
         assert_eq!(io.len(), 48 * 12);
@@ -156,13 +168,13 @@ pub fn main() {
 
     cfg_match! {
         cfg(feature = "bn254") => {
-            bn254::setup_all_moduli();
+            bn254::setup_0();
             bn254::setup_all_complex_extensions();
             bn254::test_miller_step(&io[..32 * 12]);
             bn254::test_miller_double_and_add_step(&io[32 * 12..]);
         }
         cfg(feature = "bls12_381") => {
-            bls12_381::setup_all_moduli();
+            bls12_381::setup_0();
             bls12_381::setup_all_complex_extensions();
             bls12_381::test_miller_step(&io[..48 * 12]);
             bls12_381::test_miller_double_and_add_step(&io[48 * 12..]);

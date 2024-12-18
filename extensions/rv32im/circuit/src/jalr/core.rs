@@ -4,26 +4,22 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
-};
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    program::PC_BITS,
-    Rv32JalrOpcode::{self, *},
-    UsizeOpcode,
 };
 
 use crate::adapters::{compose, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -213,7 +209,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         assert!(self.range_checker_chip.range_max_bits() >= 16);
         let Instruction { opcode, c, .. } = *instruction;
-        let local_opcode_index = Rv32JalrOpcode::from_usize(opcode - self.air.offset);
+        let local_opcode = Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
@@ -222,7 +218,7 @@ where
         let rs1 = reads.into()[0];
         let rs1_val = compose(rs1);
 
-        let (to_pc, rd_data) = run_jalr(local_opcode_index, from_pc, imm_extended, rs1_val);
+        let (to_pc, rd_data) = run_jalr(local_opcode, from_pc, imm_extended, rs1_val);
 
         self.bitwise_lookup_chip
             .request_range(rd_data[0], rd_data[1]);

@@ -1,6 +1,8 @@
-use axvm_native_compiler::prelude::*;
-use p3_commit::TwoAdicMultiplicativeCoset;
-use p3_field::{AbstractField, TwoAdicField};
+use openvm_native_compiler::prelude::*;
+use openvm_stark_backend::{
+    p3_commit::TwoAdicMultiplicativeCoset,
+    p3_field::{AbstractField, TwoAdicField},
+};
 use p3_symmetric::Hash;
 
 use super::{
@@ -312,18 +314,22 @@ where
 pub mod tests {
     use std::cmp::Reverse;
 
-    use ax_stark_backend::config::{StarkGenericConfig, Val};
-    use ax_stark_sdk::config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config};
-    use axvm_circuit::arch::instructions::program::Program;
-    use axvm_native_compiler::{
+    use itertools::Itertools;
+    use openvm_circuit::arch::instructions::program::Program;
+    use openvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Array, RVar, DIGEST_SIZE},
     };
-    use itertools::Itertools;
-    use p3_baby_bear::BabyBear;
-    use p3_challenger::{CanObserve, FieldChallenger};
-    use p3_commit::{Pcs, TwoAdicMultiplicativeCoset};
-    use p3_matrix::dense::RowMajorMatrix;
+    use openvm_stark_backend::{
+        config::{StarkGenericConfig, Val},
+        p3_challenger::{CanObserve, FieldChallenger},
+        p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
+        p3_matrix::dense::RowMajorMatrix,
+    };
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+        p3_baby_bear::BabyBear,
+    };
     use rand::rngs::OsRng;
 
     use crate::{
@@ -428,6 +434,6 @@ pub mod tests {
     #[test]
     fn test_two_adic_fri_pcs_single_batch() {
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
-        axvm_native_circuit::execute_program(program, witness);
+        openvm_native_circuit::execute_program(program, witness);
     }
 }

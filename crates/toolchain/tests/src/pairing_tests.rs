@@ -1,18 +1,17 @@
 #![allow(non_snake_case)]
 
-use ax_ecc_execution::axvm_ecc_guest::{
-    algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint,
-};
-use ax_stark_sdk::ax_stark_backend::p3_field::AbstractField;
-use axvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, SystemConfig, VmExecutor};
-use axvm_ecc_circuit::WeierstrassExtension;
-use axvm_ecc_constants::{BLS12381, BN254};
-use axvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
-use axvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
-use axvm_transpiler::{transpiler::Transpiler, FromElf};
 use eyre::Result;
-use p3_baby_bear::BabyBear;
+use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, SystemConfig},
+    utils::new_air_test_with_min_segments,
+};
+use openvm_ecc_circuit::WeierstrassExtension;
+use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
+use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
+use openvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand::SeedableRng;
 
 type F = BabyBear;
@@ -20,26 +19,26 @@ type F = BabyBear;
 mod bn254 {
     use std::iter;
 
-    use ax_ecc_execution::{
-        axvm_ecc_guest::halo2curves::{
-            bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            ff::Field,
-        },
-        curves::bn254::Bn254,
+    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use openvm_ecc_guest::halo2curves::{
+        bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        ff::Field,
     };
-    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use axvm_pairing_guest::{affine_point::AffineCoords, pairing::MillerStep};
-    use axvm_pairing_transpiler::PairingTranspilerExtension;
-    use axvm_rv32im_transpiler::{
+    use openvm_pairing_guest::{
+        affine_point::AffineCoords, bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254,
+        pairing::MillerStep,
+    };
+    use openvm_pairing_transpiler::PairingTranspilerExtension;
+    use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use axvm_transpiler::transpiler::Transpiler;
+    use openvm_transpiler::transpiler::Transpiler;
 
     use super::*;
     use crate::utils::build_example_program_with_features;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
-        let primes = [BN254.MODULUS.clone()];
+        let primes = [BN254_MODULUS.clone()];
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -55,7 +54,7 @@ mod bn254 {
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -64,8 +63,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
@@ -79,14 +77,14 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -95,8 +93,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
@@ -132,14 +129,14 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -148,8 +145,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
@@ -176,14 +172,14 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -192,9 +188,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -225,14 +219,14 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bn254"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -241,9 +235,7 @@ mod bn254 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -278,33 +270,34 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        // Always run proving for just pairing check
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 }
 
 mod bls12_381 {
-    use ax_ecc_execution::{
-        axvm_ecc_guest::{
-            halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-            AffinePoint,
-        },
-        curves::bls12_381::Bls12_381,
+    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use openvm_ecc_guest::{
+        algebra::IntMod,
+        halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        AffinePoint,
     };
-    use axvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use axvm_ecc_guest::algebra::IntMod;
-    use axvm_pairing_guest::pairing::{LineMulMType, MillerStep};
-    use axvm_pairing_transpiler::PairingTranspilerExtension;
-    use axvm_rv32im_transpiler::{
+    use openvm_pairing_guest::{
+        bls12_381::BLS12_381_MODULUS,
+        halo2curves_shims::bls12_381::Bls12_381,
+        pairing::{LineMulMType, MillerStep},
+    };
+    use openvm_pairing_transpiler::PairingTranspilerExtension;
+    use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use axvm_transpiler::axvm_platform::bincode;
 
     use super::*;
     use crate::utils::build_example_program_with_features;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
-        let primes = [BLS12381.MODULUS.clone()];
+        let primes = [BLS12_381_MODULUS.clone()];
         Rv32PairingConfig {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -320,7 +313,7 @@ mod bls12_381 {
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let elf = build_example_program_with_features("fp12_mul", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -329,8 +322,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
@@ -344,14 +336,14 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
         let elf = build_example_program_with_features("pairing_line", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -360,8 +352,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
@@ -398,15 +389,14 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
-    #[ignore = "fixme"]
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -415,8 +405,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
@@ -443,14 +432,14 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
         let elf = build_example_program_with_features("pairing_miller_loop", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -459,9 +448,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -498,14 +485,14 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
         let elf = build_example_program_with_features("pairing_check", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -514,9 +501,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let S = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -530,7 +515,6 @@ mod bls12_381 {
             G2Affine::from(Q * Fr::from(2)),
             G2Affine::from(Q * Fr::from(1)),
         ];
-
         let s = S_mul.map(|s| AffinePoint::new(s.x, s.y));
         let q = Q_mul.map(|p| AffinePoint::new(p.x, p.y));
 
@@ -551,14 +535,15 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        executor.execute(axvm_exe, vec![io_all])?;
+        // Always run proving for just pairing check
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let elf = build_example_program_with_features("final_exp_hint", ["bls12_381"])?;
-        let axvm_exe = AxVmExe::from_elf(
+        let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
@@ -567,8 +552,7 @@ mod bls12_381 {
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
-        );
-        let executor = VmExecutor::<F, _>::new(get_testing_config());
+        )?;
 
         let P = G1Affine::generator();
         let Q = G2Affine::generator();
@@ -580,7 +564,7 @@ mod bls12_381 {
             .into_iter()
             .map(|pt| {
                 let [x, y] = [pt.x, pt.y]
-                    .map(|x| axvm_pairing_guest::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                    .map(|x| openvm_pairing_guest::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
@@ -588,17 +572,20 @@ mod bls12_381 {
             .into_iter()
             .map(|pt| {
                 let [x, y] = [pt.x, pt.y]
-                    .map(|x| axvm_pairing_guest::bls12_381::Fp2::from_bytes(&x.to_bytes()));
+                    .map(|x| openvm_pairing_guest::bls12_381::Fp2::from_bytes(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
-        let [c, s] = [c, s].map(|x| axvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
+        let [c, s] =
+            [c, s].map(|x| openvm_pairing_guest::bls12_381::Fp12::from_bytes(&x.to_bytes()));
         let io = (ps, qs, (c, s));
-        let io = bincode::serde::encode_to_vec(&io, bincode::config::standard()).unwrap();
-        executor.execute(
-            axvm_exe,
-            vec![io.into_iter().map(F::from_canonical_u8).collect()],
-        )?;
+        let io = openvm::serde::to_vec(&io).unwrap();
+        let io = io
+            .into_iter()
+            .flat_map(|w| w.to_le_bytes())
+            .map(F::from_canonical_u8)
+            .collect();
+        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
         Ok(())
     }
 }

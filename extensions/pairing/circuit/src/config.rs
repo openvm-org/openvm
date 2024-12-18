@@ -1,17 +1,18 @@
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_circuit::*;
-use axvm_circuit::arch::{
+use derive_more::derive::From;
+use openvm_algebra_circuit::*;
+use openvm_circuit::arch::{
     SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmInventoryError,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_ecc_circuit::*;
-use axvm_rv32im_circuit::*;
-use derive_more::derive::From;
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_ecc_circuit::*;
+use openvm_rv32im_circuit::*;
+use openvm_stark_backend::p3_field::PrimeField32;
+use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Clone, Debug, VmConfig)]
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32PairingConfig {
     #[system]
     pub system: SystemConfig,

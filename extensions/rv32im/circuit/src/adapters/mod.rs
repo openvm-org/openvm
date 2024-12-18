@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
-use ax_stark_backend::p3_field::{AbstractField, PrimeField32};
-use axvm_circuit::system::memory::{MemoryController, MemoryReadRecord};
+use openvm_circuit::system::memory::{MemoryController, MemoryReadRecord};
+use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 
 mod alu;
 mod branch;
@@ -12,12 +12,12 @@ mod mul;
 mod rdwrite;
 
 pub use alu::*;
-pub use axvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use branch::*;
 pub use hintstore::*;
 pub use jalr::*;
 pub use loadstore::*;
 pub use mul::*;
+pub use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use rdwrite::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)

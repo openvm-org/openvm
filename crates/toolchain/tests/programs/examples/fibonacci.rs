@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let n = core::hint::black_box(1 << 10);

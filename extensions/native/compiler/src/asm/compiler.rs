@@ -1,8 +1,8 @@
 use alloc::{collections::BTreeMap, vec};
 use std::collections::BTreeSet;
 
-use axvm_circuit::arch::instructions::instruction::DebugInfo;
-use p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
+use openvm_circuit::arch::instructions::instruction::DebugInfo;
+use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeField32, TwoAdicField};
 
 use super::{config::AsmConfig, AssemblyCode, BasicBlock, IndexTriple, ValueOrConst};
 use crate::{
@@ -457,6 +457,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                 },
                 DslIr::LoadE(var, ptr, index) => self.load_ext(var, ptr.fp(), index, debug_info),
+                DslIr::LoadHeapPtr(ptr) => self.push(
+                    AsmInstruction::AddFI(ptr.fp(), HEAP_PTR, F::ZERO),
+                    debug_info,
+                ),
                 DslIr::StoreV(var, ptr, index) => match index.fp() {
                     IndexTriple::Const(index, offset, size) => self.push(
                         AsmInstruction::StoreFI(var.fp(), ptr.fp(), index, size, offset),
@@ -478,6 +482,10 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     ),
                 },
                 DslIr::StoreE(var, ptr, index) => self.store_ext(var, ptr.fp(), index, debug_info),
+                DslIr::StoreHeapPtr(ptr) => self.push(
+                    AsmInstruction::AddFI(HEAP_PTR, ptr.fp(), F::ZERO),
+                    debug_info,
+                ),
                 DslIr::HintBitsF(var, len) => {
                     self.push(AsmInstruction::HintBits(var.fp(), len), debug_info);
                 }

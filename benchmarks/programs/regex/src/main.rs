@@ -5,12 +5,12 @@ use core::mem::transmute;
 
 use regex::Regex;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 const pattern: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
 pub fn main() {
-    let data = axvm::io::read_vec();
+    let data = openvm::io::read_vec();
     let data = core::str::from_utf8(&data).expect("Invalid UTF-8");
 
     // Compile the regex
@@ -18,12 +18,12 @@ pub fn main() {
 
     let caps = re.captures(data).expect("No match found.");
     let email = caps.name("email").expect("No email found.");
-    let email_hash = axvm_keccak256_guest::keccak256(email.as_str().as_bytes());
+    let email_hash = openvm_keccak256_guest::keccak256(email.as_str().as_bytes());
 
     let email_hash = unsafe { transmute::<[u8; 32], [u32; 8]>(email_hash) };
 
     email_hash
         .into_iter()
         .enumerate()
-        .for_each(|(i, x)| axvm::io::reveal(x, i));
+        .for_each(|(i, x)| openvm::io::reveal(x, i));
 }

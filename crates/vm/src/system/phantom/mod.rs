@@ -4,22 +4,22 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode, UsizeOpcode, VmOpcode,
+};
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, UsizeOpcode,
-};
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 
@@ -42,7 +42,7 @@ const NUM_PHANTOM_OPERANDS: usize = 3;
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
     /// Global opcode for PhantomOpcode
-    pub phantom_opcode: usize,
+    pub phantom_opcode: VmOpcode,
 }
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -74,7 +74,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 
         self.execution_bridge
             .execute_and_increment_or_set_pc(
-                AB::Expr::from_canonical_usize(self.phantom_opcode),
+                self.phantom_opcode.to_field::<AB::F>(),
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::ONE,
@@ -102,7 +102,7 @@ impl<F> PhantomChip<F> {
         Self {
             air: PhantomAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: offset + SystemOpcode::PHANTOM.as_usize(),
+                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.as_usize()),
             },
             rows: vec![],
             memory: memory_controller,

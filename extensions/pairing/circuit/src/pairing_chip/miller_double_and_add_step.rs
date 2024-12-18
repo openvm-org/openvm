@@ -1,16 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
-use ax_stark_backend::p3_field::PrimeField32;
-use axvm_algebra_circuit::Fp2;
-use axvm_circuit::{
-    arch::{instructions::PairingOpcode, VmChipWrapper},
-    system::memory::MemoryControllerRef,
+use openvm_algebra_circuit::Fp2;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_pairing_transpiler::PairingOpcode;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -50,12 +50,13 @@ impl<
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "MillerDoubleAndAddStep",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
 }
 
-// Ref: https://github.com/axiom-crypto/afs-prototype/blob/043968891d596acdc82c8e3a9126a555fe178d43/lib/ecc-execution/src/common/miller_step.rs#L72
+// Ref: openvm_pairing_guest::miller_step
 pub fn miller_double_and_add_step_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
@@ -100,23 +101,21 @@ pub fn miller_double_and_add_step_expr(
 mod tests {
     use std::sync::Arc;
 
-    use ax_circuit_primitives::bitwise_op_lookup::{
+    use halo2curves_axiom::bn256::G2Affine;
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     };
-    use ax_ecc_execution::curves::bn254::Bn254;
-    use ax_mod_circuit_builder::test_utils::bn254_fq_to_biguint;
-    use ax_stark_backend::p3_field::AbstractField;
-    use ax_stark_sdk::p3_baby_bear::BabyBear;
-    use axvm_circuit::{
-        arch::{instructions::PairingOpcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        utils::biguint_to_limbs,
+    use openvm_ecc_guest::AffinePoint;
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_mod_circuit_builder::test_utils::{biguint_to_limbs, bn254_fq_to_biguint};
+    use openvm_pairing_guest::{
+        bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254, pairing::MillerStep,
     };
-    use axvm_ecc_constants::BN254;
-    use axvm_ecc_guest::AffinePoint;
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_pairing_guest::pairing::MillerStep;
-    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
-    use halo2curves_axiom::bn256::G2Affine;
+    use openvm_pairing_transpiler::PairingOpcode;
+    use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
@@ -144,7 +143,7 @@ mod tests {
             adapter,
             tester.memory_controller(),
             ExprBuilderConfig {
-                modulus: BN254.MODULUS.clone(),
+                modulus: BN254_MODULUS.clone(),
                 limb_bits: LIMB_BITS,
                 num_limbs: NUM_LIMBS,
             },

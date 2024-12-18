@@ -1,6 +1,8 @@
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
-use ax_circuit_primitives::{
+use num_bigint_dig::{BigInt, BigUint, Sign};
+use num_traits::Zero;
+use openvm_circuit_primitives::{
     bigint::{
         check_carry_mod_to_zero::{CheckCarryModToZeroCols, CheckCarryModToZeroSubAir},
         check_carry_to_zero::get_carry_max_abs_and_bits,
@@ -10,15 +12,13 @@ use ax_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
-use ax_stark_backend::{
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField64},
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use num_bigint_dig::{BigInt, BigUint, Sign};
-use num_traits::Zero;
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field, PrimeField64};
-use p3_matrix::Matrix;
 
 use super::{FieldVariable, SymbolicExpr};
 

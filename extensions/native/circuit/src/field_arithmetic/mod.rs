@@ -1,4 +1,4 @@
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{VmAirWrapper, VmChipWrapper},
     system::native_adapter::{NativeAdapterAir, NativeAdapterChip},
 };

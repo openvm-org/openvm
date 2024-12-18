@@ -1,4 +1,4 @@
-use axvm_algebra_guest::{field::FieldExtension, Field, IntMod};
+use openvm_algebra_guest::{field::FieldExtension, Field, IntMod};
 
 use super::fp2_invert_assign;
 

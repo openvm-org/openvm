@@ -2,17 +2,18 @@ use std::{
     array,
     borrow::BorrowMut,
     collections::{BTreeMap, BTreeSet, HashSet},
+    sync::Arc,
 };
 
-use ax_stark_backend::interaction::InteractionType;
-use ax_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    utils::create_seeded_rng,
+use openvm_stark_backend::{
+    interaction::InteractionType, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+    prover::types::AirProofInput, Chip, ChipUsageGetter,
 };
-use p3_baby_bear::BabyBear;
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+};
 use rand::RngCore;
 
 use super::DirectCompressionBus;
@@ -36,7 +37,7 @@ const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIR
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
     initial_memory: &Equipartition<BabyBear, CHUNK>,
-    touched_labels: BTreeSet<(BabyBear, usize)>,
+    touched_labels: BTreeSet<(u32, u32)>,
     final_memory: &Equipartition<BabyBear, CHUNK>,
 ) {
     let MemoryDimensions {
@@ -48,7 +49,7 @@ fn test<const CHUNK: usize>(
 
     // checking validity of test data
     for (&(address_space, label), value) in final_memory {
-        assert!((address_space.as_canonical_u32() as usize) - as_offset < (1 << as_height));
+        assert!(address_space - as_offset < (1 << as_height));
         assert!(label < (1 << address_height));
         if initial_memory.get(&(address_space, label)) != Some(value) {
             assert!(touched_labels.contains(&(address_space, label)));
@@ -71,27 +72,26 @@ fn test<const CHUNK: usize>(
     let mut chip =
         MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
     for &(address_space, label) in touched_labels.iter() {
-        for i in 0..CHUNK {
-            chip.touch_address(
-                address_space,
-                BabyBear::from_canonical_usize(label * CHUNK + i),
-            );
+        for i in 0..CHUNK as u32 {
+            chip.touch_address(address_space, label * CHUNK as u32 + i);
         }
     }
 
-    println!("trace height = {}", chip.current_height());
-    let (trace, final_tree) =
-        chip.generate_trace_and_final_tree(&initial_tree, final_memory, &mut hash_test_chip, None);
-
-    assert_eq!(final_tree, final_tree_check);
+    println!("trace height = {}", chip.current_trace_height());
+    chip.finalize(&initial_tree, final_memory, &mut hash_test_chip);
+    assert_eq!(
+        chip.final_state.as_ref().unwrap().final_root,
+        final_tree_check.hash()
+    );
+    let chip_api = chip.generate_air_proof_input();
 
     let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.0);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: InteractionType,
                            is_compress: bool,
                            height: usize,
-                           as_label: usize,
-                           address_label: usize,
+                           as_label: u32,
+                           address_label: u32,
                            hash: [BabyBear; CHUNK]| {
         let expand_direction = if is_compress {
             BabyBear::NEG_ONE
@@ -105,8 +105,8 @@ fn test<const CHUNK: usize>(
         dummy_interaction_trace_rows.extend([
             expand_direction,
             BabyBear::from_canonical_usize(height),
-            BabyBear::from_canonical_usize(as_label),
-            BabyBear::from_canonical_usize(address_label),
+            BabyBear::from_canonical_u32(as_label),
+            BabyBear::from_canonical_u32(address_label),
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
@@ -115,7 +115,7 @@ fn test<const CHUNK: usize>(
         let initial_values = *initial_memory
             .get(&(address_space, address_label))
             .unwrap_or(&[BabyBear::ZERO; CHUNK]);
-        let as_label = address_space.as_canonical_u32() as usize - as_offset;
+        let as_label = address_space - as_offset;
         interaction(
             InteractionType::Send,
             false,
@@ -144,28 +144,25 @@ fn test<const CHUNK: usize>(
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
+    let dummy_interaction_api =
+        AirProofInput::simple_no_pis(Arc::new(dummy_interaction_air), dummy_interaction_trace);
 
-    let mut public_values = vec![vec![]; 3];
-    public_values[0].extend(initial_tree.hash());
-    public_values[0].extend(final_tree_check.hash());
-
-    let hash_test_chip_air = hash_test_chip.air();
-    BabyBearPoseidon2Engine::run_simple_test_fast(
-        any_rap_arc_vec![chip.air, dummy_interaction_air, hash_test_chip_air],
-        vec![trace, dummy_interaction_trace, hash_test_chip.trace()],
-        public_values,
-    )
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        chip_api,
+        dummy_interaction_api,
+        hash_test_chip.generate_air_proof_input(),
+    ])
     .expect("Verification failed");
 }
 
 fn random_test<const CHUNK: usize>(
     height: usize,
-    max_value: usize,
+    max_value: u32,
     mut num_initial_addresses: usize,
     mut num_touched_addresses: usize,
 ) {
     let mut rng = create_seeded_rng();
-    let mut next_usize = || rng.next_u64() as usize;
+    let mut next_u32 = || rng.next_u64() as u32;
 
     let mut initial_memory = Equipartition::new();
     let mut final_memory = Equipartition::new();
@@ -173,15 +170,15 @@ fn random_test<const CHUNK: usize>(
     let mut touched_labels = BTreeSet::new();
 
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
-        let address_space = BabyBear::from_canonical_usize((next_usize() & 1) + 1);
-        let label = next_usize() % (1 << height);
+        let address_space = (next_u32() & 1) + 1;
+        let label = next_u32() % (1 << height);
 
         if seen_labels.insert(label) {
-            let is_initial = next_usize() & 1 == 0;
+            let is_initial = next_u32() & 1 == 0;
             let initial_values =
-                array::from_fn(|_| BabyBear::from_canonical_usize(next_usize() % max_value));
-            let is_touched = next_usize() & 1 == 0;
-            let value_changes = next_usize() & 1 == 0;
+                array::from_fn(|_| BabyBear::from_canonical_u32(next_u32() % max_value));
+            let is_touched = next_u32() & 1 == 0;
+            let value_changes = next_u32() & 1 == 0;
 
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
@@ -192,9 +189,8 @@ fn random_test<const CHUNK: usize>(
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
-                    let changed_values = array::from_fn(|_| {
-                        BabyBear::from_canonical_usize(next_usize() % max_value)
-                    });
+                    let changed_values =
+                        array::from_fn(|_| BabyBear::from_canonical_u32(next_u32() % max_value));
                     final_memory.insert((address_space, label), changed_values);
                 }
             }
@@ -250,18 +246,11 @@ fn expand_test_no_accesses() {
         COMPRESSION_BUS,
     );
 
-    let (trace, _) = chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip, None);
-
-    let mut public_values = vec![vec![]; 2];
-    public_values[0].extend(tree.hash());
-    public_values[0].extend(tree.hash());
-
-    let hash_test_chip_air = hash_test_chip.air();
-    BabyBearPoseidon2Engine::run_simple_test_fast(
-        any_rap_arc_vec![chip.air, hash_test_chip_air],
-        vec![trace, hash_test_chip.trace()],
-        public_values,
-    )
+    chip.finalize(&tree, &memory, &mut hash_test_chip);
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        chip.generate_air_proof_input(),
+        hash_test_chip.generate_air_proof_input(),
+    ])
     .expect("This should occur");
 }
 
@@ -289,25 +278,22 @@ fn expand_test_negative() {
         COMPRESSION_BUS,
     );
 
-    let (mut trace, _) =
-        chip.generate_trace_and_final_tree(&tree, &memory, &mut hash_test_chip, None);
-    for row in trace.rows_mut() {
-        let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
-        if row.expand_direction == BabyBear::NEG_ONE {
-            row.left_direction_different = BabyBear::ZERO;
-            row.right_direction_different = BabyBear::ZERO;
+    chip.finalize(&tree, &memory, &mut hash_test_chip);
+    let mut chip_api = chip.generate_air_proof_input();
+    {
+        let trace = chip_api.raw.common_main.as_mut().unwrap();
+        for row in trace.rows_mut() {
+            let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
+            if row.expand_direction == BabyBear::NEG_ONE {
+                row.left_direction_different = BabyBear::ZERO;
+                row.right_direction_different = BabyBear::ZERO;
+            }
         }
     }
 
-    let mut public_values = vec![vec![]; 2];
-    public_values[0].extend(tree.hash());
-    public_values[0].extend(tree.hash());
-
-    let hash_test_chip_air = hash_test_chip.air();
-    BabyBearPoseidon2Engine::run_simple_test_fast(
-        any_rap_arc_vec![chip.air, hash_test_chip_air],
-        vec![trace, hash_test_chip.trace()],
-        public_values,
-    )
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        chip_api,
+        hash_test_chip.generate_air_proof_input(),
+    ])
     .expect("This should occur");
 }

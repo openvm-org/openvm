@@ -1,14 +1,14 @@
 [workspace]
 [package]
 version = "0.1.0"
-name = "axvm-regex-program"
+name = "openvm-regex-program"
 edition = "2021"
 
 [dependencies]
-axvm = { path = "../../../crates/toolchain/axvm" }
-axvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
+openvm = { path = "../../../crates/toolchain/openvm" }
+openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
 regex = { version = "1.11.1", default-features = false }
 
 [features]
 default = []
-std = ["axvm/std"]
+std = ["openvm/std"]

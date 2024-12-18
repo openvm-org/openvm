@@ -3,11 +3,11 @@ use std::sync::Arc;
 use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use p3_baby_bear::BabyBear;
-use p3_field::{
+use openvm_stark_backend::p3_field::{
     extension::{BinomialExtensionField, BinomiallyExtendable},
     AbstractExtensionField, AbstractField, Field, PrimeField32, PrimeField64,
 };
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         gates::{GateChip, GateInstructions, RangeChip, RangeInstructions},

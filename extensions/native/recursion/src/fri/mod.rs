@@ -1,12 +1,12 @@
-use axvm_native_compiler::{
+pub use domain::*;
+use openvm_native_compiler::{
     ir::{
         Array, Builder, Config, Ext, ExtensionOperand, Felt, Ptr, RVar, SymbolicVar, Usize, Var,
         DIGEST_SIZE,
     },
     prelude::MemVariable,
 };
-pub use domain::*;
-use p3_field::{AbstractField, Field, TwoAdicField};
+use openvm_stark_backend::p3_field::{AbstractField, Field, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{

@@ -4,24 +4,21 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::bitwise_op_lookup::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
-};
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32AuipcOpcode::{self, *},
-    UsizeOpcode,
 };
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -170,9 +167,10 @@ where
         from_pc: u32,
         _reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode_index = Rv32AuipcOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32AuipcOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
         let imm = instruction.c.as_canonical_u32();
-        let rd_data = run_auipc(local_opcode_index, from_pc, imm);
+        let rd_data = run_auipc(local_opcode, from_pc, imm);
         let rd_data_field = rd_data.map(F::from_canonical_u32);
 
         let output = AdapterRuntimeContext::without_pc([rd_data_field]);

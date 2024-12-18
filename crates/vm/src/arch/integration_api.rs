@@ -1,21 +1,21 @@
 use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::utils::next_power_of_two_or_zero;
-use ax_stark_backend::{
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::instruction::Instruction;
+use openvm_stark_backend::{
     air_builders::{
         debug::DebugConstraintBuilder, prover::ProverConstraintFolder, symbolic::SymbolicRapBuilder,
     },
     config::{StarkGenericConfig, Val},
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::instruction::Instruction;
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 
 use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
@@ -133,6 +133,13 @@ pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
     }
 
     fn air(&self) -> &Self::Air;
+
+    /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the constraints.
+    /// This is done **after** records are consumed and the trace matrix is generated.
+    /// Most implementations should just leave the default implementation if padding with rows of all 0s satisfies the constraints.
+    fn finalize(&self, _trace: &mut RowMajorMatrix<F>, _num_records: usize) {
+        // do nothing by default
+    }
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -267,7 +274,8 @@ where
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let air = self.air();
-        let height = next_power_of_two_or_zero(self.records.len());
+        let num_records = self.records.len();
+        let height = next_power_of_two_or_zero(num_records);
         let core_width = self.core.air().width();
         let adapter_width = self.adapter.air().width();
         let width = core_width + adapter_width;
@@ -290,11 +298,10 @@ where
                 self.core.generate_trace_row(core_row, record.2);
             });
 
-        AirProofInput::simple(
-            air,
-            RowMajorMatrix::new(values, width),
-            self.core.generate_public_values(),
-        )
+        let mut trace = RowMajorMatrix::new(values, width);
+        self.core.finalize(&mut trace, num_records);
+
+        AirProofInput::simple(air, trace, self.core.generate_public_values())
     }
 }
 

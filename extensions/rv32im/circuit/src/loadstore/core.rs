@@ -1,19 +1,16 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
-};
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32LoadStoreOpcode::{self, *},
-    UsizeOpcode,
 };
 
 use crate::adapters::LoadStoreInstruction;
@@ -265,7 +262,8 @@ where
         _from_pc: u32,
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(instruction.opcode - self.air.offset);
+        let local_opcode =
+            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
 
         let (reads, shift_amount) = reads.into();
         let shift = shift_amount.as_canonical_u32();

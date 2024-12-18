@@ -2,7 +2,7 @@ pub mod public_values;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
@@ -66,9 +66,9 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryNode<CHUNK, F> {
     }
 
     fn from_memory(
-        memory: &BTreeMap<usize, [F; CHUNK]>,
+        memory: &BTreeMap<u64, [F; CHUNK]>,
         height: usize,
-        from: usize,
+        from: u64,
         hasher: &impl Hasher<CHUNK, F>,
     ) -> MemoryNode<CHUNK, F> {
         let mut range = memory.range(from..from + (1 << height));

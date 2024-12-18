@@ -1,9 +1,18 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{
+use openvm_circuit::{
+    arch::{
+        testing::{TestAdapterChip, VmChipTestBuilder},
+        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
+    },
+    utils::generate_long_number,
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_rv32im_transpiler::ShiftOpcode;
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::AbstractField,
     p3_matrix::{
@@ -14,15 +23,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::{
-    arch::{
-        testing::{TestAdapterChip, VmChipTestBuilder},
-        ExecutionBridge, VmAdapterChip, VmChipWrapper, BITWISE_OP_LOOKUP_BUS,
-    },
-    utils::generate_long_number,
-};
-use axvm_instructions::{instruction::Instruction, ShiftOpcode};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{core::run_shift, Rv32ShiftChip, ShiftCoreChip};
@@ -154,7 +155,7 @@ fn run_rv32_shift_negative_test(
 
     tester.execute(
         &mut chip,
-        Instruction::from_usize(opcode as usize, [0, 0, 0, 1, 1]),
+        Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, 0, 0, 1, 1]),
     );
 
     let bit_shift = prank_vals
@@ -213,7 +214,7 @@ fn run_rv32_shift_negative_test(
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(if interaction_error {
-        VerificationError::NonZeroCumulativeSum
+        VerificationError::ChallengePhaseError
     } else {
         VerificationError::OodEvaluationMismatch
     });

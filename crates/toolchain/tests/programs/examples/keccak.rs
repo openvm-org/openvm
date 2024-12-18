@@ -6,10 +6,10 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::hint::black_box;
 
-use axvm_keccak256_guest::keccak256;
+use openvm_keccak256_guest::keccak256;
 use hex::FromHex;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let test_vectors = [

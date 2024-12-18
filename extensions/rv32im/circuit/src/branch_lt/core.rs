@@ -4,22 +4,23 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     utils::not,
 };
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::BranchLessThanOpcode;
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{instruction::Instruction, BranchLessThanOpcode, UsizeOpcode};
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -154,7 +155,6 @@ where
             })
             + AB::Expr::from_canonical_usize(self.offset);
 
-        // TODO: update the default increment (i.e. 4) when opcodes are updated
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
             + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
@@ -225,7 +225,7 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, c: imm, .. } = *instruction;
-        let blt_opcode = BranchLessThanOpcode::from_usize(opcode - self.air.offset);
+        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let data: [[F; NUM_LIMBS]; 2] = reads.into();
         let a = data[0].map(|x| x.as_canonical_u32());
@@ -341,14 +341,14 @@ where
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
 pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    local_opcode_index: BranchLessThanOpcode,
+    local_opcode: BranchLessThanOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
-    let signed = local_opcode_index == BranchLessThanOpcode::BLT
-        || local_opcode_index == BranchLessThanOpcode::BGE;
-    let ge_op = local_opcode_index == BranchLessThanOpcode::BGE
-        || local_opcode_index == BranchLessThanOpcode::BGEU;
+    let signed =
+        local_opcode == BranchLessThanOpcode::BLT || local_opcode == BranchLessThanOpcode::BGE;
+    let ge_op =
+        local_opcode == BranchLessThanOpcode::BGE || local_opcode == BranchLessThanOpcode::BGEU;
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     for i in (0..NUM_LIMBS).rev() {

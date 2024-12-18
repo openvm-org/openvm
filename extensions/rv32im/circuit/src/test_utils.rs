@@ -1,12 +1,13 @@
-use ax_stark_backend::p3_field::AbstractField;
-use ax_stark_sdk::p3_baby_bear::BabyBear;
-use axvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
-use axvm_instructions::instruction::Instruction;
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
 use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
 // Returns (instruction, rd)
+#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     tester: &mut VmChipTestBuilder<BabyBear>,
     rs1_writes: [u32; NUM_LIMBS],
@@ -28,13 +29,14 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 
     (
         Instruction::from_usize(
-            opcode_with_offset,
+            VmOpcode::from_usize(opcode_with_offset),
             [rd, rs1, rs2, 1, if rs2_is_imm { 0 } else { 1 }],
         ),
         rd,
     )
 }
 
+#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
 pub fn generate_rv32_is_type_immediate(
     rng: &mut StdRng,
 ) -> (usize, [u32; RV32_REGISTER_NUM_LIMBS]) {

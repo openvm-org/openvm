@@ -1,3 +1,3 @@
-# axVM Algebra Traits
+# OpenVM Algebra Traits
 
-Traits used for Algebraic calculations in axVM
+Traits used for Algebraic calculations in OpenVM

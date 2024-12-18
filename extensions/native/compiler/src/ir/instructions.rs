@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Var};
 
 /// An intermeddiate instruction set for implementing programs.
 ///
 /// Programs written in the DSL can compile both to the recursive zkVM and the R1CS or Plonk-ish
 /// circuits.
-#[derive(Debug, Clone, strum_macros::Display)]
+#[derive(Debug, Clone, strum_macros::Display, Serialize, Deserialize)]
 pub enum DslIr<C: Config> {
     // Immediates.
     /// Assigns an immediate to a variable (var = imm).
@@ -176,12 +178,16 @@ pub enum DslIr<C: Config> {
     LoadF(Felt<C::F>, Ptr<C::N>, MemIndex<C::N>),
     /// Load extension field
     LoadE(Ext<C::F, C::EF>, Ptr<C::N>, MemIndex<C::N>),
+    /// Load heap pointer into a stack variable. ASM only.
+    LoadHeapPtr(Ptr<C::N>),
     /// Store variable at address
     StoreV(Var<C::N>, Ptr<C::N>, MemIndex<C::N>),
     /// Store field element at address
     StoreF(Felt<C::F>, Ptr<C::N>, MemIndex<C::N>),
     /// Store extension field at address
     StoreE(Ext<C::F, C::EF>, Ptr<C::N>, MemIndex<C::N>),
+    /// Store heap pointer. ASM only.
+    StoreHeapPtr(Ptr<C::N>),
 
     // Bits.
     /// Decompose a variable into size bits (bits = num2bits(var, size)). Should only be used when target is a gnark circuit.

@@ -1,13 +1,18 @@
 [package]
-name = "axvm-bigint-transpiler"
+name = "openvm-bigint-transpiler"
+description = "OpenVM transpiler extension for bigint"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for bigint"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-axvm-instructions = { workspace = true }
-axvm-transpiler = { workspace = true }
-p3-field = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
-strum_macros = { workspace = true }
+openvm-bigint-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }

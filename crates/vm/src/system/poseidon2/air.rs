@@ -1,15 +1,15 @@
 use std::borrow::Borrow;
 
-use ax_poseidon2_air::poseidon2::Poseidon2Air;
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-};
 use derive_new::new;
 use itertools::izip;
-use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{AbstractField, Field};
-use p3_matrix::Matrix;
+use openvm_poseidon2_air::poseidon2::Poseidon2Air;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field},
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
 
 use super::{columns::Poseidon2VmCols, CHUNK, WIDTH};
 use crate::{

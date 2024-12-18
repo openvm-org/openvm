@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::io::{read, reveal};
+use openvm::io::{read, reveal};
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let n: u64 = read();

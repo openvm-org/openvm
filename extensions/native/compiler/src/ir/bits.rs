@@ -1,4 +1,4 @@
-use p3_field::AbstractField;
+use openvm_stark_backend::p3_field::AbstractField;
 
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, RVar, Var};
 
@@ -25,8 +25,8 @@ impl<C: Config> Builder<C> {
             self.assign(&sum, sum + bit * C::N::from_canonical_u32(1 << i));
         }
 
-        // TODO: There is an edge case where the witnessed bits may slightly overflow and cause
-        // the output to be incorrect. This is a known issue and will be fixed in the future.
+        // FIXME: There is an edge case where the witnessed bits may slightly overflow and cause
+        // the output to be incorrect.
         self.assert_var_eq(sum, num);
 
         output
@@ -64,8 +64,8 @@ impl<C: Config> Builder<C> {
             self.assign(&sum, sum + bit * C::F::from_canonical_u32(1 << i));
         }
 
-        // TODO: There is an edge case where the witnessed bits may slightly overflow and cause
-        // the output to be incorrect. This is a known issue and will be fixed in the future.
+        // FIXME: There is an edge case where the witnessed bits may slightly overflow and cause
+        // the output to be incorrect.
         self.assert_felt_eq(sum, num);
 
         // Cast Array<C, Felt<C::F>> to Array<C, Var<C::N>>

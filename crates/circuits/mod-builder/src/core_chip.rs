@@ -1,21 +1,27 @@
 use std::sync::Arc;
 
-use ax_circuit_primitives::{var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator};
-use ax_stark_backend::{interaction::InteractionBuilder, rap::BaseAirWithPublicValues};
-use axvm_circuit::{
-    arch::{
-        AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
-    },
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-};
-use axvm_instructions::instruction::Instruction;
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
+    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::{
+    var_range::VariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
+};
+use openvm_instructions::instruction::Instruction;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    rap::BaseAirWithPublicValues,
+};
 
-use crate::{FieldExpr, FieldExprCols};
+use crate::{
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    FieldExpr, FieldExprCols,
+};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -165,6 +171,9 @@ pub struct FieldExpressionCoreChip {
     pub range_checker: Arc<VariableRangeCheckerChip>,
 
     pub name: String,
+
+    /// Whether to finalize the trace. True if all-zero rows don't satisfy the constraints (e.g. there is int_add)
+    pub should_finalize: bool,
 }
 
 impl FieldExpressionCoreChip {
@@ -175,12 +184,14 @@ impl FieldExpressionCoreChip {
         opcode_flag_idx: Vec<usize>,
         range_checker: Arc<VariableRangeCheckerChip>,
         name: &str,
+        should_finalize: bool,
     ) -> Self {
         let air = FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx);
         Self {
             air,
             range_checker,
             name: name.to_string(),
+            should_finalize,
         }
     }
 
@@ -221,7 +232,7 @@ where
         }
 
         let Instruction { opcode, .. } = instruction.clone();
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
         let mut flags = vec![];
 
         // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is needed.
@@ -233,7 +244,7 @@ where
                 .iter()
                 .enumerate()
                 .for_each(|(i, &flag_idx)| {
-                    flags[flag_idx] = local_opcode_index == self.air.local_opcode_idx[i]
+                    flags[flag_idx] = local_opcode_idx == self.air.local_opcode_idx[i]
                 });
         }
 
@@ -271,5 +282,25 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+
+    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
+        if !self.should_finalize || num_records == 0 {
+            return;
+        }
+        // We will copy over the core part of last row to padded rows (all rows after num_records).
+        let adapter_width = trace.width() - <Self::Air as BaseAir<F>>::width(&self.air);
+        let last_row = trace
+            .rows()
+            .nth(num_records - 1)
+            .unwrap()
+            .collect::<Vec<_>>();
+        let last_row_core = last_row.split_at(adapter_width).1;
+        for row in trace.rows_mut().skip(num_records) {
+            let core_row = row.split_at_mut(adapter_width).1;
+            // The same as last row, except "is_valid" (the first element of core part) is zero.
+            core_row.copy_from_slice(last_row_core);
+            core_row[0] = F::ZERO;
+        }
     }
 }

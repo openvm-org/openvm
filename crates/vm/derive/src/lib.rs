@@ -26,20 +26,20 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::axvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
             // Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::axvm_circuit::arch::InstructionExecutor<F> },
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F> },
             );
             quote! {
-                impl #impl_generics ::axvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        instruction: ::axvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        from_state: ::axvm_circuit::arch::ExecutionState<u32>,
-                    ) -> ::axvm_circuit::arch::Result<::axvm_circuit::arch::ExecutionState<u32>> {
+                        instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        from_state: ::openvm_circuit::arch::ExecutionState<u32>,
+                    ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
                         self.0.execute(instruction, from_state)
                     }
 
@@ -72,27 +72,27 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     _ => None,
                 })
                 .expect("First generic must be type for Field");
-            // Use full path ::axvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
             // Assume F is already generic of the field.
             let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, instruction, from_state)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, instruction, from_state)
                     };
                     let get_opcode_name_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
                     };
 
                     (execute_arm, get_opcode_name_arm)
                 }));
             quote! {
-                impl #impl_generics ::axvm_circuit::arch::InstructionExecutor<#first_ty_generic> for #name #ty_generics {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic> for #name #ty_generics {
                     fn execute(
                         &mut self,
-                        instruction: ::axvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        from_state: ::axvm_circuit::arch::ExecutionState<u32>,
-                    ) -> ::axvm_circuit::arch::Result<::axvm_circuit::arch::ExecutionState<u32>> {
+                        instruction: ::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        from_state: ::openvm_circuit::arch::ExecutionState<u32>,
+                    ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
                         match self {
                             #(#execute_arms,)*
                         }
@@ -150,10 +150,10 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
                     if *is_enum {
                         // Call the inner trait impl
                         (quote! {
-                            #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::AnyEnum>::as_any_kind(x)
+                            #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AnyEnum>::as_any_kind(x)
                         },
                         quote! {
-                            #name::#variant_name(x) => <#field_ty as ::axvm_circuit::arch::AnyEnum>::as_any_kind_mut(x)
+                            #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AnyEnum>::as_any_kind_mut(x)
                         })
                     } else {
                         (quote! {
@@ -165,7 +165,7 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
                     }
                 }).unzip();
             quote! {
-                impl #impl_generics ::axvm_circuit::arch::AnyEnum for #name #ty_generics {
+                impl #impl_generics ::openvm_circuit::arch::AnyEnum for #name #ty_generics {
                     fn as_any_kind(&self) -> &dyn std::any::Any {
                         match self {
                             #(#arms,)*

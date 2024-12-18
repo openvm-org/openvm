@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::ops::{Mul, MulAssign, Neg};
 
-use axvm_algebra_guest::{
+use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivAssignUnsafe, DivUnsafe, Field,
 };

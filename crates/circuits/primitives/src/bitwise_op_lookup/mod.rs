@@ -4,17 +4,17 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir, PairBuilder},
+    p3_field::{AbstractField, Field},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use p3_air::{Air, BaseAir, PairBuilder};
-use p3_field::{AbstractField, Field};
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 mod bus;
 #[cfg(test)]

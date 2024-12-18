@@ -25,9 +25,9 @@ pub(super) fn bigint_to_limbs<const NUM_LIMBS: usize>(x: &BigInt) -> [u8; NUM_LI
 /// - $trait_assign_name: The trait name of the assignment operation to implement.
 /// - $trait_fn: The trait function name to implement.
 /// - $trait_assign_fn: The assignment trait function name to implement.
-/// - $opcode: The custom opcode of the operation in axvm.
-/// - $func3: The func3 of the operation in axvm.
-/// - $func7: The func7 of the operation in axvm.
+/// - $opcode: The custom opcode of the operation in openvm.
+/// - $func3: The func3 of the operation in openvm.
+/// - $func7: The func7 of the operation in openvm.
 /// - $op_sym: The symbol to use for the operation.
 /// - $rust_expr: A closure to get the result of the operation if target is non-zkvm.
 #[macro_export]

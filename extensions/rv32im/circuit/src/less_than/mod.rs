@@ -1,4 +1,4 @@
-use axvm_circuit::arch::VmChipWrapper;
+use openvm_circuit::arch::VmChipWrapper;
 
 use super::adapters::{Rv32BaseAluAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 

@@ -1,14 +1,22 @@
 use alloc::vec::Vec;
 use core::ops::Neg;
 
-use axvm_algebra_guest::{
-    field::{Complex, FieldExtension},
-    Field, IntMod,
-};
+use openvm_algebra_complex_macros::{complex_declare, complex_impl_field};
+use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field, IntMod};
 
 use super::Fp;
 
-pub type Fp2 = Complex<Fp>;
+// The struct name needs to be globally unique for linking purposes.
+// The mod_type is a path used only in the struct definition.
+complex_declare! {
+    Bn254Fp2 { mod_type = Fp }
+}
+
+complex_impl_field! {
+    Bn254Fp2,
+}
+
+pub type Fp2 = Bn254Fp2;
 
 impl FieldExtension<Fp> for Fp2 {
     const D: usize = 2;

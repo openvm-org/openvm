@@ -1,24 +1,26 @@
 use std::marker::PhantomData;
 
-use ax_stark_backend::{
-    air_builders::{
-        symbolic::symbolic_expression::SymbolicExpression,
-        verifier::GenericVerifierConstraintFolder,
-    },
-    prover::{opener::AdjacentOpenedValues, types::Proof},
-};
-use ax_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters};
-use axvm_circuit::arch::instructions::program::Program;
-use axvm_native_compiler::{
+use itertools::Itertools;
+use openvm_circuit::arch::instructions::program::Program;
+use openvm_native_compiler::{
     conversion::CompilerOptions,
     ir::{Array, Builder, Config, Ext, ExtConst, Felt, SymbolicExt, Usize},
     prelude::RVar,
 };
-use itertools::Itertools;
-use p3_baby_bear::BabyBear;
-use p3_commit::LagrangeSelectors;
-use p3_field::{AbstractExtensionField, AbstractField, TwoAdicField};
-use p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair};
+use openvm_stark_backend::{
+    air_builders::{
+        symbolic::symbolic_expression::SymbolicExpression,
+        verifier::GenericVerifierConstraintFolder,
+    },
+    p3_commit::LagrangeSelectors,
+    p3_field::{AbstractExtensionField, AbstractField, TwoAdicField},
+    p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
+    prover::{opener::AdjacentOpenedValues, types::Proof},
+};
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    p3_baby_bear::BabyBear,
+};
 
 use crate::{
     challenger::{duplex::DuplexChallengerVariable, ChallengerVariable},
@@ -100,19 +102,29 @@ impl<C: Config> StarkVerifier<C>
 where
     C::F: TwoAdicField,
 {
-    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify].
+    /// Reference: [openvm_stark_backend::verifier::MultiTraceStarkVerifier::verify].
     pub fn verify<CH: ChallengerVariable<C>>(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
         m_advice: &MultiStarkVerificationAdvice<C>,
         proof: &StarkProofVariable<C>,
     ) {
-        let mut challenger = CH::new(builder);
-
-        Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
+        if builder.flags.static_only {
+            let mut challenger = CH::new(builder);
+            Self::verify_raps(builder, pcs, m_advice, &mut challenger, proof);
+        } else {
+            // Recycle stack space after verifying
+            let mut tmp_builder = builder.create_sub_builder();
+            // Recycle heap space after verifying by resetting the heap pointer.
+            let old_heap_ptr = tmp_builder.load_heap_ptr();
+            let mut challenger = CH::new(&mut tmp_builder);
+            Self::verify_raps(&mut tmp_builder, pcs, m_advice, &mut challenger, proof);
+            tmp_builder.store_heap_ptr(old_heap_ptr);
+            builder.operations.extend(tmp_builder.operations);
+        }
     }
 
-    /// Reference: [ax_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
+    /// Reference: [openvm_stark_backend::verifier::MultiTraceStarkVerifier::verify_raps].
     pub fn verify_raps(
         builder: &mut Builder<C>,
         pcs: &TwoAdicFriPcsVariable<C>,
@@ -689,7 +701,7 @@ where
         builder.cycle_tracker_end("stage-e-verify-constraints");
     }
 
-    /// Reference: [ax_stark_backend::verifier::constraints::verify_single_rap_constraints]
+    /// Reference: [openvm_stark_backend::verifier::constraints::verify_single_rap_constraints]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn verify_single_rap_constraints(

@@ -1,6 +1,12 @@
 use std::{array, borrow::BorrowMut};
 
-use ax_stark_backend::{
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    VmAdapterChip,
+};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::AbstractField,
     p3_matrix::{
@@ -10,16 +16,7 @@ use ax_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use ax_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    VmAdapterChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    Rv32LoadStoreOpcode::{self, *},
-    UsizeOpcode,
-};
+use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::run_write_data_sign_extend;
@@ -95,7 +92,7 @@ fn set_and_execute(
     tester.execute(
         chip,
         Instruction::from_usize(
-            opcode as usize + Rv32LoadStoreOpcode::default_offset(),
+            VmOpcode::with_default_offset(opcode),
             [a, b, imm as usize, 1, 2],
         ),
     );
@@ -234,7 +231,7 @@ fn loadstore_negative_tests() {
         None,
         None,
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_loadstore_test(
@@ -245,7 +242,7 @@ fn loadstore_negative_tests() {
         None,
         Some([202, 109, 183, 26]),
         Some(31212),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 
     run_negative_loadstore_test(
@@ -256,7 +253,7 @@ fn loadstore_negative_tests() {
         Some([true, false, false]),
         Some([250, 132, 77, 5]),
         Some(47741),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 

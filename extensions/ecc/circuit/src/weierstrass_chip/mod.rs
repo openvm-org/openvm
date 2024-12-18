@@ -7,14 +7,14 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
-use axvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_instructions::Rv32WeierstrassOpcode;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use num_bigint_dig::BigUint;
-use p3_field::PrimeField32;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
@@ -49,6 +49,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcAddNe",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -84,6 +85,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             memory_controller.borrow().range_checker.clone(),
             "EcDouble",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }

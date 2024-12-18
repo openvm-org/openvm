@@ -1,10 +1,10 @@
 import json
 import argparse
 import os
+import sys
 import subprocess
 
 from utils import FLAMEGRAPHS_DIR, create_flamegraph_dir, get_git_root, create_bench_metrics_dir
-
 
 def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name):
     """
@@ -108,7 +108,7 @@ def main():
 
     if not shutil.which("inferno-flamegraph"):
         print("You must have inferno-flamegraph installed to use this script.")
-        os.exit(1)
+        sys.exit(1)
 
     argparser = argparse.ArgumentParser()
     argparser.add_argument('metrics_json', type=str, help="Path to the metrics JSON")

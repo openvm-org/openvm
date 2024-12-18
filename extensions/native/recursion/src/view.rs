@@ -1,10 +1,9 @@
-use ax_stark_backend::keygen::types::TraceWidth;
-use axvm_native_compiler::{
+use itertools::Itertools;
+use openvm_native_compiler::{
     ir::{Builder, Config},
     prelude::*,
 };
-use itertools::Itertools;
-use p3_util::log2_strict_usize;
+use openvm_stark_backend::{keygen::types::TraceWidth, p3_util::log2_strict_usize};
 
 use crate::{
     types::{MultiStarkVerificationAdvice, StarkVerificationAdvice},

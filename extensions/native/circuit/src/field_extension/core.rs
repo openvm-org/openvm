@@ -4,24 +4,20 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::{
+use itertools::izip;
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_native_compiler::FieldExtensionOpcode::{self, *};
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{
-    instruction::Instruction,
-    FieldExtensionOpcode,
-    FieldExtensionOpcode::{BBE4DIV, BBE4MUL, FE4ADD, FE4SUB},
-    UsizeOpcode,
-};
-use itertools::izip;
 
 pub const BETA: usize = 11;
 pub const EXT_DEG: usize = 4;
@@ -170,13 +166,13 @@ where
         reads: I::Reads,
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_index = opcode - self.air.offset;
+        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
 
         let data: [[F; EXT_DEG]; 2] = reads.into();
         let y: [F; EXT_DEG] = data[0];
         let z: [F; EXT_DEG] = data[1];
 
-        let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_index), y, z)
+        let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_idx), y, z)
             .unwrap();
 
         let output = AdapterRuntimeContext {
@@ -185,7 +181,7 @@ where
         };
 
         let record = Self::Record {
-            opcode: FieldExtensionOpcode::from_usize(local_opcode_index),
+            opcode: FieldExtensionOpcode::from_usize(local_opcode_idx),
             x,
             y,
             z,

@@ -1,10 +1,11 @@
-use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Neg};
 
-use axvm_algebra_guest::{Field, IntMod};
-use axvm_algebra_moduli_setup::moduli_declare;
-use axvm_ecc_guest::{sw::IntrinsicCurve, CyclicGroup, Group};
-use hex_literal::hex;
+use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_moduli_setup::moduli_declare;
+use openvm_ecc_guest::{
+    weierstrass::{CachedMulTable, IntrinsicCurve},
+    CyclicGroup, Group,
+};
 
 mod fp12;
 mod fp2;
@@ -12,11 +13,31 @@ pub mod pairing;
 
 pub use fp12::*;
 pub use fp2::*;
+use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
+use lazy_static::lazy_static;
+#[cfg(not(target_os = "zkvm"))]
+use num_bigint_dig::BigUint;
 
 use crate::pairing::PairingIntrinsics;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
+
+#[cfg(not(target_os = "zkvm"))]
+lazy_static! {
+    pub static ref BN254_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47"
+    ));
+    pub static ref BN254_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+    ));
+}
+
+pub const BN254_XI_ISIZE: [isize; 2] = [9, 1];
+pub const BN254_NUM_LIMBS: usize = 32;
+pub const BN254_LIMB_BITS: usize = 8;
+pub const BN254_BLOCK_SIZE: usize = 32;
 
 pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
 pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
@@ -67,11 +88,20 @@ impl Bn254 {
 
 moduli_declare! {
     Bn254Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
-    Bn254Scalar { modulus = "0x30644E72 E131A029 B85045B6 8181585D 2833E848 79B97091 43E1F593 F0000001" },
+    Bn254Scalar { modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617" },
+}
+
+const CURVE_B: Bn254Fp = Bn254Fp::from_const_bytes(hex!(
+    "0300000000000000000000000000000000000000000000000000000000000000"
+));
+
+openvm_ecc_sw_setup::sw_declare! {
+    Bn254G1Affine { mod_type = Bn254Fp, b = CURVE_B },
 }
 
 pub type Fp = Bn254Fp;
-pub type Fr = Bn254Scalar;
+pub type Scalar = Bn254Scalar;
+pub type G1Affine = Bn254G1Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
@@ -87,7 +117,7 @@ impl Field for Fp {
     }
 }
 
-impl Field for Fr {
+impl Field for Scalar {
     type SelfRef<'a> = &'a Self;
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;
@@ -98,6 +128,40 @@ impl Field for Fr {
 
     fn square_assign(&mut self) {
         IntMod::square_assign(self);
+    }
+}
+
+impl CyclicGroup for G1Affine {
+    // https://eips.ethereum.org/EIPS/eip-197
+    const GENERATOR: Self = G1Affine {
+        x: Bn254Fp::from_const_u8(1),
+        y: Bn254Fp::from_const_u8(2),
+    };
+    const NEG_GENERATOR: Self = G1Affine {
+        x: Bn254Fp::from_const_u8(1),
+        y: Bn254Fp::from_const_bytes(hex!(
+            "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
+        )),
+    };
+}
+
+impl IntrinsicCurve for Bn254 {
+    type Scalar = Scalar;
+    type Point = G1Affine;
+
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        // heuristic
+        if coeffs.len() < 25 {
+            // BN254(Fp) is of prime order by Weil conjecture:
+            // <https://hackmd.io/@jpw/bn254#Subgroup-check-for-mathbb-G_1>
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            openvm_ecc_guest::msm(coeffs, bases)
+        }
     }
 }
 

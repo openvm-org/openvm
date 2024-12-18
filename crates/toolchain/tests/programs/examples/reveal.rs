@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use axvm::io::reveal;
+use openvm::io::reveal;
 
-axvm::entry!(main);
+openvm::entry!(main);
 
 pub fn main() {
     let x: u32 = core::hint::black_box(123);

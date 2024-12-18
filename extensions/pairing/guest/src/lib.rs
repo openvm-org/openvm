@@ -1,11 +1,35 @@
 #![no_std]
+use strum_macros::FromRepr;
+
+/// This is custom-1 defined in RISC-V spec document
+pub const OPCODE: u8 = 0x2b;
+pub const PAIRING_FUNCT3: u8 = 0b011;
+
+/// The funct7 field equals `pairing_idx * PAIRING_MAX_KINDS + base_funct7`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u8)]
+pub enum PairingBaseFunct7 {
+    MillerDoubleStep = 0,
+    MillerDoubleAndAddStep,
+    Fp12Mul,
+    EvaluateLine,
+    Mul013By013,
+    MulBy01234,
+    Mul023By023,
+    MulBy02345,
+    HintFinalExp,
+}
+
+impl PairingBaseFunct7 {
+    pub const PAIRING_MAX_KINDS: u8 = 16;
+}
 
 extern crate alloc;
-extern crate self as axvm_ecc;
+extern crate self as openvm_ecc;
 
-pub use axvm_algebra_guest as algebra;
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
+pub use openvm_algebra_guest as algebra;
 
 pub mod affine_point;
 

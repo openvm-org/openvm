@@ -1,12 +1,14 @@
 [package]
-name = "axvm-keccak256-guest"
+name = "openvm-keccak256-guest"
+description = "OpenVM guest library for keccak256"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Guest extension for Keccak256"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-axvm-platform = { workspace = true }
+openvm-platform = { workspace = true }
 
 serde = { workspace = true, features = ["alloc"] }
 tiny-keccak.workspace = true

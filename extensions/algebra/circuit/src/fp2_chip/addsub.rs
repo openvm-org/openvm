@@ -1,15 +1,15 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::var_range::VariableRangeCheckerBus;
-use ax_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip};
-use axvm_circuit::{
-    arch::{instructions::Fp2Opcode, VmChipWrapper},
-    system::memory::MemoryControllerRef,
+use openvm_algebra_transpiler::Fp2Opcode;
+use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
 };
-use axvm_circuit_derive::InstructionExecutor;
-use axvm_rv32_adapters::Rv32VecHeapAdapterChip;
-use p3_field::PrimeField32;
+use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp2;
 
@@ -46,6 +46,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![is_add_flag, is_sub_flag],
             memory_controller.borrow().range_checker.clone(),
             "Fp2AddSub",
+            false,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
@@ -82,24 +83,22 @@ pub fn fp2_addsub_expr(
 mod tests {
     use std::sync::Arc;
 
-    use ax_circuit_primitives::bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    };
-    use ax_mod_circuit_builder::{
-        test_utils::{bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
-        ExprBuilderConfig,
-    };
-    use axvm_circuit::{
-        arch::{instructions::Fp2Opcode, testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        utils::biguint_to_limbs,
-    };
-    use axvm_ecc_constants::BN254;
-    use axvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-    use axvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use halo2curves_axiom::{bn256::Fq2, ff::Field};
     use itertools::Itertools;
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
+    use openvm_algebra_transpiler::Fp2Opcode;
+    use openvm_circuit::arch::{testing::VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit_primitives::bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    };
+    use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
+    use openvm_mod_circuit_builder::{
+        test_utils::{biguint_to_limbs, bn254_fq2_to_biguint_vec, bn254_fq_to_biguint},
+        ExprBuilderConfig,
+    };
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
+    use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::Fp2AddSubChip;
@@ -112,7 +111,7 @@ mod tests {
     fn test_fp2_addsub() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
-            modulus: BN254.MODULUS.clone(),
+            modulus: BN254_MODULUS.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };

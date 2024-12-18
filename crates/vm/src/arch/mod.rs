@@ -11,7 +11,7 @@ pub mod segment;
 /// Top level [VirtualMachine] constructor and API.
 pub mod vm;
 
-pub use axvm_instructions as instructions;
+pub use openvm_instructions as instructions;
 
 pub mod hasher;
 /// Testing framework

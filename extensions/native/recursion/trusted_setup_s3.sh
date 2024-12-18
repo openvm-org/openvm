@@ -1,13 +1,12 @@
 #!/bin/bash
 
 if [[ -z $1 ]]; then
-    maxk=23
+    maxk=24
 else
     maxk=$1
 fi
 echo "maxk=$maxk"
 
-bash scripts/install_s5cmd.sh
 mkdir -p params/
 cd params
 for k in $(seq 10 $maxk)

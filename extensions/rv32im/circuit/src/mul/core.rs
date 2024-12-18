@@ -4,19 +4,20 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-use ax_stark_backend::{
+use openvm_circuit::arch::{
+    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
+    VmCoreAir, VmCoreChip,
+};
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_rv32im_transpiler::MulOpcode;
+use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use axvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
-};
-use axvm_instructions::{instruction::Instruction, MulOpcode, UsizeOpcode};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -158,7 +159,7 @@ where
     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
         let Instruction { opcode, .. } = instruction;
         assert_eq!(
-            MulOpcode::from_usize(opcode - self.air.offset),
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
             MulOpcode::MUL
         );
 

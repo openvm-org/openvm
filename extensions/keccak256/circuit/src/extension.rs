@@ -1,25 +1,26 @@
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use ax_stark_backend::p3_field::PrimeField32;
-use axvm_circuit::{
+use derive_more::derive::From;
+use openvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
+        VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
-use axvm_instructions::*;
-use axvm_rv32im_circuit::{
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::*;
+use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
 };
-use derive_more::derive::From;
+use openvm_stark_backend::p3_field::PrimeField32;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
 
-#[derive(Clone, Debug, VmConfig, derive_new::new)]
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
     #[system]
     pub system: SystemConfig,
@@ -45,7 +46,7 @@ impl Default for Keccak256Rv32Config {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
@@ -68,9 +69,11 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let execution_bus = builder.system_base().execution_bus();
-        let program_bus = builder.system_base().program_bus();
-        let memory_controller = builder.memory_controller().clone();
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()
@@ -92,7 +95,7 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
         );
         inventory.add_executor(
             keccak_chip,
-            Rv32KeccakOpcode::iter().map(|opcode| opcode.with_default_offset()),
+            Rv32KeccakOpcode::iter().map(VmOpcode::with_default_offset),
         )?;
 
         Ok(inventory)

@@ -8,12 +8,6 @@ Cargo.lock
 **/*.rs.bk
 **/.env
 .DS_Store
-**/root
-**/leaf
-**/internal
-!axvm-sdk/src/verifier/leaf
-!axvm-sdk/src/verifier/internal
-!axvm-sdk/src/verifier/root
 
 .cache/
 rustc-*
@@ -24,9 +18,6 @@ rustc-*
 # IDE directories
 .vscode/
 .zed/
-
-# Axiom intermediate files
-.axiom/
 
 # Bench metrics
 .bench_metrics/

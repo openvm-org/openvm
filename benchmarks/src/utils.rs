@@ -1,22 +1,24 @@
 use std::{fs::read, path::PathBuf, time::Instant};
 
-use ax_stark_sdk::{
-    ax_stark_backend::{engine::VerificationData, Chip},
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
-};
-use axvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
-use axvm_circuit::arch::{instructions::exe::AxVmExe, VirtualMachine, VmConfig};
-use axvm_sdk::{
-    config::AppConfig,
-    keygen::AppProvingKey,
-    prover::{commit_app_exe, StarkProver},
-};
-use axvm_transpiler::{axvm_platform::memory::MEM_SIZE, elf::Elf};
 use clap::{command, Parser};
 use eyre::Result;
 use metrics::{counter, gauge, Gauge};
-use p3_baby_bear::BabyBear;
+use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
+use openvm_sdk::{
+    commit::commit_app_exe,
+    config::AppConfig,
+    keygen::{leaf_keygen, AppProvingKey},
+    prover::{AppProver, LeafProver},
+    StdIn,
+};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    engine::StarkFriEngine,
+    openvm_stark_backend::Chip,
+    p3_baby_bear::BabyBear,
+};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
 type F = BabyBear;
@@ -40,6 +42,10 @@ pub struct BenchmarkCli {
     /// Internal level log blowup, default set by the benchmark
     #[arg(short, long, alias = "internal_log_blowup")]
     pub internal_log_blowup: Option<usize>,
+
+    /// Max segment length for continuations
+    #[arg(short, long, alias = "max_segment_length")]
+    pub max_segment_length: Option<usize>,
 }
 
 fn get_programs_dir() -> PathBuf {
@@ -53,8 +59,10 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     let pkg = get_package(manifest_dir);
     let target_dir = tempdir()?;
     // Build guest with default features
-    let guest_opts = GuestOptions::default().into();
-    build_guest_package(&pkg, &target_dir, &guest_opts, None);
+    let guest_opts = GuestOptions::default().with_target_dir(target_dir.path());
+    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
+        std::process::exit(code);
+    }
     // Assumes the package has a single target binary
     let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
     let data = read(elf_path)?;
@@ -69,58 +77,50 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<E, VC>(
-    engine: E,
-    config: VC,
-    exe: impl Into<AxVmExe<F>>,
-    input_stream: Vec<Vec<F>>,
-) -> Result<Vec<VerificationDataWithFriParams<SC>>>
+pub fn bench_from_exe<VC>(
+    bench_name: impl ToString,
+    app_config: AppConfig<VC>,
+    exe: impl Into<VmExe<F>>,
+    input_stream: StdIn,
+    bench_leaf: bool,
+) -> Result<()>
 where
-    E: StarkFriEngine<SC>,
     VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    counter!("fri.log_blowup").absolute(engine.fri_params().log_blowup as u64);
-    let app_config = AppConfig {
-        app_vm_config: config.clone(),
-        app_fri_params: engine.fri_params(),
-    };
-    let vm = VirtualMachine::new(engine, config);
+    counter!("fri.log_blowup").absolute(app_config.app_fri_params.fri_params.log_blowup as u64);
+    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
+    let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = time(gauge!("keygen_time_ms"), || {
         AppProvingKey::keygen(app_config.clone())
     });
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-        commit_app_exe(app_config, exe)
+        commit_app_exe(app_config.app_fri_params.fri_params, exe)
     });
-    // 3. Executes runtime again without metric collection and generate trace.
-    time(gauge!("execute_and_trace_gen_time_ms"), || {
-        vm.execute_and_generate_with_cached_program(committed_exe.clone(), input_stream.clone())
-    })?;
-    // 4. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 3. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 4. Executes runtime again without metric collection and generate trace.
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
-    let prover = StarkProver::new(app_pk, committed_exe);
-    let proofs = prover.generate_app_proof(input_stream).per_segment;
+    let vk = app_pk.app_vm_pk.vm_pk.get_vk();
+    let prover = AppProver::new(app_pk.app_vm_pk, committed_exe)
+        .with_profiling()
+        .with_program_name(bench_name.to_string());
+    let app_proofs = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs.
-    let vk = prover.app_pk.app_vm_pk.vm_pk.get_vk();
-    vm.verify(&vk, proofs.clone()).expect("Verification failed");
-    let vdata = proofs
-        .into_iter()
-        .map(|proof| VerificationDataWithFriParams {
-            data: VerificationData {
-                vk: vk.clone(),
-                proof,
-            },
-            fri_params: vm.engine.fri_params(),
-        })
-        .collect();
-    Ok(vdata)
+    vm.verify(&vk, app_proofs.per_segment.clone())
+        .expect("Verification failed");
+    if bench_leaf {
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
+        let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe).with_profile();
+        leaf_prover.generate_proof(&app_proofs);
+    }
+    Ok(())
 }
 
-fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {
+pub fn time<F: FnOnce() -> R, R>(gauge: Gauge, f: F) -> R {
     let start = Instant::now();
     let res = f();
     gauge.set(start.elapsed().as_millis() as f64);

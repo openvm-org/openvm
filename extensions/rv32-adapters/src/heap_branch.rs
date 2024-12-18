@@ -7,16 +7,8 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-};
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
-};
-use axvm_circuit::{
+use itertools::izip;
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
         ExecutionBus, ExecutionState, ImmInstruction, Result, VmAdapterAir, VmAdapterChip,
@@ -31,12 +23,22 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use axvm_rv32im_circuit::adapters::{read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use itertools::izip;
+use openvm_rv32im_circuit::adapters::{
+    read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+};
 
 /// This adapter reads from NUM_READS <= 2 pointers.
 /// * The data is read from the heap (address space 2), and the pointers
@@ -183,12 +185,17 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
     ) -> Self {
         assert!(NUM_READS <= 2);
         let memory_controller = RefCell::borrow(&memory_controller);
+        let address_bits = memory_controller.mem_config().pointer_max_bits;
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
+            "address_bits={address_bits} needs to be large enough for high limb range check"
+        );
         Self {
             air: Rv32HeapBranchAdapterAir {
                 execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge: memory_controller.memory_bridge(),
                 bus: bitwise_lookup_chip.bus(),
-                address_bits: memory_controller.mem_config().pointer_max_bits,
+                address_bits,
             },
             bitwise_lookup_chip,
             _marker: PhantomData,
@@ -294,10 +301,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
             .chain(once(0)) // in case NUM_READS is odd
             .collect();
         debug_assert!(self.air.address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-        let limb_shift = (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits) as u32;
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits;
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_chip
-                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
         }
     }
 

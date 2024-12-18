@@ -3,18 +3,19 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use ax_stark_backend::{
+use openvm_circuit::arch::testing::{
+    memory::{gen_address_space, gen_pointer},
+    VmChipTestBuilder,
+};
+use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
+use openvm_native_compiler::FieldExtensionOpcode;
+use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField},
     utils::disable_debug_builder,
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::testing::{
-    memory::{gen_address_space, gen_pointer},
-    VmChipTestBuilder,
-};
-use axvm_instructions::{instruction::Instruction, FieldExtensionOpcode, UsizeOpcode};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 use strum::EnumCount;
 
@@ -65,7 +66,7 @@ fn new_field_extension_air_test() {
         tester.execute(
             &mut chip,
             Instruction::from_usize(
-                opcode as usize,
+                VmOpcode::from_usize(opcode as usize),
                 [result_address, address1, address2, as_d, as_e],
             ),
         );

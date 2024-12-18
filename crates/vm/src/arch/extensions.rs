@@ -1,27 +1,27 @@
 use std::{any::Any, cell::RefCell, iter::once, rc::Rc, sync::Arc};
 
-use ax_circuit_derive::{Chip, ChipUsageGetter};
-use ax_circuit_primitives::{
+use derive_more::derive::From;
+use getset::Getters;
+use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
-use ax_poseidon2_air::poseidon2::air::SBOX_DEGREE;
-use ax_stark_backend::{
+use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::{
+    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
+    UsizeOpcode, VmOpcode,
+};
+use openvm_poseidon2_air::poseidon2::air::SBOX_DEGREE;
+use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
+    p3_field::{AbstractField, PrimeField32},
+    p3_matrix::Matrix,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_circuit_derive::{AnyEnum, InstructionExecutor};
-use axvm_instructions::{
-    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode,
-};
-use derive_more::derive::From;
-use getset::Getters;
-use p3_field::{AbstractField, PrimeField32};
-use p3_matrix::Matrix;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -85,6 +85,14 @@ pub trait VmExtension<F: PrimeField32> {
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
 }
 
+/// SystemPort combines system resources needed by most extensions
+#[derive(Clone)]
+pub struct SystemPort<F> {
+    pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
+    pub memory_controller: MemoryControllerRef<F>,
+}
+
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
@@ -124,6 +132,14 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 
     pub fn system_base(&self) -> &SystemBase<F> {
         self.system
+    }
+
+    pub fn system_port(&self) -> SystemPort<F> {
+        SystemPort {
+            execution_bus: self.system_base().execution_bus(),
+            program_bus: self.system_base().program_bus(),
+            memory_controller: self.memory_controller().clone(),
+        }
     }
 
     pub fn new_bus_idx(&mut self) -> usize {
@@ -172,7 +188,7 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
 #[derive(Clone, Debug)]
 pub struct VmInventory<E, P> {
     /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
-    instruction_lookup: FxHashMap<AxVmOpcode, ExecutorId>,
+    instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
     executors: Vec<E>,
     pub(super) periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
@@ -192,8 +208,6 @@ pub struct VmComplexTraceHeights {
 }
 
 type ExecutorId = usize;
-/// TODO: create newtype
-type AxVmOpcode = usize;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChipId {
@@ -204,7 +218,7 @@ pub enum ChipId {
 #[derive(thiserror::Error, Debug)]
 pub enum VmInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
-    ExecutorExists { opcode: AxVmOpcode, id: ExecutorId },
+    ExecutorExists { opcode: VmOpcode, id: ExecutorId },
     #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
     PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
     #[error("Chip {name} not found")]
@@ -268,7 +282,7 @@ impl<E, P> VmInventory<E, P> {
     pub fn add_executor(
         &mut self,
         executor: impl Into<E>,
-        opcodes: impl IntoIterator<Item = AxVmOpcode>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
     ) -> Result<(), VmInventoryError> {
         let opcodes: Vec<_> = opcodes.into_iter().collect();
         for opcode in &opcodes {
@@ -294,12 +308,12 @@ impl<E, P> VmInventory<E, P> {
         self.insertion_order.push(ChipId::Periphery(id));
     }
 
-    pub fn get_executor(&self, opcode: AxVmOpcode) -> Option<&E> {
+    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&E> {
         let id = self.instruction_lookup.get(&opcode)?;
         self.executors.get(*id)
     }
 
-    pub fn get_mut_executor(&mut self, opcode: &AxVmOpcode) -> Option<&mut E> {
+    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
         let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
     }
@@ -523,7 +537,10 @@ impl<F: PrimeField32> SystemComplex<F> {
                 memory_controller.clone(),
             );
             inventory
-                .add_executor(chip, [PublishOpcode::default_offset()])
+                .add_executor(
+                    chip,
+                    [VmOpcode::with_default_offset(PublishOpcode::PUBLISH)],
+                )
                 .unwrap();
         }
         if config.continuation_enabled {
@@ -550,7 +567,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let phantom_opcode = SystemOpcode::PHANTOM.with_default_offset();
+        let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
         let mut phantom_chip = PhantomChip::new(
             EXECUTION_BUS,
             PROGRAM_BUS,
@@ -722,7 +739,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
     }
 
-    // TODO[jpw]: find better way to handle public values chip. It is an executor but
     // we always need to special case it because we need to fix the air id.
     fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ax_mod_circuit_builder::{ExprBuilder, FieldVariable, SymbolicExpr};
+use openvm_mod_circuit_builder::{ExprBuilder, FieldVariable, SymbolicExpr};
 
 /// Quadratic field extension of `Fp` defined by `Fp2 = Fp[u]/(1 + u^2)`. Assumes that `-1` is not a quadratic residue in `Fp`, which is equivalent to `p` being congruent to `3 (mod 4)`.
 #[derive(Clone)]
@@ -166,18 +166,18 @@ impl Fp2 {
 
 #[cfg(test)]
 mod tests {
-    use ax_circuit_primitives::TraceSubRowGenerator;
-    use ax_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
-    use ax_stark_sdk::{
-        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    };
-    use axvm_ecc_constants::BN254;
     use halo2curves_axiom::bn256::Fq2;
     use num_bigint_dig::BigUint;
-    use p3_air::BaseAir;
-    use p3_baby_bear::BabyBear;
-    use p3_field::AbstractField;
-    use p3_matrix::dense::RowMajorMatrix;
+    use openvm_circuit_primitives::TraceSubRowGenerator;
+    use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
+    use openvm_stark_backend::{
+        p3_air::BaseAir, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+    };
+    use openvm_stark_sdk::{
+        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+        p3_baby_bear::BabyBear,
+    };
 
     use super::Fp2;
 
@@ -195,7 +195,7 @@ mod tests {
         fq2_fn: impl Fn(&Fq2, &Fq2) -> Fq2,
         save_result: bool,
     ) {
-        let prime = BN254.MODULUS.clone();
+        let prime = BN254_MODULUS.clone();
         let (range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_fp2_div2() {
-        let prime = BN254.MODULUS.clone();
+        let prime = BN254_MODULUS.clone();
         let (range_checker, builder) = setup(&prime);
 
         let mut x_fp2 = Fp2::new(builder.clone());

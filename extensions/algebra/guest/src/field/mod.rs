@@ -1,17 +1,12 @@
+use alloc::vec::Vec;
 use core::{
     fmt::Debug,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-/// Complex quadratic extension of any ring.
-mod complex;
-use alloc::vec::Vec;
-
-pub use complex::*;
-
 use crate::{DivAssignUnsafe, DivUnsafe};
 
-// TODO: this should extend an IntegralDomain trait
+// TODO: this can now extend IntMod trait
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized

@@ -1,15 +1,15 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use air::ProgramDummyAir;
-use ax_stark_backend::{
+use openvm_instructions::instruction::Instruction;
+use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use axvm_instructions::instruction::Instruction;
-use p3_field::{AbstractField, Field, PrimeField32};
-use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     arch::ExecutionState,
@@ -35,7 +35,7 @@ impl<F: PrimeField32> ProgramTester<F> {
     pub fn execute(&mut self, instruction: Instruction<F>, initial_state: &ExecutionState<u32>) {
         self.records.push(ProgramExecutionCols {
             pc: F::from_canonical_u32(initial_state.pc),
-            opcode: F::from_canonical_usize(instruction.opcode),
+            opcode: instruction.opcode.to_field(),
             a: instruction.a,
             b: instruction.b,
             c: instruction.c,

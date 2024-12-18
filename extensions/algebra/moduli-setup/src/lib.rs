@@ -4,7 +4,7 @@ extern crate proc_macro;
 
 use std::sync::atomic::AtomicUsize;
 
-use axvm_macros_common::{string_to_bytes, MacroArgs};
+use openvm_macros_common::{string_to_bytes, MacroArgs};
 use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{
@@ -18,8 +18,8 @@ static MOD_IDX: AtomicUsize = AtomicUsize::new(0);
 /// Usage:
 /// ```
 /// moduli_declare! {
-///     Bls12381 = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
-///     Bn254 = "21888242871839275222246405745257275088696311157297823662689037894645226208583";
+///     Bls12381 { modulus = "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab" },
+///     Bn254 { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
 /// }
 /// ```
 /// This creates two structs, `Bls12381` and `Bn254`, each representing the modular arithmetic class (implementing `Add`, `Sub` and so on).
@@ -77,7 +77,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             .chain(vec![0u8; limbs])
             .take(limbs)
             .collect::<Vec<_>>();
-        let num_bytes = modulus_bytes.len();
 
         let modulus_hex = modulus_bytes
             .iter()
@@ -108,7 +107,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
-            pub struct #struct_name(#[serde(with = "axvm_algebra_guest::BigArray")] [u8; #limbs]);
+            pub struct #struct_name(#[serde(with = "openvm_algebra_guest::BigArray")] [u8; #limbs]);
 
             extern "C" {
                 fn #add_extern_func(rd: usize, rs1: usize, rs2: usize);
@@ -196,7 +195,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = axvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
                         *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                     }
                     #[cfg(target_os = "zkvm")]
@@ -288,7 +287,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let modulus = Self::modulus_biguint();
-                        let inv = axvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
+                        let inv = openvm::utils::uint_mod_inverse(&other.as_biguint(), &modulus);
                         Self::from_biguint((self.as_biguint() * inv) % modulus)
                     }
                     #[cfg(target_os = "zkvm")]
@@ -322,21 +321,19 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
             // Put trait implementations in a private module to avoid conflicts
             mod #module_name {
-                use axvm_algebra_guest::IntMod;
+                use openvm_algebra_guest::IntMod;
 
                 use super::#struct_name;
 
-                impl axvm_algebra_guest::IntMod for #struct_name {
+                impl IntMod for #struct_name {
                     type Repr = [u8; #limbs];
                     type SelfRef<'a> = &'a Self;
-
-                    const MOD_IDX: usize = #mod_idx;
 
                     const MODULUS: Self::Repr = [#(#modulus_bytes),*];
 
                     const ZERO: Self = Self([0; #limbs]);
 
-                    const NUM_BYTES: usize = #num_bytes;
+                    const NUM_LIMBS: usize = #limbs;
 
                     const ONE: Self = Self::from_const_u8(1);
 
@@ -347,6 +344,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     fn from_le_bytes(bytes: &[u8]) -> Self {
                         let mut arr = [0u8; #limbs];
                         arr.copy_from_slice(bytes);
+                        Self(arr)
+                    }
+
+                    fn from_be_bytes(bytes: &[u8]) -> Self {
+                        let mut arr = [0u8; #limbs];
+                        for (a, b) in arr.iter_mut().zip(bytes.iter().rev()) {
+                            *a = *b;
+                        }
                         Self(arr)
                     }
 
@@ -370,6 +375,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         &(self.0)
                     }
 
+                    fn to_be_bytes(&self) -> [u8; #limbs] {
+                        core::array::from_fn(|i| self.0[#limbs - 1 - i])
+                    }
+
                     #[cfg(not(target_os = "zkvm"))]
                     fn modulus_biguint() -> num_bigint_dig::BigUint {
                         num_bigint_dig::BigUint::from_bytes_le(&Self::MODULUS)
@@ -377,7 +386,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     #[cfg(not(target_os = "zkvm"))]
                     fn from_biguint(biguint: num_bigint_dig::BigUint) -> Self {
-                        Self(axvm::utils::biguint_to_limbs(&biguint))
+                        Self(openvm::utils::biguint_to_limbs(&biguint))
                     }
 
                     #[cfg(not(target_os = "zkvm"))]
@@ -554,7 +563,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra_guest::DivAssignUnsafe<&'a #struct_name> for #struct_name {
+                impl<'a> openvm_algebra_guest::DivAssignUnsafe<&'a #struct_name> for #struct_name {
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
                     fn div_assign_unsafe(&mut self, other: &'a #struct_name) {
@@ -562,7 +571,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl axvm_algebra_guest::DivAssignUnsafe for #struct_name {
+                impl openvm_algebra_guest::DivAssignUnsafe for #struct_name {
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
                     fn div_assign_unsafe(&mut self, other: Self) {
@@ -570,7 +579,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl axvm_algebra_guest::DivUnsafe for #struct_name {
+                impl openvm_algebra_guest::DivUnsafe for #struct_name {
                     type Output = Self;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -580,7 +589,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for #struct_name {
+                impl<'a> openvm_algebra_guest::DivUnsafe<&'a #struct_name> for #struct_name {
                     type Output = Self;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -590,7 +599,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl<'a> axvm_algebra_guest::DivUnsafe<&'a #struct_name> for &#struct_name {
+                impl<'a> openvm_algebra_guest::DivUnsafe<&'a #struct_name> for &#struct_name {
                     type Output = #struct_name;
                     /// Undefined behaviour when denominator is not coprime to N
                     #[inline(always)]
@@ -651,12 +660,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl axvm_algebra_guest::Reduce for #struct_name {
+            impl openvm_algebra_guest::Reduce for #struct_name {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
-                    let mut res = <Self as axvm_algebra_guest::IntMod>::ZERO;
+                    let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
                     let mut base = Self::from_le_bytes(&[255u8; #limbs]);
-                    base += <Self as axvm_algebra_guest::IntMod>::ONE;
+                    base += <Self as openvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
                         res = res * &base + Self::from_le_bytes(chunk);
                     }
@@ -690,9 +699,13 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     let mut externs = Vec::new();
     let mut setups = Vec::new();
-    let mut axiom_section = Vec::new();
+    let mut openvm_section = Vec::new();
     let mut setup_all_moduli = Vec::new();
-    let mut setup_all_complex_extensions = Vec::new();
+
+    // List of all modular limbs in one (that is, with a compile-time known size) array.
+    let mut two_modular_limbs_flattened_list = Vec::<u8>::new();
+    // List of "bars" between adjacent modular limbs sublists.
+    let mut limb_list_borders = vec![0usize];
 
     let span = proc_macro::Span::call_site();
 
@@ -718,6 +731,11 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             .take(limbs)
             .collect::<Vec<_>>();
 
+        // We need two copies of modular limbs for Fp2 setup.
+        let doubled_modulus = [modulus_bytes.clone(), modulus_bytes.clone()].concat();
+        two_modular_limbs_flattened_list.extend(doubled_modulus);
+        limb_list_borders.push(two_modular_limbs_flattened_list.len());
+
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
@@ -732,16 +750,15 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 .chain(modulus_bytes.iter().copied())
                 .collect::<Vec<_>>();
         let serialized_name = syn::Ident::new(
-            &format!("AXIOM_SERIALIZED_MODULUS_{}", mod_idx),
+            &format!("OPENVM_SERIALIZED_MODULUS_{}", mod_idx),
             span.into(),
         );
         let serialized_len = serialized_modulus.len();
         let setup_function = syn::Ident::new(&format!("setup_{}", mod_idx), span.into());
-        let setup_function_fp2 = syn::Ident::new(&format!("setup_{}_fp2", mod_idx), span.into());
 
-        axiom_section.push(quote::quote_spanned! { span.into() =>
+        openvm_section.push(quote::quote_spanned! { span.into() =>
             #[cfg(target_os = "zkvm")]
-            #[link_section = ".axiom"]
+            #[link_section = ".openvm"]
             #[no_mangle]
             #[used]
             static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
@@ -761,10 +778,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             externs.push(quote::quote_spanned! { span.into() =>
                 #[no_mangle]
                 extern "C" fn #func_name(rd: usize, rs1: usize, rs2: usize) {
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_algebra_guest::OPCODE,
+                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                        ::openvm_algebra_guest::ModArithBaseFunct7::#local_opcode as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         rd,
                         rs1,
                         rs2
@@ -782,9 +799,9 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                 unsafe {
                     core::arch::asm!(
                         ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, {rs2}",
-                        opcode = const axvm_platform::constants::CUSTOM_1,
-                        funct3 = const axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        funct7 = const axvm_platform::constants::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                        opcode = const ::openvm_algebra_guest::OPCODE,
+                        funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                        funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::IsEqMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         rd = out(reg) x,
                         rs1 = in(reg) rs1,
                         rs2 = in(reg) rs2
@@ -796,9 +813,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         setup_all_moduli.push(quote::quote_spanned! { span.into() =>
             #setup_function();
-        });
-        setup_all_complex_extensions.push(quote::quote_spanned! { span.into() =>
-            #setup_function_fp2();
         });
 
         setups.push(quote::quote_spanned! { span.into() =>
@@ -818,86 +832,61 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
                     let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_algebra_guest::OPCODE,
+                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
+                    openvm_platform::custom_insn_r!(
+                        ::openvm_algebra_guest::OPCODE,
+                        ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3,
+                        ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize
                             + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                                * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         uninit.as_mut_ptr(),
                         remaining.as_ptr(),
                         "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ModularArithmetic as usize,
-                        axvm_platform::constants::ModArithBaseFunct7::SetupMod as usize
-                            + #mod_idx
-                                * (axvm_platform::constants::MODULAR_ARITHMETIC_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        remaining.as_ptr(),
-                        "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
-                    );
-                }
-            }
-
-            #[allow(non_snake_case)]
-            pub fn #setup_function_fp2() {
-                #[cfg(target_os = "zkvm")]
-                {
-
-                    let modulus_bytes = &#serialized_name[6..];
-
-                    // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
-                    // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
-                    let mut uninit: core::mem::MaybeUninit<[u8; #limbs]> = core::mem::MaybeUninit::uninit();
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
-                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
-                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
-                        "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
-                    );
-                    axvm_platform::custom_insn_r!(
-                        axvm_platform::constants::CUSTOM_1,
-                        axvm_platform::constants::Custom1Funct3::ComplexExtField as usize,
-                        axvm_platform::constants::ComplexExtFieldBaseFunct7::Setup as usize
-                            + #mod_idx
-                                * (axvm_platform::constants::COMPLEX_EXT_FIELD_MAX_KINDS as usize),
-                        uninit.as_mut_ptr(),
-                        modulus_bytes.as_ptr(),
-                        "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
-                    );
+                    unsafe {
+                        // This should not be x0:
+                        let mut tmp = uninit.as_mut_ptr() as usize;
+                        // rs2="x2" will be parsed as 2 and therefore transpiled to SETUP_ISEQ
+                        core::arch::asm!(
+                            ".insn r {opcode}, {funct3}, {funct7}, {rd}, {rs1}, x2",
+                            opcode = const ::openvm_algebra_guest::OPCODE,
+                            funct3 = const ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                            funct7 = const ::openvm_algebra_guest::ModArithBaseFunct7::SetupMod as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                            rd = inout(reg) tmp,
+                            rs1 = in(reg) remaining.as_ptr(),
+                        );
+                        // rd = inout(reg) is necessary because this instruction will write to `rd` register
+                    }
                 }
             }
         });
     }
 
+    let total_limbs_cnt = two_modular_limbs_flattened_list.len();
+    let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
-        #(#axiom_section)*
+        #(#openvm_section)*
         #[cfg(target_os = "zkvm")]
-        mod axvm_intrinsics_ffi {
+        mod openvm_intrinsics_ffi {
             #(#externs)*
+        }
+        #[allow(non_snake_case)]
+        pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
+            pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
+            pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
         }
         #(#setups)*
         pub fn setup_all_moduli() {
             #(#setup_all_moduli)*
-        }
-        pub fn setup_all_complex_extensions() {
-            #(#setup_all_complex_extensions)*
         }
     })
 }

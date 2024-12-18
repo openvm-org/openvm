@@ -22,7 +22,8 @@ pub trait Group:
     where
         Self: 'a;
 
-    fn identity() -> Self;
+    const IDENTITY: Self;
+
     fn is_identity(&self) -> bool;
 
     fn double(&self) -> Self;

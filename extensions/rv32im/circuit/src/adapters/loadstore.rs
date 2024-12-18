@@ -6,17 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_circuit_primitives::{
-    utils::select,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-};
-use ax_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
-};
-use axvm_circuit::{
+use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
         Result, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
@@ -32,11 +22,21 @@ use axvm_circuit::{
         program::ProgramBus,
     },
 };
-use axvm_instructions::{
+use openvm_circuit_primitives::{
+    utils::select,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    Rv32LoadStoreOpcode::{self, *},
     UsizeOpcode,
+};
+use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{AirBuilder, BaseAir},
+    p3_field::{AbstractField, Field, PrimeField32},
 };
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};
@@ -355,7 +355,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
         assert!(self.range_checker_chip.range_max_bits() >= 15);
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
         let rs1_val = compose(rs1_record.data);
@@ -428,7 +428,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             opcode, a, d, e, ..
         } = *instruction;
 
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode - self.offset);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let write_record = match local_opcode {
             STOREW | STOREH | STOREB => {

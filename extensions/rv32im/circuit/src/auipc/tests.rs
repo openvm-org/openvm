@@ -1,9 +1,12 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use ax_circuit_primitives::bitwise_op_lookup::{
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
+use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-use ax_stark_backend::{
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode, VmOpcode};
+use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
+use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{AbstractField, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -11,14 +14,7 @@ use ax_stark_backend::{
     verifier::VerificationError,
     Chip, ChipUsageGetter,
 };
-use ax_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use axvm_circuit::arch::{testing::VmChipTestBuilder, VmAdapterChip};
-use axvm_instructions::{
-    instruction::Instruction,
-    program::PC_BITS,
-    Rv32AuipcOpcode::{self, *},
-    UsizeOpcode,
-};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
@@ -42,10 +38,7 @@ fn set_and_execute(
 
     tester.execute_with_pc(
         chip,
-        Instruction::from_usize(
-            opcode as usize + Rv32AuipcOpcode::default_offset(),
-            [a, 0, imm, 1, 0],
-        ),
+        Instruction::from_usize(VmOpcode::with_default_offset(opcode), [a, 0, imm, 1, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
@@ -200,7 +193,7 @@ fn invalid_limb_negative_tests() {
         Some([197, 202, 49, 70]),
         Some([166, 243, 17]),
         Some([36, 62, 52]),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 
@@ -231,7 +224,7 @@ fn overflow_negative_tests() {
         None,
         Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
         None,
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -240,7 +233,7 @@ fn overflow_negative_tests() {
         Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
         Some([0, 0, 0]),
         Some([1, 0, 0]),
-        VerificationError::NonZeroCumulativeSum,
+        VerificationError::ChallengePhaseError,
     );
 }
 

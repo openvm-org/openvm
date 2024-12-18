@@ -4,11 +4,13 @@ use std::{
     fmt::Debug,
 };
 
-use ax_circuit_derive::AlignedBorrow;
-use ax_stark_backend::interaction::InteractionBuilder;
-use axvm_instructions::instruction::Instruction;
-use p3_air::BaseAir;
-use p3_field::{AbstractField, Field, PrimeField32};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::instruction::Instruction;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{AbstractField, Field, PrimeField32},
+};
 
 use crate::{
     arch::{
