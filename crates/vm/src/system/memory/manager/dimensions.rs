@@ -1,5 +1,5 @@
 use derive_new::new;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
+use openvm_stark_backend::p3_util::log2_strict_usize;
 
 use crate::{arch::MemoryConfig, system::memory::CHUNK};
 
@@ -12,7 +12,7 @@ pub struct MemoryDimensions {
     /// Pointer height
     pub address_height: usize,
     /// Address space offset
-    pub as_offset: usize,
+    pub as_offset: u32,
 }
 
 impl MemoryDimensions {
@@ -20,10 +20,9 @@ impl MemoryDimensions {
         self.as_height + self.address_height
     }
     /// Convert an address label (address space, block id) to its index in the memory merkle tree.
-    pub fn label_to_index<F: PrimeField32>(&self, label: (F, usize)) -> usize {
+    pub fn label_to_index(&self, label: (u32, u32)) -> u64 {
         let (addr_space, block_id) = label;
-        ((addr_space.as_canonical_u32() as usize - self.as_offset) << self.address_height)
-            + block_id
+        (((addr_space - self.as_offset) as u64) << self.address_height) + block_id as u64
     }
 }
 

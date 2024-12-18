@@ -140,7 +140,6 @@ impl<
         // Compose the u32 register value into single field element, with
         // a range check on the highest limb.
         let rs_val_f = cols.rs_val.map(|decomp| {
-            // TODO: range check
             decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
                 acc * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS) + limb
             })

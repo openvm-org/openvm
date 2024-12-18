@@ -1,11 +1,12 @@
 [package]
 name = "openvm"
 description = "OpenVM standard Rust library for guest programs."
-version = { workspace = true }
-edition = { workspace = true }
-# license = { workspace = true }
-homepage = { workspace = true }
-repository = { workspace = true }
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-platform = { workspace = true, features = [

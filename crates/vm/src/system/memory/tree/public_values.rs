@@ -8,7 +8,7 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Equipartition},
 };
 
-pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: usize = 2;
+pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = 2;
 
 /// Merkle proof for user public values in the memory state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -111,11 +111,8 @@ pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
     final_memory: &Equipartition<F, CHUNK>,
 ) -> Vec<F> {
     // All (addr, value) pairs in the public value address space.
-    let f_as_start =
-        F::from_canonical_usize(PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset);
-    let f_as_end = F::from_canonical_usize(
-        PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset + 1,
-    );
+    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset + 1;
 
     let used_pvs: Vec<_> = final_memory
         .range((f_as_start, 0)..(f_as_end, 0))
@@ -123,7 +120,7 @@ pub fn extract_public_values<const CHUNK: usize, F: PrimeField32>(
             value
                 .iter()
                 .enumerate()
-                .map(|(i, &v)| (*block_id * CHUNK + i, v))
+                .map(|(i, &v)| (*block_id as usize * CHUNK + i, v))
         })
         .collect();
     if let Some(last_pv) = used_pvs.last() {
@@ -161,13 +158,9 @@ mod tests {
         vm_config.memory_config.as_height = 4;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
-        let pv_as = F::from_canonical_usize(
-            PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset,
-        );
+        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
         let num_public_values = 16;
-        let memory: MemoryImage<F> = [((pv_as, F::from_canonical_u32(15)), F::ONE)]
-            .into_iter()
-            .collect();
+        let memory: MemoryImage<F> = [((pv_as, 15), F::ONE)].into_iter().collect();
         let mut expected_pvs = F::zero_vec(num_public_values);
         expected_pvs[15] = F::ONE;
 

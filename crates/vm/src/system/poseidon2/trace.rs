@@ -6,10 +6,13 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
+#[cfg(feature = "parallel")]
+use rayon::iter::ParallelExtend;
 
 use super::{columns::*, Poseidon2Chip};
 
@@ -35,12 +38,21 @@ where
 
         let aux_cols_factory = memory_controller.borrow().aux_cols_factory();
         let mut flat_rows: Vec<_> = records
-            .into_iter()
+            .into_par_iter()
             .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())
             .collect();
-        for _ in 0..diff {
-            flat_rows.extend(Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten());
-        }
+        #[cfg(feature = "parallel")]
+        flat_rows.par_extend(
+            vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
+                .into_par_iter()
+                .flatten(),
+        );
+        #[cfg(not(feature = "parallel"))]
+        flat_rows.extend(
+            vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
+                .into_iter()
+                .flatten(),
+        );
 
         AirProofInput::simple_no_pis(
             Arc::new(air.clone()),

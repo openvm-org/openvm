@@ -3,7 +3,11 @@ name = "cargo-openvm"
 description = "OpenVM CLI tools"
 readme = "README.md"
 version.workspace = true
+authors.workspace = true
 edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [build-dependencies]
 vergen = { version = "8", default-features = false, features = [
@@ -22,6 +26,10 @@ openvm-rv32im-transpiler = { workspace = true }
 openvm-sdk = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-stark-sdk.workspace = true
+
+aws-sdk-s3 = "1.20.0"
+aws-config = "1.0.0"
+tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "macros"] }
 cargo_metadata = "0.18.1"
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
@@ -42,8 +50,11 @@ regex = "1.5.4"
 prettytable-rs = "0.10"
 textwrap = "0.16.0"
 ctrlc = "3.4.2"
-bincode = { workspace = true, features = ["serde", "std"] }
 toml = { workspace = true }
+num-bigint-dig = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+openvm-cli-example-test = { path = "example" }
 
 [features]
 default = ["parallel", "mimalloc"]

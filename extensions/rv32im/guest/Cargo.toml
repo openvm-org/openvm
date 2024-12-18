@@ -1,9 +1,11 @@
 [package]
 name = "openvm-rv32im-guest"
+description = "OpenVM guest library for RISC-V 32-bit IM instruction set"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Guest extension for RISC-V 32IM"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-platform = { workspace = true }

@@ -1,0 +1,22 @@
+[package]
+name = "algebra-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
+serde = { version = "1.0.216", default-features = false }
+
+[features]
+default = []
+std = [
+    "serde/std",
+    "openvm/std",
+    "openvm-algebra-guest/std",
+]

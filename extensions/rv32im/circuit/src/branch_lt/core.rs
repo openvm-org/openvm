@@ -155,7 +155,6 @@ where
             })
             + AB::Expr::from_canonical_usize(self.offset);
 
-        // TODO: update the default increment (i.e. 4) when opcodes are updated
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
             + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);

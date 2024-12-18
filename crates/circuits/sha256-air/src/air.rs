@@ -68,7 +68,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for Sha256Air {
 }
 
 impl Sha256Air {
-    /// Implement constraints that need to be true for all rows
+    /// Implements the single row constraints (i.e. imposes constraints only on local)
+    /// Implements some sanity constraints on the row index, flags, and work variables
+    /// Calls `eval_round_row` and `eval_digest_row`
     fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -112,7 +114,7 @@ impl Sha256Air {
         );
 
         // Constrain a, e, being composed of bits: we make sure a and e are always in the same place in the trace matrix
-        // Note: this has to be true for every row, even invalid rows
+        // Note: this has to be true for every row, even padding rows
         for i in 0..SHA256_ROUNDS_PER_ROW {
             for j in 0..SHA256_WORD_BITS {
                 builder.assert_bool(local_cols.work_vars.a[i][j]);
@@ -125,7 +127,7 @@ impl Sha256Air {
         self.eval_digest_row(builder, local_cols);
     }
 
-    /// Implement constraints for a row as if it is a round row
+    /// Implement constraints for a conditional on it being a round row
     fn eval_round_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -157,7 +159,10 @@ impl Sha256Air {
         }
     }
 
-    /// Implement constraints for a digest row
+    /// Implements constraints for a digest row that ensure proper state transitions between blocks
+    /// This validates that:
+    /// The work variables are correctly initialized for the next message block
+    /// For the last message block, the initial state matches SHA256_H constants
     fn eval_digest_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

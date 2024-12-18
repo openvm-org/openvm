@@ -424,7 +424,6 @@ impl<
         let (rs2_record, rs2_val) = read_rv32_register(memory, d, c);
         let (rd_record, rd_val) = read_rv32_register(memory, d, a);
 
-        // TODO: assert address has < 2^address_bits
         assert!(rs1_val as usize + READ_SIZE * BLOCKS_PER_READ1 - 1 < (1 << self.air.address_bits));
         let read1_records = from_fn(|i| {
             memory.read::<READ_SIZE>(e, F::from_canonical_u32(rs1_val + (i * READ_SIZE) as u32))

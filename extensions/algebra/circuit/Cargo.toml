@@ -1,8 +1,11 @@
 [package]
 name = "openvm-algebra-circuit"
-version = "0.1.0"
-edition = "2021"
-description = "Modular arithmetic circuits."
+description = "OpenVM circuit extension for algebra (modular arithmetic)"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
@@ -26,6 +29,7 @@ derive_more = { workspace = true, features = ["from"] }
 strum = { workspace = true }
 derive-new = { workspace = true }
 serde.workspace = true
+serde_with = { workspace = true }
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }

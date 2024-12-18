@@ -129,13 +129,6 @@ jobs:
       # Environment setup                                                      #
       ##########################################################################
 
-      # TEMPORARY
-      - name: Give GitHub Actions access to private repositories
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref }}
@@ -159,7 +152,6 @@ jobs:
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
 
       - name: Setup e2e (halo2 and arguments)
-        working-directory: extensions/native/recursion # We only ever run halo2 for recursion
         run: |
           E2E_BENCH=${{ inputs.e2e_bench }}
           echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
@@ -169,6 +161,7 @@ jobs:
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
             bash ./extensions/native/recursion/trusted_setup_s3.sh
+            export PARAMS_DIR=$(pwd)/params
           fi
 
       - name: Set BIN_NAME and CMD_ARGS
@@ -185,8 +178,8 @@ jobs:
             select(.name == $name) |
             .working_directory
           ' ./ci/benchmark-config.json)
-          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKSPACE_DIR'))")
-          echo "working_dir=$WORKSPACE_DIR" >> $GITHUB_OUTPUT
+          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKING_DIR'))")
+          echo "working_dir=$WORKING_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
       # Metric name is unique within a run (matrix)
@@ -261,11 +254,11 @@ jobs:
           fi
 
       ##########################################################################
-      # Update gh-pages with individual results                                #
+      # Update benchmark-results with individual results                       #
       ##########################################################################
       - uses: actions/checkout@v4
         with:
-          ref: gh-pages
+          ref: benchmark-results
 
       - name: Set up git
         run: |
@@ -274,28 +267,29 @@ jobs:
 
       - name: Set github pages path for dispatch
         run: |
-          GH_PAGES_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
-          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for PR
         if: github.event_name == 'pull_request'
         run: |
-          GH_PAGES_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
-          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          BENCHMARK_RESULTS_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          GH_PAGES_PATH="benchmarks/individual"
-          echo "GH_PAGES_PATH=${GH_PAGES_PATH}" >> $GITHUB_ENV
+          BENCHMARK_RESULTS_PATH="benchmarks/individual"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Update PR github pages with new bench results
+        if: github.event.pull_request.head.repo.fork == false # forks do not have write access
         run: |
-          mkdir -p ${GH_PAGES_PATH}
+          mkdir -p ${BENCHMARK_RESULTS_PATH}
           s3_md_file="${METRIC_NAME}-${current_sha}.md"
-          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${GH_PAGES_PATH}/${s3_md_file}
-          git add ${GH_PAGES_PATH}/${s3_md_file}
-          git commit --allow-empty -m "Update benchmark result at ${GH_PAGES_PATH}/${s3_md_file}"
+          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${BENCHMARK_RESULTS_PATH}/${s3_md_file}
+          git add ${BENCHMARK_RESULTS_PATH}/${s3_md_file}
+          git commit --allow-empty -m "Update benchmark result at ${BENCHMARK_RESULTS_PATH}/${s3_md_file}"
 
           MAX_RETRIES=10
           RETRY_DELAY=5
@@ -304,9 +298,9 @@ jobs:
 
           while [ $ATTEMPT -lt $MAX_RETRIES ]; do
               echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
-              git fetch origin gh-pages
-              git merge origin/gh-pages --no-edit
-              if git push origin gh-pages; then
+              git fetch origin benchmark-results
+              git merge origin/benchmark-results --no-edit
+              if git push origin benchmark-results; then
                   SUCCESS=true
                   break
               else

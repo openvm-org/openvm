@@ -2,7 +2,7 @@ generate_markdown() {
     local metric_path="$1"
     local metric_name="$2"
     local s3_metrics_path="$3"
-    local afs_root="$4"
+    local openvm_root="$4"
 
     if [[ -f $metric_path ]]; then
         prev_path="${s3_metrics_path}/main-${metric_name}.json"
@@ -10,10 +10,10 @@ generate_markdown() {
 
         if [[ $count -gt 0 ]]; then
             s5cmd cp $prev_path prev.json
-            python3 ${afs_root}/ci/scripts/metric_unify/main.py $metric_path --prev prev.json --aggregation-json ${afs_root}/ci/scripts/metric_unify/aggregation.json > results.md
+            python3 ${openvm_root}/ci/scripts/metric_unify/main.py $metric_path --prev prev.json --aggregation-json ${openvm_root}/ci/scripts/metric_unify/aggregation.json > results.md
         else
             echo "No previous benchmark on main branch found"
-            python3 ${afs_root}/ci/scripts/metric_unify/main.py $metric_path --aggregation-json ${afs_root}/ci/scripts/metric_unify/aggregation.json > results.md
+            python3 ${openvm_root}/ci/scripts/metric_unify/main.py $metric_path --aggregation-json ${openvm_root}/ci/scripts/metric_unify/aggregation.json > results.md
         fi
     else
         echo "No benchmark metrics found at ${metric_path}"
@@ -54,7 +54,7 @@ add_metadata() {
     echo "[Benchmark Workflow](https://github.com/${repo}/actions/runs/${run_id})" >> $result_path
 }
 
-commit_and_push_gh_pages() {
+commit_and_push_benchmark_results() {
     local files=$1
     local commit_message=$2
     git add ${files}
@@ -67,9 +67,9 @@ commit_and_push_gh_pages() {
 
     while [ $ATTEMPT -lt $MAX_RETRIES ]; do
         echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
-        git fetch origin gh-pages
-        git merge origin/gh-pages --no-edit
-        if git push origin gh-pages; then
+        git fetch origin benchmark-results
+        git merge origin/benchmark-results --no-edit
+        if git push origin benchmark-results; then
             SUCCESS=true
             break
         else

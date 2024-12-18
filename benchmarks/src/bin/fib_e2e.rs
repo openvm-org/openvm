@@ -13,6 +13,7 @@ use openvm_rv32im_transpiler::{
 use openvm_sdk::{
     commit::commit_app_exe,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config},
+    prover::ContinuationProver,
     Sdk, StdIn,
 };
 use openvm_stark_sdk::{
@@ -48,7 +49,7 @@ async fn main() -> Result<()> {
     let max_segment_length = cli_args.max_segment_length.unwrap_or(1_000_000);
 
     let app_config = AppConfig {
-        app_fri_params,
+        app_fri_params: app_fri_params.into(),
         app_vm_config: Rv32ImConfig::with_public_values_and_segment_len(
             NUM_PUBLIC_VALUES,
             max_segment_length,
@@ -87,14 +88,11 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        Sdk.generate_evm_proof(
-            &halo2_params_reader,
-            app_pk,
-            app_committed_exe,
-            full_agg_pk,
-            stdin,
-        )
-        .unwrap();
+        let mut e2e_prover =
+            ContinuationProver::new(&halo2_params_reader, app_pk, app_committed_exe, full_agg_pk)
+                .with_profiling();
+        e2e_prover.set_program_name("fib_e2e");
+        let _proof = e2e_prover.generate_proof_for_evm(stdin);
     });
 
     Ok(())

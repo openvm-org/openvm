@@ -1,9 +1,11 @@
 [package]
 name = "openvm-pairing-guest"
+description = "OpenVM guest library for elliptic curve pairing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM guest library for elliptic curve pairings."
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }

@@ -23,13 +23,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      # TEMPORARY
-      - name: Give GitHub Actions access to private repositories
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-
       - name: Run build
         run: |
           cargo build --verbose

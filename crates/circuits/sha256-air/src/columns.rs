@@ -1,6 +1,7 @@
 //! WARNING: the order of fields in the structs is important, do not change it
 
-use openvm_circuit_primitives::AlignedBorrow;
+use openvm_circuit_primitives::{utils::not, AlignedBorrow};
+use openvm_stark_backend::p3_field::AbstractField;
 
 use super::{
     SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW, SHA256_ROW_VAR_CNT, SHA256_WORD_BITS,
@@ -82,4 +83,17 @@ pub struct Sha256FlagsCols<T> {
     pub global_block_idx: T,
     /// Will store the index of the current block in the current message starting from 0
     pub local_block_idx: T,
+}
+
+impl<O, T: Copy + core::ops::Add<Output = O>> Sha256FlagsCols<T> {
+    pub fn is_not_padding_row(&self) -> O {
+        self.is_round_row + self.is_digest_row
+    }
+
+    pub fn is_padding_row(&self) -> O
+    where
+        O: AbstractField,
+    {
+        not(self.is_not_padding_row())
+    }
 }

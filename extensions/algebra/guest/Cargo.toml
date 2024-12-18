@@ -1,9 +1,11 @@
 [package]
 name = "openvm-algebra-guest"
+description = "OpenVM guest library for algebra over rings and fields, including modular and complex field arithmetic."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM guest library for algebra over rings and fields, including modular and Fp2 arithmetic."
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }

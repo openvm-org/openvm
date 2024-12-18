@@ -18,7 +18,7 @@ use openvm_circuit::{
         VmInventoryError,
     },
     derive::{AnyEnum, InstructionExecutor, VmConfig},
-    utils::new_air_test_with_min_segments,
+    utils::air_test,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
@@ -159,6 +159,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    new_air_test_with_min_segments(config, openvm_exe, vec![], 1, true);
+    air_test(config, openvm_exe);
     Ok(())
 }

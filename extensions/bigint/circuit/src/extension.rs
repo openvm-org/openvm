@@ -56,15 +56,20 @@ impl Default for Int256Rv32Config {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Int256 {
+    #[serde(default = "default_range_tuple_checker_sizes")]
     pub range_tuple_checker_sizes: [u32; 2],
 }
 
 impl Default for Int256 {
     fn default() -> Self {
         Self {
-            range_tuple_checker_sizes: [1 << 8, 32 * (1 << 8)],
+            range_tuple_checker_sizes: default_range_tuple_checker_sizes(),
         }
     }
+}
+
+fn default_range_tuple_checker_sizes() -> [u32; 2] {
+    [1 << 8, 32 * (1 << 8)]
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]

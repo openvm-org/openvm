@@ -29,7 +29,7 @@ lint or use rust-analyzer on the crate while in the workspace, so the recommende
 
 ### Adding the Benchmark
 
-Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](./src/bin) by following the [fibonacci example](./bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](./src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
+Our proving benchmarks are written as standalone rust binaries. Add one by making a new file in [bin](./src/bin) by following the [fibonacci example](./src/bin/fibonacci.rs). We currently only run aggregation proofs when feature "aggregation" is on (off by default). Any general benchmarking utility functions can be added to the library in [`src`](./src). There are utility functions `build_bench_program` which compiles the guest program crate with target set to `openvm` and reads the output RISC-V ELF file.
 This can then be fed into `bench_from_exe` which will generate a proof of the execution of the ELF (any other `VmExe`) from a given `VmConfig`.
 
 #### Providing Inputs

@@ -134,7 +134,6 @@ impl OverflowInt<isize> {
     }
 }
 
-// TODO: this doesn't work for references automatically?
 impl<T> Add for OverflowInt<T>
 where
     T: Add<Output = T> + Clone + Default,

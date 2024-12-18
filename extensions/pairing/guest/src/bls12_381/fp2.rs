@@ -6,13 +6,17 @@ use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field, IntMod};
 
 use super::Fp;
 
+// The struct name needs to be globally unique for linking purposes.
+// The mod_type is a path used only in the struct definition.
 complex_declare! {
-    Fp2 { mod_type = Fp }
+    Bls12_381Fp2 { mod_type = Fp }
 }
 
 complex_impl_field! {
-    Fp2,
+    Bls12_381Fp2,
 }
+
+pub type Fp2 = Bls12_381Fp2;
 
 impl FieldExtension<Fp> for Fp2 {
     const D: usize = 2;

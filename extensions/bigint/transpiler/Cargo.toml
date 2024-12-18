@@ -1,9 +1,11 @@
 [package]
 name = "openvm-bigint-transpiler"
+description = "OpenVM transpiler extension for bigint"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for bigint"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

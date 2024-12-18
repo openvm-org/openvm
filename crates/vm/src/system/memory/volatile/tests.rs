@@ -2,13 +2,14 @@ use std::{collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
-    p3_field::{AbstractField, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, prover::types::AirProofInput, Chip,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    engine::StarkFriEngine,
+    p3_baby_bear::BabyBear,
+    utils::create_seeded_rng,
 };
 use rand::Rng;
 use test_log::test;
@@ -26,32 +27,33 @@ fn boundary_air_test() {
 
     const MEMORY_BUS: usize = 1;
     const RANGE_CHECKER_BUS: usize = 3;
-    const MAX_ADDRESS_SPACE: usize = 4;
+    const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
-    const MAX_VAL: usize = 1 << LIMB_BITS;
+    const MAX_VAL: u32 = 1 << LIMB_BITS;
     const DECOMP: usize = 8;
     let memory_bus = MemoryBus(MEMORY_BUS);
 
     let num_addresses = 10;
     let mut distinct_addresses = HashSet::new();
     while distinct_addresses.len() < num_addresses {
-        let addr_space = Val::from_canonical_usize(rng.gen_range(0..MAX_ADDRESS_SPACE));
-        let pointer = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
+        let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
+        let pointer = rng.gen_range(0..MAX_VAL);
         distinct_addresses.insert((addr_space, pointer));
     }
 
     let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, DECOMP);
     let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let boundary_chip = VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
+    let mut boundary_chip =
+        VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
 
     let mut final_memory = TimestampedEquipartition::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-        let final_data = Val::from_canonical_usize(rng.gen_range(0..MAX_VAL));
+        let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
         final_memory.insert(
-            (addr_space, pointer.as_canonical_u32() as usize),
+            (addr_space, pointer),
             TimestampedValues {
                 values: [final_data],
                 timestamp: final_clk,
@@ -70,8 +72,8 @@ fn boundary_air_test() {
             .flat_map(|(addr_space, pointer)| {
                 vec![
                     Val::ONE,
-                    *addr_space,
-                    *pointer,
+                    Val::from_canonical_u32(*addr_space),
+                    Val::from_canonical_u32(*pointer),
                     Val::ZERO,
                     Val::ZERO,
                     Val::ONE,
@@ -86,14 +88,12 @@ fn boundary_air_test() {
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
-                let timestamped_value = final_memory
-                    .get(&(*addr_space, pointer.as_canonical_u32() as usize))
-                    .unwrap();
+                let timestamped_value = final_memory.get(&(*addr_space, *pointer)).unwrap();
 
                 vec![
                     Val::ONE,
-                    *addr_space,
-                    *pointer,
+                    Val::from_canonical_u32(*addr_space),
+                    Val::from_canonical_u32(*pointer),
                     timestamped_value.values[0],
                     Val::from_canonical_u32(timestamped_value.timestamp),
                     Val::ONE,
@@ -104,35 +104,30 @@ fn boundary_air_test() {
         6,
     );
 
-    let boundary_trace = boundary_chip.generate_trace(&final_memory, None);
+    boundary_chip.finalize(final_memory.clone());
+    let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+        boundary_chip.generate_air_proof_input();
     // test trace height override
     {
-        let overridden_height = boundary_trace.height() * 2;
+        let overridden_height = boundary_api.main_trace_height() * 2;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let boundary_chip =
+        let mut boundary_chip =
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
-        let boundary_trace = boundary_chip.generate_trace(&final_memory, Some(overridden_height));
+        boundary_chip.set_overridden_height(overridden_height);
+        boundary_chip.finalize(final_memory.clone());
+        let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+            boundary_chip.generate_air_proof_input();
         assert_eq!(
-            boundary_trace.height(),
+            boundary_api.main_trace_height(),
             overridden_height.next_power_of_two()
         );
     }
 
-    let range_checker_trace = range_checker.generate_trace();
-
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![
-            boundary_chip.air,
-            range_checker.air,
-            init_memory_dummy_air,
-            final_memory_dummy_air
-        ],
-        vec![
-            boundary_trace,
-            range_checker_trace,
-            init_memory_trace,
-            final_memory_trace,
-        ],
-    )
+    BabyBearPoseidon2Engine::run_test_fast(vec![
+        boundary_api,
+        range_checker.generate_air_proof_input(),
+        AirProofInput::simple_no_pis(Arc::new(init_memory_dummy_air), init_memory_trace),
+        AirProofInput::simple_no_pis(Arc::new(final_memory_dummy_air), final_memory_trace),
+    ])
     .expect("Verification failed");
 }

@@ -5,7 +5,7 @@ extern crate proc_macro;
 use itertools::multiunzip;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, LitStr, Meta};
 
 #[proc_macro_derive(AlignedBorrow)]
 pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
@@ -72,8 +72,9 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(methods)
 }
 
-#[proc_macro_derive(Chip)]
+#[proc_macro_derive(Chip, attributes(chip))]
 pub fn chip_derive(input: TokenStream) -> TokenStream {
+    // Parse the attributes from the struct or enum
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
@@ -160,6 +161,37 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(syn::parse_quote! { openvm_stark_backend::config::Domain<SC>: openvm_stark_backend::p3_commit::PolynomialSpace<Val = F>
             });
+            let attributes = ast.attrs.iter().find(|&attr| attr.path().is_ident("chip"));
+            if let Some(attr) = attributes {
+                let mut fail_flag = false;
+
+                match &attr.meta {
+                    Meta::List(meta_list) => {
+                        meta_list
+                            .parse_nested_meta(|meta| {
+                                if meta.path.is_ident("where") {
+                                    let value = meta.value()?; // this parses the `=`
+                                    let s: LitStr = value.parse()?;
+                                    let where_value = s.value();
+                                    where_clause.predicates.push(syn::parse_str(&where_value)?);
+                                } else {
+                                    fail_flag = true;
+                                }
+                                Ok(())
+                            })
+                            .unwrap();
+                    }
+                    _ => fail_flag = true,
+                }
+                if fail_flag {
+                    return syn::Error::new(
+                        name.span(),
+                        "Only `#[chip(where = ...)]` format is supported",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            }
 
             quote! {
                 impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {

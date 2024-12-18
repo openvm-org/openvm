@@ -352,12 +352,9 @@ fn test_vm_initial_memory() {
         ),
     ]);
 
-    let init_memory: BTreeMap<_, _> = [(
-        (BabyBear::ONE, BabyBear::from_canonical_u32(7)),
-        BabyBear::from_canonical_u32(101),
-    )]
-    .into_iter()
-    .collect();
+    let init_memory: BTreeMap<_, _> = [((1, 7), BabyBear::from_canonical_u32(101))]
+        .into_iter()
+        .collect();
 
     let config = NativeConfig::aggregation(0, 3).with_continuations();
     let exe = VmExe {

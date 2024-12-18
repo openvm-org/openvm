@@ -1,9 +1,11 @@
 [package]
 name = "openvm-algebra-transpiler"
+description = "OpenVM transpiler extension for algebra (modular arithmetic)"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Transpiler extension for modular arithmetic"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

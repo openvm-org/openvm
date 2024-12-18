@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashSet;
 
@@ -19,9 +17,16 @@ mod tests;
 #[derive(Debug)]
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: FxHashSet<(usize, usize, usize)>,
+    touched_nodes: FxHashSet<(usize, u32, u32)>,
     num_touched_nonleaves: usize,
-    _marker: PhantomData<F>,
+    final_state: Option<FinalState<CHUNK, F>>,
+    overridden_height: Option<usize>,
+}
+#[derive(Debug)]
+struct FinalState<const CHUNK: usize, F> {
+    rows: Vec<MemoryMerkleCols<F, CHUNK>>,
+    init_root: [F; CHUNK],
+    final_root: [F; CHUNK],
 }
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
@@ -43,11 +48,15 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             },
             touched_nodes,
             num_touched_nonleaves: 1,
-            _marker: PhantomData,
+            final_state: None,
+            overridden_height: None,
         }
     }
+    pub fn set_overridden_height(&mut self, override_height: usize) {
+        self.overridden_height = Some(override_height);
+    }
 
-    fn touch_node(&mut self, height: usize, as_label: usize, address_label: usize) {
+    fn touch_node(&mut self, height: usize, as_label: u32, address_label: u32) {
         if self.touched_nodes.insert((height, as_label, address_label)) {
             assert_ne!(height, self.air.memory_dimensions.overall_height());
             if height != 0 {
@@ -61,15 +70,11 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         }
     }
 
-    pub fn touch_address(&mut self, address_space: F, address: F) {
+    pub fn touch_address(&mut self, address_space: u32, address: u32) {
         self.touch_node(
             0,
-            (address_space.as_canonical_u32() as usize) - self.air.memory_dimensions.as_offset,
-            (address.as_canonical_u32() as usize) / CHUNK,
+            address_space - self.air.memory_dimensions.as_offset,
+            address / CHUNK as u32,
         );
-    }
-
-    pub fn current_height(&self) -> usize {
-        2 * self.num_touched_nonleaves
     }
 }

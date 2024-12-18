@@ -226,5 +226,3 @@ fn rand_native_loadstore_test() {
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
-
-// TODO[yi]: Add negative tests after clarifying ISA spec

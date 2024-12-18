@@ -20,19 +20,25 @@ use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};
 
+#[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct CurveConfig {
     /// The coordinate modulus of the curve.
+    #[serde_as(as = "DisplayFromStr")]
     pub modulus: BigUint,
     /// The scalar field modulus of the curve.
+    #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
     /// The coefficient a of y^2 = x^3 + ax + b.
+    #[serde_as(as = "DisplayFromStr")]
     pub a: BigUint,
     /// The coefficient b of y^2 = x^3 + ax + b.
+    #[serde_as(as = "DisplayFromStr")]
     pub b: BigUint,
 }
 

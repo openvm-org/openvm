@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     };
 
     let app_config = AppConfig {
-        app_fri_params,
+        app_fri_params: app_fri_params.into(),
         app_vm_config: Rv32ImConfig::default(),
         leaf_fri_params: leaf_fri_params.into(),
         compiler_options,

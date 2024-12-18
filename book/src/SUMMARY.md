@@ -12,15 +12,20 @@
 
 - [Overview](./writing-apps/overview.md)
 - [Writing a Program](./writing-apps/write-program.md)
-- [Cross-Compilation](./writing-apps/compile.md)
-- [Testing](./writing-apps/testing.md)
+- [Compiling](./writing-apps/build.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Onchain Verification](./writing-apps/verify.md)
 
 # Using Extensions
 
-- [Customizable Extensions](./using-extensions/customizable-extensions.md)
+- [Overview](./custom-extensions/overview.md)
+- [Keccak](./custom-extensions/keccak.md)
+- [Big Integer](./custom-extensions/bigint.md)
+- [Algebra (Modular Arithmetic)](./custom-extensions/algebra.md)
+- [Elliptic Curve Cryptography](./custom-extensions/ecc.md)
+- [Elliptic Curve Pairing](./custom-extensions/pairing.md)
 
 # Advanced Usage
 
-- [Overview](./advanced-usage/overview.md)
+- [SDK](./advanced-usage/sdk.md)
+- [Creating a New Extension](./advanced-usage/new-extension.md)

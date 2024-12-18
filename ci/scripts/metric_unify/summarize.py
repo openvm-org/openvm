@@ -100,7 +100,7 @@ def read_first_markdown_table(md_file):
     return table, other_info
 
 # group stats (ex. app, agg, root) are either added to the row as is, or aggregated together
-def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
+def generate_row(md_file, sections, aggregation_groups, benchmark_results_link):
     table, other_info = read_first_markdown_table(md_file)
     sections = [table[0].group] + sections
     section_by_group = {};
@@ -116,12 +116,12 @@ def generate_row(md_file, sections, aggregation_groups, gh_pages_link):
                     section_by_group[group_name] = row
                 break
 
-    res = [f"[ {table[0].group} ]({gh_pages_link}/individual/{md_file})"]
+    res = [f"[ {table[0].group} ]({benchmark_results_link}/individual/{md_file})"]
     for section in sections:
         group_row = section_by_group.get(section)
         if group_row is None:
             res += [format_cell("-", None, None)] * COLS_PER_SECTION
-        else:    
+        else:
             res.append(str(group_row.log_blowup))
             for cell in group_row.cells:
                 res.append(str(cell))
@@ -142,7 +142,7 @@ def main():
     argparser.add_argument('metrics_md_files', type=str, help="Comma separated list of metrics markdown file names")
     argparser.add_argument('--e2e-md-files', type=str, required=False, help="Comma separated list of e2e metrics markdown file names")
     argparser.add_argument('--aggregation-json', type=str, required=True, help="Path to a JSON file with metrics to aggregate")
-    argparser.add_argument('--gh-pages-link', type=str, required=True, help="Link to this PR's gh-pages directory")
+    argparser.add_argument('--benchmark-results-link', type=str, required=True, help="Link to this PR's benchmark-results directory")
     args = argparser.parse_args()
 
     aggregations = read_aggregations(args.aggregation_json)
@@ -154,14 +154,14 @@ def main():
     md_files = args.metrics_md_files.split(',')
     outputs = []
     for md_file in md_files:
-        outputs.append(generate_row(md_file, ["leaf_verifier"], {}, args.gh_pages_link))
+        outputs.append(generate_row(md_file, ["leaf"], {}, args.benchmark_results_link))
     write_md_table(outputs, "Benchmarks", headers, rewrite=True)
 
     if args.e2e_md_files and args.e2e_md_files.strip():
         outputs = []
         md_files = args.e2e_md_files.split(',')
         for md_file in md_files:
-            outputs.append(generate_row(md_file, ["root_verifier", "leaf_verifier", "internal_verifier"], {"internal.*": "internal_verifier"}, args.gh_pages_link))
+            outputs.append(generate_row(md_file, ["root", "leaf", "internal"], {"internal.*": "internal"}, args.benchmark_results_link))
         if outputs:
             write_md_table(outputs, "E2E Benchmarks", e2e_headers)
 

@@ -1,0 +1,45 @@
+[workspace]
+[package]
+name = "openvm-ecc-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-platform = { path = "../../../../crates/toolchain/platform" }
+
+openvm-ecc-guest = { path = "../../guest", default-features = false }
+openvm-ecc-sw-setup = { path = "../../../../extensions/ecc/sw-setup", default-features = false }
+openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
+openvm-algebra-moduli-setup = { path = "../../../algebra/moduli-setup", default-features = false }
+openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
+
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex-literal = { version = "0.4.1", default-features = false }
+k256 = { version = "0.13.3", default-features = false, features = [
+    "ecdsa-core",
+    "ecdsa",
+], optional = true }
+
+[features]
+default = []
+std = [
+    "serde/std",
+    "openvm/std",
+    "openvm-ecc-guest/std",
+]
+
+k256 = ["openvm-ecc-guest/k256", "dep:k256"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"
+
+[[example]]
+name = "ec"
+required-features = ["k256"]

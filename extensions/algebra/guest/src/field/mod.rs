@@ -6,7 +6,7 @@ use core::{
 
 use crate::{DivAssignUnsafe, DivUnsafe};
 
-// TODO: this should extend an IntegralDomain trait
+// TODO: this can now extend IntMod trait
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized

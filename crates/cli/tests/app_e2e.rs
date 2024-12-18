@@ -6,21 +6,7 @@ use tempfile::tempdir;
 #[test]
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
-    let package_dir = env::current_dir()?;
-    let prefix = "[test cli e2e]";
-    let run_cmd = |program: &str, args: &[&str]| {
-        println!("{prefix} Running command: {} {} ...", program, args[0]);
-        let mut cmd = Command::new(program);
-        cmd.args(args);
-        cmd.current_dir(&package_dir);
-        let output = cmd.output().unwrap();
-        println!("{prefix} Finished!");
-        println!("{prefix} stdout:");
-        println!("{}", std::str::from_utf8(&output.stdout).unwrap());
-        println!("{prefix} stderr:");
-        println!("{}", std::str::from_utf8(&output.stderr).unwrap());
-    };
-    run_cmd("cargo", &["install", "--path", ".", "--force"]);
+    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
     let temp_exe = temp_dir.path().join("example.vmexe");
     let temp_pk = temp_dir.path().join("example.pk");
     let temp_vk = temp_dir.path().join("example.vk");
@@ -32,14 +18,13 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "build",
             "--manifest-dir",
-            "../sdk/example",
-            "--transpile",
-            "--transpiler-config",
-            "example/app_config.toml",
-            "--transpile-to",
+            "example",
+            "--config",
+            "example/openvm.toml",
+            "--exe-output",
             temp_exe.to_str().unwrap(),
         ],
-    );
+    )?;
 
     run_cmd(
         "cargo",
@@ -47,13 +32,13 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "keygen",
             "--config",
-            "example/app_config.toml",
+            "example/openvm.toml",
             "--output",
             temp_pk.to_str().unwrap(),
             "--vk-output",
             temp_vk.to_str().unwrap(),
         ],
-    );
+    )?;
 
     run_cmd(
         "cargo",
@@ -63,9 +48,9 @@ fn test_cli_app_e2e() -> Result<()> {
             "--exe",
             temp_exe.to_str().unwrap(),
             "--config",
-            "example/app_config.toml",
+            "example/openvm.toml",
         ],
-    );
+    )?;
 
     run_cmd(
         "cargo",
@@ -80,7 +65,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--output",
             temp_proof.to_str().unwrap(),
         ],
-    );
+    )?;
 
     run_cmd(
         "cargo",
@@ -93,7 +78,40 @@ fn test_cli_app_e2e() -> Result<()> {
             "--proof",
             temp_proof.to_str().unwrap(),
         ],
-    );
+    )?;
 
+    Ok(())
+}
+
+#[test]
+fn test_cli_app_e2e_default_paths() -> Result<()> {
+    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd("cargo", &["openvm", "build", "--manifest-dir", "example"])?;
+    run_cmd("cargo", &["openvm", "keygen"])?;
+    run_cmd("cargo", &["openvm", "run"])?;
+    run_cmd("cargo", &["openvm", "prove", "app"])?;
+    run_cmd("cargo", &["openvm", "verify", "app"])?;
+    Ok(())
+}
+
+fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
+    let package_dir = env::current_dir()?;
+    let prefix = "[test cli e2e]";
+    println!(
+        "{prefix} Running command: {} {} {} ...",
+        program, args[0], args[1]
+    );
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    cmd.current_dir(package_dir);
+    let output = cmd.output()?;
+    println!("{prefix} Finished!");
+    println!("{prefix} stdout:");
+    println!("{}", std::str::from_utf8(&output.stdout).unwrap());
+    println!("{prefix} stderr:");
+    println!("{}", std::str::from_utf8(&output.stderr).unwrap());
+    if !output.status.success() {
+        return Err(eyre::eyre!("Command failed with status: {}", output.status));
+    }
     Ok(())
 }

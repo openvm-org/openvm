@@ -4,6 +4,8 @@ use cargo_openvm::{
 };
 use clap::{Parser, Subcommand};
 use eyre::Result;
+use openvm_stark_sdk::config::setup_tracing_with_log_level;
+use tracing::Level;
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -30,16 +32,18 @@ pub enum VmCliCommands {
     Verify(VerifyCmd),
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
+    setup_tracing_with_log_level(Level::WARN);
     match command {
         VmCliCommands::Bench(cmd) => cmd.run(),
         VmCliCommands::Build(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),
-        VmCliCommands::Setup(cmd) => cmd.run(),
+        VmCliCommands::Setup(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }
 }

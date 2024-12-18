@@ -83,14 +83,17 @@ where
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {
-        let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params);
+        let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
             let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
             let vm_pk = vm.keygen();
-            assert!(vm_pk.max_constraint_degree <= config.app_fri_params.max_constraint_degree());
+            assert!(
+                vm_pk.max_constraint_degree
+                    <= config.app_fri_params.fri_params.max_constraint_degree()
+            );
             assert!(config.app_vm_config.system().continuation_enabled);
             VmProvingKey {
-                fri_params: config.app_fri_params,
+                fri_params: config.app_fri_params.fri_params,
                 vm_config: config.app_vm_config.clone(),
                 vm_pk,
             }
@@ -98,7 +101,7 @@ where
         let leaf_committed_exe = {
             let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
-                app_fri_params: config.app_fri_params,
+                app_fri_params: config.app_fri_params.fri_params,
                 app_system_config: config.app_vm_config.system().clone(),
                 compiler_options: config.compiler_options,
             }

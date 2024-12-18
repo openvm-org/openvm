@@ -1,17 +1,42 @@
-# Introduction
+# OpenVM
 
-OpenVM is ...
+_A performant and modular zkVM framework built for customization and extensibility_
 
-... is _modular_, which means that its functionality is provided by several independent components. In particular, one can expand the functionality of OpenVM by adding new components.
+OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.
 
-An _extension_ (we could also call it a _module_ but we prefer not to in order to avoid confusion with the concept of a _module_ in the Rust language) is a component that provides a specific functionality. It consists of the following parts:
+## Key Features
 
-- one
-- two
-- three
+- **Modular no-CPU Architecture**: Unlike traditional machine architectures, the OpenVM architecture has no central processing unit. This design choice allows for seamless integration of custom chips, **without forking or modifying the core architecture**.
 
-...
+- **Extensible Instruction Set**: The instruction set architecture (ISA) is designed to be extended with new custom instructions that integrate directly with the virtual machine. Current extensions available for OpenVM include:
+  - RISC-V support via RV32IM
+  - A native field arithmetic extension for proof recursion and aggregation
+  - The Keccak-256 hash function
+  - Int256 arithmetic
+  - Modular arithmetic over arbitrary fields
+  - Elliptic curve operations, including multi-scalar multiplication and ECDSA scalar multiplication.
+  - Pairing operations on the BN254 and BLS12-381 curves.
 
-The next chapters are supposed to serve as a manual for using this modularity.
+- **Rust Frontend**: ISA extensions are directly accessible through a Rust frontend via [intrinsic functions](https://en.wikipedia.org/wiki/Intrinsic_function), providing a smooth developer experience.
 
-# In particular, Chapter 2 is for this, Chapter 3 is for that, et cetera.
+- **On-chain Verification**: Every VM made using the framework comes with out-of-the-box support for unbounded program proving with verification on Ethereum.
+
+## Using This Book
+
+The following chapters will guide you through:
+
+- [Getting started](./getting-started/install.md).
+- [Writing applications](./writing-apps/overview.md) in Rust targeting OpenVM and generating proofs.
+- [Using existing extensions](./custom-extensions/overview.md) to optimize your Rust programs.
+- [How to add custom VM extensions](./advanced-usage/new-extension.md).
+
+## Security Status
+
+As of December 2024, OpenVM has not been audited and is currently not recommended for production use. We plan to continue development towards a production-ready release in 2025.
+
+> 📖 **About this book**
+>
+> The book is continuously rendered [here](https://book.openvm.dev/)!
+> You can contribute to this book on [GitHub][gh-book].
+
+[gh-book]: https://github.com/openvm-org/openvm/tree/main/book

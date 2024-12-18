@@ -1,9 +1,11 @@
 [package]
 name = "openvm-bigint-guest"
+description = "OpenVM guest library for bigint"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Guest extension for Int256"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }

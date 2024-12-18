@@ -58,7 +58,7 @@ fn _fault() -> ! {
 ///
 /// When `#![no_main]` is used, the programs entrypoint and main function is left undefined. The
 /// `entry` macro is required to indicate the main function and link it to an entrypoint provided
-/// by the RISC Zero SDK.
+/// by the `openvm` crate.
 ///
 /// When `std` is enabled, the entrypoint will be linked automatically and this macro is not
 /// required.
@@ -69,7 +69,7 @@ fn _fault() -> ! {
 /// #![no_main]
 /// #![no_std]
 ///
-/// risc0_zkvm::entry!(main);
+/// openvm::entry!(main);
 ///
 /// fn main() { }
 /// ```

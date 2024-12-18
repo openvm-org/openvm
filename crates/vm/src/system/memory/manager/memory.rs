@@ -48,11 +48,11 @@ impl<T: Copy> MemoryReadRecord<T, 1> {
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
 /// (address_space, pointer)
-type Address = (usize, usize);
+type Address = (u32, u32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct BlockData {
-    pointer: usize,
+    pointer: u32,
     size: usize,
     timestamp: u32,
 }
@@ -76,16 +76,15 @@ impl<F: PrimeField32> Memory<F> {
         let mut block_data = FxHashMap::default();
         let mut data = FxHashMap::default();
         for (&(address_space, block_idx), values) in initial_memory {
-            let address_space_usize = address_space.as_canonical_u32() as usize;
-            let pointer = block_idx * N;
+            let pointer = block_idx * N as u32;
             let block = BlockData {
                 pointer,
                 size: N,
                 timestamp: INITIAL_TIMESTAMP,
             };
             for (i, value) in values.iter().enumerate() {
-                data.insert((address_space_usize, pointer + i), *value);
-                block_data.insert((address_space_usize, pointer + i), block);
+                data.insert((address_space, pointer + i as u32), *value);
+                block_data.insert((address_space, pointer + i as u32), block);
             }
         }
         Self {
@@ -113,8 +112,8 @@ impl<F: PrimeField32> Memory<F> {
     /// Writes an array of values to the memory at the specified address space and start index.
     pub fn write<const N: usize>(
         &mut self,
-        address_space: usize,
-        pointer: usize,
+        address_space: u32,
+        pointer: u32,
         values: [F; N],
     ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         assert!(N.is_power_of_two());
@@ -127,13 +126,13 @@ impl<F: PrimeField32> Memory<F> {
 
         let prev_data = array::from_fn(|i| {
             self.data
-                .insert((address_space, pointer + i), values[i])
+                .insert((address_space, pointer + i as u32), values[i])
                 .unwrap_or(F::ZERO)
         });
 
         let record = MemoryWriteRecord {
-            address_space: F::from_canonical_usize(address_space),
-            pointer: F::from_canonical_usize(pointer),
+            address_space: F::from_canonical_u32(address_space),
+            pointer: F::from_canonical_u32(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
             data: values,
@@ -146,8 +145,8 @@ impl<F: PrimeField32> Memory<F> {
     /// Reads an array of values from the memory at the specified address space and start index.
     pub fn read<const N: usize>(
         &mut self,
-        address_space: usize,
-        pointer: usize,
+        address_space: u32,
+        pointer: u32,
     ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
         assert!(N.is_power_of_two());
 
@@ -158,8 +157,8 @@ impl<F: PrimeField32> Memory<F> {
         debug_assert!(prev_timestamp < self.timestamp);
 
         let record = MemoryReadRecord {
-            address_space: F::from_canonical_usize(address_space),
-            pointer: F::from_canonical_usize(pointer),
+            address_space: F::from_canonical_u32(address_space),
+            pointer: F::from_canonical_u32(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
             data: self.range_array::<N>(address_space, pointer),
@@ -179,7 +178,7 @@ impl<F: PrimeField32> Memory<F> {
         let to_access: FxHashSet<_> = self
             .block_data
             .keys()
-            .map(|&(address_space, pointer)| (address_space, (pointer / N) * N))
+            .map(|&(address_space, pointer)| (address_space, (pointer / N as u32) * N as u32))
             .collect();
 
         for &(address_space, pointer) in to_access.iter() {
@@ -193,11 +192,11 @@ impl<F: PrimeField32> Memory<F> {
         for (address_space, pointer) in to_access {
             let block = self.block_data.get(&(address_space, pointer)).unwrap();
 
-            debug_assert_eq!(block.pointer % N, 0);
+            debug_assert_eq!(block.pointer % N as u32, 0);
             debug_assert_eq!(block.size, N);
 
             equipartition.insert(
-                (F::from_canonical_usize(address_space), pointer / N),
+                (address_space, pointer / N as u32),
                 TimestampedValues {
                     timestamp: block.timestamp,
                     values: self.range_array::<N>(address_space, pointer),
@@ -211,8 +210,8 @@ impl<F: PrimeField32> Memory<F> {
     // Modifies the partition to ensure that there is a block starting at (address_space, query).
     fn split_to_make_boundary(
         &mut self,
-        address_space: usize,
-        query: usize,
+        address_space: u32,
+        query: u32,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
         let original_block = self.block_containing(address_space, query);
@@ -230,44 +229,43 @@ impl<F: PrimeField32> Memory<F> {
             // Split.
             records.push(AccessAdapterRecord {
                 timestamp,
-                address_space: F::from_canonical_usize(address_space),
-                start_index: F::from_canonical_usize(cur_ptr),
-                data: data
-                    [cur_ptr - original_block.pointer..cur_ptr - original_block.pointer + cur_size]
+                address_space: F::from_canonical_u32(address_space),
+                start_index: F::from_canonical_u32(cur_ptr),
+                data: data[(cur_ptr - original_block.pointer) as usize
+                    ..(cur_ptr - original_block.pointer) as usize + cur_size]
                     .to_vec(),
                 kind: AccessAdapterRecordKind::Split,
             });
 
             let half_size = cur_size / 2;
+            let half_size_u32 = half_size as u32;
+            let mid_ptr = cur_ptr + half_size_u32;
 
-            if query <= cur_ptr + half_size {
+            if query <= mid_ptr {
                 // The right is finalized; add it to the partition.
                 let block = BlockData {
-                    pointer: cur_ptr + half_size,
+                    pointer: mid_ptr,
                     size: half_size,
                     timestamp,
                 };
-                for i in 0..half_size {
-                    self.block_data
-                        .insert((address_space, cur_ptr + half_size + i), block);
+                for i in 0..half_size_u32 {
+                    self.block_data.insert((address_space, mid_ptr + i), block);
                 }
             }
-            if query >= cur_ptr + half_size {
+            if query >= cur_ptr + half_size_u32 {
                 // The left is finalized; add it to the partition.
                 let block = BlockData {
                     pointer: cur_ptr,
                     size: half_size,
                     timestamp,
                 };
-                for i in 0..half_size {
+                for i in 0..half_size_u32 {
                     self.block_data.insert((address_space, cur_ptr + i), block);
                 }
             }
-
-            if cur_ptr + half_size <= query {
-                cur_ptr += half_size;
+            if mid_ptr <= query {
+                cur_ptr = mid_ptr;
             }
-
             if cur_ptr == query {
                 break;
             }
@@ -277,8 +275,8 @@ impl<F: PrimeField32> Memory<F> {
 
     fn access_updating_timestamp(
         &mut self,
-        address_space: usize,
-        pointer: usize,
+        address_space: u32,
+        pointer: u32,
         size: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) -> u32 {
@@ -286,11 +284,11 @@ impl<F: PrimeField32> Memory<F> {
 
         let mut prev_timestamp = None;
 
-        for i in 0..size {
+        for i in 0..size as u32 {
             let block = self
                 .block_data
-                .get_mut(&(address_space, pointer + i))
-                .unwrap();
+                .entry((address_space, pointer + i))
+                .or_insert_with(|| Self::initial_block_data(pointer + i, self.initial_block_size));
             debug_assert!(i == 0 || prev_timestamp == Some(block.timestamp));
             prev_timestamp = Some(block.timestamp);
             block.timestamp = self.timestamp;
@@ -300,27 +298,19 @@ impl<F: PrimeField32> Memory<F> {
 
     fn access(
         &mut self,
-        address_space: usize,
-        pointer: usize,
+        address_space: u32,
+        pointer: u32,
         size: usize,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
         self.split_to_make_boundary(address_space, pointer, records);
-        self.split_to_make_boundary(address_space, pointer + size, records);
+        self.split_to_make_boundary(address_space, pointer + size as u32, records);
 
         let block_data = self
             .block_data
             .get(&(address_space, pointer))
             .copied()
-            .unwrap_or_else(|| {
-                for i in 0..size {
-                    self.block_data.insert(
-                        (address_space, pointer + i),
-                        self.initial_block_data(pointer + i),
-                    );
-                }
-                self.initial_block_data(pointer)
-            });
+            .unwrap_or_else(|| Self::initial_block_data(pointer, self.initial_block_size));
 
         if block_data.pointer == pointer && block_data.size == size {
             return;
@@ -330,7 +320,12 @@ impl<F: PrimeField32> Memory<F> {
         // Now recursively access left and right blocks to ensure they are in the partition.
         let half_size = size / 2;
         self.access(address_space, pointer, half_size, records);
-        self.access(address_space, pointer + half_size, half_size, records);
+        self.access(
+            address_space,
+            pointer + half_size as u32,
+            half_size,
+            records,
+        );
 
         self.merge_block_with_next(address_space, pointer, records);
     }
@@ -341,23 +336,25 @@ impl<F: PrimeField32> Memory<F> {
     /// do not have the same size.
     fn merge_block_with_next(
         &mut self,
-        address_space: usize,
-        pointer: usize,
+        address_space: u32,
+        pointer: u32,
         records: &mut Vec<AccessAdapterRecord<F>>,
     ) {
-        let left_block = self.block_data.get(&(address_space, pointer)).unwrap();
+        let left_block = self.block_data.get(&(address_space, pointer));
 
-        let left_timestamp = left_block.timestamp;
-        let size = left_block.size;
+        let left_timestamp = left_block.map(|b| b.timestamp).unwrap_or(INITIAL_TIMESTAMP);
+        let size = left_block
+            .map(|b| b.size)
+            .unwrap_or(self.initial_block_size);
 
         let right_timestamp = self
             .block_data
-            .get(&(address_space, pointer + size))
+            .get(&(address_space, pointer + size as u32))
             .map(|b| b.timestamp)
             .unwrap_or(INITIAL_TIMESTAMP);
 
         let timestamp = max(left_timestamp, right_timestamp);
-        for i in 0..2 * size {
+        for i in 0..2 * size as u32 {
             self.block_data.insert(
                 (address_space, pointer + i),
                 BlockData {
@@ -369,8 +366,8 @@ impl<F: PrimeField32> Memory<F> {
         }
         records.push(AccessAdapterRecord {
             timestamp,
-            address_space: F::from_canonical_usize(address_space),
-            start_index: F::from_canonical_usize(pointer),
+            address_space: F::from_canonical_u32(address_space),
+            start_index: F::from_canonical_u32(pointer),
             data: self.range_vec(address_space, pointer, 2 * size),
             kind: AccessAdapterRecordKind::Merge {
                 left_timestamp,
@@ -379,34 +376,34 @@ impl<F: PrimeField32> Memory<F> {
         });
     }
 
-    fn block_containing(&mut self, address_space: usize, pointer: usize) -> BlockData {
+    fn block_containing(&mut self, address_space: u32, pointer: u32) -> BlockData {
         if let Some(block_data) = self.block_data.get(&(address_space, pointer)) {
             *block_data
         } else {
-            self.initial_block_data(pointer)
+            Self::initial_block_data(pointer, self.initial_block_size)
         }
     }
 
-    fn initial_block_data(&self, pointer: usize) -> BlockData {
-        let aligned_pointer = (pointer / self.initial_block_size) * self.initial_block_size;
+    fn initial_block_data(pointer: u32, initial_block_size: usize) -> BlockData {
+        let aligned_pointer = (pointer / initial_block_size as u32) * initial_block_size as u32;
         BlockData {
             pointer: aligned_pointer,
-            size: self.initial_block_size,
+            size: initial_block_size,
             timestamp: INITIAL_TIMESTAMP,
         }
     }
 
-    pub fn get(&self, address_space: usize, pointer: usize) -> F {
+    pub fn get(&self, address_space: u32, pointer: u32) -> F {
         *self.data.get(&(address_space, pointer)).unwrap_or(&F::ZERO)
     }
 
-    fn range_array<const N: usize>(&self, address_space: usize, pointer: usize) -> [F; N] {
-        array::from_fn(|i| self.get(address_space, pointer + i))
+    fn range_array<const N: usize>(&self, address_space: u32, pointer: u32) -> [F; N] {
+        array::from_fn(|i| self.get(address_space, pointer + i as u32))
     }
 
-    fn range_vec(&self, address_space: usize, pointer: usize, len: usize) -> Vec<F> {
+    fn range_vec(&self, address_space: u32, pointer: u32, len: usize) -> Vec<F> {
         (0..len)
-            .map(|i| self.get(address_space, pointer + i))
+            .map(|i| self.get(address_space, pointer + i as u32))
             .collect()
     }
 }
@@ -811,7 +808,7 @@ mod tests {
         let (final_memory, records) = memory.finalize::<8>();
         assert_eq!(final_memory.len(), 4);
         assert_eq!(
-            final_memory.get(&(bb!(1), 0)),
+            final_memory.get(&(1, 0)),
             Some(&TimestampedValues {
                 values: bba![1, 2, 3, 4, 0, 0, 0, 0],
                 timestamp: 1,
@@ -819,7 +816,7 @@ mod tests {
         );
         // start_index = 16 corresponds to label = 2
         assert_eq!(
-            final_memory.get(&(bb!(1), 2)),
+            final_memory.get(&(1, 2)),
             Some(&TimestampedValues {
                 values: bba![1, 1, 1, 1, 1, 1, 1, 1],
                 timestamp: 2,
@@ -827,7 +824,7 @@ mod tests {
         );
         // start_index = 24 corresponds to label = 3
         assert_eq!(
-            final_memory.get(&(bb!(1), 3)),
+            final_memory.get(&(1, 3)),
             Some(&TimestampedValues {
                 values: bba![1, 1, 1, 1, 1, 1, 1, 1],
                 timestamp: 2,
@@ -835,7 +832,7 @@ mod tests {
         );
         // start_index = 64 corresponds to label = 8
         assert_eq!(
-            final_memory.get(&(bb!(2), 8)),
+            final_memory.get(&(2, 8)),
             Some(&TimestampedValues {
                 values: bba![8, 7, 6, 5, 4, 3, 2, 1],
                 timestamp: 3,
@@ -852,8 +849,8 @@ mod tests {
 
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = Equipartition::<F, 8>::new();
-        initial_memory.insert((F::ONE, 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
-        initial_memory.insert((F::ONE, 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
+        initial_memory.insert((1, 0), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 0, pointers 0–8
+        initial_memory.insert((1, 2), bba![1, 2, 3, 4, 5, 6, 7, 8]); // Block 2, pointers 16–24
 
         let mut memory = Memory::new(&initial_memory);
 

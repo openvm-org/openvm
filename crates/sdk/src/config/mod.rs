@@ -6,13 +6,15 @@ use serde::{Deserialize, Serialize};
 mod global;
 pub use global::*;
 
+const DEFAULT_APP_BLOWUP: usize = 2;
 const DEFAULT_LEAF_BLOWUP: usize = 2;
 const DEFAULT_INTERNAL_BLOWUP: usize = 2;
 const DEFAULT_ROOT_BLOWUP: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {
-    pub app_fri_params: FriParameters,
+    #[serde(default)]
+    pub app_fri_params: AppFriParams,
     pub app_vm_config: VC,
     #[serde(default)]
     pub leaf_fri_params: LeafFriParams,
@@ -50,7 +52,7 @@ pub struct Halo2Config {
 impl<VC> AppConfig<VC> {
     pub fn new(app_fri_params: FriParameters, app_vm_config: VC) -> Self {
         Self {
-            app_fri_params,
+            app_fri_params: AppFriParams::from(app_fri_params),
             app_vm_config,
             leaf_fri_params: Default::default(),
             compiler_options: Default::default(),
@@ -63,11 +65,9 @@ impl<VC> AppConfig<VC> {
         leaf_fri_params: FriParameters,
     ) -> Self {
         Self {
-            app_fri_params,
+            app_fri_params: AppFriParams::from(app_fri_params),
             app_vm_config,
-            leaf_fri_params: LeafFriParams {
-                fri_params: leaf_fri_params,
-            },
+            leaf_fri_params: LeafFriParams::from(leaf_fri_params),
             compiler_options: Default::default(),
         }
     }
@@ -100,6 +100,27 @@ impl Default for AggConfig {
                 wrapper_k: None,
             },
         }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppFriParams {
+    pub fri_params: FriParameters,
+}
+
+impl Default for AppFriParams {
+    fn default() -> Self {
+        Self {
+            fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+                DEFAULT_APP_BLOWUP,
+            ),
+        }
+    }
+}
+
+impl From<FriParameters> for AppFriParams {
+    fn from(fri_params: FriParameters) -> Self {
+        Self { fri_params }
     }
 }
 

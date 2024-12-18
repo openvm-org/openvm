@@ -7,7 +7,6 @@ else
 fi
 echo "maxk=$maxk"
 
-bash scripts/install_s5cmd.sh
 mkdir -p params/
 cd params
 for k in $(seq 10 $maxk)

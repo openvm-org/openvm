@@ -68,7 +68,7 @@ impl IntrinsicCurve for k256::Secp256k1 {
     {
         // heuristic
         if coeffs.len() < 25 {
-            let table = CachedMulTable::<k256::Secp256k1>::new_with_prime_order(bases, 4);
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
             table.windowed_mul(coeffs)
         } else {
             crate::msm(coeffs, bases)

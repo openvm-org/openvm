@@ -1,9 +1,11 @@
 [package]
 name = "openvm-rv32im-circuit"
+description = "OpenVM circuit extension for RISC-V 32-bit IM instruction set"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuit extension for RISC-V 32-bit IM instruction set"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }

@@ -1,16 +1,12 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use itertools::izip;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
+    p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
     verifier::VerificationError,
     Chip,
@@ -29,7 +25,7 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
 use crate::{
-    arch::{ExecutionState, MemoryConfig, EXECUTION_BUS, MEMORY_BUS, READ_INSTRUCTION_BUS},
+    arch::{ExecutionState, MemoryConfig},
     system::{
         memory::{offline_checker::MemoryBus, MemoryController},
         program::ProgramBus,
@@ -46,6 +42,15 @@ pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
 use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2Chip};
+
+pub const EXECUTION_BUS: usize = 0;
+pub const MEMORY_BUS: usize = 1;
+pub const POSEIDON2_DIRECT_BUS: usize = 6;
+pub const READ_INSTRUCTION_BUS: usize = 8;
+pub const BITWISE_OP_LOOKUP_BUS: usize = 9;
+pub const BYTE_XOR_BUS: usize = 10;
+pub const RANGE_TUPLE_CHECKER_BUS: usize = 11;
+pub const MEMORY_MERKLE_BUS: usize = 12;
 
 const RANGE_CHECKER_BUS: usize = 4;
 
@@ -267,21 +272,15 @@ where
             let range_checker = memory_controller.borrow().range_checker.clone();
             self = self.load(memory_tester); // dummy memory interactions
             {
-                let memory = memory_controller.borrow();
-                let public_values = memory.generate_public_values_per_air();
-                let airs = memory.airs();
-                drop(memory);
-                let traces = Rc::try_unwrap(memory_controller)
+                let air_proof_inputs = Rc::try_unwrap(memory_controller)
                     .unwrap()
                     .into_inner()
-                    .generate_traces();
-
-                for (pvs, air, trace) in izip!(public_values, airs, traces) {
-                    if trace.height() > 0 {
-                        self.air_proof_inputs
-                            .push(AirProofInput::simple(air, trace, pvs));
-                    }
-                }
+                    .generate_air_proof_inputs();
+                self.air_proof_inputs.extend(
+                    air_proof_inputs
+                        .into_iter()
+                        .filter(|api| api.main_trace_height() > 0),
+                );
             }
             self = self.load(range_checker); // this must be last because other trace generation mutates its state
         }

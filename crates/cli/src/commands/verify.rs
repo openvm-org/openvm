@@ -10,7 +10,9 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::commands::VERIFIER_PATH;
+use crate::default::{
+    DEFAULT_APP_PROOF_PATH, DEFAULT_APP_VK_PATH, DEFAULT_EVM_PROOF_PATH, DEFAULT_VERIFIER_PATH,
+};
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -22,14 +24,14 @@ pub struct VerifyCmd {
 #[derive(Parser)]
 enum VerifySubCommand {
     App {
-        #[clap(long, action, help = "Path to app verifying key")]
+        #[clap(long, action, help = "Path to app verifying key", default_value = DEFAULT_APP_VK_PATH)]
         app_vk: PathBuf,
 
-        #[clap(long, action, help = "Path to app proof")]
+        #[clap(long, action, help = "Path to app proof", default_value = DEFAULT_APP_PROOF_PATH)]
         proof: PathBuf,
     },
     Evm {
-        #[clap(long, action, help = "Path to EVM proof")]
+        #[clap(long, action, help = "Path to EVM proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         proof: PathBuf,
     },
 }
@@ -43,7 +45,7 @@ impl VerifyCmd {
                 Sdk.verify_app_proof(&app_vk, &app_proof)?;
             }
             VerifySubCommand::Evm { proof } => {
-                let evm_verifier = read_evm_verifier_from_file(VERIFIER_PATH).map_err(|e| {
+                let evm_verifier = read_evm_verifier_from_file(DEFAULT_VERIFIER_PATH).map_err(|e| {
                     eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;

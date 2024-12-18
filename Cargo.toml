@@ -1,10 +1,11 @@
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2021"
 rust-version = "1.82"
-authors = ["Intrinsic Technologies"]
+authors = ["OpenVM Authors"]
 homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
+license = "MIT"
 
 [workspace]
 members = [
@@ -28,12 +29,15 @@ members = [
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
     "extensions/algebra/moduli-setup",
+    "extensions/algebra/tests",
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
+    "extensions/bigint/tests",
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
+    "extensions/keccak256/tests",
     "extensions/native/circuit",
     "extensions/native/compiler",
     "extensions/native/compiler/derive",
@@ -45,13 +49,17 @@ members = [
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
     "extensions/ecc/sw-setup",
+    "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
+    "extensions/pairing/tests",
     "extensions/rv32-adapters",
+    "extensions/rv32im/tests",
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
+    "extensions/sha256/tests",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -109,8 +117,8 @@ openvm-platform = { path = "crates/toolchain/platform", default-features = false
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
-openvm-stark-backend = { git = "ssh://git@github.com/openvm-org/stark-backend", default-features = false }
-openvm-stark-sdk = { git = "ssh://git@github.com/openvm-org/stark-backend", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
 
 # Extensions
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
@@ -183,6 +191,7 @@ parking_lot = "0.12.2"
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"
+serde_with = "3.11.0"
 toml = "0.8.14"
 lazy_static = "1.5.0"
 once_cell = "1.19.0"
@@ -207,13 +216,13 @@ static_assertions = "1.1.0"
 async-trait = "0.1.83"
 getset = "0.1.3"
 rrs-lib = "0.1.0"
-bson = "2.13.0"
 rand = { version = "0.8.5", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.13.0", default-features = false }
 bincode = { version = "2.0.0-rc.3", default-features = false }
+bitcode = { version = "0.6.3", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }

@@ -6,7 +6,7 @@ pub mod testing_utils;
 mod tests;
 pub mod wrapper;
 
-use std::{fmt, fmt::Debug};
+use std::fmt::Debug;
 
 use itertools::Itertools;
 use openvm_native_compiler::{
@@ -15,12 +15,7 @@ use openvm_native_compiler::{
 };
 use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
-use serde::{
-    de,
-    de::{MapAccess, Visitor},
-    ser::SerializeStruct,
-    Deserialize, Deserializer, Serialize, Serializer,
-};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use snark_verifier_sdk::{
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::halo2_base::{
@@ -229,18 +224,22 @@ impl Halo2Prover {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct SerializedHalo2ProvingPinning {
+    pk_bytes: Vec<u8>,
+    metadata: Halo2ProvingMetadata,
+}
+
 impl Serialize for Halo2ProvingPinning {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let pk_bytes = self.pk.to_bytes(SerdeFormat::RawBytes);
-
-        // Start serializing as a struct with 2 fields: "pk" and "metadata"
-        let mut state = serializer.serialize_struct("Halo2ProvingPinning", 2)?;
-        state.serialize_field("pk", &pk_bytes)?;
-        state.serialize_field("metadata", &self.metadata)?;
-        state.end()
+        let serialized = SerializedHalo2ProvingPinning {
+            pk_bytes: self.pk.to_bytes(SerdeFormat::RawBytes),
+            metadata: self.metadata.clone(),
+        };
+        serialized.serialize(serializer)
     }
 }
 
@@ -249,57 +248,16 @@ impl<'de> Deserialize<'de> for Halo2ProvingPinning {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Pk,
-            Metadata,
-        }
+        let SerializedHalo2ProvingPinning { pk_bytes, metadata } =
+            SerializedHalo2ProvingPinning::deserialize(deserializer)?;
 
-        struct Halo2ProvingPinningVisitor;
-
-        impl<'de> Visitor<'de> for Halo2ProvingPinningVisitor {
-            type Value = Halo2ProvingPinning;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a struct named Halo2ProvingPinning")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut pk_bytes: Option<Vec<u8>> = None;
-                let mut metadata: Option<Halo2ProvingMetadata> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Pk => {
-                            pk_bytes = Some(map.next_value()?);
-                        }
-                        Field::Metadata => {
-                            metadata = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                let pk_bytes = pk_bytes.ok_or_else(|| de::Error::missing_field("pk"))?;
-                let metadata = metadata.ok_or_else(|| de::Error::missing_field("metadata"))?;
-                let pk = ProvingKey::<G1Affine>::from_bytes::<BaseCircuitBuilder<Fr>>(
-                    &pk_bytes,
-                    SerdeFormat::RawBytes,
-                    metadata.config_params.clone(),
-                )
-                .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {}", e)))?;
-
-                Ok(Halo2ProvingPinning { pk, metadata })
-            }
-        }
-
-        deserializer.deserialize_struct(
-            "Halo2ProvingPinning",
-            &["pk", "metadata"],
-            Halo2ProvingPinningVisitor,
+        let pk = ProvingKey::<G1Affine>::from_bytes::<BaseCircuitBuilder<Fr>>(
+            &pk_bytes,
+            SerdeFormat::RawBytes,
+            metadata.config_params.clone(),
         )
+        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {}", e)))?;
+
+        Ok(Halo2ProvingPinning { pk, metadata })
     }
 }

@@ -48,7 +48,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
         let app_config = AppConfig {
-            app_fri_params: leaf_fri_params,
+            app_fri_params: leaf_fri_params.into(),
             app_vm_config,
             leaf_fri_params: leaf_fri_params.into(),
             compiler_options,

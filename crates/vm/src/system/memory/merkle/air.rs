@@ -176,7 +176,6 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             .chain(local.left_child_hash)
             .chain(local.right_child_hash)
             .chain(local.parent_hash);
-        // TODO: do not hardcode the hash bus
         builder.push_send(
             self.compression_bus.0,
             compress_fields,

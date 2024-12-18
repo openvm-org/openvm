@@ -60,7 +60,7 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
     let target_dir = tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default().with_target_dir(target_dir.path());
-    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None) {
+    if let Err(Some(code)) = build_guest_package(&pkg, &guest_opts, None, &None) {
         std::process::exit(code);
     }
     // Assumes the package has a single target binary
@@ -89,8 +89,8 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    counter!("fri.log_blowup").absolute(app_config.app_fri_params.log_blowup as u64);
-    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params);
+    counter!("fri.log_blowup").absolute(app_config.app_fri_params.fri_params.log_blowup as u64);
+    let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
     let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
     let app_pk = time(gauge!("keygen_time_ms"), || {
@@ -98,13 +98,10 @@ where
     });
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = time(gauge!("commit_exe_time_ms"), || {
-        commit_app_exe(app_config.app_fri_params, exe)
+        commit_app_exe(app_config.app_fri_params.fri_params, exe)
     });
-    // 3. Executes runtime again without metric collection and generate trace.
-    time(gauge!("execute_and_trace_gen_time_ms"), || {
-        vm.execute_and_generate_with_cached_program(committed_exe.clone(), input_stream.clone())
-    })?;
-    // 4. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 3. Executes runtime once with full metric collection for flamegraphs (slow).
+    // 4. Executes runtime again without metric collection and generate trace.
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     // generate_app_proof will emit metrics for proof time of each
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();

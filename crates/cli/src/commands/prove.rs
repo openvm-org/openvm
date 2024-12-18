@@ -15,7 +15,10 @@ use openvm_sdk::{
 };
 
 use crate::{
-    commands::AGG_PK_PATH,
+    default::{
+        DEFAULT_AGG_PK_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_APP_PK_PATH, DEFAULT_APP_PROOF_PATH,
+        DEFAULT_EVM_PROOF_PATH, DEFAULT_PARAMS_DIR,
+    },
     util::{read_to_stdin, Input},
 };
 
@@ -29,29 +32,29 @@ pub struct ProveCmd {
 #[derive(Parser)]
 enum ProveSubCommand {
     App {
-        #[clap(long, action, help = "Path to app proving key")]
+        #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable")]
+        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
         #[clap(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
-        #[clap(long, action, help = "Path to output proof")]
+        #[clap(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
         output: PathBuf,
     },
     Evm {
-        #[clap(long, action, help = "Path to app proving key")]
+        #[clap(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
         app_pk: PathBuf,
 
-        #[clap(long, action, help = "Path to OpenVM executable")]
+        #[clap(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
         exe: PathBuf,
 
         #[clap(long, value_parser, help = "Input to OpenVM program")]
         input: Option<Input>,
 
-        #[clap(long, action, help = "Path to output proof")]
+        #[clap(long, action, help = "Path to output proof", default_value = DEFAULT_EVM_PROOF_PATH)]
         output: PathBuf,
     },
 }
@@ -75,12 +78,11 @@ impl ProveCmd {
                 input,
                 output,
             } => {
-                // FIXME: read path from config.
-                let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
+                let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
                 let (app_pk, committed_exe, input) = Self::prepare_execution(app_pk, exe, input)?;
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let agg_pk = read_agg_pk_from_file(AGG_PK_PATH).map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
+                let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
+                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let evm_proof =
                     Sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;
