@@ -200,7 +200,7 @@ impl Sha256VmAir {
 
         let is_next_entire_padding = self.padding_encoder.contains_flag_range::<AB>(
             &next.control.pad_flags,
-            EntirePadding as usize..=EntirePaddingLastRow as usize,
+            EntirePaddingLastRow as usize..=EntirePadding as usize,
         );
 
         let is_next_not_considered = self
