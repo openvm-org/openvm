@@ -71,10 +71,10 @@ impl Sdk {
         &self,
         guest_opts: GuestOptions,
         pkg_dir: P,
-        target_filter: &TargetFilter,
+        target_filter: &Option<TargetFilter>,
     ) -> Result<Elf> {
         let pkg = get_package(pkg_dir.as_ref());
-        let target_dir = match build_guest_package(&pkg, &guest_opts, None) {
+        let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,
             Err(Some(code)) => {
                 return Err(eyre::eyre!("Failed to build guest: code = {}", code));

@@ -59,7 +59,7 @@ operands (setting the rest to zero) without paying the cost for the unused opera
 **Note:** each chip receives an _offset_ on construction, and this offset basically means "where does the class of
 operations which this chip supports start". For example, if a `FieldArithmeticChip` has offset `0x100`, then its `SUB`
 operation would be encoded with opcode `0x100 + 1` and not just `1`.
-See [ISA spec](https://github.com/axiom-crypto/afs-prototype/blob/main/docs/specs/vm/ISA.md#instruction-list) for
+See [ISA spec](./ISA.md) for
 details.
 
 Each chip receives `(timestamp, pc)` on EXECUTION_BUS and "after"

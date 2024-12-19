@@ -11,6 +11,7 @@ The main components of the repository are:
   - [Toolchain](#toolchain)
   - [Circuit Framework](#circuit-framework)
   - [Circuit Foundations](#circuit-foundations)
+  - [Examples](#examples)
   - [Extensions](#extensions)
     - [RV32IM](#rv32im)
     - [Native Recursion](#native-recursion)
@@ -49,7 +50,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-instructions`](../../crates/toolchain/instructions): OpenVM instruction struct and trait definitions. Also includes some system instruction definitions.
 - [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVM instructions.
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
-- [`openvm-toolchain-tests`](../../crates/toolchain/tests): Testing of Rust toolchain including all official RISC-V 32-bit IM test vectors. Currently this is a monolithic crate with tests across many different extensions. We will soon refactor the tests to be more modular.
+- [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
 
 ### Circuit Framework
 
@@ -63,6 +64,10 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 - [`openvm-poseidon2-air`](../../crates/circuits/poseidon2-air): Standalone poseidon2 AIR implementation which is configurable based on the desired maximum constraint degree.
 - [`openvm-mod-circuit-builder`](../../crates/circuits/mod-builder): General builder for generating a chip for any modular arithmetic expression for a modulus known at compile time.
 
+### Examples
+
+- [`examples`](../../examples): Examples of guest programs using the OpenVM framework. All of the examples can be built and run using the CLI.
+
 ### Extensions
 
 The toolchain, ISA, and VM are simultaenously extendable. All non-system functionality is implemented via extensions, which may be moved to standalone repositories in the future but are presently in this repository for maintainer convenience.
@@ -73,6 +78,7 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 - [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
 - [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
 - [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
+- [`openvm-rv32im-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
 
 #### Native Recursion
 
@@ -85,12 +91,14 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 - [`openvm-keccak256-circuit`](../../extensions/keccak256/circuit): Circuit extension for the `keccak256` hash function.
 - [`openvm-keccak256-transpiler`](../../extensions/keccak256/transpiler): Transpiler extension for the `keccak256` hash function.
 - [`openvm-keccak256-guest`](../../extensions/keccak256/guest): Guest library with intrinsic function for the `keccak256` hash function.
+- [`openvm-keccak256-tests`](../../extensions/keccak256/tests): Integration tests for the keccak256 extension.
 
 #### Big Integers
 
 - [`openvm-bigint-circuit`](../../extensions/bigint/circuit): Circuit extension for `I256` and `U256` big integer operations.
 - [`openvm-bigint-transpiler`](../../extensions/bigint/transpiler): Transpiler extension for `I256` and `U256` big integer operations.
 - [`openvm-bigint-guest`](../../extensions/bigint/guest): Guest library with `I256` and `U256` big integers operations using intrinsics for underlying operations.
+- [`openvm-bigint-tests`](../../extensions/bigint/tests): Integration tests for the bigint extension.
 
 #### Algebra (Modular Arithmetic)
 
@@ -99,6 +107,7 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 - [`openvm-algebra-guest`](../../extensions/algebra/guest): Guest library with traits for modular arithmetic and complex field extension operations.
 - [`openvm-algebra-moduli-setup`](../../extensions/algebra/moduli-setup): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
 - [`openvm-algebra-complex-macros`](../../extensions/algebra/guest/src/field/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
+- [`openvm-algebra-tests`](../../extensions/algebra/tests): Integration tests for the algebra extension.
 
 #### Elliptic Curve Cryptography
 
@@ -106,9 +115,11 @@ The toolchain, ISA, and VM are simultaenously extendable. All non-system functio
 - [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
 - [`openvm-ecc-sw-setup`](../../extensions/ecc/sw-setup): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
+- [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the elliptic curve cryptography extension.
 
 #### Elliptic Curve Pairing
 
 - [`openvm-pairing-circuit`](../../extensions/pairing/circuit): Circuit extension for optimal Ate pairing on BN254 and BLS12-381 curves.
 - [`openvm-pairing-transpiler`](../../extensions/pairing/transpiler): Transpiler extension for optimal Ate pairing on BN254 and BLS12-381.
 - [`openvm-pairing-guest`](../../extensions/pairing/guest): Guest library with optimal Ate pairing on BN254 and BLS12-381 and associated constants. Also includes elliptic curve operations for VM runtime with the `halo2curves` feature gate.
+- [`openvm-pairing-tests`](../../extensions/pairing/tests): Integration tests for the pairing extension.

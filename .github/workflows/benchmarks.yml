@@ -213,7 +213,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
           cp /tmp/benchmark-results/summary.md ${BENCHMARK_RESULTS_PATH}/summary.md

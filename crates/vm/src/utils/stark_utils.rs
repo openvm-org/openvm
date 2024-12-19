@@ -1,9 +1,7 @@
-use std::borrow::Borrow;
-
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::PrimeField32,
     verifier::VerificationError,
     Chip,
 };
@@ -16,12 +14,9 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
-use crate::{
-    arch::{
-        vm::{VirtualMachine, VmExecutor},
-        ExitCode, Streams, VmConfig, VmMemoryState, CONNECTOR_AIR_ID,
-    },
-    system::connector::VmConnectorPvs,
+use crate::arch::{
+    vm::{VirtualMachine, VmExecutor},
+    Streams, VmConfig, VmMemoryState,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
@@ -56,45 +51,6 @@ where
     assert!(proofs.len() >= min_segments);
     vm.verify(&pk.get_vk(), proofs)
         .expect("segment proofs should verify");
-    final_memory
-}
-
-/// Executes the VM and returns the final memory state.
-pub fn new_air_test_with_min_segments<VC>(
-    config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
-    min_segments: usize,
-    always_prove: bool,
-) -> Option<VmMemoryState<BabyBear>>
-where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
-{
-    setup_tracing();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, config);
-    let pk = vm.keygen();
-    let mut result = vm.execute_and_generate(exe, input).unwrap();
-    let connector_pvs = &result.per_segment.last().unwrap().per_air[CONNECTOR_AIR_ID]
-        .1
-        .raw
-        .public_values[..];
-    let pvs: &VmConnectorPvs<_> = connector_pvs.borrow();
-    assert_eq!(
-        pvs.exit_code,
-        AbstractField::from_canonical_u32(ExitCode::Success as u32),
-        "Runtime did not exit successfully"
-    );
-    let final_memory = result.final_memory.take();
-    if std::env::var("RUN_AIR_TEST_PROVING").is_ok() || always_prove {
-        let proofs = vm.prove(&pk, result);
-
-        assert!(proofs.len() >= min_segments);
-        vm.verify(&pk.get_vk(), proofs)
-            .expect("segment proofs should verify");
-    }
     final_memory
 }
 

@@ -3480,6 +3480,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-algebra-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+]
+
+[[package]]
 name = "openvm-algebra-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -3570,6 +3591,26 @@ dependencies = [
  "openvm-platform",
  "serde",
  "strum_macros",
+]
+
+[[package]]
+name = "openvm-bigint-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
 ]
 
 [[package]]
@@ -3767,6 +3808,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-ecc-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-ecc-transpiler",
+ "openvm-instructions",
+ "openvm-keccak256-transpiler",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+]
+
+[[package]]
 name = "openvm-ecc-sw-setup"
 version = "0.1.0-alpha"
 dependencies = [
@@ -3854,6 +3916,25 @@ dependencies = [
  "openvm-platform",
  "serde",
  "tiny-keccak",
+]
+
+[[package]]
+name = "openvm-keccak256-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
 ]
 
 [[package]]
@@ -4063,6 +4144,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-pairing-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "num-bigint-dig",
+ "openvm",
+ "openvm-algebra-circuit",
+ "openvm-algebra-transpiler",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-ecc-circuit",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-pairing-circuit",
+ "openvm-pairing-guest",
+ "openvm-pairing-transpiler",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "rand",
+]
+
+[[package]]
 name = "openvm-pairing-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -4164,6 +4271,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-rv32im-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "serde",
+ "test-case",
+]
+
+[[package]]
 name = "openvm-rv32im-transpiler"
 version = "0.1.0-alpha"
 dependencies = [
@@ -4226,7 +4353,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.0-alpha#83b0d048c00bbfba60a5b0732cf923bed5dd6e76"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4243,6 +4370,7 @@ dependencies = [
  "p3-uni-stark",
  "p3-util",
  "rayon",
+ "rustc-hash 2.1.0",
  "serde",
  "thiserror 1.0.69",
  "tikv-jemallocator",
@@ -4252,7 +4380,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.0-alpha#83b0d048c00bbfba60a5b0732cf923bed5dd6e76"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",

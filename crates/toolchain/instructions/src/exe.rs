@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::program::Program;
 
 /// Memory image is a map from (address space, address) to word.
-pub type MemoryImage<F> = BTreeMap<(F, F), F>;
+pub type MemoryImage<F> = BTreeMap<(u32, u32), F>;
 /// Stores the starting address, end address, and name of a set of function.
 pub type FnBounds = BTreeMap<u32, FnBound>;
 

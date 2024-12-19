@@ -1,0 +1,20 @@
+[package]
+name = "keccak-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-keccak256-guest = { git = "https://github.com/openvm-org/openvm.git" }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+
+[features]
+default = []
+std = [
+    "openvm/std",
+    "openvm-keccak256-guest/std",
+]

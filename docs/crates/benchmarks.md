@@ -3,7 +3,7 @@
 ### Latest Benchmark Results
 
 Latest benchmark results can be found [here](https://github.com/openvm-org/openvm/blob/benchmark-results/index.md).
-These are run via [github workflows](./.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.
+These are run via [github workflows](../../.github/workflows/benchmark-call.yml) and should always be up to date with the latest `main` branch.
 
 ### Adding a Benchmark
 

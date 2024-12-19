@@ -47,7 +47,7 @@ pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for searching the address space. The allowed address spaces are those in the range `[as_offset, as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address space `0` in memory.
     pub as_height: usize,
     /// The offset of the address space.
-    pub as_offset: usize,
+    pub as_offset: u32,
     pub pointer_max_bits: usize,
     pub clk_max_bits: usize,
     /// Limb size used by the range checker

@@ -42,9 +42,6 @@ pub struct BuildArgs {
     #[clap(flatten, help = "Filter the target to build")]
     pub bin_type_filter: BinTypeFilter,
 
-    #[arg(long, help = "Target name substring filter")]
-    pub name: Option<String>,
-
     #[arg(
         long,
         default_value = "false",
@@ -73,31 +70,30 @@ pub struct BuildArgs {
 #[derive(Clone, clap::Args)]
 #[group(required = false, multiple = false)]
 pub struct BinTypeFilter {
-    #[arg(
-        long,
-        help = "Specifies that the target should be a binary kind when set"
-    )]
-    pub bin: bool,
+    #[arg(long, help = "Specifies that the bin target to build")]
+    pub bin: Option<String>,
 
-    #[arg(
-        long,
-        help = "Specifies that the target should be an example kind when set"
-    )]
-    pub example: bool,
+    #[arg(long, help = "Specifies that the example target to build")]
+    pub example: Option<String>,
 }
 
 // Returns the path to the ELF file if it is unique.
 pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
     println!("[openvm] Building the package...");
-    let target_filter = TargetFilter {
-        name_substr: build_args.name.clone(),
-        kind: if build_args.bin_type_filter.bin {
-            Some("bin".to_string())
-        } else if build_args.bin_type_filter.example {
-            Some("example".to_string())
-        } else {
-            None
-        },
+    let target_filter = if let Some(bin) = &build_args.bin_type_filter.bin {
+        Some(TargetFilter {
+            name: bin.clone(),
+            kind: "bin".to_string(),
+        })
+    } else {
+        build_args
+            .bin_type_filter
+            .example
+            .as_ref()
+            .map(|example| TargetFilter {
+                name: example.clone(),
+                kind: "example".to_string(),
+            })
     };
     let guest_options = GuestOptions {
         features: build_args.features.clone(),
@@ -106,7 +102,7 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
 
     let pkg = get_package(&build_args.manifest_dir);
     // We support builds of libraries with 0 or >1 executables.
-    let elf_path = match build_guest_package(&pkg, &guest_options, None) {
+    let elf_path = match build_guest_package(&pkg, &guest_options, None, &target_filter) {
         Ok(target_dir) => {
             find_unique_executable(&build_args.manifest_dir, &target_dir, &target_filter)
         }

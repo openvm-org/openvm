@@ -1,41 +1,40 @@
 #![allow(non_snake_case)]
 
-use eyre::Result;
-use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
-use openvm_circuit::{
-    arch::{instructions::exe::VmExe, SystemConfig},
-    utils::new_air_test_with_min_segments,
-};
-use openvm_ecc_circuit::WeierstrassExtension;
-use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff::Field, AffinePoint};
-use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
-use openvm_pairing_guest::pairing::{EvaluatedLine, FinalExp, LineMulDType, MultiMillerLoop};
-use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
-use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use rand::SeedableRng;
-
-type F = BabyBear;
-
+#[cfg(test)]
 mod bn254 {
     use std::iter;
 
+    use eyre::Result;
+    use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_ecc_guest::halo2curves::{
-        bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
-        ff::Field,
+    use openvm_circuit::{arch::SystemConfig, utils::air_test_with_min_segments};
+    use openvm_ecc_circuit::WeierstrassExtension;
+    use openvm_ecc_guest::{
+        algebra::field::FieldExtension,
+        halo2curves::{
+            bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+            ff::Field,
+        },
+        AffinePoint,
     };
+    use openvm_instructions::exe::VmExe;
+    use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
-        affine_point::AffineCoords, bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254,
-        pairing::MillerStep,
+        affine_point::AffineCoords,
+        bn254::BN254_MODULUS,
+        halo2curves_shims::bn254::Bn254,
+        pairing::{EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_transpiler::transpiler::Transpiler;
+    use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+    use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
+    use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use rand::SeedableRng;
 
-    use super::*;
-    use crate::utils::build_example_program_with_features;
+    type F = BabyBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BN254_MODULUS.clone()];
@@ -53,7 +52,11 @@ mod bn254 {
 
     #[test]
     fn test_bn254_fp12_mul() -> Result<()> {
-        let elf = build_example_program_with_features("fp12_mul", ["bn254"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "fp12_mul",
+            ["bn254"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -77,13 +80,17 @@ mod bn254 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 
     #[test]
     fn test_bn254_line_functions() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_line", ["bn254"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_line",
+            ["bn254"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -129,13 +136,17 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_step() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_miller_step", ["bn254"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_miller_step",
+            ["bn254"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -172,13 +183,17 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bn254_miller_loop() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_miller_loop", ["bn254"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_miller_loop",
+            ["bn254"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -219,13 +234,17 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bn254_pairing_check() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_check", ["bn254"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check",
+            ["bn254"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -270,31 +289,45 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // Always run proving for just pairing check
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 }
 
+#[cfg(test)]
 mod bls12_381 {
+    use eyre::Result;
+    use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use openvm_circuit::{
+        arch::{instructions::exe::VmExe, SystemConfig},
+        utils::air_test_with_min_segments,
+    };
+    use openvm_ecc_circuit::WeierstrassExtension;
     use openvm_ecc_guest::{
-        algebra::IntMod,
-        halo2curves::bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+        algebra::{field::FieldExtension, IntMod},
+        halo2curves::{
+            bls12_381::{Fq12, Fq2, Fr, G1Affine, G2Affine},
+            ff::Field,
+        },
         AffinePoint,
     };
+    use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
         bls12_381::BLS12_381_MODULUS,
         halo2curves_shims::bls12_381::Bls12_381,
-        pairing::{LineMulMType, MillerStep},
+        pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
+    use openvm_stark_sdk::{openvm_stark_backend::p3_field::AbstractField, p3_baby_bear::BabyBear};
+    use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
+    use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use rand::SeedableRng;
 
-    use super::*;
-    use crate::utils::build_example_program_with_features;
+    type F = BabyBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];
@@ -312,7 +345,11 @@ mod bls12_381 {
 
     #[test]
     fn test_bls12_381_fp12_mul() -> Result<()> {
-        let elf = build_example_program_with_features("fp12_mul", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "fp12_mul",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -336,13 +373,17 @@ mod bls12_381 {
             .map(AbstractField::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_line_functions() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_line", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_line",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -389,13 +430,17 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_step() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_miller_step", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_miller_step",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -432,13 +477,17 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_miller_loop() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_miller_loop", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_miller_loop",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -485,13 +534,17 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_pairing_check() -> Result<()> {
-        let elf = build_example_program_with_features("pairing_check", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "pairing_check",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -535,14 +588,17 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        // Always run proving for just pairing check
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1, true);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
     #[test]
     fn test_bls12_381_final_exp_hint() -> Result<()> {
-        let elf = build_example_program_with_features("final_exp_hint", ["bls12_381"])?;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "final_exp_hint",
+            ["bls12_381"],
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -585,7 +641,7 @@ mod bls12_381 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        new_air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1, false);
+        air_test_with_min_segments(get_testing_config(), openvm_exe, vec![io], 1);
         Ok(())
     }
 }

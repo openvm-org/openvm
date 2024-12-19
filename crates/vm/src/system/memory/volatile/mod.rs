@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    collections::HashSet,
     sync::Arc,
 };
 
@@ -24,6 +23,7 @@ use openvm_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
+use rustc_hash::FxHashSet;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{
@@ -133,7 +133,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
 #[derive(Debug)]
 pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
-    touched_addresses: HashSet<(F, F)>,
+    touched_addresses: FxHashSet<(u32, u32)>,
     range_checker: Arc<VariableRangeCheckerChip>,
     overridden_height: Option<usize>,
     final_memory: Option<TimestampedEquipartition<F, 1>>,
@@ -154,18 +154,18 @@ impl<F: Field> VolatileBoundaryChip<F> {
                 pointer_max_bits,
                 range_bus,
             ),
-            touched_addresses: HashSet::new(),
+            touched_addresses: FxHashSet::default(),
             range_checker,
             overridden_height: None,
             final_memory: None,
         }
     }
 
-    pub fn touch_address(&mut self, addr_space: F, pointer: F) {
+    pub fn touch_address(&mut self, addr_space: u32, pointer: u32) {
         self.touched_addresses.insert((addr_space, pointer));
     }
 
-    pub fn all_addresses(&self) -> Vec<(F, F)> {
+    pub fn all_addresses(&self) -> Vec<(u32, u32)> {
         self.touched_addresses.iter().cloned().collect()
     }
 }
@@ -220,8 +220,8 @@ where
                 // `pointer` is the same as `label` since the equipartition has block size 1
                 let [data] = timestamped_values.values;
                 let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
-                row.addr_space = *addr_space;
-                row.pointer = Val::<SC>::from_canonical_usize(*ptr);
+                row.addr_space = Val::<SC>::from_canonical_u32(*addr_space);
+                row.pointer = Val::<SC>::from_canonical_u32(*ptr);
                 row.initial_data = Val::<SC>::ZERO;
                 row.final_data = data;
                 row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
@@ -235,7 +235,10 @@ where
                         (
                             &self.range_checker,
                             &[row.addr_space, row.pointer],
-                            &[next_addr_space, Val::<SC>::from_canonical_usize(next_ptr)],
+                            &[
+                                Val::<SC>::from_canonical_u32(next_addr_space),
+                                Val::<SC>::from_canonical_u32(next_ptr),
+                            ],
                         ),
                         ((&mut row.addr_lt_aux).into(), &mut out),
                     );

@@ -1,0 +1,34 @@
+[package]
+name = "openvm-pairing-integration-tests"
+description = "Integration tests for the OpenVM pairing extension"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-circuit-primitives-derive.workspace = true
+openvm-instructions = { workspace = true }
+openvm-stark-sdk.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-transpiler.workspace = true
+openvm-build.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-algebra-transpiler.workspace = true
+openvm-pairing-circuit.workspace = true
+openvm-pairing-transpiler.workspace = true
+openvm-pairing-guest.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-ecc-guest.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-platform = { workspace = true }
+openvm = { workspace = true }
+openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
+eyre.workspace = true
+num-bigint-dig.workspace = true
+rand.workspace = true
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-circuit/parallel"]

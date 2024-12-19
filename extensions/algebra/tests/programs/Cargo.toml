@@ -1,0 +1,32 @@
+[workspace]
+[package]
+name = "openvm-algebra-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-platform = { path = "../../../../crates/toolchain/platform" }
+
+openvm-algebra-guest = { path = "../../guest" }
+openvm-algebra-moduli-setup = { path = "../../moduli-setup", default-features = false }
+openvm-algebra-complex-macros = { path = "../../guest/src/field/complex-macros", default-features = false }
+num-bigint-dig = { version = "0.8", default-features = false }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+
+
+[features]
+default = []
+std = [
+    "serde/std",
+    "openvm/std",
+    "openvm-algebra-guest/std",
+]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"

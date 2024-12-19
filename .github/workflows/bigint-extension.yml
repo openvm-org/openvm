@@ -34,3 +34,9 @@ jobs:
         working-directory: extensions/bigint/circuit
         run: |
           cargo nextest run --cargo-profile=fast
+
+      - name: Run bigint integration tests
+        working-directory: extensions/bigint/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30
+          cargo nextest run --cargo-profile=fast

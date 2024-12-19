@@ -21,7 +21,7 @@ The program code is committed as a cached trace. The validity of the program cod
 Memory is comprised of addressable cells, each cell containing a single field element.
 Instructions of the VM may access (read or write) memory
 as single cells or as a contiguous list of cells. Such a contiguous list is called a _block_, and
-an memory access (read/write) to a block is a _block access_.
+a memory access (read/write) to a block is a _block access_.
 The architecture distinguishes between block accesses of different sizes as this has significant performance implications.
 The number of cells in a block access is restricted to powers of two, of which the following are supported: 1, 2, 4, 8, 16, 32, 64. Block accesses must be
 aligned, meaning that in a block access of size $N$, the starting pointer must be divisible by $N$ (as an integer).

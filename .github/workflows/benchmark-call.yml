@@ -283,6 +283,7 @@ jobs:
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Update PR github pages with new bench results
+        if: github.event.pull_request.head.repo.fork == false # forks do not have write access
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
           s3_md_file="${METRIC_NAME}-${current_sha}.md"
