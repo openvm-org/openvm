@@ -1,5 +1,10 @@
 use core::ops::{Add, AddAssign, Neg};
 
+use hex_literal::hex;
+#[cfg(not(target_os = "zkvm"))]
+use lazy_static::lazy_static;
+#[cfg(not(target_os = "zkvm"))]
+use num_bigint_dig::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
 use openvm_ecc_guest::{
@@ -7,22 +12,17 @@ use openvm_ecc_guest::{
     CyclicGroup, Group,
 };
 
+use crate::pairing::PairingIntrinsics;
+
 mod fp12;
 mod fp2;
 pub mod pairing;
 
 pub use fp12::*;
 pub use fp2::*;
-use hex_literal::hex;
-#[cfg(not(target_os = "zkvm"))]
-use lazy_static::lazy_static;
-#[cfg(not(target_os = "zkvm"))]
-use num_bigint_dig::BigUint;
-
-use crate::pairing::PairingIntrinsics;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
-mod tests;
+pub mod tests;
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {

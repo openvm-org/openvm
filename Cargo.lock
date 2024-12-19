@@ -2254,7 +2254,7 @@ dependencies = [
  "crossbeam",
  "ff 0.13.0",
  "group 0.13.0",
- "halo2curves-axiom 0.5.3",
+ "halo2curves-axiom",
  "itertools 0.11.0",
  "maybe-rayon",
  "pairing 0.23.0",
@@ -2373,33 +2373,6 @@ dependencies = [
  "sha2",
  "static_assertions",
  "subtle",
-]
-
-[[package]]
-name = "halo2curves-axiom"
-version = "0.7.0"
-source = "git+https://github.com/axiom-crypto/halo2curves.git?branch=test%2Fvisibility#c148550bd309e92b8aaa954ec5e07df3dd137dab"
-dependencies = [
- "blake2b_simd",
- "digest 0.10.7",
- "ff 0.13.0",
- "group 0.13.0",
- "hex",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "pairing 0.23.0",
- "pasta_curves 0.5.1",
- "paste",
- "rand",
- "rand_core",
- "rayon",
- "serde",
- "serde_arrays",
- "sha2",
- "static_assertions",
- "subtle",
- "unroll",
 ]
 
 [[package]]
@@ -3424,7 +3397,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "derive-new",
  "derive_more 1.0.0",
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "itertools 0.13.0",
  "num-bigint-dig",
  "num-traits",
@@ -3460,7 +3433,7 @@ dependencies = [
 name = "openvm-algebra-guest"
 version = "0.1.0-alpha"
 dependencies = [
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "num-bigint-dig",
  "openvm",
  "openvm-algebra-moduli-setup",
@@ -3655,7 +3628,7 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "getset",
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "hex",
  "inferno",
  "itertools 0.13.0",
@@ -3787,7 +3760,7 @@ dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
  "group 0.13.0",
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "hex-literal",
  "itertools 0.13.0",
  "k256",
@@ -3960,7 +3933,7 @@ dependencies = [
 name = "openvm-mod-circuit-builder"
 version = "0.1.0-alpha"
 dependencies = [
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",
@@ -4091,7 +4064,7 @@ dependencies = [
  "derive-new",
  "derive_more 1.0.0",
  "eyre",
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "itertools 0.13.0",
  "num-bigint-dig",
  "num-traits",
@@ -4121,7 +4094,7 @@ name = "openvm-pairing-guest"
 version = "0.1.0-alpha"
 dependencies = [
  "group 0.13.0",
- "halo2curves-axiom 0.7.0",
+ "halo2curves-axiom",
  "hex-literal",
  "itertools 0.13.0",
  "lazy_static",

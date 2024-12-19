@@ -186,6 +186,12 @@ fn test_fp_one() {
     assert_eq!(fp_one, convert_bls12381_halo2_fq_to_fp(fq_one));
 }
 
+// Gt(Fq12) is not public
+fn assert_miller_results_eq(a: MillerLoopResult, b: Fp12) {
+    let b = convert_bls12381_fp12_to_halo2_fq12(b);
+    crate::halo2curves_shims::bls12_381::tests::assert_miller_results_eq(a, b);
+}
+
 #[test]
 fn test_bls12381_miller_loop() {
     let mut rng = StdRng::seed_from_u64(65);
@@ -205,14 +211,8 @@ fn test_bls12381_miller_loop() {
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller =
         halo2curves_axiom::bls12_381::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-
     let f = Bls12_381::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bls12381_fp12_to_halo2_fq12(f);
-    let wrapped_f = MillerLoopResult(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -231,16 +231,11 @@ fn test_bls12381_miller_loop_identity() {
     };
 
     let f = Bls12_381::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bls12381_fp12_to_halo2_fq12(f);
-    let wrapped_f = MillerLoopResult(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller =
         halo2curves_axiom::bls12_381::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -258,14 +253,9 @@ fn test_bls12381_miller_loop_identity_2() {
     };
 
     let f = Bls12_381::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bls12381_fp12_to_halo2_fq12(f);
-    let wrapped_f = MillerLoopResult(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller =
         halo2curves_axiom::bls12_381::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }

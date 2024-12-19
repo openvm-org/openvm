@@ -25,7 +25,7 @@ jobs:
 
       - name: Generate docs
         run: |
-          cargo doc --workspace
+          cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
 
       - name: Run fmt
         run: |

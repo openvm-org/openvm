@@ -175,8 +175,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier", b
     "display",
 ] }
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-# for testing only:
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", branch = "test/visibility" }
+halo2curves-axiom = "0.5.3"
 
 rayon = "1.10"
 parking_lot = "0.12.2"

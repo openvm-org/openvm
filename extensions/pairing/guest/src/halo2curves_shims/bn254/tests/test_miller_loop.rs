@@ -1,10 +1,8 @@
 use alloc::vec::Vec;
 
-use halo2curves_axiom::{
-    bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared, Gt},
-    pairing::MillerLoopResult,
-};
+use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine, G2Prepared};
 
+use super::assert_miller_results_eq;
 use crate::{
     halo2curves_shims::{bn254::Bn254, tests::utils::generate_test_points},
     pairing::MultiMillerLoop,
@@ -22,16 +20,9 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
         .collect::<Vec<_>>();
     let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(terms.as_slice());
-    let compare_final = compare_miller.final_exponentiation();
-
     // Run the multi-miller loop
     let f = Bn254::multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
-
-    let wrapped_f = Gt(f);
-    let final_f = wrapped_f.final_exponentiation();
-
-    // Run halo2curves final exponentiation on our multi_miller_loop output
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
