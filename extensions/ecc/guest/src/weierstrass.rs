@@ -7,7 +7,8 @@ use super::group::{CyclicGroup, Group};
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Group {
-    /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
+    /// The `a` and `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
+    const CURVE_A: Self::Coordinate;
     const CURVE_B: Self::Coordinate;
 
     type Coordinate: IntMod;
@@ -52,7 +53,7 @@ pub trait WeierstrassPoint: Group {
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
         let lhs = &y * &y;
-        let rhs = &x * &x * &x + &Self::CURVE_B;
+        let rhs = &x * &x * &x + &Self::CURVE_A * &x + &Self::CURVE_B;
         if lhs != rhs {
             return None;
         }
