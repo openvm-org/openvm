@@ -1,14 +1,18 @@
 use alloc::vec::Vec;
 
-use halo2curves_axiom::bls12_381::{
-    Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared, MillerLoopResult,
-};
+use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine, G2Prepared};
 use openvm_ecc_guest::{algebra::Field, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
 use crate::{
-    halo2curves_shims::{bls12_381::Bls12_381, tests::utils::generate_test_points},
+    halo2curves_shims::{
+        bls12_381::{
+            tests::{assert_miller_results_eq, final_exp},
+            Bls12_381,
+        },
+        tests::utils::generate_test_points,
+    },
     pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop},
 };
 
@@ -24,16 +28,9 @@ fn run_miller_loop_test(rand_seeds: &[u64]) {
         .collect::<Vec<_>>();
     let terms = P_vec.iter().zip(g2_prepareds.iter()).collect::<Vec<_>>();
     let compare_miller = halo2curves_axiom::bls12_381::multi_miller_loop(terms.as_slice());
-    let compare_final = compare_miller.final_exponentiation();
-
     // Run the multi-miller loop
     let f = Bls12_381::multi_miller_loop(P_ecpoints.as_slice(), Q_ecpoints.as_slice());
-
-    let wrapped_f = MillerLoopResult(f);
-    let final_f = wrapped_f.final_exponentiation();
-
-    // Run halo2curves final exponentiation on our multi_miller_loop output
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -114,13 +111,8 @@ fn test_f_mul() {
 
     // Test line functions match
     let f_line_daa = Bls12_381::mul_by_02345(&Fq12::ONE, &l_prod0);
-    let f_line_daa_final = MillerLoopResult(f_line_daa);
-    let f_line_daa_final = f_line_daa_final.final_exponentiation();
     let f_line_da = Bls12_381::mul_by_02345(&Fq12::ONE, &l_prod1);
-    let f_line_da_final = MillerLoopResult(f_line_da);
-    let f_line_da_final = f_line_da_final.final_exponentiation();
-    assert_eq!(f_line_daa_final, f_line_da_final);
-
+    assert_eq!(final_exp(f_line_daa), final_exp(f_line_da));
     // Test Q_acc_a == 2(2Q) + Q
     assert_eq!(Q4_Q.x, Q_acc_a.x);
     assert_eq!(Q4_Q.y, Q_acc_a.y);
@@ -129,11 +121,5 @@ fn test_f_mul() {
     assert_eq!(Q_acc_daa.x, Q_acc_a.x);
     assert_eq!(Q_acc_daa.y, Q_acc_a.y);
 
-    let wrapped_f_mul = MillerLoopResult(f_mul);
-    let final_f_mul = wrapped_f_mul.final_exponentiation();
-
-    let wrapped_f_prod_mul = MillerLoopResult(f_prod_mul);
-    let final_f_prod_mul = wrapped_f_prod_mul.final_exponentiation();
-
-    assert_eq!(final_f_mul, final_f_prod_mul);
+    assert_eq!(final_exp(f_mul), final_exp(f_prod_mul));
 }

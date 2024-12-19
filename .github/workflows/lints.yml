@@ -23,6 +23,10 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Generate docs
+        run: |
+          cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
+
       - name: Run fmt
         run: |
           cargo fmt --all -- --check

@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
 
 use group::{ff::Field, prime::PrimeCurveAffine};
-use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
-    pairing::MillerLoopResult,
+use halo2curves_axiom::bn256::{
+    Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
 };
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
@@ -176,6 +175,12 @@ fn test_fp_one() {
     assert_eq!(fp_one, convert_bn254_halo2_fq_to_fp(fq_one));
 }
 
+// Gt(Fq12) is not public
+fn assert_miller_results_eq(a: Gt, b: Fp12) {
+    let b = convert_bn254_fp12_to_halo2_fq12(b);
+    crate::halo2curves_shims::bn254::tests::assert_miller_results_eq(a, b);
+}
+
 #[test]
 fn test_bn254_miller_loop() {
     let mut rng = StdRng::seed_from_u64(53);
@@ -194,14 +199,8 @@ fn test_bn254_miller_loop() {
     // Compare against halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -220,15 +219,10 @@ fn test_bn254_miller_loop_identity() {
     };
 
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -246,13 +240,8 @@ fn test_bn254_miller_loop_identity_2() {
     };
 
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
