@@ -34,7 +34,7 @@ impl PublicValuesCoreAir {
         Self {
             num_custom_pvs,
             offset,
-            encoder: Encoder::new(num_custom_pvs, max_degree),
+            encoder: Encoder::new(num_custom_pvs, max_degree, true),
         }
     }
 }

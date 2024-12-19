@@ -45,6 +45,7 @@ members = [
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
+    "extensions/rv32im/tests",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
@@ -55,7 +56,10 @@ members = [
     "extensions/pairing/guest",
     "extensions/pairing/tests",
     "extensions/rv32-adapters",
-    "extensions/rv32im/tests",
+    "extensions/sha256/circuit",
+    "extensions/sha256/transpiler",
+    "extensions/sha256/guest",
+    "extensions/sha256/tests",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -101,6 +105,7 @@ openvm-sdk = { path = "crates/sdk", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
+openvm-sha256-air = { path = "crates/circuits/sha256-air", default-features = false }
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
 openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }
 openvm = { path = "crates/toolchain/openvm", default-features = false }
@@ -142,6 +147,9 @@ openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = f
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
+openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
+openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
+openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
 
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
