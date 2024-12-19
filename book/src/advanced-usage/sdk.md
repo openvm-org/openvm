@@ -40,13 +40,18 @@ let sdk = Sdk;
 let vm_config = SdkVmConfig::builder()
     .system(Default::default())
     .rv32i(Default::default())
+    .rv32m(Default::default())
     .io(Default::default())
     .build();
 
 // 2a. Build the ELF with guest options and a target filter.
-let guest_opts = GuestOptions::default().with_features(vec!["parallel"]);
-let target_filter = TargetFilter::default().with_kind("bin".to_string());
-let elf = sdk.build(guest_opts, "your_path_project_root", &target_filter)?;
+let target_path = "your_path_project_root";
+let guest_opts = GuestOptions::default();
+let target_filter = TargetFilter {
+    name: target_path.to_string(),
+    kind: "bin".to_string(),
+};
+let elf = sdk.build(guest_opts, target_path, &Some(target_filter))?;
 // 2b. Load the ELF from a file
 let elf_bytes = fs::read("your_path_to_elf")?;
 let elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
@@ -60,6 +65,7 @@ let exe = sdk.transpile(elf, vm_config.transpiler())?;
 The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the extensions and system configuration you want.
 
 ## Running a Program
+
 To run your program and see the public value output, you can do the following:
 
 ```rust
@@ -105,6 +111,7 @@ let proof = app_prover.generate_app_proof(stdin.clone());
 ```
 
 ## Verifying Proofs
+
 After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from your `AppProvingKey`) and the output of your `generate_app_proof` call.
 
 ```rust
