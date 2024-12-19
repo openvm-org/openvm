@@ -2,8 +2,9 @@
 
 // TODO[arayi]: Revisit this
 /// This is custom-0 defined in RISC-V spec document
-pub const OPCODE: u8 = 0;
-pub const SHA256_FUNCT3: u8 = 0;
+pub const OPCODE: u8 = 0x0b;
+pub const SHA256_FUNCT3: u8 = 0b100;
+pub const SHA256_FUNCT7: u8 = 0b1;
 
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
@@ -41,5 +42,5 @@ pub fn sha256(input: &[u8]) -> [u8; 32] {
 #[inline(always)]
 #[no_mangle]
 extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
-    openvm_platform::custom_insn_r!(OPCODE, SHA256_FUNCT3, 0x0, output, bytes, len);
+    openvm_platform::custom_insn_r!(OPCODE, SHA256_FUNCT3, SHA256_FUNCT7, output, bytes, len);
 }

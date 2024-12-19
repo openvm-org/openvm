@@ -23,7 +23,7 @@ use crate::{
 /// generate_intermed_4 should be called on every row before generate_intermed_8 is called
 /// generate_intermed_12 should be called at the very end, when everything else is filled in
 impl Sha256Air {
-    /// This function takes the intput_massage (should be already padded), the previous hash,
+    /// This function takes the input_massage (should be already padded), the previous hash,
     /// a flag indicating if it's the last block, the global block index, the local block index,
     /// and the buffer values that will be put in rows 0..4. Returns the trace of the block and the final hash
     #[allow(clippy::too_many_arguments)]

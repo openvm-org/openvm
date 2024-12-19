@@ -8,7 +8,18 @@ use super::{
     SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
 
-/// the first 16 rows of every SHA256 block will be of type Sha256RoundCols and the last row will be of type Sha256DigestCols
+/// In each SHA256 block:
+/// - First 16 rows use Sha256RoundCols
+/// - Final row uses Sha256DigestCols
+///
+/// Sha256RoundCols and Sha256DigestCols share the same first 3 fields:
+/// - flags
+/// - work_vars/hash (same type, different name)
+/// - schedule_helper
+///
+/// This design allows for:
+/// 1. Common constraints to work on either struct type by accessing these shared fields
+/// 2. Specific constraints to use the appropriate struct, with flags helping to do conditional constraints
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct Sha256RoundCols<T> {
