@@ -7,7 +7,9 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::not, SubAir,
 };
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{
+    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+};
 use openvm_sha256_air::{
     compose, Sha256Air, SHA256_BLOCK_U8S, SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW,
     SHA256_WORD_U16S, SHA256_WORD_U8S,
@@ -421,7 +423,10 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::TWO, local_cols.control.read_ptr),
+                MemoryAddress::new(
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                    local_cols.control.read_ptr,
+                ),
                 message,
                 local_cols.control.cur_timestamp,
                 &local_cols.read_aux,
@@ -446,7 +451,10 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rd_ptr),
+                MemoryAddress::new(
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rd_ptr,
+                ),
                 local_cols.dst_ptr,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[0],
@@ -455,7 +463,10 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rs1_ptr,
+                ),
                 local_cols.src_ptr,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[1],
@@ -464,7 +475,10 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::Expr::ONE, local_cols.rs2_ptr),
+                MemoryAddress::new(
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    local_cols.rs2_ptr,
+                ),
                 local_cols.len_data,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[2],
@@ -502,7 +516,7 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::TWO, dst_ptr_val),
+                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), dst_ptr_val),
                 result,
                 timestamp_pp() + time_delta.clone(),
                 &local_cols.writes_aux,
@@ -516,8 +530,8 @@ impl Sha256VmAir {
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.rs2_ptr.into(),
-                    AB::Expr::ONE,
-                    AB::Expr::TWO,
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
                 AB::Expr::from_canonical_usize(timestamp_delta) + time_delta.clone(),

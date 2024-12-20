@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupChip, e
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     UsizeOpcode,
 };
 use openvm_rv32im_circuit::adapters::read_rv32_register;
@@ -44,8 +44,6 @@ const SHA256_READ_SIZE: usize = 16;
 const SHA256_WRITE_SIZE: usize = 32;
 /// Number of rv32 cells read in a SHA256 block
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
-/// Bus index fo the chip to send interactions to itself
-pub const SHA256_CHIP_BUS_IDX: usize = 28;
 
 #[derive(Debug)]
 pub struct Sha256VmChip<F: PrimeField32> {
@@ -75,6 +73,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
         program_bus: ProgramBus,
         memory_controller: MemoryControllerRef<F>,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
+        self_bus_idx: usize,
         offset: usize,
     ) -> Self {
         let ptr_max_bits = memory_controller.borrow().mem_config().pointer_max_bits;
@@ -86,7 +85,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
                 bitwise_lookup_chip.bus(),
                 ptr_max_bits,
                 offset,
-                Sha256Air::new(bitwise_lookup_chip.bus(), SHA256_CHIP_BUS_IDX),
+                Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
                 Encoder::new(PaddingFlags::COUNT, 2, false),
             ),
             memory_controller,
@@ -114,8 +113,8 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         } = instruction;
         let local_opcode = opcode.local_opcode_idx(self.offset);
         debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.as_usize());
-        debug_assert_eq!(d, F::from_canonical_u32(1));
-        debug_assert_eq!(e, F::from_canonical_u32(2));
+        debug_assert_eq!(d, F::from_canonical_u32(RV32_REGISTER_AS));
+        debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
 
         let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory.timestamp());

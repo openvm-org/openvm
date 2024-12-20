@@ -18,7 +18,7 @@ use super::Sha256VmChip;
 use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
 
 type F = BabyBear;
-
+const BUS_IDX: usize = 28;
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Sha256VmChip<F>,
@@ -86,6 +86,7 @@ fn rand_sha256_test() {
         tester.program_bus(),
         tester.memory_controller(),
         bitwise_chip.clone(),
+        BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
     );
 
@@ -116,6 +117,7 @@ fn execute_roundtrip_sanity_test() {
         tester.program_bus(),
         tester.memory_controller(),
         bitwise_chip.clone(),
+        BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
     );
 

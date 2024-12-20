@@ -96,6 +96,7 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
             program_bus,
             memory_controller,
             bitwise_lu_chip,
+            builder.new_bus_idx(),
             Rv32Sha256Opcode::default_offset(),
         );
         inventory.add_executor(

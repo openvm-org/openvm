@@ -272,15 +272,12 @@ impl Sha256Air {
         // digest->padding: 1
         // padding->padding: 0
         // Other transitions are not allowed by the above
-        let delta = local_cols.flags.is_round_row
-            * (next_cols.flags.is_digest_row + next_cols.flags.is_round_row)
-            * AB::Expr::ONE
+        let delta = local_cols.flags.is_round_row * AB::Expr::ONE
             + local_cols.flags.is_digest_row
                 * next_cols.flags.is_round_row
                 * AB::Expr::from_canonical_u32(16)
                 * AB::Expr::NEG_ONE
-            + local_cols.flags.is_digest_row * next_is_padding_row.clone() * AB::Expr::ONE
-            + local_is_padding_row.clone() * AB::Expr::ZERO;
+            + local_cols.flags.is_digest_row * next_is_padding_row.clone() * AB::Expr::ONE;
 
         let local_row_idx = self.row_idx_encoder.flag_with_val::<AB>(
             &local_cols.flags.row_idx,
