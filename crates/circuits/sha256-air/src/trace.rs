@@ -1,8 +1,4 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-    ops::Range,
-};
+use std::{array, borrow::BorrowMut, ops::Range};
 
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -66,14 +62,14 @@ impl Sha256Air {
             }
         }
         let get_range = |start: usize, len: usize| -> Range<usize> { start..start + len };
-        let mut message_schedule: Vec<u32> = input.to_vec();
+        let mut message_schedule = [0u32; 64];
+        message_schedule[..input.len()].copy_from_slice(input);
         let mut work_vars = *prev_hash;
         for (i, row) in trace.chunks_exact_mut(trace_width).enumerate() {
             // doing the 64 rounds in 16 rows
             if i < 16 {
                 let cols: &mut Sha256RoundCols<F> =
                     row[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow_mut();
-
                 cols.flags.is_round_row = F::ONE;
                 cols.flags.is_first_4_rows = if i < 4 { F::ONE } else { F::ZERO };
                 cols.flags.is_digest_row = F::ZERO;
@@ -126,7 +122,7 @@ impl Sha256Air {
                                 F::from_canonical_u32(carry >> 1);
                         }
                         // update the message schedule
-                        message_schedule.push(w);
+                        message_schedule[idx] = w;
                     }
                 }
                 // fill in the work variables
@@ -191,11 +187,34 @@ impl Sha256Air {
                     work_vars[1] = work_vars[0];
                     work_vars[0] = a;
                 }
+
+                // filling w_3 and intermed_4 here and the rest later
+                if i > 0 {
+                    for j in 0..SHA256_ROUNDS_PER_ROW {
+                        let idx = i * SHA256_ROUNDS_PER_ROW + j;
+                        let w_4 = u32_into_limbs::<SHA256_WORD_U16S>(message_schedule[idx - 4]);
+                        let sig_0_w_3 = u32_into_limbs::<SHA256_WORD_U16S>(small_sig0(
+                            message_schedule[idx - 3],
+                        ));
+                        cols.schedule_helper.intermed_4[j] =
+                            array::from_fn(|k| F::from_canonical_u32(w_4[k] + sig_0_w_3[k]));
+                        if j < SHA256_ROUNDS_PER_ROW - 1 {
+                            let w_3 = message_schedule[idx - 3];
+                            cols.schedule_helper.w_3[j] =
+                                u32_into_limbs::<SHA256_WORD_U16S>(w_3).map(F::from_canonical_u32);
+                        }
+                    }
+                }
             }
             // generate the digest row
             else {
                 let cols: &mut Sha256DigestCols<F> =
                     row[get_range(trace_start_col, SHA256_DIGEST_WIDTH)].borrow_mut();
+                for j in 0..SHA256_ROUNDS_PER_ROW - 1 {
+                    let w_3 = message_schedule[i * SHA256_ROUNDS_PER_ROW + j - 3];
+                    cols.schedule_helper.w_3[j] =
+                        u32_into_limbs::<SHA256_WORD_U16S>(w_3).map(F::from_canonical_u32);
+                }
                 cols.flags.is_round_row = F::ZERO;
                 cols.flags.is_first_4_rows = F::ZERO;
                 cols.flags.is_digest_row = F::ONE;
@@ -228,14 +247,31 @@ impl Sha256Air {
             }
         }
 
-        // Generate carry_a and carry_e for the digest row
-        let tmp_slice = &mut trace[get_range(15 * trace_width, 2 * trace_width)];
-        let (local, next) = tmp_slice.split_at_mut(trace_width);
-        let local_cols: &Sha256RoundCols<F> =
-            local[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow();
-        let next_cols: &mut Sha256RoundCols<F> =
-            next[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow_mut();
-        Self::generate_carry_ae(local_cols, next_cols);
+        for i in 0..SHA256_ROWS_PER_BLOCK - 1 {
+            let rows = &mut trace[i * trace_width..(i + 2) * trace_width];
+            let (local, next) = rows.split_at_mut(trace_width);
+            let local_cols: &mut Sha256RoundCols<F> =
+                local[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow_mut();
+            let next_cols: &mut Sha256RoundCols<F> =
+                next[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow_mut();
+            if i > 0 {
+                for j in 0..SHA256_ROUNDS_PER_ROW {
+                    next_cols.schedule_helper.intermed_8[j] =
+                        local_cols.schedule_helper.intermed_4[j];
+                    if i >= 2 && i < SHA256_ROWS_PER_BLOCK - 3 {
+                        next_cols.schedule_helper.intermed_12[j] =
+                            local_cols.schedule_helper.intermed_8[j];
+                    }
+                }
+            }
+            if i == SHA256_ROWS_PER_BLOCK - 2 {
+                Self::generate_carry_ae(local_cols, next_cols);
+                Self::generate_intermed_4(local_cols, next_cols);
+            }
+            if i <= 2 {
+                Self::generate_intermed_12(local_cols, next_cols);
+            }
+        }
     }
 
     /// Puts the correct carrys in the `next_row`, the resulting carrys can be out of bound
@@ -312,19 +348,6 @@ impl Sha256Air {
         }
     }
 
-    /// Puts the correct intermed_8 in the `next_row`
-    pub fn generate_intermed_8<F: PrimeField32>(
-        local_cols: &Sha256RoundCols<F>,
-        next_cols: &mut Sha256RoundCols<F>,
-    ) {
-        for i in 0..SHA256_ROUNDS_PER_ROW {
-            for j in 0..SHA256_WORD_U16S {
-                next_cols.schedule_helper.intermed_8[i][j] =
-                    local_cols.schedule_helper.intermed_4[i][j];
-            }
-        }
-    }
-
     /// Puts the needed intermed_12 in the `local_row`
     pub fn generate_intermed_12<F: PrimeField32>(
         local_cols: &mut Sha256RoundCols<F>,
@@ -360,23 +383,6 @@ impl Sha256Air {
                         F::ZERO
                     };
                 local_cols.schedule_helper.intermed_12[i][j] = -sum;
-            }
-        }
-    }
-
-    /// Puts the correct w_3 in the `next_row`
-    pub fn generate_w_3<F: PrimeField32>(
-        local_cols: &Sha256RoundCols<F>,
-        next_cols: &mut Sha256RoundCols<F>,
-    ) {
-        let w = [local_cols.message_schedule.w, next_cols.message_schedule.w].concat();
-        let w: Vec<[F; SHA256_WORD_U16S]> = w
-            .into_iter()
-            .map(|x| array::from_fn(|i| compose::<F>(&x[i * 16..(i + 1) * 16], 1)))
-            .collect();
-        for i in 0..SHA256_ROUNDS_PER_ROW - 1 {
-            for j in 0..SHA256_WORD_U16S {
-                next_cols.schedule_helper.w_3[i][j] = w[i + 1][j];
             }
         }
     }

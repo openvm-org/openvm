@@ -233,34 +233,13 @@ where
             let (local, next) = rows.split_at_mut(width);
             let local_cols: &mut Sha256VmRoundCols<Val<SC>> = local.borrow_mut();
             let next_cols: &mut Sha256VmRoundCols<Val<SC>> = next.borrow_mut();
-            Sha256Air::generate_w_3::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
-            Sha256Air::generate_intermed_4::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
+            if i % 17 == 16 {
+                Sha256Air::generate_intermed_4::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
+            }
+            if i % 17 == 16 || i % 17 == 15 {
+                Sha256Air::generate_intermed_12::<Val<SC>>(&mut local_cols.inner, &next_cols.inner);
+            }
         }
-        // Fill in w_3 and intermed_4 for the last row
-        let (first, rest) = values.split_at_mut(width);
-        let rest_len = rest.len();
-        let last = &mut rest[rest_len - width..];
-        let local_cols: &mut Sha256VmRoundCols<Val<SC>> = last.borrow_mut();
-        let next_cols: &mut Sha256VmRoundCols<Val<SC>> = first.borrow_mut();
-        Sha256Air::generate_w_3::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
-        Sha256Air::generate_intermed_4::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
-
-        // Fill in intermed_8
-        for i in 0..height - 1 {
-            let rows = &mut values[i * width..(i + 2) * width];
-            let (local, next) = rows.split_at_mut(width);
-            let local_cols: &mut Sha256VmRoundCols<Val<SC>> = local.borrow_mut();
-            let next_cols: &mut Sha256VmRoundCols<Val<SC>> = next.borrow_mut();
-            Sha256Air::generate_intermed_8::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
-        }
-
-        // Fill in intermed_8 for the last row
-        let (first, rest) = values.split_at_mut(width);
-        let rest_len = rest.len();
-        let last = &mut rest[rest_len - width..];
-        let local_cols: &mut Sha256VmRoundCols<Val<SC>> = last.borrow_mut();
-        let next_cols: &mut Sha256VmRoundCols<Val<SC>> = first.borrow_mut();
-        Sha256Air::generate_intermed_8::<Val<SC>>(&local_cols.inner, &mut next_cols.inner);
 
         // Fill in intermed_12
         for i in 0..height - 1 {
@@ -268,16 +247,14 @@ where
             let (local, next) = rows.split_at_mut(width);
             let local_cols: &mut Sha256VmRoundCols<Val<SC>> = local.borrow_mut();
             let next_cols: &mut Sha256VmRoundCols<Val<SC>> = next.borrow_mut();
-            Sha256Air::generate_intermed_12::<Val<SC>>(&mut local_cols.inner, &next_cols.inner);
+            println!(
+                "schedule_helper: {:?}, {:?}, {:?}, {:?}",
+                next_cols.inner.schedule_helper,
+                next_cols.inner.work_vars.carry_a,
+                next_cols.inner.work_vars.carry_e,
+                i + 2,
+            );
         }
-
-        // Fill in intermed_12 for the last row
-        let (first, rest) = values.split_at_mut(width);
-        let rest_len = rest.len();
-        let last = &mut rest[rest_len - width..];
-        let local_cols: &mut Sha256VmRoundCols<Val<SC>> = last.borrow_mut();
-        let next_cols: &mut Sha256VmRoundCols<Val<SC>> = first.borrow_mut();
-        Sha256Air::generate_intermed_12::<Val<SC>>(&mut local_cols.inner, &next_cols.inner);
 
         AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![])
     }

@@ -409,7 +409,9 @@ impl Sha256Air {
             let expected_w_3 = next.schedule_helper.w_3[i];
             for j in 0..SHA256_WORD_U16S {
                 let w_3_limb = compose::<AB::Expr>(&w_3[j * 16..(j + 1) * 16], 1);
-                builder.assert_eq(w_3_limb, expected_w_3[j].into());
+                builder
+                    .when(local.flags.is_round_row)
+                    .assert_eq(w_3_limb, expected_w_3[j].into());
             }
         }
 
@@ -419,6 +421,10 @@ impl Sha256Air {
         let is_row_3_14 = self
             .row_idx_encoder
             .contains_flag_range::<AB>(&next.flags.row_idx, 3..=14);
+        // We will only constrain intermed_8 for rows [2, 13], and let it unconstrained for other rows
+        let is_row_2_13 = self
+            .row_idx_encoder
+            .contains_flag_range::<AB>(&next.flags.row_idx, 2..=13);
         for i in 0..SHA256_ROUNDS_PER_ROW {
             // w_idx
             let w_idx = w[i].map(|x| x.into());
@@ -428,12 +434,12 @@ impl Sha256Air {
                 let w_idx_limb = compose::<AB::Expr>(&w_idx[j * 16..(j + 1) * 16], 1);
                 let sig_w_limb = compose::<AB::Expr>(&sig_w[j * 16..(j + 1) * 16], 1);
 
-                builder.assert_eq(
+                builder.when_transition().assert_eq(
                     next.schedule_helper.intermed_4[i][j],
                     w_idx_limb + sig_w_limb,
                 );
 
-                builder.assert_eq(
+                builder.when(is_row_2_13.clone()).assert_eq(
                     next.schedule_helper.intermed_8[i][j],
                     local.schedule_helper.intermed_4[i][j],
                 );
@@ -482,7 +488,7 @@ impl Sha256Air {
                         AB::Expr::ZERO
                     };
                 // Note: here we can't do a conditional check because the degree of sum is already 3
-                builder.assert_zero(sum);
+                builder.when_transition().assert_zero(sum);
             }
         }
     }

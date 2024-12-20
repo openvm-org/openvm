@@ -92,9 +92,9 @@ fn rand_sha256_test() {
         Rv32Sha256Opcode::default_offset(),
     );
 
-    let num_tests: usize = 2;
+    let num_tests: usize = 10;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, None);
+        set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, Some(52));
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
