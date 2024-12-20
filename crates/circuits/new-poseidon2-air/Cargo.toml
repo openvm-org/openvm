@@ -12,7 +12,6 @@ p3-monty-31 = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-poseidon2-air = { workspace = true }
-p3-mds = { workspace = true }
 zkhash = { workspace = true }
 
 openvm-circuit-primitives = { workspace = true }
