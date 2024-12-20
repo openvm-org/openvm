@@ -20,7 +20,7 @@ use crate::{
     metrics::cycle_tracker::CycleTracker,
     system::{
         memory::{Equipartition, CHUNK},
-        poseidon2::Poseidon2Chip,
+        poseidon2::Poseidon2PeripheryChip,
     },
 };
 
@@ -267,13 +267,13 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                         VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
                     )
                     .expect("Poseidon2 chip required for persistent memory");
-                let hasher: &mut Poseidon2Chip<F> = chip
+                let hasher: &mut Poseidon2PeripheryChip<F> = chip
                     .as_any_kind_mut()
                     .downcast_mut()
                     .expect("Poseidon2 chip required for persistent memory");
                 memory_controller.finalize(Some(hasher))
             } else {
-                memory_controller.finalize(None::<&mut Poseidon2Chip<F>>)
+                memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<F>>)
             };
         }
         #[cfg(feature = "bench-metrics")]

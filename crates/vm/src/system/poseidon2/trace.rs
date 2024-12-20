@@ -1,73 +1,78 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, iter::repeat, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
-    p3_field::PrimeField32,
+    p3_field::{AbstractField, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap},
     Chip, ChipUsageGetter,
 };
-#[cfg(feature = "parallel")]
-use rayon::iter::ParallelExtend;
 
-use super::{columns::*, Poseidon2Chip};
+use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 
-impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2Chip<Val<SC>>
+impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
+    for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: PrimeField32,
 {
     fn air(&self) -> Arc<dyn AnyRap<SC>> {
-        Arc::new(self.air.clone())
+        self.air.clone()
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let Self {
-            air,
-            memory_controller,
-            records,
-            offset: _,
-        } = self;
+        let air = self.air();
+        let height = next_power_of_two_or_zero(self.current_trace_height());
+        let width = self.trace_width();
 
-        let row_len = records.len();
-        let correct_len = next_power_of_two_or_zero(row_len);
-        let diff = correct_len - row_len;
+        let mut multiplicities = self
+            .records
+            .par_iter()
+            .map(|(_, mult)| mult.load(std::sync::atomic::Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        multiplicities.extend(repeat(0).take(height - multiplicities.len()));
 
-        let aux_cols_factory = memory_controller.borrow().aux_cols_factory();
-        let mut flat_rows: Vec<_> = records
-            .into_par_iter()
-            .flat_map(|record| Self::record_to_cols(&aux_cols_factory, record).flatten())
-            .collect();
-        #[cfg(feature = "parallel")]
-        flat_rows.par_extend(
-            vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
-                .into_par_iter()
-                .flatten(),
+        let mut inputs = self
+            .records
+            .par_iter()
+            .map(|(input, _)| *input)
+            .collect::<Vec<_>>();
+        inputs.extend(
+            repeat([Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]).take(height - inputs.len()),
         );
-        #[cfg(not(feature = "parallel"))]
-        flat_rows.extend(
-            vec![Poseidon2VmCols::<Val<SC>>::blank_row(&air).flatten(); diff]
-                .into_iter()
-                .flatten(),
-        );
+        let inner_trace = self.subchip.generate_trace(inputs);
+        let inner_width = self.air.subair.width();
 
-        AirProofInput::simple_no_pis(
-            Arc::new(air.clone()),
-            RowMajorMatrix::new(flat_rows, air.width()),
-        )
+        let mut values = Val::<SC>::zero_vec(height * width);
+        values
+            .par_chunks_mut(width)
+            .zip(inner_trace.values.par_chunks(inner_width))
+            .zip(multiplicities)
+            .for_each(|((row, inner_row), mult)| {
+                // WARNING: Poseidon2SubCols must be the first field in NativePoseidon2Cols
+                row[..inner_width].copy_from_slice(inner_row);
+                let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
+                cols.mult = Val::<SC>::from_canonical_u32(mult);
+            });
+
+        AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for Poseidon2Chip<F> {
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+{
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
+
     fn current_trace_height(&self) -> usize {
         self.records.len()
     }
+
     fn trace_width(&self) -> usize {
         self.air.width()
     }

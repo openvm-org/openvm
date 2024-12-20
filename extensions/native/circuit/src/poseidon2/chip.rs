@@ -34,7 +34,7 @@ pub struct NativePoseidon2ChipRecord<F> {
     pub from_state: ExecutionState<u32>,
     pub opcode: Poseidon2Opcode,
     pub input: [F; NATIVE_POSEIDON2_WIDTH],
-
+    pub c: F,
     pub rd: MemoryReadRecord<F, 1>,
     pub rs1: MemoryReadRecord<F, 1>,
     pub rs2: Option<MemoryReadRecord<F, 1>>,
@@ -93,12 +93,21 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         let rd = memory.read_cell(d, a);
         let rs1 = memory.read_cell(d, b);
         let rs2 = match local_opcode {
-            Poseidon2Opcode::PERM_POS2 => None,
+            Poseidon2Opcode::PERM_POS2 => {
+                memory.increment_timestamp();
+                None
+            }
             Poseidon2Opcode::COMP_POS2 => Some(memory.read_cell(d, c)),
         };
 
         let read1 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rs1.data[0]);
-        let read2 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rs2.unwrap_or(rs1).data[0]);
+        let read2 = memory.read::<NATIVE_POSEIDON2_CHUNK_SIZE>(
+            e,
+            match rs2 {
+                Some(rs2) => rs2.data[0],
+                None => rs1.data[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
+            },
+        );
 
         let mut input_state: [F; NATIVE_POSEIDON2_WIDTH] = [F::ZERO; NATIVE_POSEIDON2_WIDTH];
         input_state[..NATIVE_POSEIDON2_CHUNK_SIZE].copy_from_slice(&read1.data);
@@ -117,13 +126,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 rd.data[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
                 output2,
             )),
-            Poseidon2Opcode::COMP_POS2 => None,
+            Poseidon2Opcode::COMP_POS2 => {
+                memory.increment_timestamp();
+                None
+            }
         };
 
         self.records.push(Some(NativePoseidon2ChipRecord {
             from_state,
             opcode: local_opcode,
             input: input_state,
+            c,
             rd,
             rs1,
             rs2,
@@ -172,6 +185,7 @@ impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
             },
             ptr_as: self.rd.address_space,
             chunk_as: self.read1.address_space,
+            c: self.c,
             rs_ptr: [self.rs1.pointer, rs2_ptr],
             rd_ptr: self.rd.pointer,
             rs_val: [self.rs1.data[0], rs2_val],

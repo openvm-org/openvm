@@ -66,7 +66,6 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
     where
         F: PrimeField,
     {
-        println!("generate_trace");
         match self.air.as_ref() {
             Poseidon2SubAir::BabyBearMds(_) => generate_trace_rows::<
                 F,

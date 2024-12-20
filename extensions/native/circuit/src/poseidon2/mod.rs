@@ -1,13 +1,5 @@
-mod air;
-mod chip;
-mod columns;
-mod trace;
-
 use std::sync::Arc;
 
-pub use air::*;
-pub use chip::*;
-pub use columns::*;
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{memory::MemoryControllerRef, program::ProgramBus},
@@ -21,6 +13,17 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
+
+mod air;
+pub use air::*;
+mod chip;
+pub use chip::*;
+mod columns;
+pub use columns::*;
+mod trace;
+
+#[cfg(test)]
+mod tests;
 
 pub const NATIVE_POSEIDON2_WIDTH: usize = 16;
 pub const NATIVE_POSEIDON2_CHUNK_SIZE: usize = 8;
@@ -39,7 +42,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
         offset: usize,
         max_constraint_degree: usize,
     ) -> Self {
-        if max_constraint_degree < 7 {
+        if max_constraint_degree >= 7 {
             Self::Register0(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,

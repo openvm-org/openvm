@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
+use derive_new::new;
 use itertools::izip;
 use openvm_circuit::{
     arch::ExecutionBridge,
@@ -9,7 +10,7 @@ use openvm_new_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{AbstractField, Field},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -17,28 +18,12 @@ use openvm_stark_backend::{
 
 use super::{NativePoseidon2Cols, NATIVE_POSEIDON2_CHUNK_SIZE};
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub struct NativePoseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub(super) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub(super) offset: usize,
-}
-
-impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS> {
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
-        offset: usize,
-    ) -> Self {
-        Self {
-            execution_bridge,
-            memory_bridge,
-            subair,
-            offset,
-        }
-    }
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for NativePoseidon2Air<F, SBOX_REGISTERS> {
@@ -89,6 +74,14 @@ impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS
             * (cols.memory.opcode_flag - AB::F::ONE)
             * (AB::F::TWO.inverse());
         let is_valid = permute.clone() + compress.clone();
+        builder.assert_zero(
+            cols.memory.opcode_flag
+                * (cols.memory.opcode_flag - AB::F::ONE)
+                * (cols.memory.opcode_flag - AB::F::TWO),
+        );
+        builder
+            .when_ne(permute.clone(), AB::F::ONE)
+            .assert_eq(cols.memory.c, cols.memory.rs_ptr[1]);
 
         for (ptr, val, aux, count) in izip!(
             [
@@ -173,7 +166,7 @@ impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS
                 [
                     cols.memory.rd_ptr,
                     cols.memory.rs_ptr[0],
-                    cols.memory.rs_ptr[1],
+                    cols.memory.c,
                     cols.memory.ptr_as,
                     cols.memory.chunk_as,
                 ],

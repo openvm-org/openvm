@@ -9,10 +9,8 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::Program, PhantomDiscriminant, Poseidon2Opcode, PublishOpcode, SystemOpcode,
-    UsizeOpcode, VmOpcode,
+    program::Program, PhantomDiscriminant, PublishOpcode, SystemOpcode, UsizeOpcode, VmOpcode,
 };
-use openvm_poseidon2_air::poseidon2::air::SBOX_DEGREE;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
@@ -40,7 +38,7 @@ use crate::system::{
     },
     native_adapter::NativeAdapterChip,
     phantom::PhantomChip,
-    poseidon2::Poseidon2Chip,
+    poseidon2::Poseidon2PeripheryChip,
     program::{ProgramBus, ProgramChip},
     public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
@@ -492,7 +490,7 @@ pub enum SystemExecutor<F: PrimeField32> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum SystemPeriphery<F: PrimeField32> {
     /// Poseidon2 chip with direct compression interactions
-    Poseidon2(Poseidon2Chip<F>),
+    Poseidon2(Poseidon2PeripheryChip<F>),
 }
 
 impl<F: PrimeField32> SystemComplex<F> {
@@ -555,14 +553,10 @@ impl<F: PrimeField32> SystemComplex<F> {
                 .compression_bus()
                 .unwrap()
                 .0;
-            let chip = Poseidon2Chip::from_poseidon2_config(
+            let chip = Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
-                config.max_constraint_degree.min(SBOX_DEGREE),
-                EXECUTION_BUS,
-                PROGRAM_BUS,
-                memory_controller.clone(),
                 direct_bus_idx,
-                Poseidon2Opcode::default_offset(),
+                config.max_constraint_degree,
             );
             inventory.add_periphery_chip(chip);
         }
@@ -698,7 +692,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         chip.as_any_kind().downcast_ref()
     }
 
-    pub fn poseidon2_chip(&self) -> Option<&Poseidon2Chip<F>>
+    pub fn poseidon2_chip(&self) -> Option<&Poseidon2PeripheryChip<F>>
     where
         P: AnyEnum,
     {
@@ -709,7 +703,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         chip.as_any_kind().downcast_ref()
     }
 
-    pub fn poseidon2_chip_mut(&mut self) -> Option<&mut Poseidon2Chip<F>>
+    pub fn poseidon2_chip_mut(&mut self) -> Option<&mut Poseidon2PeripheryChip<F>>
     where
         P: AnyEnum,
     {

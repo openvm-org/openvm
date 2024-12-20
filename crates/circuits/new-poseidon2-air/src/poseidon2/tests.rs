@@ -1,28 +1,29 @@
-use std::sync::Arc;
+use std::{array::from_fn, sync::Arc};
 
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::{
+    p3_air::BaseAir, p3_field::AbstractField, utils::disable_debug_builder,
+    verifier::VerificationError,
+};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{engine_from_perm, random_perm},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
-        setup_tracing_with_log_level,
     },
     engine::StarkEngine,
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
-use rand::RngCore;
-use tracing::Level;
+use p3_poseidon2::ExternalLayerConstants;
+use rand::{rngs::StdRng, Rng, RngCore};
 
-use super::{Poseidon2Config, Poseidon2SubChip};
+use super::{
+    Poseidon2Config, Poseidon2Constants, Poseidon2Matrix, Poseidon2SubChip,
+    POSEIDON2_HALF_FULL_ROUNDS,
+};
 
-#[test]
-fn test_poseidon2_default() {
-    // config
-    let num_rows = 1 << 1;
-
-    // random constants, state generation
-    let mut rng = create_seeded_rng();
+fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: &mut StdRng) {
+    // random state and trace generation
+    let num_rows = 1 << 4;
     let states: Vec<[BabyBear; 16]> = (0..num_rows)
         .map(|_| {
             let vec: Vec<BabyBear> = (0..16)
@@ -31,25 +32,81 @@ fn test_poseidon2_default() {
             vec.try_into().unwrap()
         })
         .collect();
-
-    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(
-        Poseidon2Config::default(),
-    ));
-    let poseidon2_trace = poseidon2_subchip.generate_trace(states.clone());
+    let mut poseidon2_trace = subchip.generate_trace(states.clone());
 
     // engine generation
     let perm = random_perm();
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
     let engine = engine_from_perm(perm, fri_params);
 
-    setup_tracing_with_log_level(Level::DEBUG);
-
     // positive test
     engine
         .run_simple_test_impl(
-            vec![poseidon2_subchip.air.clone()],
+            vec![subchip.air.clone()],
             vec![poseidon2_trace.clone()],
             vec![vec![]],
         )
         .expect("Verification failed");
+
+    // negative test
+    disable_debug_builder();
+    for _ in 0..10 {
+        let rand_idx = rng.gen_range(0..subchip.air.width());
+        let rand_inc = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
+        poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] += rand_inc;
+        assert_eq!(
+            engine
+                .run_simple_test_impl(
+                    vec![subchip.air.clone()],
+                    vec![poseidon2_trace.clone()],
+                    vec![vec![]],
+                )
+                .err(),
+            Some(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
+        poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] -= rand_inc;
+    }
+}
+
+#[test]
+fn test_poseidon2_default() {
+    let mut rng = create_seeded_rng();
+    let poseidon2_config = Poseidon2Config::default();
+    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
+    run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
+}
+
+#[test]
+fn test_poseidon2_random_constants() {
+    let mut rng = create_seeded_rng();
+    let external_constants =
+        ExternalLayerConstants::new_from_rng(2 * POSEIDON2_HALF_FULL_ROUNDS, &mut rng);
+    let poseidon2_config = Poseidon2Config {
+        constants: Poseidon2Constants {
+            beginning_full_round_constants: {
+                let vec = external_constants.get_initial_constants();
+                from_fn(|i| vec[i])
+            },
+            ending_full_round_constants: {
+                let vec = external_constants.get_terminal_constants();
+                from_fn(|i| vec[i])
+            },
+            partial_round_constants: from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32())),
+        },
+        ..Default::default()
+    };
+    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
+    run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
+}
+
+#[test]
+fn test_poseidon2_horizen() {
+    let mut rng = create_seeded_rng();
+    let poseidon2_config = Poseidon2Config {
+        matrix: Poseidon2Matrix::HlMdsMatrix,
+        ..Default::default()
+    };
+    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
+    run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
 }

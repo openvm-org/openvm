@@ -25,6 +25,9 @@ pub struct NativePoseidon2MemoryCols<T> {
     pub ptr_as: T,
     pub chunk_as: T,
 
+    // rs_ptr[1] if COMPRESS, original value of instruction field c if PERMUTE
+    pub c: T,
+
     pub rs_ptr: [T; 2],
     pub rd_ptr: T,
     pub rs_val: [T; 2],
@@ -43,6 +46,7 @@ impl<F: AbstractField + Copy> NativePoseidon2MemoryCols<F> {
             opcode_flag: F::ZERO,
             ptr_as: F::ZERO,
             chunk_as: F::ZERO,
+            c: F::ZERO,
             rs_ptr: [F::ZERO; 2],
             rd_ptr: F::ZERO,
             rs_val: [F::ZERO; 2],

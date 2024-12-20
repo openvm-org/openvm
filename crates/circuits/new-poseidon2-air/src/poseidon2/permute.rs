@@ -157,11 +157,11 @@ impl<AF: AbstractField, Config: Poseidon2MatrixConfig, const WIDTH: usize>
     for Poseidon2ExternalLayer<AF::F, Config, WIDTH>
 {
     fn permute_state_initial(&self, state: &mut [AF; WIDTH]) {
+        Poseidon2LinearLayers::<Config>::external_linear_layer(state);
         external_permute_state::<AF, Config, WIDTH>(state, self.constants.get_initial_constants());
     }
 
     fn permute_state_terminal(&self, state: &mut [AF; WIDTH]) {
-        Poseidon2LinearLayers::<Config>::external_linear_layer(state);
         external_permute_state::<AF, Config, WIDTH>(state, self.constants.get_terminal_constants());
     }
 }

@@ -76,7 +76,6 @@ impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB>
     for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
 {
     fn eval(&self, builder: &mut AB) {
-        println!("eval");
         match self {
             Self::BabyBearMds(air) => air.eval(builder),
             Self::BabyBearHlMds(air) => air.eval(builder),
