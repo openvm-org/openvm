@@ -3508,6 +3508,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-edsl-deserialize",
  "openvm-keccak256-circuit",
  "openvm-keccak256-guest",
  "openvm-keccak256-transpiler",
@@ -3820,6 +3821,44 @@ dependencies = [
  "openvm-transpiler",
  "rrs-lib",
  "strum",
+]
+
+[[package]]
+name = "openvm-edsl-deserialize"
+version = "0.1.0-alpha"
+dependencies = [
+ "derive-new",
+ "derive_more 1.0.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-native-circuit",
+ "openvm-native-compiler",
+ "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "p3-baby-bear",
+ "p3-field",
+ "serde",
+ "strum",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-edsl-kernel"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm-instructions",
+ "openvm-native-compiler",
+ "openvm-stark-backend",
+ "p3-baby-bear",
+ "p3-field",
+ "proc-macro2",
+ "quote",
+ "strum",
+ "strum_macros",
+ "syn 2.0.90",
 ]
 
 [[package]]

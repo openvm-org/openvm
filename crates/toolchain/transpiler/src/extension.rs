@@ -10,5 +10,33 @@ pub trait TranspilerExtension<F> {
     /// the next contiguous section of RISC-V instructions into an [`Instruction`].
     /// It returns `None` if it cannot transpile. Otherwise it returns `(instruction, how_many_u32s)` to indicate that
     /// `instruction_stream[..how_many_u32s]` should be transpiled into `instruction`.
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)>;
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>>;
+}
+
+pub struct TranspilerOutput<F> {
+    pub instructions: Vec<Option<Instruction<F>>>,
+    pub used_u32s: usize,
+}
+
+impl<F> TranspilerOutput<F> {
+    pub fn one_to_one(instruction: Instruction<F>) -> Self {
+        Self {
+            instructions: vec![Some(instruction)],
+            used_u32s: 1,
+        }
+    }
+
+    pub fn many_to_one(instruction: Instruction<F>, used_u32s: usize) -> Self {
+        Self {
+            instructions: vec![Some(instruction)],
+            used_u32s,
+        }
+    }
+
+    pub fn gap(gap_length: usize, used_u32s: usize) -> Self {
+        Self {
+            instructions: (0..gap_length).map(|_| None).collect(),
+            used_u32s,
+        }
+    }
 }
