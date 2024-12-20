@@ -34,6 +34,8 @@ pub const SHA256_ROW_VAR_CNT: usize = 5;
 pub const SHA256_ROUND_WIDTH: usize = Sha256RoundCols::<u8>::width();
 /// Width of the Sha256DigestCols
 pub const SHA256_DIGEST_WIDTH: usize = Sha256DigestCols::<u8>::width();
+/// Size of the buffer of the first 4 rows of a block (each row's size)
+pub const SHA256_BUFFER_SIZE: usize = SHA256_ROUNDS_PER_ROW * SHA256_WORD_U16S * 2;
 /// Width of the Sha256Cols
 pub const SHA256_WIDTH: usize = if SHA256_ROUND_WIDTH > SHA256_DIGEST_WIDTH {
     SHA256_ROUND_WIDTH

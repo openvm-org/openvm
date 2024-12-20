@@ -246,8 +246,8 @@ impl Sha256VmAir {
         local: &Sha256VmRoundCols<AB::Var>,
     ) {
         let message: [AB::Var; SHA256_READ_SIZE] = array::from_fn(|i| {
-            local.inner.message_schedule.carry_or_buffer[i / (SHA256_WORD_U16S * 2)]
-                [i % (SHA256_WORD_U16S * 2)]
+            local.inner.message_schedule.carry_or_buffer[i / (SHA256_WORD_U8S)]
+                [i % (SHA256_WORD_U8S)]
         });
 
         let get_ith_byte = |i: usize| {

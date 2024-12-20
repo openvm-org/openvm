@@ -41,7 +41,14 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[inline(always)]
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    openvm_platform::custom_insn_r!(OPCODE, KECCAK256_FUNCT3, KECCAK256_FUNCT7, output, bytes, len);
+    openvm_platform::custom_insn_r!(
+        OPCODE,
+        KECCAK256_FUNCT3,
+        KECCAK256_FUNCT7,
+        output,
+        bytes,
+        len
+    );
 }
 
 /// Sets `output` to the keccak256 hash of `input`.

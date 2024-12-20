@@ -51,7 +51,7 @@ pub struct Sha256MessageScheduleCols<T> {
     pub w: [[T; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW],
     /// Will be message schedule carries for rows 4..16 and a buffer for rows 0..4 to be used freely by wrapper chips
     /// Note: carries are represented as 2 bit numbers
-    pub carry_or_buffer: [[T; SHA256_WORD_U16S * 2]; SHA256_ROUNDS_PER_ROW],
+    pub carry_or_buffer: [[T; SHA256_WORD_U8S]; SHA256_ROUNDS_PER_ROW],
 }
 
 #[repr(C)]

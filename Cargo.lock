@@ -4355,12 +4355,10 @@ dependencies = [
 name = "openvm-sha256-air"
 version = "0.1.0-alpha"
 dependencies = [
- "ark-ff 0.4.2",
  "openvm-circuit-primitives",
  "openvm-stark-backend",
- "p3-symmetric",
  "rand",
- "test-case",
+ "sha2",
 ]
 
 [[package]]
