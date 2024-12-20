@@ -162,7 +162,7 @@ p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4
 p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
-p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9starb267c4" }
+p3-mds = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
