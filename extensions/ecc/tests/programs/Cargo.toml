@@ -34,6 +34,7 @@ std = [
 ]
 
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
+p256 = ["openvm-ecc-guest/p256"]
 
 [profile.release]
 panic = "abort"
