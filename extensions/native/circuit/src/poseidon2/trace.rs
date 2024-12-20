@@ -1,6 +1,5 @@
 use std::{borrow::BorrowMut, iter::repeat, sync::Arc};
 
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -27,7 +26,7 @@ where
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let air = self.air();
-        let height = next_power_of_two_or_zero(self.current_trace_height());
+        let height = self.current_trace_height().next_power_of_two();
         let width = self.trace_width();
         let mut records = self.records;
         records.extend(repeat(None).take(height - records.len()));

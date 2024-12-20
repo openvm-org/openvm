@@ -1,6 +1,5 @@
 use std::{borrow::BorrowMut, iter::repeat, sync::Arc};
 
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -25,7 +24,7 @@ where
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let air = self.air();
-        let height = next_power_of_two_or_zero(self.current_trace_height());
+        let height = self.current_trace_height().next_power_of_two();
         let width = self.trace_width();
 
         let mut multiplicities = self
@@ -52,7 +51,7 @@ where
             .zip(inner_trace.values.par_chunks(inner_width))
             .zip(multiplicities)
             .for_each(|((row, inner_row), mult)| {
-                // WARNING: Poseidon2SubCols must be the first field in NativePoseidon2Cols
+                // WARNING: Poseidon2SubCols must be the first field in Poseidon2PeripheryCols
                 row[..inner_width].copy_from_slice(inner_row);
                 let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
