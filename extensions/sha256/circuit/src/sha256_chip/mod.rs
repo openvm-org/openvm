@@ -7,11 +7,8 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
-        program::ProgramBus,
-    },
+    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
+    system::memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupChip, encoder::Encoder};
 use openvm_instructions::{
@@ -44,7 +41,8 @@ const SHA256_READ_SIZE: usize = 16;
 const SHA256_WRITE_SIZE: usize = 32;
 /// Number of rv32 cells read in a SHA256 block
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
-
+/// Number of rows we will do a read on for each SHA256 block
+pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
 #[derive(Debug)]
 pub struct Sha256VmChip<F: PrimeField32> {
     pub air: Sha256VmAir,
@@ -62,16 +60,18 @@ pub struct Sha256Record<F> {
     pub dst_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub src_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
     pub len_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub input_message:
-        Vec<[MemoryReadRecord<F, SHA256_READ_SIZE>; SHA256_BLOCK_CELLS / SHA256_READ_SIZE]>,
+    pub input_records: Vec<[MemoryReadRecord<F, SHA256_READ_SIZE>; SHA256_NUM_READ_ROWS]>,
+    pub input_message: Vec<[[u8; SHA256_READ_SIZE]; SHA256_NUM_READ_ROWS]>,
     pub digest_write: MemoryWriteRecord<F, SHA256_WRITE_SIZE>,
 }
 
 impl<F: PrimeField32> Sha256VmChip<F> {
     pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
+        SystemPort {
+            execution_bus,
+            program_bus,
+            memory_controller,
+        }: SystemPort<F>,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         self_bus_idx: usize,
         offset: usize,
@@ -138,21 +138,32 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             src as usize + num_blocks * SHA256_BLOCK_CELLS <= (1 << self.air.ptr_max_bits)
         );
         let mut hasher = Sha256::new();
-        let mut input_message = Vec::new();
+        let mut input_records = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
+        let mut input_message = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
         let mut read_ptr = src;
         for _ in 0..num_blocks {
-            let block_reads = array::from_fn(|_| {
-                let read_record = memory.read(e, F::from_canonical_u32(read_ptr));
+            let block_reads_records = array::from_fn(|i| {
+                let read_record = memory.read(
+                    e,
+                    F::from_canonical_u32(read_ptr + (i * SHA256_READ_SIZE) as u32),
+                );
+                read_record
+            });
+            let block_reads_bytes = array::from_fn(|i| {
                 // we add to the hasher only the bytes that are part of the message
                 let num_reads = min(
                     SHA256_READ_SIZE,
                     (max(read_ptr, src + len) - read_ptr) as usize,
                 );
-                hasher.update(&read_record.data.map(|x| x.as_canonical_u32() as u8)[0..num_reads]);
+                let row_input = block_reads_records[i]
+                    .data
+                    .map(|x| x.as_canonical_u32().try_into().unwrap());
+                hasher.update(&row_input[..num_reads]);
                 read_ptr += SHA256_READ_SIZE as u32;
-                read_record
+                row_input
             });
-            input_message.push(block_reads);
+            input_records.push(block_reads_records);
+            input_message.push(block_reads_bytes);
         }
 
         let mut digest = [0u8; SHA256_WRITE_SIZE];
@@ -168,6 +179,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             dst_read,
             src_read,
             len_read,
+            input_records,
             input_message,
             digest_write,
         });

@@ -514,6 +514,8 @@ impl Sha256VmAir {
         let dst_ptr_val =
             compose::<AB::Expr>(&local_cols.dst_ptr.map(|x| x.into()), RV32_CELL_BITS);
 
+        // Note: revisit in the future to do 2 block writes of 16 cells instead of 1 block write of 32 cells
+        //       This could be beneficial as the output is often an input for another hash
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), dst_ptr_val),

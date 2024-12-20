@@ -3,8 +3,8 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemExecutor, SystemPeriphery, SystemPort, VmChipComplex, VmConfig,
-        VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -74,11 +74,6 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_controller,
-        } = builder.system_port();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
             .first()
@@ -92,9 +87,7 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         };
 
         let sha256_chip = Sha256VmChip::new(
-            execution_bus,
-            program_bus,
-            memory_controller,
+            builder.system_port(),
             bitwise_lu_chip,
             builder.new_bus_idx(),
             Rv32Sha256Opcode::default_offset(),

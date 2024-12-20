@@ -5,7 +5,7 @@ use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_rv32im_circuit::adapters::compose;
 use openvm_sha256_air::{
     get_flag_pt_array, limbs_into_u32, Sha256Air, SHA256_BLOCK_WORDS, SHA256_BUFFER_SIZE, SHA256_H,
-    SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
+    SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -53,7 +53,6 @@ where
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.air.ptr_max_bits);
 
         let mut states = Vec::with_capacity(non_padded_height / SHA256_ROWS_PER_BLOCK);
-
         let mut global_block_idx = 0;
         for (record_idx, record) in records.iter().enumerate() {
             self.bitwise_lookup_chip.request_range(
@@ -64,19 +63,20 @@ where
             );
             let len = compose(record.len_read.data);
             let mut state = None;
-            for (i, block_reads) in record.input_message.iter().enumerate() {
-                let input_message = array::from_fn(|j| {
-                    block_reads[j / (SHA256_ROUNDS_PER_ROW * SHA256_WORD_U8S)].data
-                        [j % (SHA256_ROUNDS_PER_ROW * SHA256_WORD_U8S)]
-                        .as_canonical_u32() as u8
-                });
-
+            for (i, input_message) in record.input_message.iter().enumerate() {
+                let input_message = input_message
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap();
                 states.push(Self::generate_state(
                     state,
                     input_message,
                     record_idx,
                     len,
-                    i == record.input_message.len() - 1,
+                    i == record.input_records.len() - 1,
                 ));
                 state = Some(&states[global_block_idx]);
                 global_block_idx += 1;
@@ -122,7 +122,7 @@ where
                     &buffer,
                 );
 
-                let block_reads = &records[state.message_idx].input_message[state.local_block_idx];
+                let block_reads = &records[state.message_idx].input_records[state.local_block_idx];
 
                 let mut read_ptr = block_reads[0].pointer;
                 let mut cur_timestamp = Val::<SC>::from_canonical_u32(block_reads[0].timestamp);
@@ -289,7 +289,7 @@ impl<F: PrimeField32> ChipUsageGetter for Sha256VmChip<F> {
     }
     fn current_trace_height(&self) -> usize {
         self.records.iter().fold(0, |acc, record| {
-            acc + record.input_message.len() * SHA256_ROWS_PER_BLOCK
+            acc + record.input_records.len() * SHA256_ROWS_PER_BLOCK
         })
     }
 
@@ -298,7 +298,7 @@ impl<F: PrimeField32> ChipUsageGetter for Sha256VmChip<F> {
     }
 }
 
-/// This is the minimal state information that a block needs to generate its trace
+/// This is the state information that a block will use to generate its trace
 #[derive(Debug, Clone)]
 struct Sha256State {
     hash: [u32; SHA256_HASH_WORDS],

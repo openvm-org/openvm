@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
-    BITWISE_OP_LOOKUP_BUS,
+    SystemPort, BITWISE_OP_LOOKUP_BUS,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -82,9 +82,11 @@ fn rand_sha256_test() {
         bitwise_bus,
     ));
     let mut chip = Sha256VmChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_controller(),
+        SystemPort {
+            execution_bus: tester.execution_bus(),
+            program_bus: tester.program_bus(),
+            memory_controller: tester.memory_controller(),
+        },
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
@@ -113,9 +115,11 @@ fn execute_roundtrip_sanity_test() {
         bitwise_bus,
     ));
     let mut chip = Sha256VmChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_controller(),
+        SystemPort {
+            execution_bus: tester.execution_bus(),
+            program_bus: tester.program_bus(),
+            memory_controller: tester.memory_controller(),
+        },
         bitwise_chip.clone(),
         BUS_IDX,
         Rv32Sha256Opcode::default_offset(),
