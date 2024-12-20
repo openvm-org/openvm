@@ -5,7 +5,7 @@ use openvm_instructions::{
 };
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -32,7 +32,7 @@ pub enum EccPhantom {
 pub struct EccTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -59,15 +59,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
             if let Some(SwBaseFunct7::HintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
                 assert_eq!(dec_insn.rd, 0);
-                return Some((
-                    Instruction::phantom(
-                        PhantomDiscriminant(EccPhantom::HintDecompress as u16),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                        curve_idx as u16,
-                    ),
-                    1,
-                ));
+                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                    PhantomDiscriminant(EccPhantom::HintDecompress as u16),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    curve_idx as u16,
+                )));
             }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
@@ -101,6 +98,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                 Some(from_r_type(global_opcode, 2, &dec_insn))
             }
         };
-        instruction.map(|instruction| (instruction, 1))
+        instruction.map(TranspilerOutput::one_to_one)
     }
 }

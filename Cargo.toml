@@ -19,6 +19,8 @@ members = [
     "crates/toolchain/transpiler",
     "crates/toolchain/openvm",
     "crates/toolchain/build",
+    "crates/toolchain/edsl-deserialize",
+    "crates/toolchain/edsl-kernel",
     "crates/toolchain/instructions",
     "crates/toolchain/instructions/derive",
     "crates/toolchain/macros",
@@ -114,6 +116,10 @@ openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
+
+# eDSL Kernel
+openvm-edsl-kernel = { path = "crates/toolchain/edsl-kernel", default-features = false }
+openvm-edsl-deserialize = { path = "crates/toolchain/edsl-deserialize", default-features = false }
 
 # Extensions
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }

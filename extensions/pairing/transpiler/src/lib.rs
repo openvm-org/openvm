@@ -4,7 +4,7 @@ use openvm_instructions::{
 use openvm_instructions_derive::UsizeOpcode;
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{util::from_r_type, TranspilerExtension};
+use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -81,7 +81,7 @@ pub enum PairingPhantom {
 pub struct PairingTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -102,15 +102,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
         if let Some(PairingBaseFunct7::HintFinalExp) = PairingBaseFunct7::from_repr(base_funct7) {
             assert_eq!(dec_insn.rd, 0);
             // Return exits the outermost function
-            return Some((
-                Instruction::phantom(
-                    PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    pairing_idx as u16,
-                ),
-                1,
-            ));
+            return Some(TranspilerOutput::one_to_one(Instruction::phantom(
+                PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
+                F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                pairing_idx as u16,
+            )));
         }
         let global_opcode = match PairingBaseFunct7::from_repr(base_funct7) {
             Some(PairingBaseFunct7::MillerDoubleStep) => {
@@ -151,6 +148,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             };
         let global_opcode = global_opcode + pairing_idx_shift;
 
-        Some((from_r_type(global_opcode, 2, &dec_insn), 1))
+        Some(TranspilerOutput::one_to_one(from_r_type(
+            global_opcode,
+            2,
+            &dec_insn,
+        )))
     }
 }
