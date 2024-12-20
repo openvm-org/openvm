@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_field::{AbstractField, Field},
@@ -13,6 +15,7 @@ pub struct Encoder {
     /// The maximal degree of the equalities in the AIR, however, **is one higher:** that is, `max_flag_degree + 1`.
     max_flag_degree: u32,
     pts: Vec<Vec<u32>>,
+    reserve_invalid: bool,
 }
 
 impl Encoder {
@@ -21,7 +24,8 @@ impl Encoder {
     /// The zero point is reserved for the dummy row.
     /// `max_degree` is the upper bound for the flag expressions, but the `eval` function
     /// of the encoder itself will use some constraints of degree `max_degree + 1`.
-    pub fn new(cnt: usize, max_degree: u32) -> Self {
+    /// `reserve_invalid` indicates if the encoder should reserve the (0, ..., 0) point as an invalid/dummy flag.
+    pub fn new(cnt: usize, max_degree: u32, reserve_invalid: bool) -> Self {
         let binomial = |x: u32| {
             let mut res = 1;
             for i in 1..=max_degree {
@@ -52,6 +56,7 @@ impl Encoder {
             flag_cnt: cnt,
             max_flag_degree: max_degree,
             pts,
+            reserve_invalid,
         }
     }
 
@@ -86,13 +91,19 @@ impl Encoder {
         flag_idx: usize,
         vars: &[AB::Var],
     ) -> AB::Expr {
-        assert!(flag_idx < self.flag_cnt, "flag index out of range");
-        self.expression_for_point::<AB>(&self.pts[flag_idx + 1], vars)
+        assert!(
+            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
+            "flag index out of range"
+        );
+        self.expression_for_point::<AB>(&self.pts[flag_idx + self.reserve_invalid as usize], vars)
     }
 
     pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
-        assert!(flag_idx < self.flag_cnt, "flag index out of range");
-        self.pts[flag_idx + 1].clone()
+        assert!(
+            flag_idx + self.reserve_invalid as usize <= self.flag_cnt,
+            "flag index out of range"
+        );
+        self.pts[flag_idx + self.reserve_invalid as usize].clone()
     }
 
     pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
@@ -115,6 +126,42 @@ impl Encoder {
 
     pub fn width(&self) -> usize {
         self.var_cnt
+    }
+
+    /// Returns an expression that is 1 if `flag_idxs` contains the encoded flag and 0 otherwise
+    pub fn contains_flag<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        flag_idxs: &[usize],
+    ) -> AB::Expr {
+        flag_idxs.iter().fold(AB::Expr::ZERO, |acc, flag_idx| {
+            acc + self.get_flag_expr::<AB>(*flag_idx, vars)
+        })
+    }
+
+    /// Returns an expression that is 1 if (l..=r) contains the encoded flag and 0 otherwise
+    pub fn contains_flag_range<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        range: RangeInclusive<usize>,
+    ) -> AB::Expr {
+        self.contains_flag::<AB>(vars, &range.collect::<Vec<_>>())
+    }
+
+    /// Returns an expression that is 0 if `flag_idxs_vals` doesn't contain the encoded flag
+    /// and the corresponding val if it does
+    /// `flag_idxs_vals` is a list of tuples (flag_idx, val)
+    pub fn flag_with_val<AB: InteractionBuilder>(
+        &self,
+        vars: &[AB::Var],
+        flag_idx_vals: &[(usize, usize)],
+    ) -> AB::Expr {
+        flag_idx_vals
+            .iter()
+            .fold(AB::Expr::ZERO, |acc, (flag_idx, val)| {
+                acc + self.get_flag_expr::<AB>(*flag_idx, vars)
+                    * AB::Expr::from_canonical_usize(*val)
+            })
     }
 }
 

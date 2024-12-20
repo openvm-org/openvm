@@ -1,0 +1,15 @@
+[package]
+name = "openvm-sha256-transpiler"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Transpiler extension for sha256"
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+openvm-sha256-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }

@@ -32,6 +32,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
@@ -46,6 +48,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
+    pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
 
     pub rv32m: Option<Rv32M>,
@@ -66,6 +69,8 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     Io(Rv32IoExecutor<F>),
     #[any_enum]
     Keccak(Keccak256Executor<F>),
+    #[any_enum]
+    Sha256(Sha256Executor<F>),
     #[any_enum]
     Native(NativeExecutor<F>),
     #[any_enum]
@@ -93,6 +98,8 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Keccak(Keccak256Periphery<F>),
     #[any_enum]
+    Sha256(Sha256Periphery<F>),
+    #[any_enum]
     Native(NativePeriphery<F>),
     #[any_enum]
     Rv32m(Rv32MPeriphery<F>),
@@ -119,6 +126,9 @@ impl SdkVmConfig {
         }
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
+        }
+        if self.sha256.is_some() {
+            transpiler = transpiler.with_extension(Sha256TranspilerExtension);
         }
         if self.rv32m.is_some() {
             transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
@@ -167,6 +177,9 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         }
         if self.keccak.is_some() {
             complex = complex.extend(&Keccak256)?;
+        }
+        if self.sha256.is_some() {
+            complex = complex.extend(&Sha256)?;
         }
         if self.native.is_some() {
             complex = complex.extend(&Native)?;
@@ -247,6 +260,12 @@ impl From<Rv32Io> for UnitStruct {
 
 impl From<Keccak256> for UnitStruct {
     fn from(_: Keccak256) -> Self {
+        UnitStruct {}
+    }
+}
+
+impl From<Sha256> for UnitStruct {
+    fn from(_: Sha256) -> Self {
         UnitStruct {}
     }
 }
