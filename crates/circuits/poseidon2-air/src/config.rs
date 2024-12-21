@@ -37,9 +37,8 @@ pub struct Poseidon2Constants<F> {
 }
 
 impl<F: Field> Poseidon2Constants<F> {
-    // FIXME[stephenh]: Right now RoundConstants is not very easy to use. I've put up a Plonky3 PR to
-    // add a public constructor to it and derive Clone. Once this goes through, we should not do this
-    // unsafely.
+    // FIXME[stephenh]: PR https://github.com/Plonky3/Plonky3/pull/588 is now merged.
+    // We can remove Poseidon2Constants and use Plonky3RoundConstants directly after updating the plonky3 commit.
     pub fn to_round_constants(&self) -> Plonky3RoundConstants<F> {
         unsafe { std::mem::transmute_copy(self) }
     }
