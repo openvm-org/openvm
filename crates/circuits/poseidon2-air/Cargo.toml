@@ -1,5 +1,6 @@
 [package]
 name = "openvm-poseidon2-air"
+description = "Wrapper for the Plonky3 Poseidon2 AIR."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
