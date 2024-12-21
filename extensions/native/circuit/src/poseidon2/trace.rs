@@ -11,10 +11,12 @@ use openvm_stark_backend::{
     Chip, ChipUsageGetter,
 };
 
-use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
+use super::{
+    NativePoseidon2BaseChip, NativePoseidon2Cols, NativePoseidon2MemoryCols, NATIVE_POSEIDON2_WIDTH,
+};
 
 impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
-    for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
+    for NativePoseidon2BaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: PrimeField32,
 {
@@ -26,35 +28,35 @@ where
         let air = self.air();
         let height = self.current_trace_height().next_power_of_two();
         let width = self.trace_width();
+        let mut records = self.records;
+        records.extend(repeat(None).take(height - records.len()));
 
-        let mut multiplicities = self
-            .records
+        let inputs = records
             .par_iter()
-            .map(|(_, mult)| mult.load(std::sync::atomic::Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        multiplicities.extend(repeat(0).take(height - multiplicities.len()));
-
-        let mut inputs = self
-            .records
-            .par_iter()
-            .map(|(input, _)| *input)
-            .collect::<Vec<_>>();
-        inputs.extend(
-            repeat([Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]).take(height - inputs.len()),
-        );
+            .map(|record| match record {
+                Some(record) => record.input,
+                None => [Val::<SC>::ZERO; NATIVE_POSEIDON2_WIDTH],
+            })
+            .collect();
         let inner_trace = self.subchip.generate_trace(inputs);
         let inner_width = self.air.subair.width();
+
+        let aux_cols_factory = self.memory_controller.borrow().aux_cols_factory();
+        let memory_cols = records.par_iter().map(|record| match record {
+            Some(record) => record.to_memory_cols(&aux_cols_factory),
+            None => NativePoseidon2MemoryCols::blank(),
+        });
 
         let mut values = Val::<SC>::zero_vec(height * width);
         values
             .par_chunks_mut(width)
             .zip(inner_trace.values.par_chunks(inner_width))
-            .zip(multiplicities)
-            .for_each(|((row, inner_row), mult)| {
-                // WARNING: Poseidon2SubCols must be the first field in Poseidon2PeripheryCols
+            .zip(memory_cols)
+            .for_each(|((row, inner_row), memory_cols)| {
+                // WARNING: Poseidon2SubCols must be the first field in NativePoseidon2Cols
                 row[..inner_width].copy_from_slice(inner_row);
-                let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
-                cols.mult = Val::<SC>::from_canonical_u32(mult);
+                let cols: &mut NativePoseidon2Cols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
+                cols.memory = memory_cols;
             });
 
         AirProofInput::simple_no_pis(air, RowMajorMatrix::new(values, width))
@@ -62,7 +64,7 @@ where
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+    for NativePoseidon2BaseChip<F, SBOX_REGISTERS>
 {
     fn air_name(&self) -> String {
         get_air_name(&self.air)

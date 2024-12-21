@@ -3648,8 +3648,8 @@ dependencies = [
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
+ "openvm-new-poseidon2-air",
  "openvm-pairing-circuit",
- "openvm-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
@@ -3966,12 +3966,13 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-native-compiler",
- "openvm-poseidon2-air",
+ "openvm-new-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "parking_lot",
  "rand",
+ "rayon",
  "serde",
  "strum",
  "test-case",
@@ -4055,6 +4056,26 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "openvm-new-poseidon2-air"
+version = "0.1.0-alpha"
+dependencies = [
+ "ark-ff 0.4.2",
+ "itertools 0.13.0",
+ "lazy_static",
+ "openvm-circuit-primitives",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-monty-31",
+ "p3-poseidon2",
+ "p3-poseidon2-air",
+ "p3-symmetric",
+ "rand",
+ "test-case",
+ "tracing",
+ "zkhash",
 ]
 
 [[package]]
@@ -4325,7 +4346,6 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4352,7 +4372,6 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "0.1.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.1-alpha#a995f8e03662e0a18c89edbe4424933b99c42e52"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",
@@ -4750,6 +4769,22 @@ dependencies = [
  "p3-mds",
  "p3-symmetric",
  "rand",
+]
+
+[[package]]
+name = "p3-poseidon2-air"
+version = "0.1.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=9b267c4#9b267c411cc8965c709b27d7b0ef81e225603c59"
+dependencies = [
+ "p3-air",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-poseidon2",
+ "p3-util",
+ "rand",
+ "tikv-jemallocator",
+ "tracing",
 ]
 
 [[package]]
