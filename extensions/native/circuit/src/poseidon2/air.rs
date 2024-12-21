@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
-use openvm_new_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS};
+use openvm_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,

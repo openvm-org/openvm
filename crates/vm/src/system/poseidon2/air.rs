@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
 use derive_new::new;
-use openvm_new_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
+use openvm_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,

@@ -7,7 +7,7 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},

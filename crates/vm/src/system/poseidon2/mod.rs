@@ -9,7 +9,7 @@
 //! add any padding.
 use std::sync::Arc;
 
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,

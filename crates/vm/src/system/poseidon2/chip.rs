@@ -3,7 +3,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use openvm_new_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 

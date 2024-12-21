@@ -11,7 +11,7 @@ repository.workspace = true
 p3-symmetric = { workspace = true }
 p3-baby-bear = { workspace = true }
 
-openvm-new-poseidon2-air = { workspace = true }
+openvm-poseidon2-air = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }

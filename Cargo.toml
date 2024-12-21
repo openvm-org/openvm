@@ -13,7 +13,6 @@ members = [
     "crates/sdk",
     "crates/cli",
     "crates/circuits/mod-builder",
-    "crates/circuits/new-poseidon2-air",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
     "crates/circuits/primitives/derive",
@@ -101,7 +100,6 @@ lto = "thin"
 openvm-sdk = { path = "crates/sdk", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
-openvm-new-poseidon2-air = { path = "crates/circuits/new-poseidon2-air", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
 openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
 openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }

@@ -19,7 +19,7 @@ use openvm_native_compiler::{
     FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStoreOpcode, NativePhantom,
 };
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};

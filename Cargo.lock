@@ -3647,8 +3647,8 @@ dependencies = [
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
- "openvm-new-poseidon2-air",
  "openvm-pairing-circuit",
+ "openvm-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
@@ -3958,7 +3958,7 @@ dependencies = [
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-native-compiler",
- "openvm-new-poseidon2-air",
+ "openvm-poseidon2-air",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -4048,26 +4048,6 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "tracing",
-]
-
-[[package]]
-name = "openvm-new-poseidon2-air"
-version = "0.1.0-alpha"
-dependencies = [
- "ark-ff 0.4.2",
- "itertools 0.13.0",
- "lazy_static",
- "openvm-circuit-primitives",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "p3-monty-31",
- "p3-poseidon2",
- "p3-poseidon2-air",
- "p3-symmetric",
- "rand",
- "test-case",
- "tracing",
- "zkhash",
 ]
 
 [[package]]
@@ -4192,9 +4172,11 @@ dependencies = [
  "openvm-stark-sdk",
  "p3-monty-31",
  "p3-poseidon2",
+ "p3-poseidon2-air",
  "p3-symmetric",
  "rand",
  "test-case",
+ "tracing",
  "zkhash",
 ]
 

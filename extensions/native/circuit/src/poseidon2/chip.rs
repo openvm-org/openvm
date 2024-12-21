@@ -13,7 +13,7 @@ use openvm_circuit::{
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, Poseidon2Opcode, UsizeOpcode,
 };
-use openvm_new_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
 use super::{

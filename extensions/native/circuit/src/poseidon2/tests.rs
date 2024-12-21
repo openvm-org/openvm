@@ -1,6 +1,6 @@
 use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester};
 use openvm_instructions::{instruction::Instruction, Poseidon2Opcode, UsizeOpcode, VmOpcode};
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField64};
 use openvm_stark_sdk::{
     config::{

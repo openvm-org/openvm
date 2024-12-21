@@ -1,5 +1,5 @@
 use openvm_circuit_primitives::AlignedBorrow;
-use openvm_new_poseidon2_air::Poseidon2SubCols;
+use openvm_poseidon2_air::Poseidon2SubCols;
 
 /// Columns for Poseidon2Vm AIR.
 #[repr(C)]

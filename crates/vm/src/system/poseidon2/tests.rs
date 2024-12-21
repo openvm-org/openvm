@@ -1,4 +1,4 @@
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use openvm_stark_sdk::{
     dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},

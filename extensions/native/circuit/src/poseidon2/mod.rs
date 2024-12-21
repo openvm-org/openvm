@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::{memory::MemoryControllerRef, program::ProgramBus},
 };
 use openvm_instructions::instruction::Instruction;
-use openvm_new_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, PrimeField32},
