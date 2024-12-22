@@ -4165,6 +4165,7 @@ name = "openvm-poseidon2-air"
 version = "0.1.0-alpha"
 dependencies = [
  "ark-ff 0.4.2",
+ "derivative",
  "itertools 0.13.0",
  "lazy_static",
  "openvm-circuit-primitives",

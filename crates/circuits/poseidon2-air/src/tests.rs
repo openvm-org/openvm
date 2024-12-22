@@ -16,10 +16,8 @@ use openvm_stark_sdk::{
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
 
-use super::{
-    Poseidon2Config, Poseidon2Constants, Poseidon2Matrix, Poseidon2SubChip,
-    POSEIDON2_HALF_FULL_ROUNDS,
-};
+use super::{Poseidon2Config, Poseidon2Constants, Poseidon2SubChip};
+use crate::BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS;
 
 fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: &mut StdRng) {
     // random state and trace generation
@@ -81,7 +79,7 @@ fn test_poseidon2_default() {
 fn test_poseidon2_random_constants() {
     let mut rng = create_seeded_rng();
     let external_constants =
-        ExternalLayerConstants::new_from_rng(2 * POSEIDON2_HALF_FULL_ROUNDS, &mut rng);
+        ExternalLayerConstants::new_from_rng(2 * BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, &mut rng);
     let poseidon2_config = Poseidon2Config {
         constants: Poseidon2Constants {
             beginning_full_round_constants: {
@@ -94,18 +92,6 @@ fn test_poseidon2_random_constants() {
             },
             partial_round_constants: from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32())),
         },
-        ..Default::default()
-    };
-    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
-    run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
-}
-
-#[test]
-fn test_poseidon2_horizen() {
-    let mut rng = create_seeded_rng();
-    let poseidon2_config = Poseidon2Config {
-        matrix: Poseidon2Matrix::HlMdsMatrix,
-        ..Default::default()
     };
     let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
     run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);

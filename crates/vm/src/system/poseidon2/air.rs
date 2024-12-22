@@ -1,7 +1,9 @@
 use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
 use derive_new::new;
-use openvm_poseidon2_air::{Poseidon2SubAir, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH};
+use openvm_poseidon2_air::{
+    Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH,
+};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
@@ -56,7 +58,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         let input: [AB::Var; POSEIDON2_WIDTH] = cols.inner.inputs;
         let output: [AB::Var; POSEIDON2_WIDTH] =
-            cols.inner.ending_full_rounds[POSEIDON2_HALF_FULL_ROUNDS - 1].post;
+            cols.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1].post;
         let fields: [_; POSEIDON2_WIDTH + POSEIDON2_WIDTH / 2] = from_fn(|i| {
             if i < POSEIDON2_WIDTH {
                 input[i]

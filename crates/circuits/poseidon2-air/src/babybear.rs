@@ -9,7 +9,8 @@ use zkhash::{
 };
 
 use super::{
-    Poseidon2Constants, POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
+    Poseidon2Constants, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
+    POSEIDON2_WIDTH,
 };
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
@@ -26,13 +27,14 @@ pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
                 .collect()
         })
         .collect();
-    let p_end = POSEIDON2_HALF_FULL_ROUNDS + POSEIDON2_PARTIAL_ROUNDS;
+    let p_end = BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS + BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS;
 
-    let beginning_full_round_constants: [[BabyBear; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS] =
-        from_fn(|i| p3_rc16[i].clone().try_into().unwrap());
-    let partial_round_constants: [BabyBear; POSEIDON2_PARTIAL_ROUNDS] =
-        from_fn(|i| p3_rc16[i + POSEIDON2_HALF_FULL_ROUNDS][0]);
-    let ending_full_round_constants: [[BabyBear; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS] =
+    let beginning_full_round_constants: [[BabyBear; POSEIDON2_WIDTH];
+        BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] = from_fn(|i| p3_rc16[i].clone().try_into().unwrap());
+    let partial_round_constants: [BabyBear; BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS] =
+        from_fn(|i| p3_rc16[i + BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS][0]);
+    let ending_full_round_constants: [[BabyBear; POSEIDON2_WIDTH];
+        BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] =
         from_fn(|i| p3_rc16[i + p_end].clone().try_into().unwrap());
 
     Poseidon2Constants {
@@ -43,50 +45,20 @@ pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
 }
 
 lazy_static! {
-    pub static ref BABYBEAR_BEGIN_EXT_CONSTS: [[BabyBear; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS] =
+    pub static ref BABYBEAR_BEGIN_EXT_CONSTS: [[BabyBear; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] =
         horizen_round_consts().beginning_full_round_constants;
-    pub static ref BABYBEAR_PARTIAL_CONSTS: [BabyBear; POSEIDON2_PARTIAL_ROUNDS] =
+    pub static ref BABYBEAR_PARTIAL_CONSTS: [BabyBear; BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS] =
         horizen_round_consts().partial_round_constants;
-    pub static ref BABYBEAR_END_EXT_CONSTS: [[BabyBear; POSEIDON2_WIDTH]; POSEIDON2_HALF_FULL_ROUNDS] =
+    pub static ref BABYBEAR_END_EXT_CONSTS: [[BabyBear; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] =
         horizen_round_consts().ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<F: AbstractField, const WIDTH: usize>(
-    state: &mut [F; WIDTH],
-    int_diag_m1_matrix: [F; 16],
-    reduction_factor: F,
+pub(crate) fn babybear_internal_linear_layer<FA: AbstractField, const WIDTH: usize>(
+    state: &mut [FA; WIDTH],
+    int_diag_m1_matrix: &[FA::F; WIDTH],
 ) {
-    let sum = state.iter().cloned().sum::<F>();
+    let sum = state.iter().cloned().sum::<FA>();
     for (input, diag_m1) in state.iter_mut().zip(int_diag_m1_matrix) {
-        *input = (sum.clone() + diag_m1 * input.clone()) * reduction_factor.clone();
+        *input = sum.clone() + FA::from_f(*diag_m1) * input.clone();
     }
-}
-
-// Same as p3_poseidon2::mds_light_permutation when for WIDTH = POSEIDON2_WIDTH
-pub(crate) fn babybear_external_linear_layer<F: AbstractField, const WIDTH: usize>(
-    input: &mut [F; WIDTH],
-    ext_mds_matrix: [[F; 4]; 4],
-) {
-    let mut new_state: [F; WIDTH] = core::array::from_fn(|_| F::ZERO);
-    for i in (0..WIDTH).step_by(4) {
-        for index1 in 0..4 {
-            for index2 in 0..4 {
-                new_state[i + index1] +=
-                    ext_mds_matrix[index1][index2].clone() * input[i + index2].clone();
-            }
-        }
-    }
-
-    let sums: [F; 4] = core::array::from_fn(|j| {
-        (0..WIDTH)
-            .step_by(4)
-            .map(|i| new_state[i + j].clone())
-            .sum()
-    });
-
-    for i in 0..WIDTH {
-        new_state[i] += sums[i % 4].clone();
-    }
-
-    input.clone_from_slice(&new_state);
 }

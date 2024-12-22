@@ -23,7 +23,7 @@ rand.workspace = true
 lazy_static.workspace = true
 itertools.workspace = true
 tracing.workspace = true
-
+derivative.workspace = true
 
 [dev-dependencies]
 p3-symmetric = { workspace = true }
