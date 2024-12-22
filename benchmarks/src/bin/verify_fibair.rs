@@ -41,7 +41,8 @@ fn main() -> Result<()> {
         let app_vm_config = NativeConfig::aggregation(
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
             leaf_fri_params.max_constraint_degree().min(7),
-        );
+        )
+        .with_continuations();
         let compiler_options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
