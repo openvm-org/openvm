@@ -40,6 +40,7 @@ where
         inputs.resize(height, [Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]);
         multiplicities.resize(height, 0);
 
+        // TODO: this would be more optimal if plonky3 made the generate_trace_row function public
         let inner_trace = self.subchip.generate_trace(inputs);
         let inner_width = self.air.subair.width();
 
