@@ -1,5 +1,6 @@
-use std::{borrow::BorrowMut, iter::repeat, sync::Arc};
+use std::{borrow::BorrowMut, sync::Arc};
 
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -24,24 +25,21 @@ where
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let air = self.air();
-        let height = self.current_trace_height().next_power_of_two();
+        let height = next_power_of_two_or_zero(self.current_trace_height());
         let width = self.trace_width();
 
-        let mut multiplicities = self
+        let mut inputs = Vec::with_capacity(height);
+        let mut multiplicities = Vec::with_capacity(height);
+        let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = self
             .records
-            .par_iter()
-            .map(|(_, mult)| mult.load(std::sync::atomic::Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        multiplicities.extend(repeat(0).take(height - multiplicities.len()));
+            .into_par_iter()
+            .map(|(input, mult)| (input, mult.load(std::sync::atomic::Ordering::Relaxed)))
+            .unzip();
+        inputs.extend(actual_inputs);
+        multiplicities.extend(actual_multiplicities);
+        inputs.resize(height, [Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]);
+        multiplicities.resize(height, 0);
 
-        let mut inputs = self
-            .records
-            .par_iter()
-            .map(|(input, _)| *input)
-            .collect::<Vec<_>>();
-        inputs.extend(
-            repeat([Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]).take(height - inputs.len()),
-        );
         let inner_trace = self.subchip.generate_trace(inputs);
         let inner_width = self.air.subair.width();
 
