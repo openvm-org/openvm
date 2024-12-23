@@ -40,6 +40,9 @@ impl<C: IntrinsicCurve> VerifyingKey<C> {
 impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + IntrinsicCurve,
+    C::Point: WeierstrassPoint + CyclicGroup,
+    Coordinate<C>: IntMod,
+    C::Scalar: IntMod + Reduce,
 {
     /// Ref: <https://github.com/RustCrypto/signatures/blob/85c984bcc9927c2ce70c7e15cbfe9c6936dd3521/ecdsa/src/recovery.rs#L297>
     ///

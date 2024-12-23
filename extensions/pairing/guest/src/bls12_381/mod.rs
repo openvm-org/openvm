@@ -120,7 +120,10 @@ impl IntrinsicCurve for Bls12_381 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
-    // TODO: msm optimization
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
+        // TODO: msm optimization
+        openvm_ecc_guest::msm(coeffs, bases)
+    }
 }
 
 impl PairingIntrinsics for Bls12_381 {

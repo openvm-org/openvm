@@ -1,16 +1,16 @@
 use alloc::vec::Vec;
-use core::ops::{Add, AddAssign, Mul};
+use core::ops::{AddAssign, Mul};
 
-use openvm_algebra_guest::{IntMod, Reduce};
+use openvm_algebra_guest::{Field, IntMod};
 
-use super::group::{CyclicGroup, Group};
+use super::group::Group;
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Group {
     /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_B: Self::Coordinate;
 
-    type Coordinate: IntMod;
+    type Coordinate: Field;
 
     /// The concatenated `x, y` coordinates of the affine point, where
     /// coordinates are in little endian.
@@ -71,16 +71,7 @@ pub trait WeierstrassPoint: Group {
     // and then constrain its correctness. A malicious prover could hint
     // incorrectly, so there is no way to use a hint to prove that the input
     // **cannot** be decompressed.
-    fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self
-    where
-        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
-    {
-        let y = Self::hint_decompress(&x, rec_id);
-        // Must assert unique so we can check the parity
-        y.assert_unique();
-        assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
-        Self::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
-    }
+    fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self;
 
     /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
     /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
@@ -94,18 +85,13 @@ pub trait WeierstrassPoint: Group {
 /// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
 /// Implement this for external curves with corresponding openvm point and scalar types.
 pub trait IntrinsicCurve {
-    type Scalar: IntMod + Reduce;
-    type Point: WeierstrassPoint + CyclicGroup;
+    type Scalar: Clone;
+    type Point: Clone;
 
-    /// Multi-scalar multiplication. The default implementation may be
-    /// replaced by specialized implementations that use properties of the curve
+    /// Multi-scalar multiplication.
+    /// The implementation may be specialized to use properties of the curve
     /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
-        super::msm(coeffs, bases)
-    }
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
 // MSM using preprocessed table (windowed method)
@@ -128,7 +114,11 @@ pub struct CachedMulTable<'a, C: IntrinsicCurve> {
     identity: C::Point,
 }
 
-impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
+impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C>
+where
+    C::Point: WeierstrassPoint,
+    C::Scalar: IntMod,
+{
     /// Constructor when the curve order is prime (so the group of curve points forms the scalar prime field).
     ///
     /// Assumes that `window_bits` is less than number of bits - 1 in the modulus

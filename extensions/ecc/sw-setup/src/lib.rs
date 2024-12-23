@@ -245,6 +245,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     Self::double_assign_impl(self);
                 }
 
+                fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self {
+                    let y = Self::hint_decompress(&x, rec_id);
+                    // Must assert unique so we can check the parity
+                    y.assert_unique();
+                    assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
+                    Self::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
+                }
+
                 fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
                     #[cfg(not(target_os = "zkvm"))]
                     {
