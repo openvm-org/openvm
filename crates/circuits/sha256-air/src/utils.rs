@@ -42,6 +42,20 @@ pub const SHA256_WIDTH: usize = if SHA256_ROUND_WIDTH > SHA256_DIGEST_WIDTH {
 } else {
     SHA256_DIGEST_WIDTH
 };
+/// We can notice that `carry_a`'s and `carry_e`'s are always the same on invalid rows
+/// To optimize the trace generation of invalid rows, we have thos values precomputed here
+pub(crate) const SHA256_INVALID_CARRY_A: [[u32; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW] = [
+    [1230919683, 1162494304],
+    [266373122, 1282901987],
+    [1519718403, 1008990871],
+    [923381762, 330807052],
+];
+pub(crate) const SHA256_INVALID_CARRY_E: [[u32; SHA256_WORD_U16S]; SHA256_ROUNDS_PER_ROW] = [
+    [204933122, 1994683449],
+    [443873282, 1544639095],
+    [719953922, 1888246508],
+    [194580482, 1075725211],
+];
 /// SHA256 constant K's
 pub const SHA256_K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,

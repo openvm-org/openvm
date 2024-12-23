@@ -11,15 +11,14 @@ use super::{
 };
 use crate::{
     big_sig0, big_sig1, ch, columns::Sha256DigestCols, limbs_into_u32, maj, small_sig0, small_sig1,
-    u32_into_limbs, SHA256_BLOCK_U8S, SHA256_BUFFER_SIZE, SHA256_H, SHA256_K,
-    SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK, SHA256_WORD_BITS, SHA256_WORD_U16S,
-    SHA256_WORD_U8S,
+    u32_into_limbs, SHA256_BLOCK_U8S, SHA256_BUFFER_SIZE, SHA256_H, SHA256_INVALID_CARRY_A,
+    SHA256_INVALID_CARRY_E, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK,
+    SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
 
-/// It is important to call the generate functions in the correct order:
-/// default_rows should be initialized first
-/// generate_intermed_4 should be called on every row before generate_intermed_8 is called
-/// generate_intermed_12 should be called at the very end, when everything else is filled in
+/// The trace generation of SHA256 should be done in two passes.
+/// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
+/// The second pass should go through all the blocks and call `generate_missing_values`
 impl Sha256Air {
     /// This function takes the input_massage (should be already padded), the previous hash,
     /// and returns the new hash after processing the block input
@@ -38,6 +37,7 @@ impl Sha256Air {
     /// and the buffer values that will be put in rows 0..4.
     /// Will populate the given `trace` with the trace of the block, where the width of the trace is `trace_width`
     /// and the starting column for the `Sha256Air` is `trace_start_col`.
+    /// Note that, some values cannot be correctly generated at this time, refer to [`generate_missing_cells`] for details
     #[allow(clippy::too_many_arguments)]
     pub fn generate_block_trace<F: PrimeField32>(
         &self,
@@ -274,6 +274,67 @@ impl Sha256Air {
         }
     }
 
+    /// This function will fill in the cells that we couldn't do during the first pass.
+    /// This function should be called only after `generate_block_trace` was called for all blocks
+    /// And [`generate_default_row`] is called for all invalid rows
+    /// Will populate the missing values of `trace`, where the width of the trace is `trace_width`
+    /// and the starting column for the `Sha256Air` is `trace_start_col`.
+    /// Note: `trace` needs to be the rows 1..17 of a block and the first row of the next block
+    pub fn generate_missing_cells<F: PrimeField32>(
+        &self,
+        trace: &mut [F],
+        trace_width: usize,
+        trace_start_col: usize,
+    ) {
+        // Here row_17 = next blocks row 0
+        let rows_15_17 = &mut trace[14 * trace_width..17 * trace_width];
+        let (row_15, row_16_17) = rows_15_17.split_at_mut(trace_width);
+        let (row_16, row_17) = row_16_17.split_at_mut(trace_width);
+        let cols_15: &mut Sha256RoundCols<F> =
+            row_15[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
+        let cols_16: &mut Sha256RoundCols<F> =
+            row_16[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
+        let cols_17: &mut Sha256RoundCols<F> =
+            row_17[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
+        Self::generate_intermed_12(cols_15, cols_16);
+        Self::generate_intermed_12(cols_16, cols_17);
+        Self::generate_intermed_4(cols_16, cols_17);
+    }
+
+    /// Fills the `cols` as a padding row
+    /// Note: we still need to correctly fill in the hash values, carries and intermeds
+    pub fn generate_default_row<F: PrimeField32>(self: &Sha256Air, cols: &mut Sha256RoundCols<F>) {
+        cols.flags.is_round_row = F::ZERO;
+        cols.flags.is_first_4_rows = F::ZERO;
+        cols.flags.is_digest_row = F::ZERO;
+
+        cols.flags.is_last_block = F::ZERO;
+        cols.flags.global_block_idx = F::ZERO;
+        cols.flags.row_idx =
+            get_flag_pt_array(&self.row_idx_encoder, 17).map(F::from_canonical_u32);
+        cols.flags.local_block_idx = F::ZERO;
+
+        cols.message_schedule.w = [[F::ZERO; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW];
+        cols.message_schedule.carry_or_buffer =
+            [[F::ZERO; SHA256_WORD_U16S * 2]; SHA256_ROUNDS_PER_ROW];
+
+        let hash = SHA256_H
+            .map(u32_into_limbs::<SHA256_WORD_BITS>)
+            .map(|x| x.map(F::from_canonical_u32));
+
+        for i in 0..SHA256_ROUNDS_PER_ROW {
+            cols.work_vars.a[i] = hash[SHA256_ROUNDS_PER_ROW - i - 1];
+            cols.work_vars.e[i] = hash[SHA256_ROUNDS_PER_ROW - i + 3];
+        }
+
+        cols.work_vars.carry_a = array::from_fn(|i| {
+            array::from_fn(|j| F::from_canonical_u32(SHA256_INVALID_CARRY_A[i][j]))
+        });
+        cols.work_vars.carry_e = array::from_fn(|i| {
+            array::from_fn(|j| F::from_canonical_u32(SHA256_INVALID_CARRY_E[i][j]))
+        });
+    }
+
     /// Puts the correct carrys in the `next_row`, the resulting carrys can be out of bound
     fn generate_carry_ae<F: PrimeField32>(
         local_cols: &Sha256RoundCols<F>,
@@ -329,7 +390,7 @@ impl Sha256Air {
     }
 
     /// Puts the correct intermed_4 in the `next_row`
-    pub fn generate_intermed_4<F: PrimeField32>(
+    fn generate_intermed_4<F: PrimeField32>(
         local_cols: &Sha256RoundCols<F>,
         next_cols: &mut Sha256RoundCols<F>,
     ) {
@@ -349,7 +410,7 @@ impl Sha256Air {
     }
 
     /// Puts the needed intermed_12 in the `local_row`
-    pub fn generate_intermed_12<F: PrimeField32>(
+    fn generate_intermed_12<F: PrimeField32>(
         local_cols: &mut Sha256RoundCols<F>,
         next_cols: &Sha256RoundCols<F>,
     ) {
@@ -385,37 +446,5 @@ impl Sha256Air {
                 local_cols.schedule_helper.intermed_12[i][j] = -sum;
             }
         }
-    }
-
-    /// Fills the `next_row` as a padding row
-    /// Note: we still need to correctly fill in the hash values, carries and count corrections
-    pub fn default_row<F: PrimeField32>(
-        self: &Sha256Air,
-        local_cols: &Sha256RoundCols<F>,
-        next_cols: &mut Sha256RoundCols<F>,
-    ) {
-        next_cols.flags.is_round_row = F::ZERO;
-        next_cols.flags.is_first_4_rows = F::ZERO;
-        next_cols.flags.is_digest_row = F::ZERO;
-
-        next_cols.flags.is_last_block = F::ZERO;
-        next_cols.flags.global_block_idx = F::ZERO;
-        next_cols.flags.row_idx =
-            get_flag_pt_array(&self.row_idx_encoder, 17).map(F::from_canonical_u32);
-        next_cols.flags.local_block_idx = F::ZERO;
-
-        next_cols.message_schedule.w = [[F::ZERO; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW];
-        next_cols.message_schedule.carry_or_buffer =
-            [[F::ZERO; SHA256_WORD_U16S * 2]; SHA256_ROUNDS_PER_ROW];
-
-        let hash = SHA256_H
-            .map(u32_into_limbs::<SHA256_WORD_BITS>)
-            .map(|x| x.map(F::from_canonical_u32));
-
-        for i in 0..SHA256_ROUNDS_PER_ROW {
-            next_cols.work_vars.a[i] = hash[SHA256_ROUNDS_PER_ROW - i - 1];
-            next_cols.work_vars.e[i] = hash[SHA256_ROUNDS_PER_ROW - i + 3];
-        }
-        Self::generate_carry_ae(local_cols, next_cols);
     }
 }
