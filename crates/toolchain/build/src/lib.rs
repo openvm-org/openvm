@@ -19,8 +19,11 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-#[allow(dead_code)]
 const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2024-10-30";
+const OPENVM_BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
+const OPENVM_BUILD_DEBUG_ENV: &str = "OPENVM_BUILD_DEBUG";
+const OPENVM_SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
+const OPENVM_GUEST_LOGFILE_ENV: &str = "OPENVM_GUEST_LOGFILE";
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
@@ -92,12 +95,12 @@ pub fn current_package() -> Package {
 
 /// Reads the value of the environment variable `OPENVM_BUILD_DEBUG` and returns true if it is set to 1.
 pub fn is_debug() -> bool {
-    get_env_var("OPENVM_BUILD_DEBUG") == "1"
+    get_env_var(OPENVM_BUILD_DEBUG_ENV) == "1"
 }
 
 /// Reads the value of the environment variable `OPENVM_SKIP_BUILD` and returns true if it is set to 1.
 pub fn is_skip_build() -> bool {
-    !get_env_var("OPENVM_SKIP_BUILD").is_empty()
+    !get_env_var(OPENVM_SKIP_BUILD_ENV).is_empty()
 }
 
 fn get_env_var(name: &str) -> String {
@@ -152,7 +155,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let rustc = sanitized_cmd("rustup")
-        .args(["+nightly-2024-10-30", "which", "rustc"]) // TODO: switch +nightly to +openvm once we make a toolchain
+        .args([&format!("+{RUSTUP_TOOLCHAIN_NAME}"), "which", "rustc"])
         .output()
         .expect("rustup failed to find nightly toolchain")
         .stdout;
@@ -162,25 +165,27 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     println!("Using rustc: {rustc}");
 
     let mut cmd = sanitized_cmd("cargo");
-    // TODO[jpw]: remove +nightly
+    let toolchain = format!("+{RUSTUP_TOOLCHAIN_NAME}");
     let mut args = vec![
-        "+nightly-2024-10-30",
+        &toolchain,
         subcmd,
         "--target",
         "riscv32im-risc0-zkvm-elf",
     ];
 
-    if std::env::var("OPENVM_BUILD_LOCKED").is_ok() {
+    if std::env::var(OPENVM_BUILD_LOCKED_ENV).is_ok() {
         args.push("--locked");
     }
 
     // let rust_src = get_env_var("OPENVM_RUST_SRC");
     // if !rust_src.is_empty() {
     // TODO[jpw]: only do this for custom src once we make openvm toolchain
-    args.push("-Z");
-    args.push("build-std=alloc,core,proc_macro,panic_abort,std");
-    args.push("-Z");
-    args.push("build-std-features=compiler-builtins-mem");
+    args.extend_from_slice(&[
+        "-Z",
+        "build-std=alloc,core,proc_macro,panic_abort,std",
+        "-Z",
+        "build-std-features=compiler-builtins-mem"
+    ]);
     // cmd.env("__CARGO_TESTS_ONLY_SRC_ROOT", rust_src);
     // }
 
@@ -227,7 +232,7 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
 // progress messages from the inner cargo so the user doesn't
 // think it's just hanging.
 fn tty_println(msg: &str) {
-    let tty_file = env::var("OPENVM_GUEST_LOGFILE").unwrap_or_else(|_| "/dev/tty".to_string());
+    let tty_file = env::var(OPENVM_GUEST_LOGFILE_ENV).unwrap_or_else(|_| "/dev/tty".to_string());
 
     let mut tty = fs::OpenOptions::new()
         .read(true)
