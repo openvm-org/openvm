@@ -6,7 +6,7 @@ use core::{
 
 use crate::{DivAssignUnsafe, DivUnsafe};
 
-// TODO: this can now extend IntMod trait
+// TODO: the shared parts of Field and IntMod should be moved into a new `IntegralDomain` trait.
 /// This is a simplified trait for field elements.
 pub trait Field:
     Sized
@@ -48,6 +48,14 @@ pub trait Field:
 
     /// Square `self` in-place
     fn square_assign(&mut self);
+
+    /// Unchecked inversion. See [DivUnsafe].
+    ///
+    /// ## Panics
+    /// If `self` is zero.
+    fn invert(&self) -> Self {
+        Self::ONE.div_unsafe(self)
+    }
 }
 
 /// Field extension trait. BaseField is the base field of the extension field.
