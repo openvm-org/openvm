@@ -8,75 +8,35 @@ For more information on the basic CLI flow, see [Overview of Basic Usage](../wri
 
 If you have a guest program and would like to try running the **host program** specified below, you can do so by adding the following imports and setup at the top of the file. You may need to modify the imports and/or the `SomeStruct` struct to match your program.
 
-```rust
-use std::{fs, sync::Arc};
-use eyre::Result;
-use openvm::platform::memory::MEM_SIZE;
-use openvm_build::{GuestOptions, TargetFilter};
-use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
-use openvm_sdk::{
-    config::{AggConfig, AppConfig, SdkVmConfig},
-    prover::AppProver,
-    Sdk, StdIn,
-};
-use openvm_stark_sdk::config::FriParameters;
-use openvm_transpiler::elf::Elf;
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize)]
-pub struct SomeStruct {
-    pub a: u64,
-    pub b: u64,
-}
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:dependencies }}
 ```
 
 ## Building and Transpiling a Program
 
 The SDK provides lower-level control over the building and transpiling process.
 
-```rust
-// 1. Build the VmConfig with the extensions needed.
-let sdk = Sdk;
-let vm_config = SdkVmConfig::builder()
-    .system(Default::default())
-    .rv32i(Default::default())
-    .rv32m(Default::default())
-    .io(Default::default())
-    .build();
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:build }}
+{{ #include ../../../crates/sdk/examples/sdk.rs:read_elf}}
 
-// 2a. Build the ELF with guest options and a target filter.
-let target_path = "your_path_project_root";
-let guest_opts = GuestOptions::default();
-let target_filter = TargetFilter {
-    name: target_path.to_string(),
-    kind: "bin".to_string(),
-};
-let elf = sdk.build(guest_opts, target_path, &Some(target_filter))?;
-// 2b. Load the ELF from a file
-let elf_bytes = fs::read("your_path_to_elf")?;
-let elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
-
-// 3. Transpile the ELF into a VmExe
-let exe = sdk.transpile(elf, vm_config.transpiler())?;
+{{ #include ../../../crates/sdk/examples/sdk.rs:transpilation }}
 ```
 
 ### Using `SdkVmConfig`
 
 The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the extensions and system configuration you want.
 
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:vm_config }}
+```
+
 ## Running a Program
 
 To run your program and see the public value output, you can do the following:
 
-```rust
-// 4. Format your input into StdIn
-let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
-let mut stdin = StdIn::default();
-stdin.write(&my_input);
-
-// 5. Run the program
-let output = sdk.execute(exe.clone(), vm_config.clone(), stdin.clone())?;
-println!("public values output: {:?}", output);
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:execution }}
 ```
 
 ### Using `StdIn`
@@ -90,62 +50,24 @@ The `StdIn` struct allows you to format any serializable type into a VM-readable
 
 After building and transpiling a program, you can then generate a proof. To do so, you need to commit your `VmExe`, generate an `AppProvingKey`, format your input into `StdIn`, and then generate a proof.
 
-```rust
-// 6. Set app configuration
-let app_log_blowup = 2;
-let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
-let app_config = AppConfig::new(app_fri_params, vm_config);
-
-// 7. Commit the exe
-let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
-
-// 8. Generate an AppProvingKey
-let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-
-// 9a. Generate a proof
-let proof = sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), stdin.clone())?;
-// 9b. Generate a proof with an AppProver with custom fields
-let app_prover = AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe.clone())
-    .with_program_name("test_program");
-let proof = app_prover.generate_app_proof(stdin.clone());
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:proof_generation }}
 ```
 
 ## Verifying Proofs
 
 After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from your `AppProvingKey`) and the output of your `generate_app_proof` call.
 
-```rust
-// 10. Verify your program
-let app_vk = app_pk.get_vk();
-sdk.verify_app_proof(&app_vk, &proof)?;
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:verification }}
 ```
 
 ## End-to-end EVM Proof Generation and Verification
 
 Generating and verifying an EVM proof is an extension of the above process.
 
-```rust
-// 11. Generate the aggregation proving key
-const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
-let halo2_params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
-let agg_config = AggConfig::default();
-let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
-
-// 12. Generate the SNARK verifier contract
-let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
-
-// 13. Generate an EVM proof
-let proof = sdk.generate_evm_proof(
-    &halo2_params_reader,
-    app_pk,
-    app_committed_exe,
-    agg_pk,
-    stdin,
-)?;
-
-// 14. Verify the EVM proof
-let success = sdk.verify_evm_proof(&verifier, &proof);
-assert!(success);
+```rust,no_run,noplayground
+{{ #include ../../../crates/sdk/examples/sdk.rs:evm_verification }}
 ```
 
 > ⚠️ **WARNING**  

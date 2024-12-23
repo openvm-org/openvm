@@ -285,7 +285,7 @@ fn test_sdk_guest_build_and_transpile() {
         // .with_options(vec!["--release"]);
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("example");
+    pkg_dir.push("guest");
     let one = sdk
         .build(guest_opts.clone(), &pkg_dir, &Default::default())
         .unwrap();
