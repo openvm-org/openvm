@@ -20,6 +20,7 @@ use crate::pairing::PairingIntrinsics;
 
 pub struct Bls12_381;
 
+mod g2;
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
 

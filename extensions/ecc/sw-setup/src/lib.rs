@@ -175,13 +175,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn double_assign_impl(&mut self) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use openvm_algebra_guest::DivUnsafe;
-                        let two = #intmod_type::from_u8(2);
-                        let lambda = &self.x * &self.x * #intmod_type::from_u8(3).div_unsafe(&self.y * &two);
-                        let x3 = &lambda * &lambda - &self.x * &two;
-                        let y3 = &lambda * &(&self.x - &x3) - &self.y;
-                        self.x = x3;
-                        self.y = y3;
+                        *self = Self::double_impl(self);
                     }
                     #[cfg(target_os = "zkvm")]
                     {
@@ -281,10 +275,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 type SelfRef<'a> = &'a Self;
 
                 const IDENTITY: Self = Self::identity();
-
-                fn is_identity(&self) -> bool {
-                    self.x == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO
-                }
 
                 fn double(&self) -> Self {
                     if self.is_identity() {
