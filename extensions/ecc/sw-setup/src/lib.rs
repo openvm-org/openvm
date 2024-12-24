@@ -252,39 +252,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::openvm_ecc_guest::weierstrass::FromCompressed<#intmod_type> for #struct_name {
-                fn decompress(x: #intmod_type, rec_id: &u8) -> Self {
-                    let y = Self::hint_decompress(&x, rec_id);
-                    // Must assert unique so we can check the parity
-                    y.assert_unique();
-                    assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
-                    <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
-                }
-
-                fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> #intmod_type {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        unimplemented!()
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        use openvm::platform as openvm_platform; // needed for hint_store_u32!
-
-                        let y = core::mem::MaybeUninit::<Self::Coordinate>::uninit();
-                        unsafe {
-                            #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
-                            let mut ptr = y.as_ptr() as *const u8;
-                            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                            for _ in (0..<Self::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
-                                openvm_rv32im_guest::hint_store_u32!(ptr, 0);
-                                ptr = ptr.add(4);
-                            }
-                            y.assume_init()
-                        }
-                    }
-                }
-            }
-
             impl core::ops::Neg for #struct_name {
                 type Output = Self;
 
@@ -308,10 +275,43 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::WeierstrassPoint, impl_sw_group_ops};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
+
+                impl FromCompressed<#intmod_type> for #struct_name {
+                    fn decompress(x: #intmod_type, rec_id: &u8) -> Self {
+                        let y = <#struct_name as FromCompressed<#intmod_type>>::hint_decompress(&x, rec_id);
+                        // Must assert unique so we can check the parity
+                        y.assert_unique();
+                        assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
+                        <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
+                    }
+
+                    fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> #intmod_type {
+                        #[cfg(not(target_os = "zkvm"))]
+                        {
+                            unimplemented!()
+                        }
+                        #[cfg(target_os = "zkvm")]
+                        {
+                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
+
+                            let y = core::mem::MaybeUninit::<#intmod_type>::uninit();
+                            unsafe {
+                                #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
+                                let mut ptr = y.as_ptr() as *const u8;
+                                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                                for _ in (0..<#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                                    ptr = ptr.add(4);
+                                }
+                                y.assume_init()
+                            }
+                        }
+                    }
+                }
             }
         });
         output.push(result);
