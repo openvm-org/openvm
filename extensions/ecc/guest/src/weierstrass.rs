@@ -212,3 +212,250 @@ where
         res
     }
 }
+
+/// Macro to generate a newtype wrapper for [AffinePoint](crate::AffinePoint)
+/// that implements elliptic curve operations by using the underlying field operations according to the
+/// [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+///
+/// The following imports are required:
+/// ```rust
+/// use core::ops::AddAssign;
+///
+/// use openvm_algebra_guest::{DivUnsafe, Field};
+/// use openvm_ecc_guest::{AffinePoint, Group};
+/// ```
+#[macro_export]
+macro_rules! impl_sw_group_affine {
+    // Assumes `a = 0` in curve equation. `$three` should be a constant expression for `3` of type `$field`.
+    ($struct_name:ident, $field:ty, $three:expr) => {
+        /// A newtype wrapper for [AffinePoint] that implements elliptic curve operations
+        /// by using the underlying field operations according to the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+        #[repr(transparent)]
+        pub struct $struct_name(AffinePoint<$field>);
+
+        impl $struct_name {
+            const IDENTITY: Self = Self(AffinePoint::new(<$field>::ZERO, <$field>::ZERO));
+
+            pub const fn new(x: $field, y: $field) -> Self {
+                Self(AffinePoint::new(x, y))
+            }
+
+            pub const fn x(&self) -> &$field {
+                &self.0.x
+            }
+
+            pub const fn y(&self) -> &$field {
+                &self.0.y
+            }
+
+            fn double_nonidentity(&self) -> Self {
+                // lambda = (3*x1^2+a)/(2*y1)
+                // for bls12-381, a = 0
+                let lambda = (&THREE * self.x() * self.x()).div_unsafe(self.y() + self.y());
+                // x3 = lambda^2-x1-x1
+                let x3 = &lambda * &lambda - self.x() - self.x();
+                // y3 = lambda * (x1-x3) - y1
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn double_assign_nonidentity(&mut self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.double_nonidentity();
+            }
+
+            fn add_ne_nonidentity(&self, p2: &Self) -> Self {
+                // lambda = (y2-y1)/(x2-x1)
+                // x3 = lambda^2-x1-x2
+                // y3 = lambda*(x1-x3)-y1
+                let lambda = (p2.y() - self.y()).div_unsafe(p2.x() - self.x());
+                let x3 = &lambda * &lambda - self.x() - p2.x();
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.add_ne_nonidentity(p2);
+            }
+
+            fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
+                // lambda = (y2+y1)/(x1-x2)
+                // x3 = lambda^2-x1-x2
+                // y3 = lambda*(x1-x3)-y1
+                let lambda = (p2.y() + self.y()).div_unsafe(self.x() - p2.x());
+                let x3 = &lambda * &lambda - self.x() - p2.x();
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.sub_ne_nonidentity(p2);
+            }
+        }
+
+        impl From<$struct_name> for AffinePoint<$field> {
+            fn from(value: $struct_name) -> Self {
+                value.0
+            }
+        }
+
+        impl From<AffinePoint<$field>> for $struct_name {
+            fn from(value: AffinePoint<$field>) -> Self {
+                Self(value)
+            }
+        }
+
+        impl Group for $struct_name {
+            type SelfRef<'a> = &'a Self;
+
+            const IDENTITY: Self = Self::IDENTITY;
+
+            fn double(&self) -> Self {
+                if self.is_identity() {
+                    self.clone()
+                } else {
+                    self.double_nonidentity()
+                }
+            }
+
+            fn double_assign(&mut self) {
+                if !self.is_identity() {
+                    self.double_assign_nonidentity();
+                }
+            }
+        }
+
+        impl core::ops::Add<&$struct_name> for $struct_name {
+            type Output = Self;
+
+            fn add(mut self, p2: &$struct_name) -> Self::Output {
+                self.add_assign(p2);
+                self
+            }
+        }
+
+        impl core::ops::Add for $struct_name {
+            type Output = Self;
+
+            fn add(self, rhs: Self) -> Self::Output {
+                self.add(&rhs)
+            }
+        }
+
+        impl core::ops::Add<&$struct_name> for &$struct_name {
+            type Output = $struct_name;
+
+            fn add(self, p2: &$struct_name) -> Self::Output {
+                if self.is_identity() {
+                    p2.clone()
+                } else if p2.is_identity() {
+                    self.clone()
+                } else if self.x() == p2.x() {
+                    if self.y() + p2.y() == <$field>::ZERO {
+                        $struct_name::IDENTITY
+                    } else {
+                        self.double_nonidentity()
+                    }
+                } else {
+                    self.add_ne_nonidentity(p2)
+                }
+            }
+        }
+
+        impl core::ops::AddAssign<&$struct_name> for $struct_name {
+            fn add_assign(&mut self, p2: &$struct_name) {
+                if self.is_identity() {
+                    *self = p2.clone();
+                } else if p2.is_identity() {
+                    // do nothing
+                } else if self.x() == p2.x() {
+                    if self.y() + p2.y() == <$field>::ZERO {
+                        *self = Self::IDENTITY;
+                    } else {
+                        self.double_assign_nonidentity();
+                    }
+                } else {
+                    self.add_ne_assign_nonidentity(p2);
+                }
+            }
+        }
+
+        impl core::ops::AddAssign for $struct_name {
+            fn add_assign(&mut self, rhs: Self) {
+                self.add_assign(&rhs);
+            }
+        }
+
+        impl core::ops::Neg for $struct_name {
+            type Output = Self;
+
+            fn neg(mut self) -> Self::Output {
+                self.0.y.neg_assign();
+                self
+            }
+        }
+
+        impl core::ops::Sub<&$struct_name> for $struct_name {
+            type Output = Self;
+
+            fn sub(self, rhs: &$struct_name) -> Self::Output {
+                self.sub(rhs.clone())
+            }
+        }
+
+        impl core::ops::Sub for $struct_name {
+            type Output = $struct_name;
+
+            fn sub(self, rhs: Self) -> Self::Output {
+                self.sub(&rhs)
+            }
+        }
+
+        impl core::ops::Sub<&$struct_name> for &$struct_name {
+            type Output = $struct_name;
+
+            fn sub(self, p2: &$struct_name) -> Self::Output {
+                if p2.is_identity() {
+                    self.clone()
+                } else if self.is_identity() {
+                    $struct_name(p2.0.neg_borrow())
+                } else if self.x() == p2.x() {
+                    if self.y() == p2.y() {
+                        $struct_name::IDENTITY
+                    } else {
+                        self.double_nonidentity()
+                    }
+                } else {
+                    self.sub_ne_nonidentity(p2)
+                }
+            }
+        }
+
+        impl core::ops::SubAssign<&$struct_name> for $struct_name {
+            fn sub_assign(&mut self, p2: &$struct_name) {
+                if p2.is_identity() {
+                    // do nothing
+                } else if self.is_identity() {
+                    *self = $struct_name(p2.0.neg_borrow());
+                } else if self.x() == p2.x() {
+                    if self.y() == p2.y() {
+                        *self = Self::IDENTITY;
+                    } else {
+                        self.double_assign_nonidentity();
+                    }
+                } else {
+                    self.sub_ne_assign_nonidentity(p2);
+                }
+            }
+        }
+
+        impl core::ops::SubAssign for $struct_name {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.sub_assign(&rhs);
+            }
+        }
+    };
+}

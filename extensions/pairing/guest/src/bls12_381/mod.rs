@@ -15,12 +15,10 @@ use hex_literal::hex;
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+use openvm_ecc_sw_setup::sw_declare;
 
 use crate::pairing::PairingIntrinsics;
 
-pub struct Bls12_381;
-
-mod g2;
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
 
@@ -54,7 +52,7 @@ const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_bytes(hex!(
     "040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 ));
 
-openvm_ecc_sw_setup::sw_declare! {
+sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
 }
 
@@ -65,6 +63,7 @@ pub type Scalar = Bls12_381Scalar;
 /// on the curve but not necessarily in the prime order subgroup
 /// because the group has cofactors.
 pub type G1Affine = Bls12_381G1Affine;
+pub use g2::G2Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
@@ -117,6 +116,8 @@ impl CyclicGroup for G1Affine {
     };
 }
 
+pub struct Bls12_381;
+
 impl IntrinsicCurve for Bls12_381 {
     type Scalar = Scalar;
     type Point = G1Affine;
@@ -125,6 +126,20 @@ impl IntrinsicCurve for Bls12_381 {
         // TODO: msm optimization
         openvm_ecc_guest::msm(coeffs, bases)
     }
+}
+
+// Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
+// but not special E(Fp2) intrinsics.
+mod g2 {
+    use core::ops::AddAssign;
+
+    use openvm_algebra_guest::{DivUnsafe, Field};
+    use openvm_ecc_guest::{impl_sw_group_affine, AffinePoint, Group};
+
+    use super::{Fp, Fp2};
+
+    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
+    impl_sw_group_affine!(G2Affine, Fp2, THREE);
 }
 
 impl PairingIntrinsics for Bls12_381 {
