@@ -119,7 +119,7 @@ fn test_add_ne() {
         .0
         .core
         .expr()
-        .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![]);
+        .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
@@ -183,7 +183,7 @@ fn test_double() {
     );
     assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
@@ -261,7 +261,7 @@ fn test_p256_double() {
     );
     assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",

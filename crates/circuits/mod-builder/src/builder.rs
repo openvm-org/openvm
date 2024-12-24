@@ -166,13 +166,16 @@ impl ExprBuilder {
         )
     }
 
+    /// Creates a new constant (compile-time known) FieldVariable from `value` where
+    /// the big integer `value` is decomposed into `num_limbs` limbs of `limb_bits` bits,
+    /// with `num_limbs, limb_bits` specified by the builder config.
     pub fn new_const(builder: Rc<RefCell<ExprBuilder>>, value: BigUint) -> FieldVariable {
         let mut borrowed = builder.borrow_mut();
         let index = borrowed.constants.len();
-        let limbs = big_uint_to_limbs(&value, borrowed.limb_bits);
-        let num_limbs = limbs.len();
-        let range_checker_bits = borrowed.range_checker_bits;
         let limb_bits = borrowed.limb_bits;
+        let num_limbs = borrowed.num_limbs;
+        let limbs = big_uint_to_num_limbs(&value, limb_bits, num_limbs);
+        let range_checker_bits = borrowed.range_checker_bits;
         borrowed.constants.push((value.clone(), limbs));
         drop(borrowed);
 

@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use itertools::Itertools;
 use num_bigint_dig::BigUint;
+use num_traits::One;
 use openvm_circuit::arch::{
     AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
@@ -20,8 +21,12 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{AbstractField, Field, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
+
+// We do not use FieldExpressionCoreAir because EcDouble needs to do special constraints for
+// its setup instruction.
 
 #[derive(Clone)]
 pub struct EcDoubleCoreAir {
@@ -45,11 +50,14 @@ impl EcDoubleCoreAir {
         let mut y1 = ExprBuilder::new_input(builder.clone());
         let a = ExprBuilder::new_const(builder.clone(), a_biguint.clone());
         let is_double_flag = builder.borrow_mut().new_flag();
-        let mut lambda = FieldVariable::select(
+        // We need to prevent divide by zero when not double flag
+        // (equivalently, when it is the setup opcode)
+        let lambda_denom = FieldVariable::select(
             is_double_flag,
-            &((x1.square().int_mul(3) + a) / (y1.int_mul(2))),
-            &x1,
+            &y1.int_mul(2),
+            &ExprBuilder::new_const(builder.clone(), BigUint::one()),
         );
+        let mut lambda = (x1.square().int_mul(3) + a) / lambda_denom;
         let mut x3 = lambda.square() - x1.int_mul(2);
         x3.save_output();
         let mut y3 = lambda * (x1 - x3.clone()) - y1;
@@ -62,6 +70,10 @@ impl EcDoubleCoreAir {
             offset,
             a_biguint,
         }
+    }
+
+    pub fn output_indices(&self) -> &[usize] {
+        &self.expr.output_indices
     }
 }
 
@@ -100,16 +112,17 @@ where
         assert_eq!(flags.len(), 1); // is_double_flag
 
         let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
-        let writes: Vec<AB::Expr> = vars
-            .into_iter()
-            .concat()
+        let writes: Vec<AB::Expr> = self
+            .output_indices()
             .iter()
-            .map(|x| (*x).into())
+            .flat_map(|&i| vars[i].clone())
+            .map(Into::into)
             .collect();
 
+        let is_setup = is_valid - flags[0];
         let local_opcode_idx = flags[0]
             * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-            + (AB::Expr::ONE - flags[0])
+            + is_setup
                 * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
 
         let instruction = MinimalInstruction {
@@ -193,10 +206,12 @@ where
         );
         assert_eq!(vars.len(), 3); // x1^2, x3, y3
 
-        let writes = vars
-            .into_iter()
-            .flat_map(|v| {
-                let limbs = biguint_to_limbs_vec(v, limb_bits, num_limbs);
+        let writes = self
+            .air
+            .output_indices()
+            .iter()
+            .flat_map(|&i| {
+                let limbs = biguint_to_limbs_vec(vars[i].clone(), limb_bits, num_limbs);
                 limbs.into_iter().map(F::from_canonical_u32)
             })
             .collect_vec();
@@ -231,4 +246,6 @@ where
     fn air(&self) -> &Self::Air {
         &self.air
     }
+
+    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {}
 }

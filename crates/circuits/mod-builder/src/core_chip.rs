@@ -123,11 +123,8 @@ where
         let writes: Vec<AB::Expr> = self
             .output_indices()
             .iter()
-            .map(|&i| vars[i].clone())
-            .collect::<Vec<_>>()
-            .concat()
-            .iter()
-            .map(|x| (*x).into())
+            .flat_map(|&i| vars[i].clone())
+            .map(Into::into)
             .collect();
 
         let opcode_flags_except_last = self.opcode_flag_idx.iter().map(|&i| flags[i]).collect_vec();
