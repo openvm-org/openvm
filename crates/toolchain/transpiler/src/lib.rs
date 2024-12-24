@@ -16,7 +16,7 @@ pub mod transpiler;
 pub mod util;
 
 mod extension;
-pub use extension::TranspilerExtension;
+pub use extension::{TranspilerExtension, TranspilerOutput};
 
 pub trait FromElf {
     type ElfContext;
@@ -29,7 +29,7 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
     type ElfContext = Transpiler<F>;
     fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Result<Self, TranspilerError> {
         let instructions = transpiler.transpile(&elf.instructions)?;
-        let program = Program::new_without_debug_infos(
+        let program = Program::new_without_debug_infos_with_option(
             &instructions,
             DEFAULT_PC_STEP,
             elf.pc_base,

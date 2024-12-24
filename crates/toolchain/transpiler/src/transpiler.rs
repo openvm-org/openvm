@@ -50,7 +50,7 @@ impl<F: PrimeField32> Transpiler<F> {
     pub fn transpile(
         &self,
         instructions_u32: &[u32],
-    ) -> Result<Vec<Instruction<F>>, TranspilerError> {
+    ) -> Result<Vec<Option<Instruction<F>>>, TranspilerError> {
         let mut instructions = Vec::new();
         let mut ptr = 0;
         while ptr < instructions_u32.len() {
@@ -60,15 +60,22 @@ impl<F: PrimeField32> Transpiler<F> {
                 .map(|proc| proc.process_custom(&instructions_u32[ptr..]))
                 .filter(|opt| opt.is_some())
                 .collect::<Vec<_>>();
-            if options.is_empty() {
-                return Err(TranspilerError::ParseError(instructions_u32[ptr]));
-            }
-            if options.len() > 1 {
-                return Err(TranspilerError::AmbiguousNextInstruction);
-            }
-            let (instruction, advance) = options.pop().unwrap().unwrap();
-            instructions.push(instruction);
-            ptr += advance;
+            assert!(
+                !options.is_empty(),
+                //"couldn't parse the next instruction: {:032b}",
+                "couldn't parse the next instruction: {} = {:032b}",
+                instructions_u32[ptr],
+                instructions_u32[ptr],
+            );
+            assert!(
+                options.len() < 2,
+                "ambiguous next instruction: {} = {:032b}",
+                instructions_u32[ptr],
+                instructions_u32[ptr],
+            );
+            let transpiler_output = options.pop().unwrap().unwrap();
+            instructions.extend(transpiler_output.instructions);
+            ptr += transpiler_output.used_u32s;
         }
         Ok(instructions)
     }

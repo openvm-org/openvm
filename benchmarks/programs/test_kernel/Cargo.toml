@@ -1,0 +1,13 @@
+[workspace]
+[package]
+name = "test_kernel"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../crates/toolchain/openvm" }
+openvm-edsl-kernel = { path = "../../../crates/toolchain/edsl-kernel" }
+
+[features]
+default = []
+std = ["openvm/std"]

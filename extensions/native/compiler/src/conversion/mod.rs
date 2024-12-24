@@ -119,7 +119,8 @@ impl AS {
         match self {
             AS::Immediate => F::ZERO,
             AS::Register => F::ONE,
-            AS::Memory => F::TWO,
+            // for kernel stuff
+            AS::Memory => F::from_canonical_usize(5),
         }
     }
 }

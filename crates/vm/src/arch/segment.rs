@@ -128,6 +128,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             let (instruction, debug_info) =
                 self.chip_complex.program_chip_mut().get_instruction(pc)?;
             tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
+            println!();
+            println!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
             let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),
