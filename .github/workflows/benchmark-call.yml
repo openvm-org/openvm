@@ -187,7 +187,7 @@ jobs:
       # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
       - name: Set metric name
         run: |
-          METRIC_NAME=${{ inputs.benchmark_id }}
+          METRIC_NAME=${{ inputs.benchmark_id || inputs.benchmark_name }}
           echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
           METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
           echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
