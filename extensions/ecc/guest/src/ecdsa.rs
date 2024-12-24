@@ -5,7 +5,7 @@ use elliptic_curve::PrimeCurve;
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
 use crate::{
-    weierstrass::{IntrinsicCurve, WeierstrassPoint},
+    weierstrass::{FromCompressed, IntrinsicCurve, WeierstrassPoint},
     CyclicGroup, Group,
 };
 
@@ -40,7 +40,7 @@ impl<C: IntrinsicCurve> VerifyingKey<C> {
 impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + IntrinsicCurve,
-    C::Point: WeierstrassPoint + CyclicGroup,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
 {
@@ -87,7 +87,7 @@ where
         }
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
-        let R: C::Point = WeierstrassPoint::decompress(x, &rec_id);
+        let R: C::Point = FromCompressed::decompress(x, &rec_id);
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);

@@ -238,16 +238,18 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn double_assign_nonidentity(&mut self) {
                     Self::double_assign_impl(self);
                 }
+            }
 
-                fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self {
+            impl ::openvm_ecc_guest::weierstrass::FromCompressed<#intmod_type> for #struct_name {
+                fn decompress(x: #intmod_type, rec_id: &u8) -> Self {
                     let y = Self::hint_decompress(&x, rec_id);
                     // Must assert unique so we can check the parity
                     y.assert_unique();
                     assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
-                    Self::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
+                    <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
                 }
 
-                fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
+                fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> #intmod_type {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         unimplemented!()
