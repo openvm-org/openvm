@@ -90,18 +90,41 @@ Different labels can be added to provide more granularity on the metrics, but th
 
 Most benchmarks are binaries that run once since proving benchmarks take longer. For smaller benchmarks, such as to benchmark VM runtime, we use Criterion. These are in the `benches` directory.
 
-### Usage
-
 ```bash
 cargo bench --bench fibonacci_execute
+cargo bench --bench regex_execute
 ```
 
 will run the normal criterion benchmark.
 
+## Profiling
+
+We profile using executables without criterion in [`examples`](./examples). To prevent the ELF build time from being included in the benchmark, we pre-build the ELF using the CLI. Check that the included ELF file in `examples` is up to date before proceeding.
+
+### Flamegraph
+
+To generate flamegraphs, install `cargo-flamegraph` and run:
+
 ```bash
-cargo bench --bench fibonacci_execute -- --profile-time=30
+cargo flamegraph --example regex_execute --profile=profiling
 ```
 
-will generate a flamegraph report without running any criterion analysis.
+will generate a flamegraph at `flamegraph.svg` without running any criterion analysis.
+On MacOS, you will need to run the above command with `sudo`.
 
-Flamegraph reports can be found in `target/criterion/fibonacci/execute/profile/flamegraph.svg` of the repo root directory.
+### Samply
+
+To use [samply](https://github.com/mstange/samply), install it and then we must first build the executable.
+
+```bash
+cargo build --example regex_execute --profile=profiling
+```
+
+Then, run:
+
+```bash
+samply record ../target/profiling/examples/regex_execute
+```
+
+It will open an interactive UI in your browser (currently only Firefox and Chrome are supported).
+See the samply github page for more information.

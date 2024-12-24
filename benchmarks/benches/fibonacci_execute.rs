@@ -8,7 +8,6 @@ use openvm_rv32im_transpiler::{
 use openvm_sdk::StdIn;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use pprof::criterion::{Output, PProfProfiler};
 
 fn benchmark_function(c: &mut Criterion) {
     let elf = build_bench_program("fibonacci").unwrap();
@@ -37,9 +36,5 @@ fn benchmark_function(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group! {
-    name = benches;
-    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
-    targets = benchmark_function
-}
+criterion_group!(benches, benchmark_function);
 criterion_main!(benches);
