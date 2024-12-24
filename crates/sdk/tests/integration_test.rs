@@ -225,12 +225,11 @@ fn test_public_values_and_leaf_verification() {
                 public_values_root_proof: Some(wrong_pv_root_proof),
             },
         );
-        match execution_result.err().unwrap() {
-            ExecutionError::Fail { .. } => {}
-            _ => {
-                panic!("Expected failure: the public value root proof has a wrong pv commit")
-            }
-        }
+        assert!(
+            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            "Expected failure: the public value root proof has a wrong pv commit: {:?}",
+            execution_result
+        );
     }
 
     // Failure: The public value root proof has a wrong path proof.
@@ -245,10 +244,11 @@ fn test_public_values_and_leaf_verification() {
                 public_values_root_proof: Some(wrong_pv_root_proof),
             },
         );
-        match execution_result.err().unwrap() {
-            ExecutionError::Fail { .. } => {}
-            _ => panic!("Expected failure: the public value root proof has a wrong path proof"),
-        }
+        assert!(
+            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            "Expected failure: the public value root proof has a wrong path proof: {:?}",
+            execution_result
+        );
     }
 }
 
