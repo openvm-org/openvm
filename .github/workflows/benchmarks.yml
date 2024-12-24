@@ -38,9 +38,6 @@ jobs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-
       - name: Create benchmark matrix from JSON
         id: create-matrix
         run: |
