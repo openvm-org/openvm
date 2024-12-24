@@ -63,6 +63,7 @@ sw_declare! {
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
 pub type G1Affine = Bn254G1Affine;
+pub use g2::G2Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
