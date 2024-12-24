@@ -9,9 +9,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, UsizeOpcode};
-use openvm_mod_circuit_builder::{
-    test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpressionCoreChip,
-};
+use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::AbstractField;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -72,9 +70,8 @@ lazy_static::lazy_static! {
     };
 }
 
-fn prime_limbs(chip: &FieldExpressionCoreChip) -> Vec<BabyBear> {
-    chip.expr()
-        .prime_limbs
+fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
+    expr.prime_limbs
         .iter()
         .map(|n| BabyBear::from_canonical_usize(*n))
         .collect::<Vec<_>>()
@@ -127,7 +124,7 @@ fn test_add_ne() {
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
@@ -184,14 +181,14 @@ fn test_double() {
         Rv32WeierstrassOpcode::default_offset(),
         BigUint::zero(),
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
@@ -262,9 +259,9 @@ fn test_p256_double() {
         Rv32WeierstrassOpcode::default_offset(),
         a,
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.expr().execute(vec![p1_x, p1_y], vec![]);
+    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -279,7 +276,7 @@ fn test_p256_double() {
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(

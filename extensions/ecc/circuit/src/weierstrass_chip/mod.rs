@@ -60,7 +60,7 @@ pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: 
     VmChipWrapper<
         F,
         Rv32VecHeapAdapterChip<F, 1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        FieldExpressionCoreChip,
+        EcDoubleCoreChip,
     >,
 );
 
@@ -74,18 +74,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         a: BigUint,
     ) -> Self {
-        let expr = ec_double_expr(config, memory_controller.borrow().range_checker.bus(), a);
-        let core = FieldExpressionCoreChip::new(
-            expr,
-            offset,
-            vec![
-                Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-                Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
-            ],
-            vec![],
+        let core = EcDoubleCoreChip::new(
+            config,
             memory_controller.borrow().range_checker.clone(),
-            "EcDouble",
-            true,
+            a,
+            offset,
         );
         Self(VmChipWrapper::new(adapter, core, memory_controller))
     }
