@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::{Add, Neg};
 
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
@@ -6,6 +6,8 @@ use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
 use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_moduli_setup::moduli_declare;
+use openvm_ecc_sw_setup::sw_declare;
 
 use super::group::{CyclicGroup, Group};
 use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
@@ -30,12 +32,12 @@ const fn seven_le() -> [u8; 32] {
     buf
 }
 
-openvm_algebra_moduli_setup::moduli_declare! {
+moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" },
     Secp256k1Scalar { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141" },
 }
 
-openvm_ecc_sw_setup::sw_declare! {
+sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 

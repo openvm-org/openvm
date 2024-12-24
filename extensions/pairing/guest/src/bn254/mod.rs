@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::{Add, Neg};
 
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
@@ -109,15 +109,26 @@ impl CyclicGroup for G1Affine {
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
 // but not special E(Fp2) intrinsics.
 mod g2 {
-    use core::ops::AddAssign;
-
-    use openvm_algebra_guest::{DivUnsafe, Field};
-    use openvm_ecc_guest::{impl_sw_group_affine, AffinePoint, Group};
+    use hex_literal::hex;
+    use openvm_algebra_guest::Field;
+    use openvm_ecc_guest::{
+        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+    };
 
     use super::{Fp, Fp2};
 
     const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
-    impl_sw_group_affine!(G2Affine, Fp2, THREE);
+    // 3 / (9 + u)
+    const B: Fp2 = Fp2::new(
+        Fp::from_const_bytes(hex!(
+            "e538a124dce66732a3efdb59e5c5b4b5c36ae01b9918be81aeaab8ce409d142b"
+        )),
+        Fp::from_const_bytes(hex!(
+            "d215c38506bda2e452182de584a04fa7f4fdd8eeadaf2ccdd4fef03ab0139700"
+        )),
+    );
+    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_group_ops!(G2Affine, Fp2);
 }
 
 pub struct Bn254;

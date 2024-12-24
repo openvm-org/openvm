@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::Neg;
 
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
@@ -48,9 +48,7 @@ moduli_declare! {
     Bls12_381Scalar { modulus = "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001" },
 }
 
-const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_bytes(hex!(
-    "040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-));
+const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_u8(4);
 
 sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
@@ -131,15 +129,17 @@ impl IntrinsicCurve for Bls12_381 {
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
 // but not special E(Fp2) intrinsics.
 mod g2 {
-    use core::ops::AddAssign;
-
-    use openvm_algebra_guest::{DivUnsafe, Field};
-    use openvm_ecc_guest::{impl_sw_group_affine, AffinePoint, Group};
+    use openvm_algebra_guest::Field;
+    use openvm_ecc_guest::{
+        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+    };
 
     use super::{Fp, Fp2};
 
     const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
-    impl_sw_group_affine!(G2Affine, Fp2, THREE);
+    const B: Fp2 = Fp2::new(Fp::from_const_u8(4), Fp::from_const_u8(4));
+    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_group_ops!(G2Affine, Fp2);
 }
 
 impl PairingIntrinsics for Bls12_381 {

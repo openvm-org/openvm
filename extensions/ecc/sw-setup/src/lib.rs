@@ -4,6 +4,7 @@ extern crate proc_macro;
 
 use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
+use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Expr, ExprPath, Path, Token,
@@ -75,6 +76,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(hint_decompress_extern_func);
+
+        let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
@@ -191,6 +194,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_B: #intmod_type = #const_b;
+                const IDENTITY: Self = Self::identity();
                 type Coordinate = #intmod_type;
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
@@ -223,16 +227,24 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     (self.x, self.y)
                 }
 
-                fn add_ne_nonidentity(p1: &Self, p2: &Self) -> Self {
-                    Self::add_ne(p1, p2)
+                fn add_ne_nonidentity(&self, p2: &Self) -> Self {
+                    Self::add_ne(self, p2)
                 }
 
                 fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
                     Self::add_ne_assign(self, p2);
                 }
 
-                fn double_nonidentity(p: &Self) -> Self {
-                    Self::double_impl(p)
+                fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
+                    Self::add_ne(self, &p2.clone().neg())
+                }
+
+                fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
+                    Self::add_ne_assign(self, &p2.clone().neg());
+                }
+
+                fn double_nonidentity(&self) -> Self {
+                    Self::double_impl(self)
                 }
 
                 fn double_assign_nonidentity(&mut self) {
@@ -273,132 +285,33 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl Group for #struct_name {
-                type SelfRef<'a> = &'a Self;
-
-                const IDENTITY: Self = Self::identity();
-
-                fn double(&self) -> Self {
-                    if self.is_identity() {
-                        self.clone()
-                    } else {
-                        Self::double_impl(self)
-                    }
-                }
-
-                fn double_assign(&mut self) {
-                    if !self.is_identity() {
-                        Self::double_assign_impl(self);
-                    }
-                }
-            }
-
-            impl core::ops::Add<&#struct_name> for #struct_name {
-                type Output = Self;
-
-                fn add(mut self, p2: &#struct_name) -> Self::Output {
-                    self.add_assign(p2);
-                    self
-                }
-            }
-
-            impl core::ops::Add for #struct_name {
-                type Output = Self;
-
-                fn add(self, rhs: Self) -> Self::Output {
-                    self.add(&rhs)
-                }
-            }
-
-            impl core::ops::Add<&#struct_name> for &#struct_name {
-                type Output = #struct_name;
-
-                fn add(self, p2: &#struct_name) -> Self::Output {
-                    if self.is_identity() {
-                        p2.clone()
-                    } else if p2.is_identity() {
-                        self.clone()
-                    } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
-                            #struct_name::identity()
-                        } else {
-                            #struct_name::double_impl(self)
-                        }
-                    } else {
-                        #struct_name::add_ne(self, p2)
-                    }
-                }
-            }
-
-            impl core::ops::AddAssign<&#struct_name> for #struct_name {
-                fn add_assign(&mut self, p2: &#struct_name) {
-                    if self.is_identity() {
-                        *self = p2.clone();
-                    } else if p2.is_identity() {
-                        // do nothing
-                    } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
-                            *self = Self::identity();
-                        } else {
-                            Self::double_assign_impl(self);
-                        }
-                    } else {
-                        Self::add_ne_assign(self, p2);
-                    }
-                }
-            }
-
-            impl core::ops::AddAssign for #struct_name {
-                fn add_assign(&mut self, rhs: Self) {
-                    self.add_assign(&rhs);
-                }
-            }
-
             impl core::ops::Neg for #struct_name {
                 type Output = Self;
 
                 fn neg(self) -> Self::Output {
-                    Self {
+                    #struct_name {
                         x: self.x,
                         y: -self.y,
                     }
                 }
             }
 
-            impl core::ops::Sub<&#struct_name> for #struct_name {
-                type Output = Self;
-
-                fn sub(self, rhs: &#struct_name) -> Self::Output {
-                    self.sub(rhs.clone())
-                }
-            }
-
-            impl core::ops::Sub for #struct_name {
+            impl core::ops::Neg for &#struct_name {
                 type Output = #struct_name;
 
-                fn sub(self, rhs: Self) -> Self::Output {
-                    self.add(rhs.neg())
+                fn neg(self) -> #struct_name {
+                    #struct_name {
+                        x: self.x.clone(),
+                        y: core::ops::Neg::neg(&self.y),
+                    }
                 }
             }
 
-            impl core::ops::Sub<&#struct_name> for &#struct_name {
-                type Output = #struct_name;
+            mod #group_ops_mod_name {
+                use ::openvm_ecc_guest::{weierstrass::WeierstrassPoint, impl_sw_group_ops};
+                use super::*;
 
-                fn sub(self, p2: &#struct_name) -> Self::Output {
-                    self.add(&p2.clone().neg())
-                }
-            }
-
-            impl core::ops::SubAssign<&#struct_name> for #struct_name {
-                fn sub_assign(&mut self, p2: &#struct_name) {
-                    self.sub_assign(p2.clone());
-                }
-            }
-
-            impl core::ops::SubAssign for #struct_name {
-                fn sub_assign(&mut self, rhs: Self) {
-                    self.add_assign(rhs.neg());
-                }
+                impl_sw_group_ops!(#struct_name, #intmod_type);
             }
         });
         output.push(result);
