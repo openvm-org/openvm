@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, iter, rc::Rc, sync::Arc};
 
-use itertools::Itertools;
+use itertools::{zip_eq, Itertools};
 use num_bigint_dig::BigUint;
 use num_traits::One;
 use openvm_circuit::arch::{
@@ -8,6 +8,7 @@ use openvm_circuit::arch::{
     Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
 };
 use openvm_circuit_primitives::{
+    bigint::utils::big_uint_to_num_limbs,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
@@ -19,9 +20,8 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::BaseAir,
+    p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
 
@@ -111,7 +111,7 @@ where
         assert_eq!(vars.len(), 3); // x1^2, x3, y3
         assert_eq!(flags.len(), 1); // is_double_flag
 
-        let reads: Vec<AB::Expr> = inputs.concat().iter().map(|x| (*x).into()).collect();
+        let reads: Vec<AB::Expr> = inputs.into_iter().flatten().map(Into::into).collect();
         let writes: Vec<AB::Expr> = self
             .output_indices()
             .iter()
@@ -120,10 +120,26 @@ where
             .collect();
 
         let is_setup = is_valid - flags[0];
+        builder.assert_bool(is_setup.clone());
         let local_opcode_idx = flags[0]
             * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-            + is_setup
+            + is_setup.clone()
                 * AB::Expr::from_canonical_usize(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
+        // when is_setup, assert `reads` equals `(modulus, a)`
+        for (lhs, &rhs) in zip_eq(
+            &reads,
+            iter::empty()
+                .chain(&self.expr.builder.prime_limbs)
+                .chain(&big_uint_to_num_limbs(
+                    &self.a_biguint,
+                    self.expr.builder.limb_bits,
+                    self.expr.builder.num_limbs,
+                )),
+        ) {
+            builder
+                .when(is_setup.clone())
+                .assert_eq(lhs.clone(), AB::F::from_canonical_usize(rhs));
+        }
 
         let instruction = MinimalInstruction {
             is_valid: is_valid.into(),
@@ -246,6 +262,4 @@ where
     fn air(&self) -> &Self::Air {
         &self.air
     }
-
-    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {}
 }

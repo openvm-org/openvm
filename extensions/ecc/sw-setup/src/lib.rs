@@ -513,9 +513,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 {
                     // p1 is (x1, y1), and x1 must be the modulus.
-                    // y1 needs to be non-zero to avoid division by zero in double.
+                    // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
                     let modulus_bytes = <#item as openvm_algebra_guest::IntMod>::MODULUS;
-                    let mut one = [0u8; <#item as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                    let one = [0u8; <#item as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     one[0] = 1;
                     let p1 = [modulus_bytes.as_ref(), one.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
