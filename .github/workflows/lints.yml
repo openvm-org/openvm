@@ -37,27 +37,15 @@ jobs:
           # echo -e "\033[1;32mAll unique features across workspace:\033[0m" && cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | sed 's/^/• /'
           cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 default entrypoint export-getrandom export-libm function-span getrandom halo2-compiler halo2curves heap-embedded-alloc k256 mimalloc nightly-features panic-handler parallel rust-runtime static-verifier std test-utils unstable" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
-      
-      - name: Run fmt for guest
-        run: |
-          # List all guest program crate paths
-          for crate_path in benchmarks/programs/* examples/*; do
-            # Check if Cargo.toml exists in the directory
-            if [ -f "$crate_path/Cargo.toml" ]; then
-              echo "Running cargo fmt for $crate_path"
-              cargo fmt --manifest-path "$crate_path/Cargo.toml" --all -- --check 
-            else
-              echo "Skipping $crate_path as it does not contain a Cargo.toml"
-            fi
-          done
 
-      - name: Run clippy for guest
+      - name: Run fmt, clippy for guest
         run: |
           # List all guest program crate paths
           for crate_path in benchmarks/programs/* examples/*; do
             # Check if Cargo.toml exists in the directory
             if [ -f "$crate_path/Cargo.toml" ]; then
-              echo "Running cargo clippy for $crate_path"
+              echo "Running cargo fmt, clippy for $crate_path"
+              cargo fmt --manifest-path "$crate_path/Cargo.toml" --all -- --check 
               cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features std -- -D warnings 
             else
               echo "Skipping $crate_path as it does not contain a Cargo.toml"

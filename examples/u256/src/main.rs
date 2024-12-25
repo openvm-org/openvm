@@ -13,11 +13,12 @@ pub fn get_matrix(val: i32) -> Matrix {
     array::from_fn(|_| array::from_fn(|_| I256::from_i32(val)))
 }
 
+#[allow(clippy::needless_range_loop)]
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     let mut c = get_matrix(0);
-    for (i, row_a) in a.iter().enumerate() {
-        for (j, _) in row_a.iter().enumerate() {
-            for (k, _) in b.iter().enumerate() {
+    for i in 0..N {
+        for j in 0..N {
+            for k in 0..N {
                 c[i][j] += &a[i][k] * &b[k][j];
             }
         }
@@ -25,10 +26,11 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     c
 }
 
+#[allow(clippy::needless_range_loop)]
 pub fn get_identity_matrix() -> Matrix {
     let mut res = get_matrix(0);
-    for (i, row) in res.iter_mut().enumerate() {
-        row[i] = I256::from_i32(1);
+    for i in 0..N {
+        res[i][i] = I256::from_i32(1);
     }
     res
 }
