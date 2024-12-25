@@ -58,7 +58,7 @@ jobs:
             # Check if Cargo.toml exists in the directory
             if [ -f "$crate_path/Cargo.toml" ]; then
               echo "Running cargo clippy for $crate_path"
-              cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets -- -D warnings
+              cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features std -- -D warnings 
             else
               echo "Skipping $crate_path as it does not contain a Cargo.toml"
             fi

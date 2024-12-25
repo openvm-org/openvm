@@ -15,10 +15,10 @@ pub fn get_matrix(val: i32) -> Matrix {
 
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     let mut c = get_matrix(0);
-    for i in 0..N {
-        for j in 0..N {
-            for k in 0..N {
-                c[i][j] += &a[i][k] * &b[k][j];
+    for (i, row_a) in a.iter().enumerate() {
+        for (j, _) in b[0].iter().enumerate() {
+            for (k, _) in b.iter().enumerate() {
+                c[i][j] += &row_a[k] * &b[k][j];
             }
         }
     }
@@ -27,8 +27,8 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
 
 pub fn get_identity_matrix() -> Matrix {
     let mut res = get_matrix(0);
-    for i in 0..N {
-        res[i][i] = I256::from_i32(1);
+    for (i, row) in res.iter_mut().enumerate() {
+        row[i] = I256::from_i32(1);
     }
     res
 }
