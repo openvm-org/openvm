@@ -42,9 +42,6 @@ metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
 
-[dev-dependencies]
-openvm-sdk-example-test = { path = "example" }
-
 [features]
 default = ["parallel"]
 bench-metrics = ["openvm-native-recursion/bench-metrics"]

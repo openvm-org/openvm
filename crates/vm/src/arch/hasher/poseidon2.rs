@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
 };
 
-use openvm_poseidon2_air::{p3_poseidon2::ExternalLayerConstants, p3_symmetric::Permutation};
+use openvm_poseidon2_air::p3_symmetric::Permutation;
 use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
@@ -15,12 +15,10 @@ use crate::{
 pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<F> {
     assert_eq!(F::ORDER_U32, BabyBear::ORDER_U32, "F must be BabyBear");
     let config = vm_poseidon2_config::<BabyBear>();
-    let external_constants = ExternalLayerConstants::new(
-        config.external_constants[..config.rounds_f() / 2].to_vec(),
-        config.external_constants[config.rounds_f() / 2..].to_vec(),
-    );
+    let (external_constants, internal_constants) =
+        config.constants.to_external_internal_constants();
     Poseidon2Hasher {
-        poseidon2: Poseidon2BabyBear::new(external_constants, config.internal_constants),
+        poseidon2: Poseidon2BabyBear::new(external_constants, internal_constants),
         _marker: PhantomData,
     }
 }

@@ -1,20 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::{hint::black_box, ptr::slice_from_raw_parts};
+use core::hint::black_box;
 
-use openvm_ecc_guest::{
-    algebra::IntMod,
-    ecdsa::VerifyingKey,
-    k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::WeierstrassPoint,
-};
-use openvm_keccak256_guest::keccak256;
 use hex_literal::hex;
 use k256::{
     ecdsa::{self, RecoveryId},
     Secp256k1,
 };
+use openvm_ecc_guest::{
+    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Coord, weierstrass::WeierstrassPoint,
+};
+use openvm_keccak256_guest::keccak256;
 openvm::entry!(main);
 
 openvm_algebra_moduli_setup::moduli_init! {

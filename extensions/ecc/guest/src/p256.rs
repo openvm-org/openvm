@@ -1,14 +1,14 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::{Add, Neg};
 
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::{CyclicGroup, Group};
-use crate::weierstrass::IntrinsicCurve;
+use crate::weierstrass::{CachedMulTable, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -42,6 +42,21 @@ openvm_ecc_sw_setup::sw_declare! {
     P256Point { mod_type = P256Coord, a = CURVE_A, b = CURVE_B },
 }
 
+impl Field for P256Coord {
+    const ZERO: Self = <Self as IntMod>::ZERO;
+    const ONE: Self = <Self as IntMod>::ONE;
+
+    type SelfRef<'a> = &'a Self;
+
+    fn double_assign(&mut self) {
+        IntMod::double_assign(self);
+    }
+
+    fn square_assign(&mut self) {
+        IntMod::square_assign(self);
+    }
+}
+
 impl CyclicGroup for P256Point {
     const GENERATOR: Self = P256Point {
         x: P256Coord::from_const_bytes(hex!(
@@ -65,5 +80,15 @@ impl IntrinsicCurve for P256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 
-    // TODO: msm optimization if needed
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
+    where
+        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
+    {
+        if coeffs.len() < 25 {
+            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+            table.windowed_mul(coeffs)
+        } else {
+            crate::msm(coeffs, bases)
+        }
+    }
 }

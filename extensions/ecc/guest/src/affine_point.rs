@@ -10,7 +10,7 @@ pub struct AffinePoint<F> {
 }
 
 impl<F: Field> AffinePoint<F> {
-    pub fn new(x: F, y: F) -> Self {
+    pub const fn new(x: F, y: F) -> Self {
         Self { x, y }
     }
 
@@ -29,6 +29,7 @@ impl<F: Field> AffinePoint<F> {
     }
 }
 
+// Note: this is true for weierstrass curves but maybe not in general
 impl<F> Neg for AffinePoint<F>
 where
     F: Neg<Output = F>,

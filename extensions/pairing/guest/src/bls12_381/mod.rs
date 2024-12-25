@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::Neg;
 
 use openvm_algebra_guest::{Field, IntMod};
 use openvm_algebra_moduli_setup::moduli_declare;
@@ -15,10 +15,9 @@ use hex_literal::hex;
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint_dig::BigUint;
+use openvm_ecc_sw_setup::sw_declare;
 
 use crate::pairing::PairingIntrinsics;
-
-pub struct Bls12_381;
 
 #[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
 mod tests;
@@ -49,11 +48,9 @@ moduli_declare! {
     Bls12_381Scalar { modulus = "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001" },
 }
 
-const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_bytes(hex!(
-    "040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-));
+const CURVE_B: Bls12_381Fp = Bls12_381Fp::from_const_u8(4);
 
-openvm_ecc_sw_setup::sw_declare! {
+sw_declare! {
     Bls12_381G1Affine { mod_type = Bls12_381Fp, b = CURVE_B },
 }
 
@@ -64,6 +61,7 @@ pub type Scalar = Bls12_381Scalar;
 /// on the curve but not necessarily in the prime order subgroup
 /// because the group has cofactors.
 pub type G1Affine = Bls12_381G1Affine;
+pub use g2::G2Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
@@ -116,11 +114,32 @@ impl CyclicGroup for G1Affine {
     };
 }
 
+pub struct Bls12_381;
+
 impl IntrinsicCurve for Bls12_381 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
-    // TODO: msm optimization
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
+        // TODO: msm optimization
+        openvm_ecc_guest::msm(coeffs, bases)
+    }
+}
+
+// Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
+// but not special E(Fp2) intrinsics.
+mod g2 {
+    use openvm_algebra_guest::Field;
+    use openvm_ecc_guest::{
+        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+    };
+
+    use super::{Fp, Fp2};
+
+    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
+    const B: Fp2 = Fp2::new(Fp::from_const_u8(4), Fp::from_const_u8(4));
+    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_group_ops!(G2Affine, Fp2);
 }
 
 impl PairingIntrinsics for Bls12_381 {

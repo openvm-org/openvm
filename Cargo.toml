@@ -112,8 +112,8 @@ openvm-platform = { path = "crates/toolchain/platform", default-features = false
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.1-alpha", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.2-alpha", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.2-alpha", default-features = false }
 
 # Extensions
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
@@ -164,6 +164,7 @@ p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c
 p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-poseidon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
+p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" } # the "parallel" feature is NOT on by default to allow single-threaded benchmarking

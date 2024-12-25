@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Neg};
+use core::ops::{Add, Neg};
 
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
@@ -11,6 +11,7 @@ use openvm_ecc_guest::{
     weierstrass::{CachedMulTable, IntrinsicCurve},
     CyclicGroup, Group,
 };
+use openvm_ecc_sw_setup::sw_declare;
 
 use crate::pairing::PairingIntrinsics;
 
@@ -46,46 +47,6 @@ pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
     0, 0, 1, 0, -1, 0, 1,
 ];
 
-pub struct Bn254;
-
-impl Bn254 {
-    pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
-        Fp2 {
-            c0: Bn254Fp(hex!(
-                "9d0d8fc58d435dd33d0bc7f528eb780a2c4679786fa36e662fdf079ac1770a0e"
-            )),
-            c1: Bn254Fp(hex!(
-                "0000000000000000000000000000000000000000000000000000000000000000"
-            )),
-        },
-        Fp2 {
-            c0: Bn254Fp(hex!(
-                "3d556f175795e3990c33c3c210c38cb743b159f53cec0b4cf711794f9847b32f"
-            )),
-            c1: Bn254Fp(hex!(
-                "a2cb0f641cd56516ce9d7c0b1d2aae3294075ad78bcca44b20aeeb6150e5c916"
-            )),
-        },
-        Fp2 {
-            c0: Bn254Fp(hex!(
-                "48fd7c60e544bde43d6e96bb9f068fc2b0ccace0e7d96d5e29a031e1724e6430"
-            )),
-            c1: Bn254Fp(hex!(
-                "0000000000000000000000000000000000000000000000000000000000000000"
-            )),
-        },
-    ];
-
-    pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
-        c0: Bn254Fp(hex!(
-            "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
-        )),
-        c1: Bn254Fp(hex!(
-            "e3b02326637fd382d25ba28fc97d80212b6f79eca7b504079a0441acbc3cc007"
-        )),
-    };
-}
-
 moduli_declare! {
     Bn254Fp { modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583" },
     Bn254Scalar { modulus = "21888242871839275222246405745257275088548364400416034343698204186575808495617" },
@@ -95,13 +56,14 @@ const CURVE_B: Bn254Fp = Bn254Fp::from_const_bytes(hex!(
     "0300000000000000000000000000000000000000000000000000000000000000"
 ));
 
-openvm_ecc_sw_setup::sw_declare! {
+sw_declare! {
     Bn254G1Affine { mod_type = Bn254Fp, b = CURVE_B },
 }
 
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
 pub type G1Affine = Bn254G1Affine;
+pub use g2::G2Affine;
 
 impl Field for Fp {
     type SelfRef<'a> = &'a Self;
@@ -141,6 +103,71 @@ impl CyclicGroup for G1Affine {
         x: Bn254Fp::from_const_u8(1),
         y: Bn254Fp::from_const_bytes(hex!(
             "45FD7CD8168C203C8DCA7168916A81975D588181B64550B829A031E1724E6430"
+        )),
+    };
+}
+
+// Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
+// but not special E(Fp2) intrinsics.
+mod g2 {
+    use hex_literal::hex;
+    use openvm_algebra_guest::Field;
+    use openvm_ecc_guest::{
+        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+    };
+
+    use super::{Fp, Fp2};
+
+    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
+    // 3 / (9 + u)
+    const B: Fp2 = Fp2::new(
+        Fp::from_const_bytes(hex!(
+            "e538a124dce66732a3efdb59e5c5b4b5c36ae01b9918be81aeaab8ce409d142b"
+        )),
+        Fp::from_const_bytes(hex!(
+            "d215c38506bda2e452182de584a04fa7f4fdd8eeadaf2ccdd4fef03ab0139700"
+        )),
+    );
+    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_group_ops!(G2Affine, Fp2);
+}
+
+pub struct Bn254;
+
+impl Bn254 {
+    pub const FROBENIUS_COEFF_FQ6_C1: [Fp2; 3] = [
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "9d0d8fc58d435dd33d0bc7f528eb780a2c4679786fa36e662fdf079ac1770a0e"
+            )),
+            c1: Bn254Fp(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        },
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "3d556f175795e3990c33c3c210c38cb743b159f53cec0b4cf711794f9847b32f"
+            )),
+            c1: Bn254Fp(hex!(
+                "a2cb0f641cd56516ce9d7c0b1d2aae3294075ad78bcca44b20aeeb6150e5c916"
+            )),
+        },
+        Fp2 {
+            c0: Bn254Fp(hex!(
+                "48fd7c60e544bde43d6e96bb9f068fc2b0ccace0e7d96d5e29a031e1724e6430"
+            )),
+            c1: Bn254Fp(hex!(
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )),
+        },
+    ];
+
+    pub const XI_TO_Q_MINUS_1_OVER_2: Fp2 = Fp2 {
+        c0: Bn254Fp(hex!(
+            "5a13a071460154dc9859c9a9ede0aadbb9f9e2b698c65edcdcf59a4805f33c06"
+        )),
+        c1: Bn254Fp(hex!(
+            "e3b02326637fd382d25ba28fc97d80212b6f79eca7b504079a0441acbc3cc007"
         )),
     };
 }

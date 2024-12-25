@@ -1,3 +1,4 @@
+[workspace]
 [package]
 name = "openvm-sdk-example-test"
 version = "0.0.0"

@@ -5,7 +5,7 @@ use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::IntMod,
     k256::{Secp256k1Coord, Secp256k1Point},
-    weierstrass::WeierstrassPoint,
+    weierstrass::FromCompressed,
 };
 
 openvm::entry!(main);

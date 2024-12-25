@@ -1,15 +1,13 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    rc::Rc,
     sync::Arc,
 };
 
 use itertools::Itertools;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_poseidon2_air::poseidon2::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -34,8 +32,8 @@ use super::{
 };
 use crate::{
     arch::{
-        testing::memory::gen_pointer, ExecutionBus, MemoryConfig, EXECUTION_BUS, MEMORY_BUS,
-        MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
+        testing::memory::gen_pointer, MemoryConfig, MEMORY_BUS, MEMORY_MERKLE_BUS,
+        POSEIDON2_DIRECT_BUS,
     },
     system::{
         memory::{
@@ -43,8 +41,7 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryWriteRecord,
         },
-        poseidon2::Poseidon2Chip,
-        program::ProgramBus,
+        poseidon2::Poseidon2PeripheryChip,
     },
 };
 
@@ -244,7 +241,7 @@ fn test_memory_controller() {
     });
     let memory_requester_trace = generate_trace(records, aux_factory);
 
-    memory_controller.finalize(None::<&mut Poseidon2Chip<BabyBear>>);
+    memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
 
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
@@ -283,22 +280,8 @@ fn test_memory_controller_persistent() {
         memory_bridge: memory_controller.memory_bridge(),
     };
 
-    // This never gets used because poseido2_chip will only have direct compression interactions
-    let dummy_memory_controller = MemoryController::with_volatile_memory(
-        MemoryBus(MEMORY_BUS),
-        MemoryConfig::default(),
-        range_checker.clone(),
-    );
-
-    let mut poseidon_chip = Poseidon2Chip::from_poseidon2_config(
-        Poseidon2Config::<16, BabyBear>::new_p3_baby_bear_16(),
-        3,
-        ExecutionBus(EXECUTION_BUS),
-        ProgramBus(READ_INSTRUCTION_BUS),
-        Rc::new(RefCell::new(dummy_memory_controller)),
-        POSEIDON2_DIRECT_BUS,
-        0,
-    );
+    let mut poseidon_chip =
+        Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
 
     memory_controller.finalize(Some(&mut poseidon_chip));
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();

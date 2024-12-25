@@ -87,6 +87,7 @@ pub(crate) fn sextic_tower_mul_intrinsic<P: super::PairingIntrinsics>(
     );
 }
 
+#[allow(dead_code)]
 #[cfg(not(target_os = "zkvm"))]
 pub(crate) fn sextic_tower_mul_host<F: Field>(
     lhs: &SexticExtField<F>,

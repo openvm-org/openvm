@@ -225,12 +225,11 @@ fn test_public_values_and_leaf_verification() {
                 public_values_root_proof: Some(wrong_pv_root_proof),
             },
         );
-        match execution_result.err().unwrap() {
-            ExecutionError::Fail { .. } => {}
-            _ => {
-                panic!("Expected failure: the public value root proof has a wrong pv commit")
-            }
-        }
+        assert!(
+            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            "Expected failure: the public value root proof has a wrong pv commit: {:?}",
+            execution_result
+        );
     }
 
     // Failure: The public value root proof has a wrong path proof.
@@ -245,10 +244,11 @@ fn test_public_values_and_leaf_verification() {
                 public_values_root_proof: Some(wrong_pv_root_proof),
             },
         );
-        match execution_result.err().unwrap() {
-            ExecutionError::Fail { .. } => {}
-            _ => panic!("Expected failure: the public value root proof has a wrong path proof"),
-        }
+        assert!(
+            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            "Expected failure: the public value root proof has a wrong path proof: {:?}",
+            execution_result
+        );
     }
 }
 
@@ -285,7 +285,7 @@ fn test_sdk_guest_build_and_transpile() {
         // .with_options(vec!["--release"]);
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("example");
+    pkg_dir.push("guest");
     let one = sdk
         .build(guest_opts.clone(), &pkg_dir, &Default::default())
         .unwrap();
