@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
     prover::USE_DEBUG_BUILDER, rap::AnyRap, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
@@ -64,7 +64,7 @@ fn test_variable_range_checker_chip_send() {
                         var_range_checker.add_count(val, bits as usize);
                         iter::once(val).chain(iter::once(bits))
                     })
-                    .map(AbstractField::from_canonical_u32)
+                    .map(FieldAlgebra::from_canonical_u32)
                     .collect(),
                 2,
             )
@@ -116,7 +116,7 @@ fn negative_test_variable_range_checker_chip_send() {
                 var_range_checker.add_count(val, bits as usize);
                 iter::once(val).chain(iter::once(bits))
             })
-            .map(AbstractField::from_canonical_u32)
+            .map(FieldAlgebra::from_canonical_u32)
             .collect(),
         2,
     );
@@ -177,7 +177,7 @@ fn test_variable_range_checker_chip_range_check() {
                         var_range_checker.add_count(val, MAX_BITS);
                         iter::once(val)
                     })
-                    .map(AbstractField::from_canonical_u32)
+                    .map(FieldAlgebra::from_canonical_u32)
                     .collect(),
                 1,
             )
@@ -227,7 +227,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
                 var_range_checker.add_count(val, MAX_BITS);
                 iter::once(val)
             })
-            .map(AbstractField::from_canonical_u32)
+            .map(FieldAlgebra::from_canonical_u32)
             .collect(),
         1,
     );

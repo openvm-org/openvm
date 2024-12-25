@@ -3,7 +3,7 @@ use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;

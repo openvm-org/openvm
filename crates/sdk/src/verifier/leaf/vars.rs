@@ -4,7 +4,7 @@ use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     prover::types::Proof,
 };
 

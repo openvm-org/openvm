@@ -24,7 +24,7 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{FieldAlgebra, Field, PrimeField32},
 };
 
 #[allow(dead_code)]

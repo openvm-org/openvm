@@ -25,7 +25,7 @@ use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{FieldAlgebra, Field, PrimeField32},
 };
 
 pub struct NativeLoadStoreInstruction<T> {

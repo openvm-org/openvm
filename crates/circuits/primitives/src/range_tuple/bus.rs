@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,7 +44,7 @@ pub struct RangeTupleCheckerBusInteraction<T> {
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> RangeTupleCheckerBusInteraction<T> {
+impl<T: FieldAlgebra> RangeTupleCheckerBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,

@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
     p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{AbstractField, TwoAdicField},
+    p3_field::{FieldAlgebra, TwoAdicField},
 };
 use p3_symmetric::Hash;
 

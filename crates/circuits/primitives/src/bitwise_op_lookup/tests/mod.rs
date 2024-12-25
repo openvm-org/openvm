@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
 use openvm_stark_backend::{
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     prover::USE_DEBUG_BUILDER,
@@ -88,7 +88,7 @@ fn test_bitwise_operation_lookup() {
                         };
                         [x, y, z, op as u32].into_iter()
                     })
-                    .map(AbstractField::from_canonical_u32)
+                    .map(FieldAlgebra::from_canonical_u32)
                     .collect(),
                 4,
             )
@@ -122,7 +122,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
                     };
                     [x, y, z, op as u32].into_iter()
                 })
-                .map(AbstractField::from_canonical_u32)
+                .map(FieldAlgebra::from_canonical_u32)
                 .collect(),
             4,
         ),

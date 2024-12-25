@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use lazy_static::lazy_static;
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
@@ -53,7 +53,7 @@ lazy_static! {
         horizen_round_consts().ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<FA: AbstractField, const WIDTH: usize>(
+pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
     state: &mut [FA; WIDTH],
     int_diag_m1_matrix: &[FA::F; WIDTH],
 ) {

@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
     p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset},
-    p3_field::{AbstractField, Field, TwoAdicField},
+    p3_field::{Field, FieldAlgebra, TwoAdicField},
 };
 
 use super::types::FriConfigVariable;

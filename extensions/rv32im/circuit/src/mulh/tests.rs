@@ -16,7 +16,7 @@ use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,

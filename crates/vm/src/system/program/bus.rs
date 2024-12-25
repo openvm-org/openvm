@@ -1,6 +1,6 @@
 use std::iter;
 
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramBus(pub usize);

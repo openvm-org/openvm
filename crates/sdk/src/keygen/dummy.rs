@@ -22,7 +22,7 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::StarkGenericConfig, p3_field::AbstractField, prover::types::Proof, Chip,
+        config::StarkGenericConfig, p3_field::FieldAlgebra, prover::types::Proof, Chip,
     },
 };
 

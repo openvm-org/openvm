@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
     rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
@@ -50,7 +50,7 @@ fn test_range_gate_chip() {
                         range_checker.add_count(v);
                         iter::once(1).chain(iter::once(v))
                     })
-                    .map(AbstractField::from_wrapped_u32)
+                    .map(FieldAlgebra::from_wrapped_u32)
                     .collect(),
                 2,
             )
@@ -91,7 +91,7 @@ fn negative_test_range_gate_chip() {
                     range_checker.count[i as usize].load(std::sync::atomic::Ordering::Relaxed);
                 iter::once(i + 1).chain(iter::once(count))
             })
-            .map(AbstractField::from_wrapped_u32)
+            .map(FieldAlgebra::from_wrapped_u32)
             .collect(),
         2,
     );
