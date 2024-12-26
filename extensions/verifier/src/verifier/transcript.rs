@@ -10,12 +10,8 @@ use halo2curves_axiom::{
 use itertools::Itertools;
 use openvm_ecc_guest::algebra::IntMod;
 use openvm_keccak256_guest::keccak256;
-use openvm_pairing_guest::{
-    affine_point::AffineCoords,
-    bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr},
-};
+use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
 use snark_verifier::{
-    loader::evm::{u256_to_fe, U256},
     util::transcript::{Transcript, TranscriptRead},
     Error,
 };
@@ -64,10 +60,9 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
             .collect_vec();
         let hash = keccak256(&data);
         self.buf = hash.to_vec();
-        let fr: Halo2Fr = u256_to_fe(U256::from_be_bytes(hash));
-        use halo2curves_axiom::ff::PrimeField;
-        let bytes: [u8; 32] = fr.to_repr();
-        OpenVmScalar(Fr::from_le_bytes(&bytes), PhantomData)
+        let fr = Fr::from_be_bytes(hash);
+        fr.reduce();
+        OpenVmScalar(fr, PhantomData)
     }
 
     fn common_ec_point(

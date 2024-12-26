@@ -10,7 +10,6 @@ use openvm_ecc_guest::{
     msm, AffinePoint,
 };
 use openvm_pairing_guest::{
-    affine_point::AffineCoords,
     bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
     pairing::PairingCheck,
 };
@@ -40,8 +39,6 @@ impl<const LIMBS: usize, const BITS: usize> AccumulatorEncoding<G1Affine, OpenVm
 
     fn from_repr(limbs: &[&OpenVmScalar<Halo2Fr, Fr>]) -> Result<Self::Accumulator, Error> {
         assert_eq!(limbs.len(), 4 * LIMBS);
-
-        let loader = &*LOADER;
 
         let [lhs_x, lhs_y, rhs_x, rhs_y]: [_; 4] = limbs
             .chunks(LIMBS)
