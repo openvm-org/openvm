@@ -7,7 +7,7 @@ use openvm_native_compiler::ir::{
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
     p3_commit::ExtensionMmcs,
-    p3_field::{extension::BinomialExtensionField, FieldExtensionAlgebra, Field, FieldAlgebra},
+    p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra},
     p3_util::log2_strict_usize,
     prover::{
         opener::{AdjacentOpenedValues, OpenedValues, OpeningProof},

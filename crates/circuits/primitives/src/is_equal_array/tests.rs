@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},

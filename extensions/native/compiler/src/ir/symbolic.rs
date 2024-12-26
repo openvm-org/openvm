@@ -11,9 +11,7 @@ use std::{
     ops::{AddAssign, DivAssign, MulAssign, SubAssign},
 };
 
-use openvm_stark_backend::p3_field::{
-    FieldAlgebra, ExtensionField, Field, FieldArray, PrimeField,
-};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, FieldArray, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};

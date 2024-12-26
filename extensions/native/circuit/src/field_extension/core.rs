@@ -15,7 +15,7 @@ use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 

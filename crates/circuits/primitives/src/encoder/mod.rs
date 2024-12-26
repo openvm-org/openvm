@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_field::{FieldAlgebra, Field},
+    p3_field::{Field, FieldAlgebra},
 };
 
 use crate::SubAir;

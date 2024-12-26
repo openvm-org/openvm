@@ -25,7 +25,7 @@ use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;

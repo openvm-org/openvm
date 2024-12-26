@@ -30,7 +30,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 use super::{compose, RV32_REGISTER_NUM_LIMBS};

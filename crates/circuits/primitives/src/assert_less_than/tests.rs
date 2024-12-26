@@ -7,7 +7,7 @@ use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
-    p3_field::{FieldAlgebra, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,

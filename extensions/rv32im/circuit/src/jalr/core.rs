@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
