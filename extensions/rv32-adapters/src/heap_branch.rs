@@ -157,7 +157,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (4, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
