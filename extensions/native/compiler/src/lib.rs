@@ -32,8 +32,6 @@ pub mod prelude {
 pub enum NativeLoadStoreOpcode {
     LOADW,
     STOREW,
-    LOADW2,
-    STOREW2,
     /// Instruction to write the next hint word into memory.
     SHINTW,
 }
