@@ -13,7 +13,11 @@ mod bn254 {
     use alloc::format;
 
     use openvm_algebra_guest::IntMod;
-    use openvm_pairing_guest::bn254::{Bn254, Fp, Fp2};
+    use openvm_ecc_guest::AffinePoint;
+    use openvm_pairing_guest::{
+        bn254::{Bn254, Fp, Fp2},
+        pairing::PairingCheck,
+    };
 
     use super::*;
 

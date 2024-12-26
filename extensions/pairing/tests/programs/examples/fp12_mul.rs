@@ -8,6 +8,7 @@ openvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
+    use openvm_algebra_guest::{field::FieldExtension, IntMod};
     use openvm_pairing_guest::bn254::{Fp, Fp12};
 
     use super::*;
