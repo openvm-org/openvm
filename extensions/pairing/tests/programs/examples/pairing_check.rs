@@ -1,10 +1,16 @@
 #![feature(cfg_match)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(unused_imports)]
 
 extern crate alloc;
 
 use openvm::io::read_vec;
+use openvm_ecc_guest::AffinePoint;
+use openvm_pairing_guest::{
+    bn254::{Bn254, Fp, Fp2},
+    pairing::PairingCheck,
+};
 
 openvm::entry!(main);
 

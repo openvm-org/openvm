@@ -1,14 +1,15 @@
 #![feature(cfg_match)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(unused_imports)]
 
 use openvm::io::read_vec;
+use openvm_algebra_guest::{field::FieldExtension, IntMod};
 
 openvm::entry!(main);
 
 #[cfg(feature = "bn254")]
 mod bn254 {
-    use openvm_algebra_guest::{field::FieldExtension, IntMod};
     use openvm_pairing_guest::bn254::{Fp, Fp12};
 
     use super::*;
