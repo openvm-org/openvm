@@ -12,7 +12,7 @@ use openvm_stark_backend::{
 };
 pub use openvm_stark_sdk::p3_baby_bear;
 pub use p3_poseidon2;
-use p3_poseidon2::Poseidon2;
+use p3_poseidon2::{ExternalLayerConstants, Poseidon2};
 use p3_poseidon2_air::generate_trace_rows;
 pub use p3_poseidon2_air::{self, Poseidon2Air};
 pub use p3_symmetric::{self, Permutation};
@@ -49,11 +49,12 @@ pub struct Poseidon2SubChip<F: Field, const SBOX_REGISTERS: usize> {
 }
 
 impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGISTERS> {
-    pub fn new(config: Poseidon2Config<F>) -> Self {
+    pub fn new(constants: Poseidon2Constants<F>) -> Self {
+        let (external_constants, internal_constants) = constants.to_external_internal_constants();
         Self {
-            air: Arc::new(Poseidon2SubAir::new(config.constants.to_round_constants())),
-            executor: Poseidon2Executor::new(config.constants),
-            constants: config.constants.to_round_constants(),
+            air: Arc::new(Poseidon2SubAir::new(constants.into())),
+            executor: Poseidon2Executor::new(external_constants, internal_constants),
+            constants: constants.into(),
         }
     }
 
@@ -87,23 +88,16 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
     }
 }
 
-pub fn from_config<F: PrimeField, const SBOX_REGISTERS: usize>(
-    config: Poseidon2Config<F>,
-) -> (Poseidon2SubAir<F, SBOX_REGISTERS>, Poseidon2Executor<F>) {
-    (
-        Poseidon2SubAir::new(config.constants.to_round_constants()),
-        Poseidon2Executor::new(config.constants),
-    )
-}
-
 #[derive(Clone, Debug)]
 pub enum Poseidon2Executor<F: Field> {
     BabyBearMds(Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers>),
 }
 
 impl<F: PrimeField> Poseidon2Executor<F> {
-    pub fn new(constants: Poseidon2Constants<F>) -> Self {
-        let (external_constants, internal_constants) = constants.to_external_internal_constants();
+    pub fn new(
+        external_constants: ExternalLayerConstants<F, POSEIDON2_WIDTH>,
+        internal_constants: Vec<F>,
+    ) -> Self {
         Self::BabyBearMds(Plonky3Poseidon2Executor::new(
             external_constants,
             internal_constants,

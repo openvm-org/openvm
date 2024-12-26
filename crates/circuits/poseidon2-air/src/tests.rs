@@ -16,8 +16,8 @@ use openvm_stark_sdk::{
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
 
-use super::{Poseidon2Config, Poseidon2Constants, Poseidon2SubChip};
-use crate::BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS;
+use super::{Poseidon2Config, Poseidon2SubChip};
+use crate::{Poseidon2Constants, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
 
 fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: &mut StdRng) {
     // random state and trace generation
@@ -71,7 +71,9 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
 fn test_poseidon2_default() {
     let mut rng = create_seeded_rng();
     let poseidon2_config = Poseidon2Config::default();
-    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
+    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(
+        poseidon2_config.constants,
+    ));
     run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
 }
 
@@ -80,19 +82,16 @@ fn test_poseidon2_random_constants() {
     let mut rng = create_seeded_rng();
     let external_constants =
         ExternalLayerConstants::new_from_rng(2 * BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, &mut rng);
-    let poseidon2_config = Poseidon2Config {
-        constants: Poseidon2Constants {
-            beginning_full_round_constants: {
-                let vec = external_constants.get_initial_constants();
-                from_fn(|i| vec[i])
-            },
-            ending_full_round_constants: {
-                let vec = external_constants.get_terminal_constants();
-                from_fn(|i| vec[i])
-            },
-            partial_round_constants: from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32())),
-        },
+    let beginning_full_round_constants_vec = external_constants.get_initial_constants();
+    let beginning_full_round_constants = from_fn(|i| beginning_full_round_constants_vec[i]);
+    let ending_full_round_constants_vec = external_constants.get_terminal_constants();
+    let ending_full_round_constants = from_fn(|i| ending_full_round_constants_vec[i]);
+    let partial_round_constants = from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32()));
+    let constants = Poseidon2Constants {
+        beginning_full_round_constants,
+        partial_round_constants,
+        ending_full_round_constants,
     };
-    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(poseidon2_config));
+    let poseidon2_subchip = Arc::new(Poseidon2SubChip::<BabyBear, 0>::new(constants));
     run_poseidon2_subchip_test(poseidon2_subchip, &mut rng);
 }

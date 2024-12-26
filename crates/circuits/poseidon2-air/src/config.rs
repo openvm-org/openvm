@@ -4,13 +4,16 @@ use p3_poseidon2::ExternalLayerConstants;
 use p3_poseidon2_air::RoundConstants;
 
 use super::{
-    BABYBEAR_BEGIN_EXT_CONSTS, BABYBEAR_END_EXT_CONSTS, BABYBEAR_PARTIAL_CONSTS,
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
+    // BABYBEAR_BEGIN_EXT_CONSTS, BABYBEAR_END_EXT_CONSTS, BABYBEAR_PARTIAL_CONSTS,
+    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
+    BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
+    POSEIDON2_WIDTH,
 };
+use crate::{BABYBEAR_BEGIN_EXT_CONSTS, BABYBEAR_END_EXT_CONSTS, BABYBEAR_PARTIAL_CONSTS};
 
 // Currently only contains round constants, but this struct may contain other configuration parameters in the future.
-#[derive(Clone, Copy, Debug)]
-pub struct Poseidon2Config<F> {
+#[derive(Clone, Debug)]
+pub struct Poseidon2Config<F: Field> {
     pub constants: Poseidon2Constants<F>,
 }
 
@@ -30,13 +33,17 @@ pub struct Poseidon2Constants<F> {
     pub ending_full_round_constants: [[F; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS],
 }
 
-impl<F: Field> Poseidon2Constants<F> {
-    // FIXME[stephenh]: PR https://github.com/Plonky3/Plonky3/pull/588 is now merged.
-    // We can remove Poseidon2Constants and use Plonky3RoundConstants directly after updating the plonky3 commit.
-    pub fn to_round_constants(&self) -> Plonky3RoundConstants<F> {
-        unsafe { std::mem::transmute_copy(self) }
+impl<F: Field> Into<Plonky3RoundConstants<F>> for Poseidon2Constants<F> {
+    fn into(self) -> Plonky3RoundConstants<F> {
+        Plonky3RoundConstants::new(
+            self.beginning_full_round_constants,
+            self.partial_round_constants,
+            self.ending_full_round_constants,
+        )
     }
+}
 
+impl<F: Field> Poseidon2Constants<F> {
     pub fn to_external_internal_constants(
         &self,
     ) -> (ExternalLayerConstants<F, POSEIDON2_WIDTH>, Vec<F>) {

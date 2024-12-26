@@ -9,9 +9,9 @@ use zkhash::{
 };
 
 use super::{
-    Poseidon2Constants, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
-    POSEIDON2_WIDTH,
+    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
 };
+use crate::Poseidon2Constants;
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
     BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
