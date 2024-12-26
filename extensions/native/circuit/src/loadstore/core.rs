@@ -31,7 +31,7 @@ pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub is_shintw: T,
 
     pub pointer_read: T,
-    pub data_read: T,
+    pub data_read: [T; NUM_CELLS],
     pub data_write: [T; NUM_CELLS],
 }
 
@@ -40,7 +40,8 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub opcode: NativeLoadStoreOpcode,
 
     pub pointer_read: F,
-    pub data_read: F,
+    #[serde(with = "BigArray")]
+    pub data_read: [F; NUM_CELLS],
     #[serde(with = "BigArray")]
     pub data_write: [F; NUM_CELLS],
 }
@@ -65,7 +66,7 @@ impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for NativeLoadStoreCoreAir<
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<(AB::Expr, AB::Expr)>,
+    I::Reads: From<(AB::Expr, [AB::Expr; NUM_CELLS])>,
     I::Writes: From<[AB::Expr; NUM_CELLS]>,
     I::ProcessedInstruction: From<NativeLoadStoreInstruction<AB::Expr>>,
 {
@@ -92,7 +93,7 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: (cols.pointer_read.into(), cols.data_read.into()).into(),
+            reads: (cols.pointer_read.into(), cols.data_read.map(Into::into)).into(),
             writes: cols.data_write.map(Into::into).into(),
             instruction: NativeLoadStoreInstruction {
                 is_valid,
@@ -127,7 +128,7 @@ impl<F: Field, const NUM_CELLS: usize> NativeLoadStoreCoreChip<F, NUM_CELLS> {
 impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
     for NativeLoadStoreCoreChip<F, NUM_CELLS>
 where
-    I::Reads: Into<(F, F)>,
+    I::Reads: Into<(F, [F; NUM_CELLS])>,
     I::Writes: From<[F; NUM_CELLS]>,
 {
     type Record = NativeLoadStoreCoreRecord<F, NUM_CELLS>;
@@ -151,7 +152,7 @@ where
             }
             array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
         } else {
-            [data_read; NUM_CELLS]
+            data_read
         };
 
         let output = AdapterRuntimeContext::without_pc(data_write);
