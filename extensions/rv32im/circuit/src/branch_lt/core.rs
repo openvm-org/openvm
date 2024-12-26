@@ -157,7 +157,7 @@ where
 
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(4);
+            + not(cols.cmp_result) * AB::Expr::from_canonical_u8(DEFAULT_PC_STEP);
 
         AdapterAirContext {
             to_pc: Some(to_pc),

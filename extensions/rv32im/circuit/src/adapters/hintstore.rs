@@ -25,6 +25,7 @@ use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRang
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
+    program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
@@ -200,7 +201,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
 
         let to_pc = ctx
             .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(4));
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP));
         self.execution_bridge
             .execute(
                 ctx.instruction.opcode,
@@ -295,7 +296,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
 
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord {
