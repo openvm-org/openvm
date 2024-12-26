@@ -1,4 +1,4 @@
-name: eDSL Compiler Tests
+name: Native Compiler Tests
 
 on:
   push:
