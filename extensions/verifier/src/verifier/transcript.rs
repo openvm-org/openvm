@@ -60,7 +60,7 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
             .collect_vec();
         let hash = keccak256(&data);
         self.buf = hash.to_vec();
-        let fr = Fr::from_be_bytes(hash);
+        let mut fr = Fr::from_be_bytes(&hash);
         fr.reduce();
         OpenVmScalar(fr, PhantomData)
     }
