@@ -28,6 +28,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
+    program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
@@ -377,7 +378,7 @@ impl<
 
         Ok((
             ExecutionState {
-                pc: from_state.pc + 4,
+                pc: from_state.pc + DEFAULT_PC_STEP,
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, rd },
