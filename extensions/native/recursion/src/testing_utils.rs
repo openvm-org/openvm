@@ -74,19 +74,6 @@ pub mod inner {
             )
             .unwrap();
 
-        println!("here, we generated the proof, let's inspect");
-        println!(
-            "final poly len: {:?} and {:?}",
-            vparams.data.proof.opening.proof.final_poly.len(),
-            vparams.fri_params.log_final_poly_len
-        );
-        println!("fri params: {:?}", vparams.fri_params);
-
-        println!(
-            "final poly: {:?}",
-            vparams.data.proof.opening.proof.final_poly
-        );
-
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),

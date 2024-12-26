@@ -61,10 +61,6 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
         });
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
-    println!(
-        "check witness: {:?}, {:?}",
-        config.proof_of_work_bits, proof.pow_witness
-    );
 
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));

@@ -61,9 +61,6 @@ impl Witnessable<C> for OuterFriProof {
     type WitnessVariable = FriProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        println!("reading final poly as witnessable");
-        println!("final poly len: {:?}", self.final_poly.len());
-
         let commit_phase_commits = self.commit_phase_commits.read(builder);
         let query_proofs = self.query_proofs.read(builder);
         let final_poly = self.final_poly.read(builder);
@@ -77,7 +74,6 @@ impl Witnessable<C> for OuterFriProof {
     }
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
-        println!("writing final poly as witnessable");
         self.commit_phase_commits.write(witness);
         <Vec<_> as Witnessable<C>>::write(&self.query_proofs, witness);
         self.final_poly.write(witness);
