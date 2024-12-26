@@ -158,8 +158,9 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         timestamp_delta += is_valid.clone();
 
         // TODO[yi]: Remove when vectorizing
+        // TODO[yi]: Decrease degree
         // read data, disabled if SHINTW
-        // data pointer = [c]_d + [f]_d * g + b, degree 2
+        // data pointer = [c]_d + b, degree 2
         builder
             .when(is_valid.clone() - is_shintw.clone())
             .assert_eq(
