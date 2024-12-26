@@ -11,7 +11,7 @@ use openvm_circuit::{
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
             MemoryReadRecord, MemoryWriteRecord,
         },
@@ -42,8 +42,7 @@ pub struct NativeLoadStoreAdapterInterface<T, const NUM_CELLS: usize>(PhantomDat
 impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     for NativeLoadStoreAdapterInterface<T, NUM_CELLS>
 {
-    // TODO[yi]: Fix when vectorizing
-    type Reads = (T, T);
+    type Reads = (T, [T; NUM_CELLS]);
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = NativeLoadStoreInstruction<T>;
 }
@@ -111,10 +110,8 @@ pub struct NativeLoadStoreAdapterCols<T, const NUM_CELLS: usize> {
     pub data_write_as: T,
     pub data_write_pointer: T,
 
-    pub pointer_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
-    pub data_read_aux_cols: MemoryReadOrImmediateAuxCols<T>,
-    // TODO[yi]: Fix when vectorizing
-    // pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
+    pub pointer_read_aux_cols: MemoryReadAuxCols<T, 1>,
+    pub data_read_aux_cols: MemoryReadAuxCols<T, NUM_CELLS>,
     pub data_write_aux_cols: MemoryWriteAuxCols<T, NUM_CELLS>,
 }
 
@@ -141,9 +138,6 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        // TODO[yi]: Remove when vectorizing
-        assert_eq!(NUM_CELLS, 1);
-
         let cols: &NativeLoadStoreAdapterCols<_, NUM_CELLS> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta = AB::Expr::from_canonical_usize(0);
@@ -155,9 +149,9 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 
         // first pointer read is always [c]_d
         self.memory_bridge
-            .read_or_immediate(
+            .read(
                 MemoryAddress::new(cols.d, cols.c),
-                ctx.reads.0.clone(),
+                [ctx.reads.0.clone()],
                 timestamp + timestamp_delta.clone(),
                 &cols.pointer_read_aux_cols,
             )
@@ -179,7 +173,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
             is_storew.clone() * cols.a + is_loadw.clone() * (ctx.reads.0.clone() + cols.b),
         );
         self.memory_bridge
-            .read_or_immediate(
+            .read(
                 MemoryAddress::new(cols.data_read_as, cols.data_read_pointer),
                 ctx.reads.1.clone(),
                 timestamp + timestamp_delta.clone(),
@@ -229,8 +223,7 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
 impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
     for NativeLoadStoreAdapterChip<F, NUM_CELLS>
 {
-    // TODO[yi]: Fix when vectorizing
-    type ReadRecord = NativeLoadStoreReadRecord<F, 1>;
+    type ReadRecord = NativeLoadStoreReadRecord<F, NUM_CELLS>;
     type WriteRecord = NativeLoadStoreWriteRecord<F, NUM_CELLS>;
     type Air = NativeLoadStoreAdapterAir<NUM_CELLS>;
     type Interface = NativeLoadStoreAdapterInterface<F, NUM_CELLS>;
@@ -267,15 +260,13 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
                 LOADW => (read_cell.data[0] + b, a),
-                STOREW => (a, read_cell.data[0] + b),
-                SHINTW => (a, read_cell.data[0] + b),
+                STOREW | SHINTW => (a, read_cell.data[0] + b),
             }
         };
 
-        // TODO[yi]: Fix when vectorizing
         let data_read = match local_opcode {
             SHINTW => None,
-            _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
+            LOADW | STOREW => Some(memory.read::<NUM_CELLS>(data_read_as, data_read_ptr)),
         };
         let record = NativeLoadStoreReadRecord {
             pointer_read: read_cell,
@@ -290,7 +281,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
 
         Ok((
-            (read_cell.data[0], data_read.map_or(F::ZERO, |x| x.data[0])),
+            (
+                read_cell.data[0],
+                data_read.map_or([F::ZERO; NUM_CELLS], |x| x.data),
+            ),
             record,
         ))
     }
@@ -340,12 +334,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;
 
-        cols.pointer_read_aux_cols =
-            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.pointer_read);
+        cols.pointer_read_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.pointer_read);
         cols.data_read_aux_cols = read_record
             .data_read
-            .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                aux_cols_factory.make_read_or_immediate_aux_cols(read)
+            .map_or_else(MemoryReadAuxCols::disabled, |read| {
+                aux_cols_factory.make_read_aux_cols(read)
             });
         cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write_record.write);
     }
