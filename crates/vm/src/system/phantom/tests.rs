@@ -15,7 +15,6 @@ fn test_nops_and_terminate() {
     let mut chip = PhantomChip::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
-        tester.memory_controller(),
         SystemOpcode::default_offset(),
     );
     chip.set_streams(Arc::new(Mutex::new(Default::default())));

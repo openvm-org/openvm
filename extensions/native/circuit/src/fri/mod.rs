@@ -12,8 +12,8 @@ use openvm_circuit::{
             offline_checker::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
-            MemoryAddress, MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord,
-            MemoryWriteRecord,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
+            MemoryReadRecord, MemoryWriteRecord,
         },
         program::ProgramBus,
     },
@@ -347,6 +347,7 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
 impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -360,8 +361,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             g: alpha_pow_ptr,
             ..
         } = instruction;
-
-        let mut memory = RefCell::borrow_mut(&self.memory);
 
         let alpha_read = memory.read(addr_space, alpha_ptr);
         let length_read = memory.read_cell(addr_space, length_ptr);

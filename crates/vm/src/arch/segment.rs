@@ -206,9 +206,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
             #[cfg(feature = "bench-metrics")]
             let mut opcode_name = None;
+            let memory_controller = &self.chip_complex.base.memory_controller;
             if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
+                    &mut *memory_controller.borrow_mut(),
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;

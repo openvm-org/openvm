@@ -105,7 +105,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(instruction.clone(), initial_state)
+            .execute(
+                &mut *self.memory.controller.borrow_mut(),
+                instruction.clone(),
+                initial_state,
+            )
             .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);

@@ -5,7 +5,8 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord,
+            MemoryAuxColsFactory, MemoryController, MemoryControllerRef, MemoryReadRecord,
+            MemoryWriteRecord,
         },
         program::ProgramBus,
     },
@@ -75,6 +76,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -88,7 +90,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
             ..
         } = instruction;
         let local_opcode = Poseidon2Opcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-        let mut memory = self.memory_controller.borrow_mut();
 
         let rd = memory.read_cell(d, a);
         let rs1 = memory.read_cell(d, b);

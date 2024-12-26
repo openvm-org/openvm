@@ -562,12 +562,8 @@ impl<F: PrimeField32> SystemComplex<F> {
         }
         let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = VmOpcode::with_default_offset(SystemOpcode::PHANTOM);
-        let mut phantom_chip = PhantomChip::new(
-            EXECUTION_BUS,
-            PROGRAM_BUS,
-            memory_controller.clone(),
-            SystemOpcode::default_offset(),
-        );
+        let mut phantom_chip =
+            PhantomChip::new(EXECUTION_BUS, PROGRAM_BUS, SystemOpcode::default_offset());
         phantom_chip.set_streams(streams.clone());
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])

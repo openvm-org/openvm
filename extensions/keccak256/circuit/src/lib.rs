@@ -22,7 +22,7 @@ pub use air::KeccakVmAir;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
-        memory::{MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{MemoryController, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
         program::ProgramBus,
     },
 };
@@ -126,6 +126,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
 impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
     fn execute(
         &mut self,
+        memory: &mut MemoryController<F>,
         instruction: Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -141,12 +142,11 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
-        let mut memory = self.memory_controller.borrow_mut();
         debug_assert_eq!(from_state.timestamp, memory.timestamp());
 
-        let (dst_read, dst) = read_rv32_register(&mut memory, d, a);
-        let (src_read, src) = read_rv32_register(&mut memory, d, b);
-        let (len_read, len) = read_rv32_register(&mut memory, d, c);
+        let (dst_read, dst) = read_rv32_register(memory, d, a);
+        let (src_read, src) = read_rv32_register(memory, d, b);
+        let (len_read, len) = read_rv32_register(memory, d, c);
         #[cfg(debug_assertions)]
         {
             assert!(dst < (1 << self.air.ptr_max_bits));
