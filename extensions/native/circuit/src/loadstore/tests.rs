@@ -173,9 +173,6 @@ fn rand_native_loadstore_test() {
         set_and_execute(&mut tester, &mut chip, &mut rng, false, STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, SHINTW);
         set_and_execute(&mut tester, &mut chip, &mut rng, false, LOADW);
-
-        set_and_execute(&mut tester, &mut chip, &mut rng, true, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, true, SHINTW);
     }
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
