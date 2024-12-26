@@ -4,7 +4,7 @@
 
 ## Instruction format
 
-Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 7` operands (field elements): `opcode, a, b, c, d, e, f, g`. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
+Instructions are encoded as a global opcode (field element) followed by `NUM_OPERANDS = 6` operands (field elements): `opcode, a, b, c, d, e, f`. An instruction does not need to use all operands, and trailing unused operands should be set to zero.
 
 ## Program ROM
 
@@ -431,8 +431,6 @@ In some instructions below, `W` is a generic parameter for the block size.
 | -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
 | STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
-| LOAD2\<W\>     | `a,b,c,d,e,f,g` | Set `[a:W]_d = [[c]_d + [f]_d * g + b:W]_e`.                                                                                                                                                                                                                                                |
-| STORE2\<W\>    | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                |
 | JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                           |
 | BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
 | BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
