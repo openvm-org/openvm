@@ -29,6 +29,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
+    program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
@@ -156,7 +157,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                 ],
                 cols.from_state,
                 AB::F::from_canonical_usize(timestamp_delta),
-                (4, ctx.to_pc),
+                (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
@@ -267,7 +268,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
 
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             from_state,
