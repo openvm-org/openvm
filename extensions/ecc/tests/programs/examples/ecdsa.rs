@@ -8,9 +8,7 @@ use k256::{
     ecdsa::{self, RecoveryId},
     Secp256k1,
 };
-use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Coord, weierstrass::WeierstrassPoint,
-};
+use openvm_ecc_guest::{algebra::IntMod, ecdsa::VerifyingKey, weierstrass::WeierstrassPoint};
 use openvm_keccak256_guest::keccak256;
 openvm::entry!(main);
 

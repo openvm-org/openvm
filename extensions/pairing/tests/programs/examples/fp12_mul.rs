@@ -3,7 +3,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::read_vec;
-use openvm_algebra_guest::{field::FieldExtension, IntMod};
 
 openvm::entry!(main);
 

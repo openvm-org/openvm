@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(clippy::needless_range_loop)]
 
 openvm::entry!(main);
 use core::array;
@@ -13,7 +14,6 @@ pub fn get_matrix(val: i32) -> Matrix {
     array::from_fn(|_| array::from_fn(|_| I256::from_i32(val)))
 }
 
-#[allow(clippy::needless_range_loop)]
 pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     let mut c = get_matrix(0);
     for i in 0..N {
@@ -26,7 +26,6 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     c
 }
 
-#[allow(clippy::needless_range_loop)]
 pub fn get_identity_matrix() -> Matrix {
     let mut res = get_matrix(0);
     for i in 0..N {
