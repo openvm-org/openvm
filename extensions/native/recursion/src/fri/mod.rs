@@ -45,8 +45,13 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
             builder.set(&betas, i, sample);
         });
 
-    let final_poly_felts = builder.ext2felt(proof.final_poly);
-    challenger.observe_slice(builder, final_poly_felts);
+    builder
+        .range(0, proof.final_poly.len())
+        .for_each(|i, builder| {
+            let final_poly_elem = builder.get(&proof.final_poly, i);
+            let final_poly_elem_felts = builder.ext2felt(final_poly_elem);
+            challenger.observe_slice(builder, final_poly_elem_felts);
+        });
 
     let num_query_proofs = proof.query_proofs.len().clone();
     builder
@@ -56,6 +61,10 @@ pub fn verify_shape_and_sample_challenges<C: Config>(
         });
 
     challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
+    println!(
+        "check witness: {:?}, {:?}",
+        config.proof_of_work_bits, proof.pow_witness
+    );
 
     let log_max_height =
         builder.eval_expr(proof.commit_phase_commits.len() + RVar::from(config.log_blowup));
@@ -105,7 +114,8 @@ pub fn verify_challenges<C: Config>(
                 log_max_height,
             );
 
-            builder.assert_ext_eq(folded_eval, proof.final_poly);
+            let final_poly_elem = builder.get(&proof.final_poly, 0);
+            builder.assert_ext_eq(folded_eval, final_poly_elem);
         });
 }
 

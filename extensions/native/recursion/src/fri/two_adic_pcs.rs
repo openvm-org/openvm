@@ -39,6 +39,8 @@ pub fn verify_two_adic_pcs<C: Config>(
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
+    builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::from(0));
+
     let g = builder.generator();
 
     let log_blowup = config.log_blowup;

@@ -30,6 +30,7 @@ pub fn const_fri_config<C: Config>(
     FriConfigVariable {
         log_blowup: params.log_blowup,
         blowup: 1 << params.log_blowup,
+        log_final_poly_len: params.log_final_poly_len,
         num_queries: params.num_queries,
         proof_of_work_bits: params.proof_of_work_bits,
         subgroups,

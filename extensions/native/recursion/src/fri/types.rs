@@ -6,6 +6,7 @@ use crate::{digest::DigestVariable, fri::TwoAdicMultiplicativeCosetVariable};
 pub struct FriConfigVariable<C: Config> {
     pub log_blowup: usize,
     pub blowup: usize,
+    pub log_final_poly_len: usize,
     pub num_queries: usize,
     pub proof_of_work_bits: usize,
     pub generators: Array<C, Felt<C::F>>,
@@ -34,7 +35,7 @@ impl<C: Config> FriConfigVariable<C> {
 pub struct FriProofVariable<C: Config> {
     pub commit_phase_commits: Array<C, DigestVariable<C>>,
     pub query_proofs: Array<C, FriQueryProofVariable<C>>,
-    pub final_poly: Ext<C::F, C::EF>,
+    pub final_poly: Array<C, Ext<C::F, C::EF>>,
     pub pow_witness: Felt<C::F>,
 }
 
