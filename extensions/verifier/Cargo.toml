@@ -12,7 +12,7 @@ openvm-pairing-guest = { workspace = true, features = [
 ] }
 openvm-keccak256-guest = { workspace = true, default-features = false }
 openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.7-git", default-features = false, features = ["halo2-axiom"] }
+snark-verifier-sdk = { workspace = true, default-features = false, features = ["halo2-axiom", "loader_evm"] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true

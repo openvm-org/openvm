@@ -10,11 +10,8 @@ use halo2curves_axiom::{
 use itertools::Itertools;
 use openvm_ecc_guest::algebra::IntMod;
 use openvm_keccak256_guest::keccak256;
-use openvm_pairing_guest::{
-    affine_point::AffineCoords,
-    bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr},
-};
-use snark_verifier::{
+use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
+use snark_verifier_sdk::snark_verifier::{
     util::transcript::{Transcript, TranscriptRead},
     Error,
 };
@@ -31,6 +28,17 @@ pub struct OpenVmTranscript<C: CurveAffine, S, B> {
     _marker: PhantomData<C>,
 }
 
+impl<S> OpenVmTranscript<G1Affine, S, Vec<u8>> {
+    /// Initialize [`OpenVmTranscript`] given readable or writeable stream for
+    /// verifying or proving with [`OpenVmLoader`].
+    pub fn new(stream: S) -> Self {
+        Self {
+            stream,
+            buf: Vec::new(),
+            _marker: PhantomData,
+        }
+    }
+}
 impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec<u8>> {
     fn loader(&self) -> &OpenVmLoader {
         &LOADER
@@ -38,7 +46,7 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
 
     fn squeeze_challenge(
         &mut self,
-    ) -> <super::loader::OpenVmLoader as snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
+    ) -> <super::loader::OpenVmLoader as snark_verifier_sdk::snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
     {
         let data = self
             .buf
@@ -52,7 +60,9 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
             .collect_vec();
         let hash = keccak256(&data);
         self.buf = hash.to_vec();
-        OpenVmScalar(Fr::from_be_bytes(&hash), PhantomData)
+        let mut fr = Fr::from_be_bytes(&hash);
+        fr.reduce();
+        OpenVmScalar(fr, PhantomData)
     }
 
     fn common_ec_point(
@@ -64,7 +74,11 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
         x.copy_from_slice(ec_point.0.x.as_le_bytes());
         y.copy_from_slice(ec_point.0.y.as_le_bytes());
         let coordinates = Option::<Coordinates<G1Affine>>::from(
-            G1Affine::new(Fq::from_bytes(&x).unwrap(), Fq::from_bytes(&y).unwrap()).coordinates(),
+            G1Affine {
+                x: Fq::from_bytes(&x).unwrap(),
+                y: Fq::from_bytes(&y).unwrap(),
+            }
+            .coordinates(),
         )
         .ok_or_else(|| {
             Error::Transcript(
@@ -108,7 +122,6 @@ where
             self.stream
                 .read_exact(repr.as_mut())
                 .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
-            repr.as_mut().reverse();
         }
         let x = Fp::from_be_bytes(&x);
         let y = Fp::from_be_bytes(&y);

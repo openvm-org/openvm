@@ -3,22 +3,23 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use halo2curves_axiom::bn256::{Bn256, Fq as Halo2Fp, Fr as Halo2Fr, G1Affine, G2Affine};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use openvm_ecc_guest::{
     algebra::{field::FieldExtension, IntMod},
     msm, AffinePoint,
 };
 use openvm_pairing_guest::{
-    affine_point::AffineCoords,
     bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
     pairing::PairingCheck,
 };
-use snark_verifier::{
+use snark_verifier_sdk::snark_verifier::{
     loader::{EcPointLoader, Loader, ScalarLoader},
     pcs::{
-        kzg::{KzgAccumulator, KzgAs, KzgDecidingKey},
-        AccumulationDecider,
+        kzg::{KzgAccumulator, KzgAs, KzgDecidingKey, LimbsEncoding},
+        AccumulationDecider, AccumulatorEncoding,
     },
+    util::arithmetic::fe_from_limbs,
     Error,
 };
 
@@ -31,13 +32,59 @@ lazy_static! {
 #[derive(Clone, Debug)]
 pub struct OpenVmLoader;
 
+impl<const LIMBS: usize, const BITS: usize> AccumulatorEncoding<G1Affine, OpenVmLoader>
+    for LimbsEncoding<LIMBS, BITS>
+{
+    type Accumulator = KzgAccumulator<G1Affine, OpenVmLoader>;
+
+    fn from_repr(limbs: &[&OpenVmScalar<Halo2Fr, Fr>]) -> Result<Self::Accumulator, Error> {
+        assert_eq!(limbs.len(), 4 * LIMBS);
+
+        let [lhs_x, lhs_y, rhs_x, rhs_y]: [_; 4] = limbs
+            .chunks(LIMBS)
+            .map(|limbs| {
+                let v: [Halo2Fr; LIMBS] = limbs
+                    .iter()
+                    .map(|limb| {
+                        let mut buf = limb.0.to_be_bytes();
+                        buf.reverse();
+                        Halo2Fr::from_bytes(&buf).expect("Halo2Fr::from_bytes")
+                    })
+                    .collect_vec()
+                    .try_into()
+                    .unwrap();
+                fe_from_limbs::<_, Halo2Fp, LIMBS, BITS>(v)
+            })
+            .collect_vec()
+            .try_into()
+            .unwrap();
+        let accumulator = KzgAccumulator::new(
+            OpenVmEcPoint(
+                EcPoint {
+                    x: Fp::from_le_bytes(&lhs_x.to_bytes()),
+                    y: Fp::from_le_bytes(&lhs_y.to_bytes()),
+                },
+                PhantomData,
+            ),
+            OpenVmEcPoint(
+                EcPoint {
+                    x: Fp::from_le_bytes(&rhs_x.to_bytes()),
+                    y: Fp::from_le_bytes(&rhs_y.to_bytes()),
+                },
+                PhantomData,
+            ),
+        );
+        Ok(accumulator)
+    }
+}
+
 impl EcPointLoader<G1Affine> for OpenVmLoader {
     type LoadedEcPoint = OpenVmEcPoint<G1Affine, EcPoint>;
 
     fn ec_point_load_const(&self, value: &G1Affine) -> Self::LoadedEcPoint {
         let point = EcPoint {
-            x: Fp::from_be_bytes(&value.x().to_bytes()),
-            y: Fp::from_be_bytes(&value.y().to_bytes()),
+            x: Fp::from_le_bytes(&value.x.to_bytes()),
+            y: Fp::from_le_bytes(&value.y.to_bytes()),
         };
         // new(value.x(), value.y());
         OpenVmEcPoint(point, PhantomData)
@@ -74,7 +121,7 @@ impl ScalarLoader<Halo2Fr> for OpenVmLoader {
     type LoadedScalar = OpenVmScalar<Halo2Fr, Fr>;
 
     fn load_const(&self, value: &Halo2Fr) -> Self::LoadedScalar {
-        let value = Fr::from_be_bytes(&value.to_bytes());
+        let value = Fr::from_le_bytes(&value.to_bytes());
         OpenVmScalar(value, PhantomData)
     }
 
@@ -89,7 +136,7 @@ impl ScalarLoader<Halo2Fp> for OpenVmLoader {
     type LoadedScalar = OpenVmScalar<Halo2Fp, Fp>;
 
     fn load_const(&self, value: &Halo2Fp) -> Self::LoadedScalar {
-        let value = Fp::from_be_bytes(&value.to_bytes());
+        let value = Fp::from_le_bytes(&value.to_bytes());
         OpenVmScalar(value, PhantomData)
     }
 
@@ -122,8 +169,8 @@ where
         let mut P = Vec::with_capacity(2);
         let mut Q = Vec::with_capacity(2);
         for t in terms {
-            let x = t.1.x().to_bytes();
-            let y = t.1.y().to_bytes();
+            let x = t.1.x.to_bytes();
+            let y = t.1.y.to_bytes();
             let point = AffinePoint { x: t.0.x, y: t.0.y };
             P.push(point);
             let point = AffinePoint {
