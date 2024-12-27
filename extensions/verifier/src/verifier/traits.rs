@@ -11,7 +11,7 @@ use halo2curves_axiom::{
 };
 use openvm_ecc_guest::algebra::{ExpBytes, Field, IntMod};
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
-use snark_verifier::{
+use snark_verifier_sdk::snark_verifier::{
     loader::{LoadedEcPoint, LoadedScalar},
     util::arithmetic::FieldOps,
 };

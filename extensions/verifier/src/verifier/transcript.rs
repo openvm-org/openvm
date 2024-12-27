@@ -11,7 +11,7 @@ use itertools::Itertools;
 use openvm_ecc_guest::algebra::IntMod;
 use openvm_keccak256_guest::keccak256;
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
-use snark_verifier::{
+use snark_verifier_sdk::snark_verifier::{
     util::transcript::{Transcript, TranscriptRead},
     Error,
 };
@@ -46,7 +46,7 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
 
     fn squeeze_challenge(
         &mut self,
-    ) -> <super::loader::OpenVmLoader as snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
+    ) -> <super::loader::OpenVmLoader as snark_verifier_sdk::snark_verifier::loader::ScalarLoader<Halo2Fr>>::LoadedScalar
     {
         let data = self
             .buf

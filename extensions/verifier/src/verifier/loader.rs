@@ -13,7 +13,7 @@ use openvm_pairing_guest::{
     bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
     pairing::PairingCheck,
 };
-use snark_verifier::{
+use snark_verifier_sdk::snark_verifier::{
     loader::{EcPointLoader, Loader, ScalarLoader},
     pcs::{
         kzg::{KzgAccumulator, KzgAs, KzgDecidingKey, LimbsEncoding},
@@ -58,7 +58,6 @@ impl<const LIMBS: usize, const BITS: usize> AccumulatorEncoding<G1Affine, OpenVm
             .collect_vec()
             .try_into()
             .unwrap();
-
         let accumulator = KzgAccumulator::new(
             OpenVmEcPoint(
                 EcPoint {
