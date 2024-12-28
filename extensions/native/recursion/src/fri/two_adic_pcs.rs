@@ -240,7 +240,6 @@ pub fn verify_two_adic_pcs<C: Config>(
             );
 
             let final_poly_elem = builder.get(&proof.final_poly, 0);
-            builder.print_e(folded_eval);
             builder.assert_ext_eq(folded_eval, final_poly_elem);
         });
     builder.cycle_tracker_end("stage-d-verifier-verify");

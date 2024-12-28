@@ -92,7 +92,6 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
 
     pub fn sample_bits(&mut self, builder: &mut Builder<C>, bits: usize) -> Var<C::N> {
         let rand_f = self.sample(builder);
-        builder.print_f(rand_f);
         let rand_f_bits = builder.num2bits_f_circuit(rand_f);
         builder.bits2num_v_circuit(&rand_f_bits[0..bits])
     }
@@ -100,7 +99,6 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
     pub fn check_witness(&mut self, builder: &mut Builder<C>, bits: usize, witness: Felt<C::F>) {
         self.observe(builder, witness);
         let element = self.sample_bits(builder, bits);
-        builder.print_v(element);
         builder.assert_var_eq(element, C::N::from_canonical_usize(0));
     }
 }
@@ -130,7 +128,6 @@ impl<C: Config> CanSampleBitsVariable<C> for MultiField32ChallengerVariable<C> {
         nb_bits: RVar<C::N>,
     ) -> Array<C, Var<C::N>> {
         let rand_f = self.sample(builder);
-        builder.print_f(rand_f);
         let rand_f_bits = builder.num2bits_f_circuit(rand_f);
         builder.vec(rand_f_bits[..nb_bits.value()].to_vec())
     }
