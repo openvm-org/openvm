@@ -104,18 +104,21 @@ impl Sha256Air {
                         cols.message_schedule.w[j] =
                             u32_into_limbs::<SHA256_WORD_BITS>(w).map(F::from_canonical_u32);
 
+                        let nums_limbs = nums
+                            .iter()
+                            .map(|x| u32_into_limbs::<SHA256_WORD_U16S>(*x))
+                            .collect::<Vec<_>>();
+                        let w_limbs = u32_into_limbs::<SHA256_WORD_U16S>(w);
+
                         // fill in the carrys
                         for k in 0..SHA256_WORD_U16S {
-                            let mut sum = nums.iter().fold(0, |acc, &num| {
-                                acc + u32_into_limbs::<SHA256_WORD_U16S>(num)[k]
-                            });
+                            let mut sum = nums_limbs.iter().fold(0, |acc, num| acc + num[k]);
                             if k > 0 {
-                                sum += cols.message_schedule.carry_or_buffer[j][k * 2 - 2]
-                                    .as_canonical_u32()
-                                    + 2 * cols.message_schedule.carry_or_buffer[j][k * 2 - 1]
-                                        .as_canonical_u32();
+                                sum += (cols.message_schedule.carry_or_buffer[j][k * 2 - 2]
+                                    + F::TWO * cols.message_schedule.carry_or_buffer[j][k * 2 - 1])
+                                    .as_canonical_u32();
                             }
-                            let carry = (sum - u32_into_limbs::<SHA256_WORD_U16S>(w)[k]) >> 16;
+                            let carry = (sum - w_limbs[k]) >> 16;
                             cols.message_schedule.carry_or_buffer[j][k * 2] =
                                 F::from_canonical_u32(carry & 1);
                             cols.message_schedule.carry_or_buffer[j][k * 2 + 1] =
@@ -149,11 +152,12 @@ impl Sha256Air {
                     let e = work_vars[3].wrapping_add(t1_sum);
                     cols.work_vars.e[j] =
                         u32_into_limbs::<SHA256_WORD_BITS>(e).map(F::from_canonical_u32);
+                    let e_limbs = u32_into_limbs::<SHA256_WORD_U16S>(e);
                     // a = t1 + t2
                     let a = t1_sum.wrapping_add(t2_sum);
                     cols.work_vars.a[j] =
                         u32_into_limbs::<SHA256_WORD_BITS>(a).map(F::from_canonical_u32);
-
+                    let a_limbs = u32_into_limbs::<SHA256_WORD_U16S>(a);
                     // fill in the carrys
                     for k in 0..SHA256_WORD_U16S {
                         let t1_limb = t1.iter().fold(0, |acc, &num| {
@@ -170,8 +174,8 @@ impl Sha256Air {
                             a_limb += cols.work_vars.carry_a[j][k - 1].as_canonical_u32();
                             e_limb += cols.work_vars.carry_e[j][k - 1].as_canonical_u32();
                         }
-                        let carry_a = (a_limb - u32_into_limbs::<SHA256_WORD_U16S>(a)[k]) >> 16;
-                        let carry_e = (e_limb - u32_into_limbs::<SHA256_WORD_U16S>(e)[k]) >> 16;
+                        let carry_a = (a_limb - a_limbs[k]) >> 16;
+                        let carry_e = (e_limb - e_limbs[k]) >> 16;
                         cols.work_vars.carry_a[j][k] = F::from_canonical_u32(carry_a);
                         cols.work_vars.carry_e[j][k] = F::from_canonical_u32(carry_e);
                         bitwise_lookup_chip.request_range(carry_a, carry_e);
@@ -335,6 +339,8 @@ impl Sha256Air {
         });
     }
 
+    /// The following functions do the calculations in native field since they will be called on padding rows
+    /// which can overflow and we need to make sure it matches the AIR constraints
     /// Puts the correct carrys in the `next_row`, the resulting carrys can be out of bound
     fn generate_carry_ae<F: PrimeField32>(
         local_cols: &Sha256RoundCols<F>,
