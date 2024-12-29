@@ -76,7 +76,12 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller(),
         bitwise_chip.clone(),
     );
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![ADD_LOCAL + 2]; // setup
@@ -204,7 +209,12 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         tester.memory_controller(),
         bitwise_chip.clone(),
     );
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
     let mut rng = create_seeded_rng();
     let num_tests = 50;
     let mut all_ops = vec![MUL_LOCAL + 2];
@@ -315,6 +325,7 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
         ),
         ModularIsEqualCoreChip::new(modulus.clone(), bitwise_chip.clone(), opcode_offset),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     {

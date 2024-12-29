@@ -101,7 +101,12 @@ fn rand_jalr_test() {
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(
+        adapter,
+        inner,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -153,7 +158,12 @@ fn run_negative_jalr_test(
         range_checker_chip.clone(),
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(
+        adapter,
+        inner,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     set_and_execute(
         &mut tester,
@@ -293,7 +303,12 @@ fn execute_roundtrip_sanity_test() {
         range_checker_chip,
         Rv32JalrOpcode::default_offset(),
     );
-    let mut chip = Rv32JalrChip::<F>::new(adapter, inner, tester.memory_controller());
+    let mut chip = Rv32JalrChip::<F>::new(
+        adapter,
+        inner,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 10;
     for _ in 0..num_tests {

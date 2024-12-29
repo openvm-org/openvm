@@ -16,9 +16,12 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
+use parking_lot::Mutex;
 
 use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{MemoryAuxColsFactory, MemoryController, MemoryControllerRef};
+use crate::system::memory::{
+    MemoryAuxColsFactory, MemoryController, MemoryControllerRef, OfflineMemory,
+};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -81,6 +84,7 @@ pub trait VmAdapterChip<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     );
 
     fn air(&self) -> &Self::Air;
@@ -185,6 +189,7 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>>
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
     memory: MemoryControllerRef<F>,
+    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 impl<F, A, C> VmChipWrapper<F, A, C>
@@ -192,12 +197,18 @@ where
     A: VmAdapterChip<F>,
     C: VmCoreChip<F, A::Interface>,
 {
-    pub fn new(adapter: A, core: C, memory: MemoryControllerRef<F>) -> Self {
+    pub fn new(
+        adapter: A,
+        core: C,
+        memory: MemoryControllerRef<F>,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    ) -> Self {
         Self {
             adapter,
             core,
             records: vec![],
             memory,
+            offline_memory,
         }
     }
 }
@@ -290,6 +301,7 @@ where
                     record.0,
                     record.1,
                     &memory_aux_cols_factory,
+                    &self.offline_memory.lock(),
                 );
                 self.core.generate_trace_row(core_row, record.2);
             });

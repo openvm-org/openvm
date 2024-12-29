@@ -58,6 +58,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         ),
         LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -150,6 +151,7 @@ fn run_rv32_lt_negative_test(
         ),
         LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

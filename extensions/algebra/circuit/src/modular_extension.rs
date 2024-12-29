@@ -17,6 +17,7 @@ use openvm_instructions::{UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -78,6 +79,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
 
         let addsub_opcodes = (Rv32ModularArithmeticOpcode::ADD as usize)
             ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize);
@@ -124,6 +126,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
@@ -139,6 +142,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
@@ -159,6 +163,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv32_32(isequal_chip),
@@ -175,6 +180,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
@@ -190,6 +196,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
@@ -210,6 +217,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         class_offset,
                     ),
                     memory_controller.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularIsEqualRv32_48(isequal_chip),

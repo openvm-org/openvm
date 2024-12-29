@@ -127,7 +127,12 @@ fn rand_loadstore_test() {
     );
 
     let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32LoadStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -177,7 +182,12 @@ fn run_negative_loadstore_test(
 
     let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32LoadStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, rs1, imm);
 
@@ -296,7 +306,12 @@ fn execute_roundtrip_sanity_test() {
         Rv32LoadStoreOpcode::default_offset(),
     );
     let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32LoadStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {

@@ -24,6 +24,7 @@ use openvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -116,6 +117,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
 
         let range_tuple_chip = if let Some(chip) = builder
             .find_chip::<Arc<RangeTupleCheckerChip<2>>>()
@@ -145,6 +147,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 Rv32BaseAlu256Opcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             base_alu_chip,
@@ -163,6 +166,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 Rv32LessThan256Opcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             less_than_chip,
@@ -178,6 +182,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::default_offset(), DEFAULT_PC_STEP),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             branch_equal_chip,
@@ -196,6 +201,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 Rv32LessThan256Opcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             branch_less_than_chip,
@@ -211,6 +217,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             ),
             MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             multiplication_chip,
@@ -230,6 +237,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 Rv32Shift256Opcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             shift_chip,

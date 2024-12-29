@@ -14,7 +14,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -28,8 +28,8 @@ use openvm_stark_backend::{
 };
 
 #[derive(Debug)]
-pub struct VectorReadRecord<F: Field, const NUM_READS: usize, const READ_SIZE: usize> {
-    pub reads: [MemoryReadRecord<F, READ_SIZE>; NUM_READS],
+pub struct VectorReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
+    pub reads: [RecordId; NUM_READS],
 }
 
 #[derive(Debug)]
@@ -155,7 +155,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterChip<F>
     for ConvertAdapterChip<F, READ_SIZE, WRITE_SIZE>
 {
-    type ReadRecord = VectorReadRecord<F, 1, READ_SIZE>;
+    type ReadRecord = VectorReadRecord<1, READ_SIZE>;
     type WriteRecord = VectorWriteRecord<F, WRITE_SIZE>;
     type Air = ConvertAdapterAir<READ_SIZE, WRITE_SIZE>;
     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 1, 1, READ_SIZE, WRITE_SIZE>;
@@ -172,7 +172,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
 
         let y_val = memory.read::<READ_SIZE>(e, b);
 
-        Ok(([y_val.data], Self::ReadRecord { reads: [y_val] }))
+        Ok(([y_val.1], Self::ReadRecord { reads: [y_val.0] }))
     }
 
     fn postprocess(
@@ -204,16 +204,18 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapter
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
 
+        let read = memory.record_by_id(read_record.reads[0]);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.a_pointer = write_record.writes[0].pointer;
         row_slice.a_as = write_record.writes[0].address_space;
-        row_slice.b_pointer = read_record.reads[0].pointer;
-        row_slice.b_as = read_record.reads[0].address_space;
+        row_slice.b_pointer = read.pointer;
+        row_slice.b_as = read.address_space;
 
-        row_slice.reads_aux = [aux_cols_factory.make_read_aux_cols(read_record.reads[0])];
+        row_slice.reads_aux = [aux_cols_factory.make_read_aux_cols(read)];
         row_slice.writes_aux = [aux_cols_factory.make_write_aux_cols(write_record.writes[0])];
     }
 

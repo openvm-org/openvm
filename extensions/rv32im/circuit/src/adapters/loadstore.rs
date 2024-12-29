@@ -17,7 +17,7 @@ use openvm_circuit::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -126,10 +126,10 @@ impl<F: PrimeField32> Rv32LoadStoreAdapterChip<F> {
 
 #[derive(Debug, Clone)]
 pub struct Rv32LoadStoreReadRecord<F: Field> {
-    pub rs1_record: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1_record: RecordId,
     pub rs1_ptr: F,
     /// This will be a read from a register in case of Stores and a read from RISC-V memory in case of Loads.
-    pub read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub read: RecordId,
 
     pub imm: F,
     pub imm_sign: bool,
@@ -358,7 +358,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let rs1_record = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        let rs1_val = compose(rs1_record.data);
+        let rs1_val = compose(rs1_record.1);
         let imm = c.as_canonical_u32();
         let imm_sign = (imm & 0x8000) >> 15;
         let imm_extended = imm + imm_sign * 0xffff0000;
@@ -401,13 +401,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         Ok((
             (
-                [prev_data, read_record.data],
+                [prev_data, read_record.1],
                 F::from_canonical_u32(shift_amount),
             ),
             Self::ReadRecord {
-                rs1_record,
+                rs1_record: rs1_record.0,
                 rs1_ptr: b,
-                read: read_record,
+                read: read_record.0,
                 imm: c,
                 imm_sign: imm_sign == 1,
                 mem_ptr_limbs: mem_ptr_limbs.map(F::from_canonical_u32),
@@ -463,14 +463,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        adapter_cols.rs1_data = read_record.rs1_record.data;
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1_record);
+        let rs1 = memory.record_by_id(read_record.rs1_record);
+        adapter_cols.rs1_data = rs1.data.clone().try_into().unwrap();
+        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
         adapter_cols.rs1_ptr = read_record.rs1_ptr;
         adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
-        adapter_cols.read_data_aux = aux_cols_factory.make_read_aux_cols(read_record.read);
+        adapter_cols.read_data_aux =
+            aux_cols_factory.make_read_aux_cols(memory.record_by_id(read_record.read));
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;

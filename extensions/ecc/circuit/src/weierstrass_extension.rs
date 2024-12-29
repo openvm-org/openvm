@@ -19,6 +19,7 @@ use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -95,6 +96,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
         let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
         let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
@@ -126,6 +128,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
@@ -144,6 +147,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     config32.clone(),
                     class_offset,
                     curve.a.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
@@ -162,6 +166,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
@@ -180,6 +185,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     config48.clone(),
                     class_offset,
                     curve.a.clone(),
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),

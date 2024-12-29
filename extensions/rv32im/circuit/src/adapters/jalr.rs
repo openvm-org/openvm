@@ -14,7 +14,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -55,8 +55,8 @@ impl<F: PrimeField32> Rv32JalrAdapterChip<F> {
     }
 }
 #[derive(Debug, Clone)]
-pub struct Rv32JalrReadRecord<F: Field> {
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+pub struct Rv32JalrReadRecord {
+    pub rs1: RecordId,
 }
 
 #[derive(Debug, Clone)]
@@ -176,7 +176,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
-    type ReadRecord = Rv32JalrReadRecord<F>;
+    type ReadRecord = Rv32JalrReadRecord;
     type WriteRecord = Rv32JalrWriteRecord<F>;
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
@@ -200,7 +200,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
 
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
 
-        Ok(([rs1.data], Rv32JalrReadRecord { rs1 }))
+        Ok(([rs1.1], Rv32JalrReadRecord { rs1: rs1.0 }))
     }
 
     fn postprocess(
@@ -236,11 +236,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        adapter_cols.rs1_ptr = read_record.rs1.pointer;
-        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(read_record.rs1);
+        let rs1 = memory.record_by_id(read_record.rs1);
+        adapter_cols.rs1_ptr = rs1.pointer;
+        adapter_cols.rs1_aux_cols = aux_cols_factory.make_read_aux_cols(rs1);
         (
             adapter_cols.rd_ptr,
             adapter_cols.rd_aux_cols,

@@ -1,5 +1,5 @@
 use std::{
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     iter::{once, zip},
@@ -16,7 +16,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -86,16 +86,16 @@ pub struct NativeVecHeapReadRecord<
     const READ_SIZE: usize,
 > {
     /// Read register value from address space e=1
-    pub rs: [MemoryReadRecord<F, 1>; R],
+    pub rs: [RecordId; R],
     /// Read register value from address space d=1
-    pub rd: MemoryReadRecord<F, 1>,
+    pub rd: RecordId,
 
     pub rd_val: F,
 
     pub ptr_as: F,
     pub heap_as: F,
 
-    pub reads: [[MemoryReadRecord<F, READ_SIZE>; NUM_READS]; R],
+    pub reads: [[RecordId; NUM_READS]; R],
 }
 
 #[derive(Clone, Debug)]
@@ -305,21 +305,21 @@ impl<
             from_fn(|i| {
                 memory.read::<READ_SIZE>(
                     e,
-                    record.data[0] + F::from_canonical_u32((i * READ_SIZE) as u32),
+                    record.1[0] + F::from_canonical_u32((i * READ_SIZE) as u32),
                 )
             })
         });
 
         let record = NativeVecHeapReadRecord {
-            rs: rs_records,
-            rd: rd_record,
-            rd_val: rd_record.data[0],
+            rs: rs_records.map(|r| r.0),
+            rd: rd_record.0,
+            rd_val: rd_record.1[0],
             ptr_as: d,
             heap_as: e,
-            reads,
+            reads: reads.map(|r| r.map(|x| x.0)),
         };
 
-        Ok((reads.map(|r| r.map(|x| x.data)), record))
+        Ok((reads.map(|r| r.map(|x| x.1)), record))
     }
 
     fn postprocess(
@@ -357,6 +357,7 @@ impl<
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut NativeVecHeapAdapterCols<
             F,
@@ -368,22 +369,22 @@ impl<
         > = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.rd_ptr = read_record.rd.pointer;
-        row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
+        let rd_record = memory.record_by_id(read_record.rd);
+        let rs_records = read_record.rs.map(|r| memory.record_by_id(r));
+        row_slice.rd_ptr = rd_record.pointer;
+        row_slice.rs_ptr = array::from_fn(|i| rs_records[i].pointer);
 
-        row_slice.rd_val = read_record.rd.data[0];
-        row_slice.rs_val = read_record.rs.map(|r| r.data[0]);
+        row_slice.rd_val = rd_record.data[0];
+        row_slice.rs_val = array::from_fn(|i| rs_records[i].data[0]);
 
         row_slice.ptr_as = read_record.ptr_as;
         row_slice.heap_as = read_record.heap_as;
 
-        row_slice.rs_read_aux = read_record
-            .rs
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
-        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(read_record.rd);
+        row_slice.rs_read_aux = rs_records.map(|r| aux_cols_factory.make_read_aux_cols(r));
+        row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd_record);
         row_slice.reads_aux = read_record
             .reads
-            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(x)));
+            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
         row_slice.writes_aux = write_record
             .writes
             .map(|w| aux_cols_factory.make_write_aux_cols(w));

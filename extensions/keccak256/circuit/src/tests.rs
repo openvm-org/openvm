@@ -40,6 +40,7 @@ fn build_keccak256_test(
         tester.memory_controller(),
         bitwise_chip.clone(),
         0,
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut dst = 0;

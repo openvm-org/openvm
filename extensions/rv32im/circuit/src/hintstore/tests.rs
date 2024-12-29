@@ -117,7 +117,12 @@ fn rand_hintstore_test() {
     let mut core =
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -162,7 +167,12 @@ fn run_negative_hintstore_test(
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
     let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
 
@@ -219,7 +229,12 @@ fn execute_roundtrip_sanity_test() {
     let mut core =
         Rv32HintStoreCoreChip::new(bitwise_chip.clone(), Rv32HintStoreOpcode::default_offset());
     core.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let mut chip = Rv32HintStoreChip::<F>::new(adapter, core, tester.memory_controller());
+    let mut chip = Rv32HintStoreChip::<F>::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {

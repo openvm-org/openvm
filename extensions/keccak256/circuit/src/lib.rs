@@ -4,6 +4,7 @@ use std::{array::from_fn, cmp::min, sync::Arc};
 
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -22,7 +23,9 @@ pub use air::KeccakVmAir;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
-        memory::{MemoryController, MemoryControllerRef, MemoryReadRecord, MemoryWriteRecord},
+        memory::{
+            MemoryController, MemoryControllerRef, MemoryWriteRecord, OfflineMemory, RecordId,
+        },
         program::ProgramBus,
     },
 };
@@ -72,22 +75,24 @@ pub struct KeccakVmChip<F: PrimeField32> {
     pub bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
 
     offset: usize,
+
+    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct KeccakRecord<F> {
     pub pc: F,
-    pub dst_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub src_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub len_read: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub input_blocks: Vec<KeccakInputBlock<F>>,
+    pub dst_read: RecordId,
+    pub src_read: RecordId,
+    pub len_read: RecordId,
+    pub input_blocks: Vec<KeccakInputBlock>,
     pub digest_writes: [MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
 }
 
 #[derive(Clone, Debug)]
-pub struct KeccakInputBlock<F> {
+pub struct KeccakInputBlock {
     /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES / KECCAK_WORD_SIZE].
-    pub reads: Vec<MemoryReadRecord<F, KECCAK_WORD_SIZE>>,
+    pub reads: Vec<RecordId>,
     /// Index in `reads` of the memory read for < KECCAK_WORD_SIZE bytes, if any.
     pub partial_read_idx: Option<usize>,
     /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
@@ -104,6 +109,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
         memory_controller: MemoryControllerRef<F>,
         bitwise_lookup_chip: Arc<BitwiseOperationLookupChip<8>>,
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let ptr_max_bits = memory_controller.borrow().mem_config().pointer_max_bits;
         let memory_bridge = memory_controller.borrow().memory_bridge();
@@ -119,6 +125,7 @@ impl<F: PrimeField32> KeccakVmChip<F> {
             bitwise_lookup_chip,
             records: Vec::new(),
             offset,
+            offline_memory,
         }
     }
 }
@@ -170,8 +177,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             let mut bytes = [0u8; KECCAK_RATE_BYTES];
             for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
                 if i < remaining_len {
-                    let read = memory.read(e, F::from_canonical_usize(src + i));
-                    let chunk = read.data.map(|x| {
+                    let read =
+                        memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_usize(src + i));
+                    let chunk = read.1.map(|x| {
                         x.as_canonical_u32()
                             .try_into()
                             .expect("Memory cell not a byte")
@@ -181,7 +189,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                         partial_read_idx = Some(reads.len());
                     }
                     bytes[i..i + copy_len].copy_from_slice(&chunk[..copy_len]);
-                    reads.push(read);
+                    reads.push(read.0);
                 } else {
                     memory.increment_timestamp();
                 }
@@ -255,7 +263,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
     }
 }
 
-impl<F: PrimeField32> Default for KeccakInputBlock<F> {
+impl Default for KeccakInputBlock {
     fn default() -> Self {
         // Padding for empty byte array so padding constraints still hold
         let mut padded_bytes = [0u8; KECCAK_RATE_BYTES];
@@ -269,15 +277,5 @@ impl<F: PrimeField32> Default for KeccakInputBlock<F> {
             reads: Vec::new(),
             src: 0,
         }
-    }
-}
-
-impl<F: Copy> KeccakRecord<F> {
-    pub fn digest_addr_space(&self) -> F {
-        self.digest_writes[0].address_space
-    }
-
-    pub fn start_timestamp(&self) -> u32 {
-        self.dst_read.timestamp
     }
 }

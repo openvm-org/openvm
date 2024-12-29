@@ -68,6 +68,7 @@ fn castf_rand_test() {
         ),
         CastFCoreChip::new(range_checker_chip, 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     let num_tests: usize = 1;
 
@@ -92,6 +93,7 @@ fn negative_castf_overflow_test() {
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
@@ -130,6 +132,7 @@ fn negative_castf_memread_test() {
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
@@ -168,6 +171,7 @@ fn negative_castf_memwrite_test() {
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
@@ -206,6 +210,7 @@ fn negative_castf_as_test() {
         ),
         CastFCoreChip::new(range_checker_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();

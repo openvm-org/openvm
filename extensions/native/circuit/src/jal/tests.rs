@@ -63,7 +63,12 @@ fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeJalChip<F>) {
         tester.memory_controller(),
     );
     let inner = JalCoreChip::new(NativeJalOpcode::default_offset());
-    let chip = NativeJalChip::<F>::new(adapter, inner, tester.memory_controller());
+    let chip = NativeJalChip::<F>::new(
+        adapter,
+        inner,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
     (rng, tester, chip)
 }
 

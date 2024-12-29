@@ -21,6 +21,7 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -220,6 +221,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             program_bus,
             memory_controller,
         } = builder.system_port();
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -237,6 +239,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             base_alu_chip,
@@ -247,6 +250,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             lt_chip,
@@ -261,6 +265,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 ShiftOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             shift_chip,
@@ -277,6 +282,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             ),
             LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             load_store_chip,
@@ -298,6 +304,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32LoadStoreOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             load_sign_extend_chip,
@@ -309,6 +316,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             BranchEqualCoreChip::new(BranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             beq_chip,
@@ -322,6 +330,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 BranchLessThanOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             blt_chip,
@@ -332,6 +341,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone(), Rv32JalLuiOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             jal_lui_chip,
@@ -346,6 +356,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32JalrOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             jalr_chip,
@@ -356,6 +367,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             Rv32AuipcCoreChip::new(bitwise_lu_chip.clone(), Rv32AuipcOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             auipc_chip,
@@ -390,6 +402,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             program_bus,
             memory_controller,
         } = builder.system_port();
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
 
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -423,6 +436,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             mul_chip,
@@ -437,6 +451,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 MulHOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             mul_h_chip,
@@ -451,6 +466,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 DivRemOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             div_rem_chip,
@@ -475,6 +491,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             program_bus,
             memory_controller,
         } = builder.system_port();
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -500,6 +518,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
                 Rv32HintStoreOpcode::default_offset(),
             ),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         hintstore_chip.core.set_streams(builder.streams().clone());
 

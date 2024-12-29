@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
-        memory::{MemoryController, MemoryControllerRef},
+        memory::{MemoryController, MemoryControllerRef, OfflineMemory},
         program::ProgramBus,
     },
 };
@@ -23,6 +23,7 @@ mod chip;
 pub use chip::*;
 mod columns;
 pub use columns::*;
+use parking_lot::Mutex;
 mod trace;
 
 #[cfg(test)]
@@ -44,6 +45,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         max_constraint_degree: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         if max_constraint_degree >= 7 {
             Self::Register0(NativePoseidon2BaseChip::new(
@@ -52,6 +54,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
                 memory_controller,
                 poseidon2_config,
                 offset,
+                offline_memory,
             ))
         } else {
             Self::Register1(NativePoseidon2BaseChip::new(
@@ -60,6 +63,7 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
                 memory_controller,
                 poseidon2_config,
                 offset,
+                offline_memory,
             ))
         }
     }

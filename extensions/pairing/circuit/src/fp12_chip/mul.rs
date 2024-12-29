@@ -1,6 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{
+    arch::VmChipWrapper,
+    system::memory::{MemoryControllerRef, OfflineMemory},
+};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -10,6 +13,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::Fp12Opcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 
 use crate::Fp12;
 // Input: Fp12 * 2
@@ -32,6 +36,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr = fp12_mul_expr(config, memory_controller.borrow().range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
@@ -43,7 +48,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "Fp12Mul",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(
+            adapter,
+            core,
+            memory_controller,
+            offline_memory,
+        ))
     }
 }
 
@@ -120,6 +130,7 @@ mod tests {
             config,
             BN254_XI_ISIZE,
             Fp12Opcode::default_offset(),
+            tester.offline_memory_mutex_arc(),
         );
 
         let mut rng = StdRng::seed_from_u64(64);

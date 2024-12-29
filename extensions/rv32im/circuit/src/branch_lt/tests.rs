@@ -101,6 +101,7 @@ fn run_rv32_branch_lt_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         ),
         BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -204,6 +205,7 @@ fn run_rv32_blt_negative_test(
         ),
         BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

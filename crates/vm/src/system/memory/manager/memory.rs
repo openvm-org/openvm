@@ -8,6 +8,32 @@ use crate::system::memory::{
     Equipartition, TimestampedEquipartition, TimestampedValues,
 };
 
+#[derive(Debug, Clone)]
+pub struct MemoryRecord<T> {
+    pub address_space: T,
+    pub pointer: T,
+    pub timestamp: u32,
+    pub prev_timestamp: u32,
+    pub data: Vec<T>,
+}
+
+impl<T: Copy> MemoryRecord<T> {
+    pub fn value(&self) -> T {
+        assert!(self.data.len() == 1);
+        self.data[0]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RecordId(usize);
+
+#[derive(Debug, Clone)]
+pub enum MemoryLog<T> {
+    Read(MemoryRecord<T>),
+    Write(MemoryRecord<T>),
+    Dummy(u32),
+}
+
 /// Represents a single or batch memory write operation.
 /// Can be used to generate [MemoryWriteAuxCols].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,13 +84,17 @@ struct BlockData {
 }
 
 /// A partition of data into blocks where each block has size a power of two.
-#[derive(Debug)]
+#[derive(Debug, Clone)] // TODO: when we have OfflineMemory, this one doesn't have to derive Clone
 pub struct Memory<F> {
     block_data: FxHashMap<Address, BlockData>,
     data: FxHashMap<Address, F>,
     initial_block_size: usize,
     timestamp: u32,
+
+    log: Vec<MemoryLog<F>>,
 }
+
+pub type OfflineMemory<F> = Memory<F>;
 
 impl<F: PrimeField32> Memory<F> {
     /// Creates a new partition with the given initial block size.
@@ -92,6 +122,7 @@ impl<F: PrimeField32> Memory<F> {
             data,
             initial_block_size: N,
             timestamp: INITIAL_TIMESTAMP + 1,
+            log: vec![],
         }
     }
 
@@ -99,14 +130,20 @@ impl<F: PrimeField32> Memory<F> {
         self.timestamp
     }
 
+    fn last_record_id(&self) -> RecordId {
+        RecordId(self.log.len() - 1)
+    }
+
     /// Increments the current timestamp by one and returns the new value.
-    pub fn increment_timestamp(&mut self) {
-        self.timestamp += 1;
+    pub fn increment_timestamp(&mut self) -> RecordId {
+        self.increment_timestamp_by(1)
     }
 
     /// Increments the current timestamp by a specified delta and returns the new value.
-    pub fn increment_timestamp_by(&mut self, delta: u32) {
+    pub fn increment_timestamp_by(&mut self, delta: u32) -> RecordId {
+        self.log.push(MemoryLog::Dummy(delta));
         self.timestamp += delta;
+        self.last_record_id()
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
@@ -138,7 +175,7 @@ impl<F: PrimeField32> Memory<F> {
             data: values,
             prev_data,
         };
-        self.increment_timestamp();
+        self.timestamp += 1;
         (record, adapter_records)
     }
 
@@ -147,7 +184,7 @@ impl<F: PrimeField32> Memory<F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
+    ) -> (RecordId, [F; N], Vec<AccessAdapterRecord<F>>) {
         assert!(N.is_power_of_two());
 
         let mut adapter_records = vec![];
@@ -156,16 +193,27 @@ impl<F: PrimeField32> Memory<F> {
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let record = MemoryReadRecord {
+        let values = self.range_array::<N>(address_space, pointer);
+        let record = MemoryRecord {
             address_space: F::from_canonical_u32(address_space),
             pointer: F::from_canonical_u32(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
-            data: self.range_array::<N>(address_space, pointer),
+            data: values.to_vec(),
         };
 
-        self.increment_timestamp();
-        (record, adapter_records)
+        self.log.push(MemoryLog::Read(record));
+
+        self.timestamp += 1;
+        (self.last_record_id(), values, adapter_records)
+    }
+
+    pub fn record_by_id(&self, id: RecordId) -> MemoryRecord<F> {
+        match &self.log[id.0] {
+            MemoryLog::Read(record) => record.clone(),
+            MemoryLog::Write(record) => record.clone(),
+            MemoryLog::Dummy(_) => panic!("dummy record"),
+        }
     }
 
     pub fn finalize<const N: usize>(

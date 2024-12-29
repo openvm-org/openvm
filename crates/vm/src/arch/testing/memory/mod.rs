@@ -10,11 +10,12 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
+use parking_lot::Mutex;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::system::memory::{
     offline_checker::{MemoryBus, MemoryBusInteraction},
-    MemoryAddress, MemoryControllerRef,
+    MemoryAddress, MemoryControllerRef, OfflineMemory,
 };
 
 pub mod air;
@@ -31,15 +32,19 @@ pub struct MemoryTester<F> {
     pub controller: MemoryControllerRef<F>,
     /// Log of raw bus messages
     pub records: Vec<MemoryBusInteraction<F>>,
+
+    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
     pub fn new(controller: MemoryControllerRef<F>) -> Self {
         let bus = controller.borrow().memory_bus;
+        let offline_memory = controller.borrow().offline_memory();
         Self {
             bus,
             controller,
             records: Vec::new(),
+            offline_memory: Arc::new(Mutex::new(offline_memory)),
         }
     }
 
@@ -48,6 +53,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let [addr_space, pointer] = [address_space, pointer].map(F::from_canonical_usize);
         // core::BorrowMut confuses compiler
         let read = RefCell::borrow_mut(&self.controller).read_cell(addr_space, pointer);
+        let read = self.offline_memory.lock().record_by_id(read.0);
         let address = MemoryAddress::new(addr_space, pointer);
         self.records.push(self.bus.receive(
             address,

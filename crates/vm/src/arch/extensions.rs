@@ -522,6 +522,8 @@ impl<F: PrimeField32> SystemComplex<F> {
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
         let mut inventory = VmInventory::new();
+        let mem = memory_controller.borrow().offline_memory();
+        let offline_memory_mutex = Arc::new(Mutex::new(mem));
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
@@ -533,6 +535,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                     config.max_constraint_degree as u32 - 1,
                 ),
                 memory_controller.clone(),
+                offline_memory_mutex.clone(),
             );
             inventory
                 .add_executor(

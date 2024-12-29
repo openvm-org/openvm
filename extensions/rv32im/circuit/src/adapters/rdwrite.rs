@@ -14,7 +14,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory,
         },
         program::ProgramBus,
     },
@@ -290,6 +290,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        _memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
@@ -352,6 +353,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        _memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.inner.from_state = write_record.from_state.map(F::from_canonical_u32);

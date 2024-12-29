@@ -14,7 +14,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord,
+            OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -56,11 +56,11 @@ impl<F: PrimeField32> Rv32BranchAdapterChip<F> {
 }
 
 #[derive(Debug)]
-pub struct Rv32BranchReadRecord<F: Field> {
+pub struct Rv32BranchReadRecord {
     /// Read register value from address space d = 1
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1: RecordId,
     /// Read register value from address space e = 1
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs2: RecordId,
 }
 
 #[derive(Debug)]
@@ -149,7 +149,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
-    type ReadRecord = Rv32BranchReadRecord<F>;
+    type ReadRecord = Rv32BranchReadRecord;
     type WriteRecord = Rv32BranchWriteRecord;
     type Air = Rv32BranchAdapterAir;
     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>;
@@ -170,7 +170,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, a);
         let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(e, b);
 
-        Ok(([rs1.data, rs2.data], Self::ReadRecord { rs1, rs2 }))
+        Ok((
+            [rs1.1, rs2.1],
+            Self::ReadRecord {
+                rs1: rs1.0,
+                rs2: rs2.0,
+            },
+        ))
     }
 
     fn postprocess(
@@ -203,14 +209,17 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut Rv32BranchAdapterCols<_> = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rs1_ptr = read_record.rs1.pointer;
-        row_slice.rs2_ptr = read_record.rs2.pointer;
+        let rs1 = memory.record_by_id(read_record.rs1);
+        let rs2 = memory.record_by_id(read_record.rs2);
+        row_slice.rs1_ptr = rs1.pointer;
+        row_slice.rs2_ptr = rs2.pointer;
         row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(read_record.rs1),
-            aux_cols_factory.make_read_aux_cols(read_record.rs2),
+            aux_cols_factory.make_read_aux_cols(rs1),
+            aux_cols_factory.make_read_aux_cols(rs2),
         ]
     }
 

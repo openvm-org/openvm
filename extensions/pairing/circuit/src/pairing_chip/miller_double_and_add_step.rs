@@ -1,7 +1,10 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{
+    arch::VmChipWrapper,
+    system::memory::{MemoryControllerRef, OfflineMemory},
+};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -11,6 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -40,6 +44,7 @@ impl<
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr =
             miller_double_and_add_step_expr(config, memory_controller.borrow().range_checker.bus());
@@ -52,7 +57,12 @@ impl<
             "MillerDoubleAndAddStep",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(
+            adapter,
+            core,
+            memory_controller,
+            offline_memory,
+        ))
     }
 }
 
@@ -148,6 +158,7 @@ mod tests {
                 num_limbs: NUM_LIMBS,
             },
             PairingOpcode::default_offset(),
+            tester.offline_memory_mutex_arc(),
         );
 
         let mut rng0 = StdRng::seed_from_u64(2);

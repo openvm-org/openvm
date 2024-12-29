@@ -16,6 +16,7 @@ use openvm_instructions::{UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -71,6 +72,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
 
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize);
@@ -109,6 +111,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
@@ -121,6 +124,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     memory_controller.clone(),
                     config32.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
@@ -134,6 +138,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
@@ -146,6 +151,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     memory_controller.clone(),
                     config48.clone(),
                     class_offset,
+                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),

@@ -20,6 +20,7 @@ use openvm_stark_sdk::{
     engine::StarkEngine,
     p3_baby_bear::BabyBear,
 };
+use parking_lot::Mutex;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
@@ -27,7 +28,7 @@ use tracing::Level;
 use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
-        memory::{offline_checker::MemoryBus, MemoryController},
+        memory::{offline_checker::MemoryBus, MemoryController, OfflineMemory},
         program::ProgramBus,
     },
 };
@@ -162,6 +163,10 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_controller(&self) -> MemoryControllerRef<F> {
         self.memory.controller.clone()
+    }
+
+    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
+        self.memory.offline_memory.clone()
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

@@ -1,5 +1,5 @@
 use std::{
-    array::from_fn,
+    array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     marker::PhantomData,
@@ -17,7 +17,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -278,13 +278,12 @@ impl<
 
 #[derive(Clone, Debug)]
 pub struct Rv32IsEqualModReadRecord<
-    F: Field,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
 > {
-    pub rs: [MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; NUM_READS],
-    pub reads: [[MemoryReadRecord<F, BLOCK_SIZE>; BLOCKS_PER_READ]; NUM_READS],
+    pub rs: [RecordId; NUM_READS],
+    pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
 }
 
 #[derive(Clone, Debug)]
@@ -302,7 +301,7 @@ impl<
     > VmAdapterChip<F>
     for Rv32IsEqualModAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
-    type ReadRecord = Rv32IsEqualModReadRecord<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
+    type ReadRecord = Rv32IsEqualModReadRecord<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
     type WriteRecord = Rv32IsEqualModWriteRecord<F>;
     type Air = Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>;
     type Interface = BasicAdapterInterface<
@@ -344,13 +343,13 @@ impl<
         });
 
         let read_data = read_records.map(|r| {
-            let read = r.map(|x| x.data);
+            let read = r.map(|x| x.1);
             let mut read_it = read.iter().flatten();
             from_fn(|_| *(read_it.next().unwrap()))
         });
         let record = Rv32IsEqualModReadRecord {
             rs: rs_records,
-            reads: read_records,
+            reads: read_records.map(|r| r.map(|x| x.0)),
         };
 
         Ok((read_data, record))
@@ -390,22 +389,20 @@ impl<
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.rs_ptr = read_record.rs.map(|r| r.pointer);
-        row_slice.rs_val = read_record.rs.map(|r| r.data);
-        row_slice.rs_read_aux = read_record
-            .rs
-            .map(|r| aux_cols_factory.make_read_aux_cols(r));
-        row_slice.heap_read_aux =
-            read_record
-                .reads
-                .map(|r: [MemoryReadRecord<F, BLOCK_SIZE>; BLOCKS_PER_READ]| {
-                    r.map(|x| aux_cols_factory.make_read_aux_cols(x))
-                });
+        let rs = read_record.rs.map(|r| memory.record_by_id(r));
+        row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
+        row_slice.rs_val = array::from_fn(|i| rs[i].data.clone().try_into().unwrap());
+        row_slice.rs_read_aux =
+            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i].clone()));
+        row_slice.heap_read_aux = read_record
+            .reads
+            .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
 
         row_slice.rd_ptr = write_record.rd.pointer;
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
@@ -413,7 +410,7 @@ impl<
         // Range checks
         let need_range_check: [u32; 2] = from_fn(|i| {
             if i < NUM_READS {
-                read_record.rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
+                rs[i].data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
             } else {
                 0
             }

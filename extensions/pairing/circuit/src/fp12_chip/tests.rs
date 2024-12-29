@@ -78,7 +78,12 @@ fn test_fp12_fn<
             biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
         })
         .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
-    let mut chip = VmChipWrapper::new(adapter, core, tester.memory_controller());
+    let mut chip = VmChipWrapper::new(
+        adapter,
+        core,
+        tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
+    );
 
     let res = chip.core.air.expr.execute([x, y].concat(), vec![]);
     assert_eq!(res.len(), var_len);

@@ -47,6 +47,7 @@ fn fri_mat_opening_air_test() {
         tester.execution_bus(),
         tester.program_bus(),
         offset,
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();

@@ -100,6 +100,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         ),
         BaseAluCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
@@ -148,6 +149,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         ),
         LessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
@@ -189,6 +191,7 @@ fn run_mul_256_rand_test(num_ops: usize) {
         ),
         MultiplicationCoreChip::new(range_tuple_checker.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(
@@ -232,6 +235,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             0,
         ),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     run_int_256_rand_execute(opcode as usize, num_ops, &mut chip, &mut tester, None);
@@ -269,6 +273,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         ),
         BranchEqualCoreChip::new(0, 4),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
@@ -315,6 +320,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         ),
         BranchLessThanCoreChip::new(bitwise_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {

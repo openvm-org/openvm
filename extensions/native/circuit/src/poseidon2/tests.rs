@@ -54,6 +54,7 @@ fn tester_with_random_poseidon2_ops(
         Poseidon2Config::default(),
         0,
         max_constraint_degree,
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();

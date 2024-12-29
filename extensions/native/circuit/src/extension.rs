@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
 use jal_native_adapter::JalNativeAdapterChip;
@@ -22,6 +24,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -100,6 +103,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             memory_controller,
         } = builder.system_port();
 
+        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
         let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             NativeLoadStoreAdapterChip::new(
                 execution_bus,
@@ -109,6 +113,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             ),
             NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         load_store_chip.core.set_streams(builder.streams().clone());
 
@@ -125,6 +130,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             ),
             BranchEqualCoreChip::new(NativeBranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             branch_equal_chip,
@@ -135,6 +141,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             JalNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_controller.clone()),
             JalCoreChip::new(NativeJalOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             jal_chip,
@@ -149,6 +156,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             ),
             FieldArithmeticCoreChip::new(FieldArithmeticOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             field_arithmetic_chip,
@@ -159,6 +167,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             FieldExtensionCoreChip::new(FieldExtensionOpcode::default_offset()),
             memory_controller.clone(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             field_extension_chip,
@@ -170,6 +179,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             execution_bus,
             program_bus,
             FriOpcode::default_offset(),
+            offline_memory.clone(),
         );
         inventory.add_executor(
             fri_reduced_opening_chip,
@@ -183,6 +193,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             Poseidon2Config::default(),
             Poseidon2Opcode::default_offset(),
             builder.system_config().max_constraint_degree,
+            offline_memory.clone(),
         );
         inventory.add_executor(
             poseidon2_chip,

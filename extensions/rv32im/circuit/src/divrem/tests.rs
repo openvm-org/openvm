@@ -112,6 +112,7 @@ fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
         ),
         DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -254,6 +255,7 @@ fn run_rv32_divrem_negative_test(
         ),
         DivRemCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let (div_opcode, rem_opcode) = if signed {

@@ -1,6 +1,8 @@
 mod add_ne;
 mod double;
 
+use std::sync::Arc;
+
 pub use add_ne::*;
 pub use double::*;
 
@@ -8,13 +10,17 @@ pub use double::*;
 mod tests;
 
 use num_bigint_dig::BigUint;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{
+    arch::VmChipWrapper,
+    system::memory::{MemoryControllerRef, OfflineMemory},
+};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionCoreChip};
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
@@ -37,6 +43,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr = ec_add_ne_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
@@ -51,7 +58,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "EcAddNe",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(
+            adapter,
+            core,
+            memory_controller,
+            offline_memory,
+        ))
     }
 }
 
@@ -73,6 +85,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         config: ExprBuilderConfig,
         offset: usize,
         a: BigUint,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr = ec_double_expr(config, memory_controller.borrow().range_checker.bus(), a);
         let core = FieldExpressionCoreChip::new(
@@ -87,6 +100,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "EcDouble",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(
+            adapter,
+            core,
+            memory_controller,
+            offline_memory,
+        ))
     }
 }

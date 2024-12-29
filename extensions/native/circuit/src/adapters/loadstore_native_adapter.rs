@@ -13,7 +13,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -79,9 +79,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> NativeLoadStoreAdapterChip<F, NUM_
 
 #[derive(Clone, Debug)]
 pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
-    pub pointer1_read: MemoryReadRecord<F, 1>,
-    pub pointer2_read: Option<MemoryReadRecord<F, 1>>,
-    pub data_read: Option<MemoryReadRecord<F, NUM_CELLS>>,
+    pub pointer1_read: RecordId,
+    pub pointer2_read: Option<RecordId>,
+    pub data_read: Option<RecordId>,
     pub write_as: F,
     pub write_ptr: F,
 
@@ -302,11 +302,11 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         };
         let (data_read_ptr, data_write_ptr) = {
             match local_opcode {
-                LOADW => (read1_cell.data[0] + b, a),
-                LOADW2 => (read1_cell.data[0] + b + read2_cell.unwrap().data[0] * g, a),
-                STOREW => (a, read1_cell.data[0] + b),
-                STOREW2 => (a, read1_cell.data[0] + b + read2_cell.unwrap().data[0] * g),
-                SHINTW => (a, read1_cell.data[0] + b),
+                LOADW => (read1_cell.1[0] + b, a),
+                LOADW2 => (read1_cell.1[0] + b + read2_cell.unwrap().1[0] * g, a),
+                STOREW => (a, read1_cell.1[0] + b),
+                STOREW2 => (a, read1_cell.1[0] + b + read2_cell.unwrap().1[0] * g),
+                SHINTW => (a, read1_cell.1[0] + b),
             }
         };
 
@@ -316,9 +316,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             _ => Some(memory.read::<1>(data_read_as, data_read_ptr)),
         };
         let record = NativeLoadStoreReadRecord {
-            pointer1_read: read1_cell,
-            pointer2_read: read2_cell,
-            data_read,
+            pointer1_read: read1_cell.0,
+            pointer2_read: read2_cell.map(|x| x.0),
+            data_read: data_read.map(|x| x.0),
             write_as: data_write_as,
             write_ptr: data_write_ptr,
             a,
@@ -332,11 +332,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
 
         Ok((
             (
-                [
-                    read1_cell.data[0],
-                    read2_cell.map_or(F::ZERO, |x| x.data[0]),
-                ],
-                data_read.map_or(F::ZERO, |x| x.data[0]),
+                [read1_cell.1[0], read2_cell.map_or(F::ZERO, |x| x.1[0])],
+                data_read.map_or(F::ZERO, |x| x.1[0]),
             ),
             record,
         ))
@@ -370,6 +367,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let cols: &mut NativeLoadStoreAdapterCols<_, NUM_CELLS> = row_slice.borrow_mut();
         cols.from_state = write_record.from_state;
@@ -381,25 +379,24 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         cols.f = read_record.f;
         cols.g = read_record.g;
 
-        cols.data_read_as = read_record
-            .data_read
-            .map_or(F::ZERO, |read| read.address_space);
-        cols.data_read_pointer = read_record.data_read.map_or(F::ZERO, |read| read.pointer);
+        let data_read = read_record.data_read.map(|read| memory.record_by_id(read));
+        if let Some(data_read) = data_read {
+            cols.data_read_as = data_read.address_space;
+            cols.data_read_pointer = data_read.pointer;
+            cols.data_read_aux_cols = aux_cols_factory.make_read_or_immediate_aux_cols(data_read);
+        } else {
+            cols.data_read_aux_cols = MemoryReadOrImmediateAuxCols::disabled();
+        }
 
         cols.data_write_as = write_record.write.address_space;
         cols.data_write_pointer = write_record.write.pointer;
 
-        cols.pointer_read_aux_cols[0] =
-            aux_cols_factory.make_read_or_immediate_aux_cols(read_record.pointer1_read);
+        cols.pointer_read_aux_cols[0] = aux_cols_factory
+            .make_read_or_immediate_aux_cols(memory.record_by_id(read_record.pointer1_read));
         cols.pointer_read_aux_cols[1] = read_record
             .pointer2_read
             .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                aux_cols_factory.make_read_or_immediate_aux_cols(read)
-            });
-        cols.data_read_aux_cols = read_record
-            .data_read
-            .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
-                aux_cols_factory.make_read_or_immediate_aux_cols(read)
+                aux_cols_factory.make_read_or_immediate_aux_cols(memory.record_by_id(read))
             });
         cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write_record.write);
     }

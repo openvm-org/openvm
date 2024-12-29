@@ -85,6 +85,7 @@ fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         ),
         BranchEqualCoreChip::new(0, 4),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -141,6 +142,7 @@ fn run_rv32_beq_negative_test(
         ),
         BranchEqualCoreChip::new(0, 4),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

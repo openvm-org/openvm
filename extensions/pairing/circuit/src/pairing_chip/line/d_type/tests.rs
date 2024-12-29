@@ -60,6 +60,7 @@ fn test_mul_013_by_013() {
         },
         BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng0 = StdRng::seed_from_u64(8);
@@ -156,6 +157,7 @@ fn test_mul_by_01234() {
         },
         BN254_XI_ISIZE,
         PairingOpcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = StdRng::seed_from_u64(8);
@@ -244,6 +246,7 @@ fn test_evaluate_line() {
         tester.memory_controller(),
         config,
         PairingOpcode::default_offset(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = StdRng::seed_from_u64(42);

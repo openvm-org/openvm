@@ -9,7 +9,8 @@ use std::{
 };
 
 use getset::Getters;
-pub use memory::{MemoryReadRecord, MemoryWriteRecord};
+use memory::MemoryRecord;
+pub use memory::{MemoryReadRecord, MemoryWriteRecord, RecordId};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -44,10 +45,12 @@ pub mod dimensions;
 mod interface;
 pub(super) mod memory;
 
+pub(crate) use crate::system::memory::manager::memory::Memory;
+pub use crate::system::memory::manager::memory::OfflineMemory;
 use crate::system::memory::{
     adapter::AccessAdapterInventory,
     dimensions::MemoryDimensions,
-    manager::memory::{Memory, INITIAL_TIMESTAMP},
+    manager::memory::INITIAL_TIMESTAMP,
     merkle::{MemoryMerkleBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     tree::MemoryNode,
@@ -341,11 +344,12 @@ impl<F: PrimeField32> MemoryController<F> {
         )
     }
 
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, 1> {
+    pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, [F; 1]) {
+        // TODO: try to make return (usize, F)?
         self.read(address_space, pointer)
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> MemoryReadRecord<F, N> {
+    pub fn read<const N: usize>(&mut self, address_space: F, pointer: F) -> (RecordId, [F; N]) {
         let address_space_u32 = address_space.as_canonical_u32();
         let ptr_u32 = pointer.as_canonical_u32();
         assert!(
@@ -356,19 +360,13 @@ impl<F: PrimeField32> MemoryController<F> {
         if address_space == F::ZERO {
             assert_eq!(N, 1, "cannot batch read from address space 0");
 
-            let timestamp = self.timestamp();
-            self.memory.increment_timestamp();
+            let record_id = self.memory.increment_timestamp();
 
-            return MemoryReadRecord {
-                address_space,
-                pointer,
-                timestamp,
-                prev_timestamp: 0,
-                data: array::from_fn(|_| pointer),
-            };
+            return (record_id, array::from_fn(|_| pointer));
         }
 
-        let (record, adapter_records) = self.memory.read::<N>(address_space_u32, ptr_u32);
+        let (record_id, values, adapter_records) =
+            self.memory.read::<N>(address_space_u32, ptr_u32);
         for record in adapter_records {
             self.access_adapters.add_record(record);
         }
@@ -378,7 +376,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 .touch_address(address_space_u32, ptr_u32 + i);
         }
 
-        record
+        (record_id, values)
     }
 
     /// Reads a word directly from memory without updating internal state.
@@ -400,6 +398,8 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn write_cell(&mut self, address_space: F, pointer: F, data: F) -> MemoryWriteRecord<F, 1> {
         self.write(address_space, pointer, [data])
     }
+
+    // TODO PLAN: change what read/write return without introducing the offline memory
 
     pub fn write<const N: usize>(
         &mut self,
@@ -640,6 +640,10 @@ impl<F: PrimeField32> MemoryController<F> {
         ret.extend(self.access_adapters.get_cells());
         ret
     }
+
+    pub fn offline_memory(&self) -> OfflineMemory<F> {
+        self.memory.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -653,7 +657,7 @@ pub struct MemoryAuxColsFactory<T> {
 impl<F: PrimeField32> MemoryAuxColsFactory<F> {
     pub fn make_read_aux_cols<const N: usize>(
         &self,
-        read: MemoryReadRecord<F, N>,
+        read: MemoryRecord<F>,
     ) -> MemoryReadAuxCols<F, N> {
         assert!(
             !read.address_space.is_zero(),
@@ -667,7 +671,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
 
     pub fn make_read_or_immediate_aux_cols(
         &self,
-        read: MemoryReadRecord<F, 1>,
+        read: MemoryRecord<F>,
     ) -> MemoryReadOrImmediateAuxCols<F> {
         let mut inv = F::ZERO;
         let mut is_zero = F::ZERO;

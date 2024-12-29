@@ -62,6 +62,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             0,
         ),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     for _ in 0..num_ops {
@@ -151,6 +152,7 @@ fn run_rv32_shift_negative_test(
         ),
         ShiftCoreChip::new(bitwise_chip.clone(), range_checker_chip.clone(), 0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     tester.execute(

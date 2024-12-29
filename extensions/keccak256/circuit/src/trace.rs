@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::system::memory::{MemoryReadRecord, MemoryWriteRecord};
+use openvm_circuit::system::memory::{MemoryWriteRecord, RecordId};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -46,8 +46,7 @@ where
             /// hi-byte of post-state
             post_hi: [u8; KECCAK_RATE_U16S],
             /// if first block
-            register_reads:
-                Option<[MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>; KECCAK_REGISTER_READS]>,
+            register_reads: Option<[RecordId; KECCAK_REGISTER_READS]>,
             /// if last block
             digest_writes: Option<[MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES]>,
         }
@@ -66,21 +65,23 @@ where
         // prepare the states
         let mut state: [u64; 25];
         for record in records {
+            let dst_read = self.offline_memory.lock().record_by_id(record.dst_read);
+            let src_read = self.offline_memory.lock().record_by_id(record.src_read);
+            let len_read = self.offline_memory.lock().record_by_id(record.len_read);
+
             state = [0u64; 25];
-            let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] =
-                from_fn(|i| record.src_read.data[i + 1]);
-            let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] =
-                from_fn(|i| record.len_read.data[i + 1]);
+            let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| src_read.data[i + 1]);
+            let len_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| len_read.data[i + 1]);
             let mut instruction = KeccakInstructionCols {
                 pc: record.pc,
                 is_enabled: Val::<SC>::ONE,
                 is_enabled_first_round: Val::<SC>::ZERO,
-                start_timestamp: Val::<SC>::from_canonical_u32(record.start_timestamp()),
-                dst_ptr: record.dst_read.pointer,
-                src_ptr: record.src_read.pointer,
-                len_ptr: record.len_read.pointer,
-                e: record.digest_addr_space(),
-                dst: record.dst_read.data,
+                start_timestamp: Val::<SC>::from_canonical_u32(dst_read.timestamp),
+                dst_ptr: dst_read.pointer,
+                src_ptr: src_read.pointer,
+                len_ptr: len_read.pointer,
+                e: record.digest_writes[0].address_space,
+                dst: dst_read.data.try_into().unwrap(),
                 src_limbs,
                 src: Val::<SC>::from_canonical_usize(record.input_blocks[0].src),
                 len_limbs,
@@ -160,7 +161,12 @@ where
             .for_each(|((rows, p3_keccak_mat), (instruction, diff, block))| {
                 let height = rows.len() / trace_width;
                 let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
-                    block.reads[partial_read_idx].data
+                    self.offline_memory
+                        .lock()
+                        .record_by_id(block.reads[partial_read_idx])
+                        .data
+                        .try_into()
+                        .unwrap()
                 } else {
                     [Val::<SC>::ZERO; KECCAK_WORD_SIZE]
                 };
@@ -195,22 +201,31 @@ where
                         &register_reads[2], // len
                         &register_reads[2],
                     ]
-                    .map(|r| r.data.last().unwrap().as_canonical_u32());
+                    .map(|r| {
+                        self.offline_memory
+                            .lock()
+                            .record_by_id(*r)
+                            .data
+                            .last()
+                            .unwrap()
+                            .as_canonical_u32()
+                    });
                     for bytes in need_range_check.chunks(2) {
                         self.bitwise_lookup_chip.request_range(
                             bytes[0] << limb_shift_bits,
                             bytes[1] << limb_shift_bits,
                         );
                     }
-                    for (i, record) in register_reads.into_iter().enumerate() {
+                    for (i, id) in register_reads.into_iter().enumerate() {
                         // TODO[jpw] make_read_aux_cols should directly write into slice
-                        first_row.mem_oc.register_aux[i] =
-                            aux_cols_factory.make_read_aux_cols(record);
+                        first_row.mem_oc.register_aux[i] = aux_cols_factory
+                            .make_read_aux_cols(self.offline_memory.lock().record_by_id(id));
                     }
                 }
-                for (i, record) in block.reads.into_iter().enumerate() {
+                for (i, id) in block.reads.into_iter().enumerate() {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
-                    first_row.mem_oc.absorb_reads[i] = aux_cols_factory.make_read_aux_cols(record);
+                    first_row.mem_oc.absorb_reads[i] = aux_cols_factory
+                        .make_read_aux_cols(self.offline_memory.lock().record_by_id(id));
                 }
 
                 let last_row: &mut KeccakVmCols<Val<SC>> =

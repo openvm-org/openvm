@@ -40,6 +40,7 @@ fn new_field_arithmetic_air_test() {
         ),
         FieldArithmeticCoreChip::new(0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
 
     let mut rng = create_seeded_rng();
@@ -129,6 +130,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
         ),
         FieldArithmeticCoreChip::new(0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 6, BabyBear::from_canonical_u32(111));
     tester.write_cell(1, 7, BabyBear::from_canonical_u32(222));
@@ -173,6 +175,7 @@ fn new_field_arithmetic_air_test_panic() {
         ),
         FieldArithmeticCoreChip::new(0),
         tester.memory_controller(),
+        tester.offline_memory_mutex_arc(),
     );
     tester.write_cell(1, 0, BabyBear::ZERO);
     // should panic

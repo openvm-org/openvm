@@ -37,6 +37,7 @@ rand = { workspace = true }
 itertools = { workspace = true }
 eyre = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
+parking_lot = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 openvm-pairing-guest = { workspace = true }

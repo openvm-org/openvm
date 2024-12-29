@@ -1,4 +1,10 @@
-use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
+use std::{
+    array::{self, from_fn},
+    borrow::Borrow,
+    cell::RefCell,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use openvm_circuit::{
     arch::{
@@ -9,7 +15,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::MemoryBridge, MemoryAuxColsFactory, MemoryController,
-            MemoryControllerRef,
+            MemoryControllerRef, OfflineMemory,
         },
         program::ProgramBus,
     },
@@ -176,13 +182,13 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             debug_assert!(address < (1 << self.air.address_bits));
             [memory.read::<READ_SIZE>(e, F::from_canonical_u32(address))]
         });
-        let read_data = read_records.map(|r| r[0].data);
+        let read_data = read_records.map(|r| r[0].1);
 
         let record = Rv32VecHeapReadRecord {
             rs: rs_records,
             rd: rd_record,
             rd_val: F::from_canonical_u32(rd_val),
-            reads: read_records,
+            reads: read_records.map(|r| array::from_fn(|i| r[i].0)),
         };
 
         Ok((read_data, record))
@@ -221,6 +227,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         vec_heap_generate_trace_row_impl(
             row_slice,
@@ -229,6 +236,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
             aux_cols_factory,
             &self.bitwise_lookup_chip,
             self.air.address_bits,
+            memory,
         );
     }
 

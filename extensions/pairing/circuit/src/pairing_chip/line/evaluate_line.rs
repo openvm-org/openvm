@@ -1,7 +1,10 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::MemoryControllerRef};
+use openvm_circuit::{
+    arch::VmChipWrapper,
+    system::memory::{MemoryControllerRef, OfflineMemory},
+};
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -11,6 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
+use parking_lot::Mutex;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>
@@ -56,6 +60,7 @@ impl<
         memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
+        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         let expr = evaluate_line_expr(config, memory_controller.borrow().range_checker.bus());
         let core = FieldExpressionCoreChip::new(
@@ -67,7 +72,12 @@ impl<
             "EvaluateLine",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, memory_controller))
+        Self(VmChipWrapper::new(
+            adapter,
+            core,
+            memory_controller,
+            offline_memory,
+        ))
     }
 }
 

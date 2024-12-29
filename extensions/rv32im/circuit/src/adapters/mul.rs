@@ -14,7 +14,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryReadRecord, MemoryWriteRecord,
+            MemoryWriteRecord, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -55,10 +55,10 @@ impl<F: PrimeField32> Rv32MultAdapterChip<F> {
 }
 
 #[derive(Debug)]
-pub struct Rv32MultReadRecord<F: Field> {
+pub struct Rv32MultReadRecord {
     /// Reads from operand registers
-    pub rs1: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
-    pub rs2: MemoryReadRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rs1: RecordId,
+    pub rs2: RecordId,
 }
 
 #[derive(Debug)]
@@ -166,7 +166,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 }
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
-    type ReadRecord = Rv32MultReadRecord<F>;
+    type ReadRecord = Rv32MultReadRecord;
     type WriteRecord = Rv32MultWriteRecord<F>;
     type Air = Rv32MultAdapterAir;
     type Interface = BasicAdapterInterface<
@@ -193,7 +193,13 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
         let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, c);
 
-        Ok(([rs1.data, rs2.data], Self::ReadRecord { rs1, rs2 }))
+        Ok((
+            [rs1.1, rs2.1],
+            Self::ReadRecord {
+                rs1: rs1.0,
+                rs2: rs2.0,
+            },
+        ))
     }
 
     fn postprocess(
@@ -229,15 +235,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut Rv32MultAdapterCols<_> = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
         row_slice.rd_ptr = write_record.rd.pointer;
-        row_slice.rs1_ptr = read_record.rs1.pointer;
-        row_slice.rs2_ptr = read_record.rs2.pointer;
+        let rs1 = memory.record_by_id(read_record.rs1);
+        let rs2 = memory.record_by_id(read_record.rs2);
+        row_slice.rs1_ptr = rs1.pointer;
+        row_slice.rs2_ptr = rs2.pointer;
         row_slice.reads_aux = [
-            aux_cols_factory.make_read_aux_cols(read_record.rs1),
-            aux_cols_factory.make_read_aux_cols(read_record.rs2),
+            aux_cols_factory.make_read_aux_cols(rs1),
+            aux_cols_factory.make_read_aux_cols(rs2),
         ];
         row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
     }
