@@ -4,6 +4,7 @@ extern crate proc_macro;
 
 use openvm_macros_common::MacroArgs;
 use proc_macro::TokenStream;
+use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Expr, ExprPath, Path, Token,
@@ -75,6 +76,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(hint_decompress_extern_func);
+
+        let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
@@ -175,13 +178,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn double_assign_impl(&mut self) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use openvm_algebra_guest::DivUnsafe;
-                        let two = #intmod_type::from_u8(2);
-                        let lambda = &self.x * &self.x * #intmod_type::from_u8(3).div_unsafe(&self.y * &two);
-                        let x3 = &lambda * &lambda - &self.x * &two;
-                        let y3 = &lambda * &(&self.x - &x3) - &self.y;
-                        self.x = x3;
-                        self.y = y3;
+                        *self = Self::double_impl(self);
                     }
                     #[cfg(target_os = "zkvm")]
                     {
@@ -197,6 +194,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_B: #intmod_type = #const_b;
+                const IDENTITY: Self = Self::identity();
                 type Coordinate = #intmod_type;
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
@@ -229,128 +227,28 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     (self.x, self.y)
                 }
 
-                fn add_ne_nonidentity(p1: &Self, p2: &Self) -> Self {
-                    Self::add_ne(p1, p2)
+                fn add_ne_nonidentity(&self, p2: &Self) -> Self {
+                    Self::add_ne(self, p2)
                 }
 
                 fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
                     Self::add_ne_assign(self, p2);
                 }
 
-                fn double_nonidentity(p: &Self) -> Self {
-                    Self::double_impl(p)
+                fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
+                    Self::add_ne(self, &p2.clone().neg())
+                }
+
+                fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
+                    Self::add_ne_assign(self, &p2.clone().neg());
+                }
+
+                fn double_nonidentity(&self) -> Self {
+                    Self::double_impl(self)
                 }
 
                 fn double_assign_nonidentity(&mut self) {
                     Self::double_assign_impl(self);
-                }
-
-                fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        unimplemented!()
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        use openvm::platform as openvm_platform; // needed for hint_store_u32!
-
-                        let y = core::mem::MaybeUninit::<Self::Coordinate>::uninit();
-                        unsafe {
-                            #hint_decompress_extern_func(x as *const Self::Coordinate as usize, rec_id as *const u8 as usize);
-                            let mut ptr = y.as_ptr() as *const u8;
-                            // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
-                            for _ in (0..<Self::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
-                                openvm_rv32im_guest::hint_store_u32!(ptr, 0);
-                                ptr = ptr.add(4);
-                            }
-                            y.assume_init()
-                        }
-                    }
-                }
-            }
-
-            impl Group for #struct_name {
-                type SelfRef<'a> = &'a Self;
-
-                const IDENTITY: Self = Self::identity();
-
-                fn is_identity(&self) -> bool {
-                    self.x == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO && self.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO
-                }
-
-                fn double(&self) -> Self {
-                    if self.is_identity() {
-                        self.clone()
-                    } else {
-                        Self::double_impl(self)
-                    }
-                }
-
-                fn double_assign(&mut self) {
-                    if !self.is_identity() {
-                        Self::double_assign_impl(self);
-                    }
-                }
-            }
-
-            impl core::ops::Add<&#struct_name> for #struct_name {
-                type Output = Self;
-
-                fn add(mut self, p2: &#struct_name) -> Self::Output {
-                    self.add_assign(p2);
-                    self
-                }
-            }
-
-            impl core::ops::Add for #struct_name {
-                type Output = Self;
-
-                fn add(self, rhs: Self) -> Self::Output {
-                    self.add(&rhs)
-                }
-            }
-
-            impl core::ops::Add<&#struct_name> for &#struct_name {
-                type Output = #struct_name;
-
-                fn add(self, p2: &#struct_name) -> Self::Output {
-                    if self.is_identity() {
-                        p2.clone()
-                    } else if p2.is_identity() {
-                        self.clone()
-                    } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
-                            #struct_name::identity()
-                        } else {
-                            #struct_name::double_impl(self)
-                        }
-                    } else {
-                        #struct_name::add_ne(self, p2)
-                    }
-                }
-            }
-
-            impl core::ops::AddAssign<&#struct_name> for #struct_name {
-                fn add_assign(&mut self, p2: &#struct_name) {
-                    if self.is_identity() {
-                        *self = p2.clone();
-                    } else if p2.is_identity() {
-                        // do nothing
-                    } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
-                            *self = Self::identity();
-                        } else {
-                            Self::double_assign_impl(self);
-                        }
-                    } else {
-                        Self::add_ne_assign(self, p2);
-                    }
-                }
-            }
-
-            impl core::ops::AddAssign for #struct_name {
-                fn add_assign(&mut self, rhs: Self) {
-                    self.add_assign(&rhs);
                 }
             }
 
@@ -358,46 +256,61 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 type Output = Self;
 
                 fn neg(self) -> Self::Output {
-                    Self {
+                    #struct_name {
                         x: self.x,
                         y: -self.y,
                     }
                 }
             }
 
-            impl core::ops::Sub<&#struct_name> for #struct_name {
-                type Output = Self;
-
-                fn sub(self, rhs: &#struct_name) -> Self::Output {
-                    self.sub(rhs.clone())
-                }
-            }
-
-            impl core::ops::Sub for #struct_name {
+            impl core::ops::Neg for &#struct_name {
                 type Output = #struct_name;
 
-                fn sub(self, rhs: Self) -> Self::Output {
-                    self.add(rhs.neg())
+                fn neg(self) -> #struct_name {
+                    #struct_name {
+                        x: self.x.clone(),
+                        y: core::ops::Neg::neg(&self.y),
+                    }
                 }
             }
 
-            impl core::ops::Sub<&#struct_name> for &#struct_name {
-                type Output = #struct_name;
+            mod #group_ops_mod_name {
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops};
+                use super::*;
 
-                fn sub(self, p2: &#struct_name) -> Self::Output {
-                    self.add(&p2.clone().neg())
-                }
-            }
+                impl_sw_group_ops!(#struct_name, #intmod_type);
 
-            impl core::ops::SubAssign<&#struct_name> for #struct_name {
-                fn sub_assign(&mut self, p2: &#struct_name) {
-                    self.sub_assign(p2.clone());
-                }
-            }
+                impl FromCompressed<#intmod_type> for #struct_name {
+                    fn decompress(x: #intmod_type, rec_id: &u8) -> Self {
+                        let y = <#struct_name as FromCompressed<#intmod_type>>::hint_decompress(&x, rec_id);
+                        // Must assert unique so we can check the parity
+                        y.assert_unique();
+                        assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
+                        <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
+                    }
 
-            impl core::ops::SubAssign for #struct_name {
-                fn sub_assign(&mut self, rhs: Self) {
-                    self.add_assign(rhs.neg());
+                    fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> #intmod_type {
+                        #[cfg(not(target_os = "zkvm"))]
+                        {
+                            unimplemented!()
+                        }
+                        #[cfg(target_os = "zkvm")]
+                        {
+                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
+
+                            let y = core::mem::MaybeUninit::<#intmod_type>::uninit();
+                            unsafe {
+                                #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
+                                let mut ptr = y.as_ptr() as *const u8;
+                                // NOTE[jpw]: this loop could be unrolled using seq_macro and hint_store_u32(ptr, $imm)
+                                for _ in (0..<#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS).step_by(4) {
+                                    openvm_rv32im_guest::hint_store_u32!(ptr, 0);
+                                    ptr = ptr.add(4);
+                                }
+                                y.assume_init()
+                            }
+                        }
+                    }
                 }
             }
         });

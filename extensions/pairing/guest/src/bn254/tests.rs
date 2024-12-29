@@ -1,17 +1,16 @@
 use alloc::vec::Vec;
 
 use group::{ff::Field, prime::PrimeCurveAffine};
-use halo2curves_axiom::{
-    bn256::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1},
-    pairing::MillerLoopResult,
+use halo2curves_axiom::bn256::{
+    Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine, G2Prepared, Gt, FROBENIUS_COEFF_FQ12_C1,
 };
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{
-    bn254::Bn254,
+    bn254::{Bn254, G2Affine as OpenVmG2Affine},
     pairing::{
         fp2_invert_assign, fp6_invert_assign, fp6_square_assign, MultiMillerLoop, PairingIntrinsics,
     },
@@ -55,6 +54,13 @@ fn convert_bn254_fp2_to_halo2_fq2(x: Fp2) -> Fq2 {
 fn convert_bn254_fp12_to_halo2_fq12(x: Fp12) -> Fq12 {
     let c = x.to_coeffs();
     Fq12::from_coeffs(c.map(convert_bn254_fp2_to_halo2_fq2))
+}
+
+fn convert_g2_affine_halo2_to_openvm(p: G2Affine) -> OpenVmG2Affine {
+    OpenVmG2Affine::from_xy_unchecked(
+        convert_bn254_halo2_fq2_to_fp2(p.x),
+        convert_bn254_halo2_fq2_to_fp2(p.y),
+    )
 }
 
 #[test]
@@ -176,6 +182,12 @@ fn test_fp_one() {
     assert_eq!(fp_one, convert_bn254_halo2_fq_to_fp(fq_one));
 }
 
+// Gt(Fq12) is not public
+fn assert_miller_results_eq(a: Gt, b: Fp12) {
+    let b = convert_bn254_fp12_to_halo2_fq12(b);
+    crate::halo2curves_shims::bn254::tests::assert_miller_results_eq(a, b);
+}
+
 #[test]
 fn test_bn254_miller_loop() {
     let mut rng = StdRng::seed_from_u64(53);
@@ -194,14 +206,8 @@ fn test_bn254_miller_loop() {
     // Compare against halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -220,15 +226,10 @@ fn test_bn254_miller_loop_identity() {
     };
 
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
 }
 
 #[test]
@@ -246,13 +247,42 @@ fn test_bn254_miller_loop_identity_2() {
     };
 
     let f = Bn254::multi_miller_loop(&[p], &[q]);
-    let f_fq12 = convert_bn254_fp12_to_halo2_fq12(f);
-    let wrapped_f = Gt(f_fq12);
-    let final_f = wrapped_f.final_exponentiation();
-
     // halo2curves implementation
     let h2c_q_prepared = G2Prepared::from(h2c_q);
     let compare_miller = halo2curves_axiom::bn256::multi_miller_loop(&[(&h2c_p, &h2c_q_prepared)]);
-    let compare_final = compare_miller.final_exponentiation();
-    assert_eq!(final_f, compare_final);
+    assert_miller_results_eq(compare_miller, f);
+}
+
+// test on host is enough since we are testing the curve formulas and not anything
+// about intrinsic functions
+#[test]
+fn test_bn254_g2_affine() {
+    let mut rng = StdRng::seed_from_u64(34);
+    for _ in 0..10 {
+        let p = G2Affine::random(&mut rng);
+        let q = G2Affine::random(&mut rng);
+        let expected_add = G2Affine::from(p + q);
+        let expected_sub = G2Affine::from(p - q);
+        let expected_neg = -p;
+        let expected_double = G2Affine::from(p + p);
+        let [p, q] = [p, q].map(|p| {
+            let x = convert_bn254_halo2_fq2_to_fp2(p.x);
+            let y = convert_bn254_halo2_fq2_to_fp2(p.y);
+            // check on curve
+            OpenVmG2Affine::from_xy(x, y).unwrap()
+        });
+        let r_add = &p + &q;
+        let r_sub = &p - &q;
+        let r_neg = -&p;
+        let r_double = &p + &p;
+
+        for (expected, actual) in [
+            (expected_add, r_add),
+            (expected_sub, r_sub),
+            (expected_neg, r_neg),
+            (expected_double, r_double),
+        ] {
+            assert_eq!(convert_g2_affine_halo2_to_openvm(expected), actual);
+        }
+    }
 }

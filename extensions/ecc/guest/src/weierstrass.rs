@@ -1,16 +1,17 @@
 use alloc::vec::Vec;
-use core::ops::{Add, AddAssign, Mul};
+use core::ops::{AddAssign, Mul};
 
-use openvm_algebra_guest::{IntMod, Reduce};
+use openvm_algebra_guest::{Field, IntMod};
 
-use super::group::{CyclicGroup, Group};
+use super::group::Group;
 
 /// Short Weierstrass curve affine point.
-pub trait WeierstrassPoint: Group {
+pub trait WeierstrassPoint: Sized {
     /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_B: Self::Coordinate;
+    const IDENTITY: Self;
 
-    type Coordinate: IntMod;
+    type Coordinate: Field;
 
     /// The concatenated `x, y` coordinates of the affine point, where
     /// coordinates are in little endian.
@@ -27,12 +28,16 @@ pub trait WeierstrassPoint: Group {
     fn x_mut(&mut self) -> &mut Self::Coordinate;
     fn y_mut(&mut self) -> &mut Self::Coordinate;
 
-    /// Hazmat: Assumes p1 != +- p2 and p != identity and p2 != identity.
-    fn add_ne_nonidentity(p1: &Self, p2: &Self) -> Self;
+    /// Hazmat: Assumes self != +- p2 and self != identity and p2 != identity.
+    fn add_ne_nonidentity(&self, p2: &Self) -> Self;
     /// Hazmat: Assumes self != +- p2 and self != identity and p2 != identity.
     fn add_ne_assign_nonidentity(&mut self, p2: &Self);
-    /// Hazmat: Assumes p != identity and 2 * p != identity.
-    fn double_nonidentity(p: &Self) -> Self;
+    /// Hazmat: Assumes self != +- p2 and self != identity and p2 != identity.
+    fn sub_ne_nonidentity(&self, p2: &Self) -> Self;
+    /// Hazmat: Assumes self != +- p2 and self != identity and p2 != identity.
+    fn sub_ne_assign_nonidentity(&mut self, p2: &Self);
+    /// Hazmat: Assumes self != identity and 2 * self != identity.
+    fn double_nonidentity(&self) -> Self;
     /// Hazmat: Assumes self != identity and 2 * self != identity.
     fn double_assign_nonidentity(&mut self);
 
@@ -58,7 +63,9 @@ pub trait WeierstrassPoint: Group {
         }
         Some(Self::from_xy_unchecked(x, y))
     }
+}
 
+pub trait FromCompressed<Coordinate> {
     /// Given `x`-coordinate,
     ///
     /// ## Panics
@@ -71,16 +78,7 @@ pub trait WeierstrassPoint: Group {
     // and then constrain its correctness. A malicious prover could hint
     // incorrectly, so there is no way to use a hint to prove that the input
     // **cannot** be decompressed.
-    fn decompress(x: Self::Coordinate, rec_id: &u8) -> Self
-    where
-        for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
-    {
-        let y = Self::hint_decompress(&x, rec_id);
-        // Must assert unique so we can check the parity
-        y.assert_unique();
-        assert_eq!(y.as_le_bytes()[0] & 1, *rec_id & 1);
-        Self::from_xy_nonidentity(x, y).expect("decompressed point not on curve")
-    }
+    fn decompress(x: Coordinate, rec_id: &u8) -> Self;
 
     /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
     /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
@@ -88,24 +86,19 @@ pub trait WeierstrassPoint: Group {
     ///
     /// This is only a hint, and the returned `y` does not guarantee any of the above properties.
     /// They must be checked separately. Normal users should use `decompress` directly.
-    fn hint_decompress(x: &Self::Coordinate, rec_id: &u8) -> Self::Coordinate;
+    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Coordinate;
 }
 
 /// A trait for elliptic curves that bridges the openvm types and external types with CurveArithmetic etc.
 /// Implement this for external curves with corresponding openvm point and scalar types.
 pub trait IntrinsicCurve {
-    type Scalar: IntMod + Reduce;
-    type Point: WeierstrassPoint + CyclicGroup;
+    type Scalar: Clone;
+    type Point: Clone;
 
-    /// Multi-scalar multiplication. The default implementation may be
-    /// replaced by specialized implementations that use properties of the curve
+    /// Multi-scalar multiplication.
+    /// The implementation may be specialized to use properties of the curve
     /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
-        super::msm(coeffs, bases)
-    }
+    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
 // MSM using preprocessed table (windowed method)
@@ -128,11 +121,15 @@ pub struct CachedMulTable<'a, C: IntrinsicCurve> {
     identity: C::Point,
 }
 
-impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
-    /// Constructor when the curve order is prime (so the group of curve points forms the scalar prime field).
+impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C>
+where
+    C::Point: WeierstrassPoint + Group,
+    C::Scalar: IntMod,
+{
+    /// Constructor when each element of `bases` has prime torsion or is identity.
     ///
-    /// Assumes that `window_bits` is less than number of bits - 1 in the modulus
-    /// of `C::Scalar`.
+    /// Assumes that `window_bits` is less than (number of bits - 1) of the order of
+    /// subgroup generated by each non-identity `base`.
     pub fn new_with_prime_order(bases: &'a [C::Point], window_bits: usize) -> Self {
         assert!(window_bits > 0);
         let window_size = 1 << window_bits;
@@ -140,18 +137,18 @@ impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
             .iter()
             .map(|base| {
                 if base.is_identity() {
-                    vec![C::Point::IDENTITY; window_size - 2]
+                    vec![<C::Point as Group>::IDENTITY; window_size - 2]
                 } else {
                     let mut multiples = Vec::with_capacity(window_size - 2);
                     for _ in 0..window_size - 2 {
-                        // Because curve order is prime, we are guaranteed that
+                        // Because the order of `base` is prime, we are guaranteed that
                         // j * base != identity,
                         // j * base != +- base for j > 1,
                         // j * base + base != identity
                         let multiple = multiples
                             .last()
-                            .map(|last| C::Point::add_ne_nonidentity(last, base))
-                            .unwrap_or_else(|| C::Point::double_nonidentity(base));
+                            .map(|last| WeierstrassPoint::add_ne_nonidentity(last, base))
+                            .unwrap_or_else(|| base.double_nonidentity());
                         multiples.push(multiple);
                     }
                     multiples
@@ -163,7 +160,7 @@ impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
             window_bits,
             bases,
             table,
-            identity: C::Point::IDENTITY,
+            identity: <C::Point as Group>::IDENTITY,
         }
     }
 
@@ -197,7 +194,7 @@ impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
         // bit_idx will always be in range [0, 8)
         let mut bit_idx = 0;
 
-        let mut res = C::Point::IDENTITY;
+        let mut res = <C::Point as Group>::IDENTITY;
         for outer in 0..num_windows {
             if bit_idx == 0 {
                 limb_idx -= 1;
@@ -221,4 +218,289 @@ impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C> {
         }
         res
     }
+}
+
+/// Macro to generate a newtype wrapper for [AffinePoint](crate::AffinePoint)
+/// that implements elliptic curve operations by using the underlying field operations according to the
+/// [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+///
+/// The following imports are required:
+/// ```rust
+/// use core::ops::AddAssign;
+///
+/// use openvm_algebra_guest::{DivUnsafe, Field};
+/// use openvm_ecc_guest::{AffinePoint, Group, weierstrass::WeierstrassPoint};
+/// ```
+#[macro_export]
+macro_rules! impl_sw_affine {
+    // Assumes `a = 0` in curve equation. `$three` should be a constant expression for `3` of type `$field`.
+    ($struct_name:ident, $field:ty, $three:expr, $b:expr) => {
+        /// A newtype wrapper for [AffinePoint] that implements elliptic curve operations
+        /// by using the underlying field operations according to the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+        #[repr(transparent)]
+        pub struct $struct_name(AffinePoint<$field>);
+
+        impl WeierstrassPoint for $struct_name {
+            const CURVE_B: $field = $b;
+            const IDENTITY: Self = Self(AffinePoint::new(<$field>::ZERO, <$field>::ZERO));
+
+            type Coordinate = $field;
+
+            /// SAFETY: assumes that [$field] has internal representation in little-endian.
+            fn as_le_bytes(&self) -> &[u8] {
+                unsafe {
+                    &*core::ptr::slice_from_raw_parts(
+                        self as *const Self as *const u8,
+                        core::mem::size_of::<Self>(),
+                    )
+                }
+            }
+            fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
+                Self(AffinePoint::new(x, y))
+            }
+            fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
+                (self.0.x, self.0.y)
+            }
+            fn x(&self) -> &Self::Coordinate {
+                &self.0.x
+            }
+            fn y(&self) -> &Self::Coordinate {
+                &self.0.y
+            }
+            fn x_mut(&mut self) -> &mut Self::Coordinate {
+                &mut self.0.x
+            }
+            fn y_mut(&mut self) -> &mut Self::Coordinate {
+                &mut self.0.y
+            }
+
+            fn double_nonidentity(&self) -> Self {
+                use ::openvm_algebra_guest::DivUnsafe;
+                // lambda = (3*x1^2+a)/(2*y1)
+                // for bls12-381, a = 0
+                let lambda = (&THREE * self.x() * self.x()).div_unsafe(self.y() + self.y());
+                // x3 = lambda^2-x1-x1
+                let x3 = &lambda * &lambda - self.x() - self.x();
+                // y3 = lambda * (x1-x3) - y1
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn double_assign_nonidentity(&mut self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.double_nonidentity();
+            }
+
+            fn add_ne_nonidentity(&self, p2: &Self) -> Self {
+                use ::openvm_algebra_guest::DivUnsafe;
+                // lambda = (y2-y1)/(x2-x1)
+                // x3 = lambda^2-x1-x2
+                // y3 = lambda*(x1-x3)-y1
+                let lambda = (p2.y() - self.y()).div_unsafe(p2.x() - self.x());
+                let x3 = &lambda * &lambda - self.x() - p2.x();
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.add_ne_nonidentity(p2);
+            }
+
+            fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
+                use ::openvm_algebra_guest::DivUnsafe;
+                // lambda = (y2+y1)/(x1-x2)
+                // x3 = lambda^2-x1-x2
+                // y3 = lambda*(x1-x3)-y1
+                let lambda = (p2.y() + self.y()).div_unsafe(self.x() - p2.x());
+                let x3 = &lambda * &lambda - self.x() - p2.x();
+                let y3 = lambda * (self.x() - &x3) - self.y();
+                Self(AffinePoint::new(x3, y3))
+            }
+
+            fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
+                // TODO: revisit if there are possible optimizations
+                *self = self.sub_ne_nonidentity(p2);
+            }
+        }
+
+        impl core::ops::Neg for $struct_name {
+            type Output = Self;
+
+            fn neg(mut self) -> Self::Output {
+                self.0.y.neg_assign();
+                self
+            }
+        }
+
+        impl core::ops::Neg for &$struct_name {
+            type Output = $struct_name;
+
+            fn neg(self) -> Self::Output {
+                self.clone().neg()
+            }
+        }
+
+        impl From<$struct_name> for AffinePoint<$field> {
+            fn from(value: $struct_name) -> Self {
+                value.0
+            }
+        }
+
+        impl From<AffinePoint<$field>> for $struct_name {
+            fn from(value: AffinePoint<$field>) -> Self {
+                Self(value)
+            }
+        }
+    };
+}
+
+/// Implements `Group` on `$struct_name` assuming that `$struct_name` implements `WeierstrassPoint`.
+/// Assumes that `Neg` is implemented for `&$struct_name`.
+#[macro_export]
+macro_rules! impl_sw_group_ops {
+    ($struct_name:ident, $field:ty) => {
+        impl Group for $struct_name {
+            type SelfRef<'a> = &'a Self;
+
+            const IDENTITY: Self = <Self as WeierstrassPoint>::IDENTITY;
+
+            fn double(&self) -> Self {
+                if self.is_identity() {
+                    self.clone()
+                } else {
+                    self.double_nonidentity()
+                }
+            }
+
+            fn double_assign(&mut self) {
+                if !self.is_identity() {
+                    self.double_assign_nonidentity();
+                }
+            }
+        }
+
+        impl core::ops::Add<&$struct_name> for $struct_name {
+            type Output = Self;
+
+            fn add(mut self, p2: &$struct_name) -> Self::Output {
+                use core::ops::AddAssign;
+                self.add_assign(p2);
+                self
+            }
+        }
+
+        impl core::ops::Add for $struct_name {
+            type Output = Self;
+
+            fn add(self, rhs: Self) -> Self::Output {
+                self.add(&rhs)
+            }
+        }
+
+        impl core::ops::Add<&$struct_name> for &$struct_name {
+            type Output = $struct_name;
+
+            fn add(self, p2: &$struct_name) -> Self::Output {
+                if self.is_identity() {
+                    p2.clone()
+                } else if p2.is_identity() {
+                    self.clone()
+                } else if self.x() == p2.x() {
+                    if self.y() + p2.y() == <$field as Field>::ZERO {
+                        <$struct_name as WeierstrassPoint>::IDENTITY
+                    } else {
+                        self.double_nonidentity()
+                    }
+                } else {
+                    self.add_ne_nonidentity(p2)
+                }
+            }
+        }
+
+        impl core::ops::AddAssign<&$struct_name> for $struct_name {
+            fn add_assign(&mut self, p2: &$struct_name) {
+                if self.is_identity() {
+                    *self = p2.clone();
+                } else if p2.is_identity() {
+                    // do nothing
+                } else if self.x() == p2.x() {
+                    if self.y() + p2.y() == <$field as Field>::ZERO {
+                        *self = <$struct_name as WeierstrassPoint>::IDENTITY;
+                    } else {
+                        self.double_assign_nonidentity();
+                    }
+                } else {
+                    self.add_ne_assign_nonidentity(p2);
+                }
+            }
+        }
+
+        impl core::ops::AddAssign for $struct_name {
+            fn add_assign(&mut self, rhs: Self) {
+                self.add_assign(&rhs);
+            }
+        }
+
+        impl core::ops::Sub<&$struct_name> for $struct_name {
+            type Output = Self;
+
+            fn sub(self, rhs: &$struct_name) -> Self::Output {
+                core::ops::Sub::sub(&self, rhs)
+            }
+        }
+
+        impl core::ops::Sub for $struct_name {
+            type Output = $struct_name;
+
+            fn sub(self, rhs: Self) -> Self::Output {
+                self.sub(&rhs)
+            }
+        }
+
+        impl core::ops::Sub<&$struct_name> for &$struct_name {
+            type Output = $struct_name;
+
+            fn sub(self, p2: &$struct_name) -> Self::Output {
+                if p2.is_identity() {
+                    self.clone()
+                } else if self.is_identity() {
+                    core::ops::Neg::neg(p2)
+                } else if self.x() == p2.x() {
+                    if self.y() == p2.y() {
+                        <$struct_name as WeierstrassPoint>::IDENTITY
+                    } else {
+                        self.double_nonidentity()
+                    }
+                } else {
+                    self.sub_ne_nonidentity(p2)
+                }
+            }
+        }
+
+        impl core::ops::SubAssign<&$struct_name> for $struct_name {
+            fn sub_assign(&mut self, p2: &$struct_name) {
+                if p2.is_identity() {
+                    // do nothing
+                } else if self.is_identity() {
+                    *self = core::ops::Neg::neg(p2);
+                } else if self.x() == p2.x() {
+                    if self.y() == p2.y() {
+                        *self = <$struct_name as WeierstrassPoint>::IDENTITY
+                    } else {
+                        self.double_assign_nonidentity();
+                    }
+                } else {
+                    self.sub_ne_assign_nonidentity(p2);
+                }
+            }
+        }
+
+        impl core::ops::SubAssign for $struct_name {
+            fn sub_assign(&mut self, rhs: Self) {
+                self.sub_assign(&rhs);
+            }
+        }
+    };
 }

@@ -28,3 +28,7 @@ __pycache__/
 
 # Javascript
 **/node_modules/
+
+# Profiling
+**/flamegraph.svg
+**/profile.json

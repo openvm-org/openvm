@@ -12,7 +12,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, UsizeOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    UsizeOpcode,
+};
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -103,11 +107,12 @@ where
         );
 
         let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV32_CELL_BITS);
-        builder
-            .when(is_jal)
-            .assert_eq(intermed_val, from_pc + AB::F::from_canonical_u32(4));
+        builder.when(is_jal).assert_eq(
+            intermed_val,
+            from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),
+        );
 
-        let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(4) + is_jal * imm;
+        let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(DEFAULT_PC_STEP) + is_jal * imm;
 
         let expected_opcode = is_lui * AB::F::from_canonical_u32(LUI as u32)
             + is_jal * AB::F::from_canonical_u32(JAL as u32)
@@ -243,7 +248,9 @@ pub(super) fn run_jal_lui(
 ) -> (u32, [u32; RV32_REGISTER_NUM_LIMBS]) {
     match opcode {
         JAL => {
-            let rd_data = array::from_fn(|i| ((pc + 4) >> (8 * i)) & ((1 << RV32_CELL_BITS) - 1));
+            let rd_data = array::from_fn(|i| {
+                ((pc + DEFAULT_PC_STEP) >> (8 * i)) & ((1 << RV32_CELL_BITS) - 1)
+            });
             let next_pc = pc as i32 + imm;
             assert!(next_pc >= 0);
             (next_pc as u32, rd_data)
@@ -253,7 +260,7 @@ pub(super) fn run_jal_lui(
             let rd = imm << 12;
             let rd_data =
                 array::from_fn(|i| (rd >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1));
-            (pc + 4, rd_data)
+            (pc + DEFAULT_PC_STEP, rd_data)
         }
     }
 }

@@ -49,9 +49,7 @@ fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
 // An "eyeball test" only: prints the decoded ELF for eyeball inspection
 #[test]
 fn test_decode_elf() -> Result<()> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join("tests/data/rv32im-empty-program-elf"))?;
-    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    let elf = get_elf("tests/data/rv32im-empty-program-elf")?;
     dbg!(elf);
     Ok(())
 }
@@ -62,9 +60,7 @@ fn test_decode_elf() -> Result<()> {
 #[test_case("tests/data/rv32im-fib-from-as")]
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let data = read(dir.join(elf_path))?;
-    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    let elf = get_elf(elf_path)?;
     let program = Transpiler::<F>::default()
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32MTranspilerExtension)

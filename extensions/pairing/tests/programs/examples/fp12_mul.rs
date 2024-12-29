@@ -1,6 +1,7 @@
 #![feature(cfg_match)]
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(unused_imports)]
 
 use openvm::io::read_vec;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};

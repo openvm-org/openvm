@@ -21,7 +21,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::utils::not;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -146,7 +148,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
         let to_pc = ctx
             .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(4));
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP));
 
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
@@ -223,7 +225,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
 
         Ok((
             ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + 4),
+                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
                 timestamp: memory.timestamp(),
             },
             Self::WriteRecord { from_state, rd },

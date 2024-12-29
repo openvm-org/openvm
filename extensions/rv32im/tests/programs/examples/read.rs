@@ -11,6 +11,7 @@ struct Foo {
     baz: alloc::vec::Vec<u32>,
 }
 
+#[allow(clippy::disallowed_names)]
 pub fn main() {
     let foo: Foo = read();
     if foo.baz.len() != 4 {

@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{IntMod, moduli_setup::*};
+use openvm_algebra_guest::{moduli_setup::*, DivUnsafe, IntMod};
 
 openvm::entry!(main);
 
@@ -41,5 +41,5 @@ pub fn main() {
     let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding field
     assert_eq!(a.clone() * &a * &a * &a * &a, a); // a^5 = a
     assert_eq!(b.clone() * &b * &b * &b * &b, b); // b^5 = b
-    // Note that these assertions would fail, have we provided the `mod_idx` parameters wrongly.
+                                                  // Note that these assertions would fail, have we provided the `mod_idx` parameters wrongly.
 }
