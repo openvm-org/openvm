@@ -9,3 +9,6 @@ mod utils;
 pub use air::*;
 pub use columns::*;
 pub use utils::*;
+
+#[cfg(test)]
+mod tests;

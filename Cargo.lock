@@ -4316,10 +4316,16 @@ dependencies = [
 name = "openvm-sha256-air"
 version = "0.1.0-alpha"
 dependencies = [
+ "hex",
+ "lazy_static",
+ "openvm-circuit",
  "openvm-circuit-primitives",
  "openvm-stark-backend",
+ "openvm-stark-sdk",
  "rand",
  "sha2",
+ "test-case",
+ "test-log",
 ]
 
 [[package]]
