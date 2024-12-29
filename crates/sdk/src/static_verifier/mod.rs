@@ -13,7 +13,7 @@ use openvm_native_recursion::{
 };
 use openvm_stark_sdk::{
     openvm_stark_backend::{
-        p3_field::{AbstractField, PrimeField32},
+        p3_field::{FieldAlgebra, PrimeField32},
         prover::types::Proof,
     },
     p3_baby_bear::BabyBear,

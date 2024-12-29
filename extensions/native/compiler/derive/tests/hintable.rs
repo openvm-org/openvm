@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_native_compiler_derive::Hintable;
 use openvm_native_recursion::{hints::InnerVal, types::InnerConfig};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 #[derive(Hintable)]
 struct TestStruct {

@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -84,7 +84,7 @@ fn test_single_is_zero(x: u32) {
     let air = chip.air;
     let trace = chip.generate_trace();
 
-    assert_eq!(trace.get(0, 1), AbstractField::from_bool(x == 0));
+    assert_eq!(trace.get(0, 1), FieldAlgebra::from_bool(x == 0));
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
@@ -95,7 +95,7 @@ fn test_single_is_zero(x: u32) {
 fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
     let x_vec = x_vec
         .into_iter()
-        .map(AbstractField::from_canonical_u32)
+        .map(FieldAlgebra::from_canonical_u32)
         .collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
@@ -104,7 +104,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
     for (i, value) in expected.iter().enumerate() {
         assert_eq!(
             trace.values[3 * i + 1],
-            AbstractField::from_canonical_u32(*value)
+            FieldAlgebra::from_canonical_u32(*value)
         );
     }
 
@@ -115,7 +115,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero_fail(x: u32) {
-    let x = AbstractField::from_canonical_u32(x);
+    let x = FieldAlgebra::from_canonical_u32(x);
     let chip = IsZeroChip::new(vec![x]);
     let air = chip.air;
     let mut trace = chip.generate_trace();

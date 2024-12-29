@@ -5,7 +5,7 @@ use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    p3_field::{extension::BinomialExtensionField, AbstractField},
+    p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
 use openvm_stark_sdk::{
     config::fri_params::standard_fri_params_with_100_bits_conjectured_security,

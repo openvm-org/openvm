@@ -13,7 +13,7 @@ use openvm_mod_circuit_builder::{
     test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpressionCoreChip,
 };
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{EcAddNeChip, EcDoubleChip};

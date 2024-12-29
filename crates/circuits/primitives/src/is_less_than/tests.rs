@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -161,7 +161,7 @@ fn test_is_less_than_negative() {
     let mut trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
-    trace.values[2] = AbstractField::from_canonical_u64(0);
+    trace.values[2] = FieldAlgebra::from_canonical_u64(0);
 
     disable_debug_builder();
     assert_eq!(

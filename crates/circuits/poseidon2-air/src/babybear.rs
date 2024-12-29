@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use lazy_static::lazy_static;
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
@@ -9,9 +9,9 @@ use zkhash::{
 };
 
 use super::{
-    Poseidon2Constants, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
-    POSEIDON2_WIDTH,
+    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS, POSEIDON2_WIDTH,
 };
+use crate::Poseidon2Constants;
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
     BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
@@ -53,7 +53,7 @@ lazy_static! {
         horizen_round_consts().ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<FA: AbstractField, const WIDTH: usize>(
+pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
     state: &mut [FA; WIDTH],
     int_diag_m1_matrix: &[FA::F; WIDTH],
 ) {

@@ -4,7 +4,7 @@ use openvm_native_compiler::{
     ir::{Ext, Felt},
 };
 use openvm_stark_backend::p3_field::{
-    extension::BinomialExtensionField, AbstractExtensionField, AbstractField,
+    extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{thread_rng, Rng};

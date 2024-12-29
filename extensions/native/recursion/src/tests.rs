@@ -113,6 +113,7 @@ fn test_fibonacci() {
         fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
         FriParameters {
             log_blowup: 3,
+            log_final_poly_len: 0,
             num_queries: 2,
             proof_of_work_bits: 0,
         },

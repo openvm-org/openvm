@@ -9,7 +9,7 @@ use num_traits::{FromPrimitive, One, Zero};
 use openvm_circuit_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits, utils::big_uint_mod_inverse, OverflowInt,
 };
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::AbstractField, p3_util::log2_ceil_usize};
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra, p3_util::log2_ceil_usize};
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>

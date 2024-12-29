@@ -5,7 +5,7 @@ use std::{array, borrow::Borrow, iter};
 
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::p3_field::{AbstractField, PrimeField32};
+use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 use crate::system::memory::offline_checker::bridge::AUX_LEN;
 
@@ -97,7 +97,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryWriteAuxCols<F, N> {
+impl<const N: usize, F: FieldAlgebra + Copy> MemoryWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryWriteAuxCols::<F, N>::width();
         MemoryWriteAuxCols::from_slice(&F::zero_vec(width))
@@ -145,7 +145,7 @@ impl<const N: usize, T> MemoryReadAuxCols<T, N> {
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryReadAuxCols<F, N> {
+impl<const N: usize, F: FieldAlgebra + Copy> MemoryReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, N>::width();
         MemoryReadAuxCols::from_slice(&F::zero_vec(width))
@@ -175,7 +175,7 @@ impl<const N: usize, T: Clone> MemoryHeapReadAuxCols<T, N> {
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryHeapReadAuxCols<F, N> {
+impl<const N: usize, F: FieldAlgebra + Copy> MemoryHeapReadAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
         let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
@@ -212,7 +212,7 @@ impl<const N: usize, T: Clone> MemoryHeapWriteAuxCols<T, N> {
     }
 }
 
-impl<const N: usize, F: AbstractField + Copy> MemoryHeapWriteAuxCols<F, N> {
+impl<const N: usize, F: FieldAlgebra + Copy> MemoryHeapWriteAuxCols<F, N> {
     pub fn disabled() -> Self {
         let width = MemoryReadAuxCols::<F, 1>::width();
         let address = MemoryReadAuxCols::from_slice(&F::zero_vec(width));
@@ -277,7 +277,7 @@ impl<T> MemoryReadOrImmediateAuxCols<T> {
     }
 }
 
-impl<F: AbstractField + Copy> MemoryReadOrImmediateAuxCols<F> {
+impl<F: FieldAlgebra + Copy> MemoryReadOrImmediateAuxCols<F> {
     pub fn disabled() -> Self {
         let width = MemoryReadOrImmediateAuxCols::<F>::width();
         MemoryReadOrImmediateAuxCols::from_slice(&F::zero_vec(width))

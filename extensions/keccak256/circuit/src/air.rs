@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -625,7 +625,7 @@ impl KeccakVmAir {
 
     /// Amount to advance timestamp by after execution of one opcode instruction.
     /// This is an upper bound dependant on the length `len` operand, which is unbounded.
-    pub fn timestamp_change<T: AbstractField>(len: impl Into<T>) -> T {
+    pub fn timestamp_change<T: FieldAlgebra>(len: impl Into<T>) -> T {
         // actual number is ceil(len / 136) * (3 + 17) + KECCAK_DIGEST_WRITES
         // digest writes only done on last row of multi-block
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding

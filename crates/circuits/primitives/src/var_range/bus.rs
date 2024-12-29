@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
 };
 
 // Represents a bus for (x, bits) where either (x, bits) = (0, 0) or
@@ -45,7 +45,7 @@ impl VariableRangeCheckerBus {
         max_bits: usize,
     ) -> VariableRangeCheckerBusInteraction<T>
     where
-        T: AbstractField,
+        T: FieldAlgebra,
     {
         debug_assert!(max_bits <= self.range_max_bits);
         self.push(
@@ -78,7 +78,7 @@ pub struct VariableRangeCheckerBusInteraction<T> {
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> VariableRangeCheckerBusInteraction<T> {
+impl<T: FieldAlgebra> VariableRangeCheckerBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,

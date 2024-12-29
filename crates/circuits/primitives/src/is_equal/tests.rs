@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -82,8 +82,8 @@ impl<F: Field> IsEqualChip<F> {
     [0,23,97]
 )]
 fn test_single_is_equal(x: u32, y: u32) {
-    let x = AbstractField::from_canonical_u32(x);
-    let y = AbstractField::from_canonical_u32(y);
+    let x = FieldAlgebra::from_canonical_u32(x);
+    let y = FieldAlgebra::from_canonical_u32(y);
 
     let chip = IsEqualChip {
         pairs: vec![(x, y)],
@@ -103,18 +103,18 @@ fn test_single_is_equal(x: u32, y: u32) {
     [0,23,97]
 )]
 fn test_single_is_zero_fail(x: u32, y: u32) {
-    let x = AbstractField::from_canonical_u32(x);
-    let y = AbstractField::from_canonical_u32(y);
+    let x = FieldAlgebra::from_canonical_u32(x);
+    let y = FieldAlgebra::from_canonical_u32(y);
 
     let chip = IsEqualChip {
         pairs: vec![(x, y)],
     };
 
     let mut trace = chip.generate_trace();
-    trace.values[2] = if trace.values[2] == AbstractField::ONE {
-        AbstractField::ZERO
+    trace.values[2] = if trace.values[2] == FieldAlgebra::ONE {
+        FieldAlgebra::ZERO
     } else {
-        AbstractField::ONE
+        FieldAlgebra::ONE
     };
 
     disable_debug_builder();

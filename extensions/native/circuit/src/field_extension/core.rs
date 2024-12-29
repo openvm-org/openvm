@@ -15,7 +15,7 @@ use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -252,7 +252,7 @@ impl FieldExtension {
 
     pub(crate) fn multiply<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
-        E: AbstractField,
+        E: FieldAlgebra,
         V: Copy,
         V: Mul<V, Output = E>,
         E: Mul<V, Output = E>,

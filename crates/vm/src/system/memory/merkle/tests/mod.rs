@@ -6,7 +6,7 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    interaction::InteractionType, p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix,
+    interaction::InteractionType, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput, Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{

@@ -7,7 +7,7 @@ use openvm_circuit::{
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
-    p3_field::{AbstractField, Field, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     prover::USE_DEBUG_BUILDER,
     utils::disable_debug_builder,
     verifier::VerificationError,

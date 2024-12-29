@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul, MulAssign};
 
-use openvm_stark_backend::p3_field::{AbstractExtensionField, AbstractField, PrimeField};
+use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField};
 
 use super::{
     Array, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt, Var, Variable,
@@ -94,7 +94,7 @@ impl<C: Config> Builder<C> {
     /// Exponentiates a variable to an array of bits in little endian.
     pub fn exp_bits<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
     where
-        V::Expression: AbstractField,
+        V::Expression: FieldAlgebra,
         V: Copy + Mul<Output = V::Expression> + Variable<C>,
     {
         let result: V = self.eval(V::Expression::ONE);
@@ -149,7 +149,7 @@ impl<C: Config> Builder<C> {
         bit_len: impl Into<RVar<C::N>>,
     ) -> V
     where
-        V::Expression: AbstractField,
+        V::Expression: FieldAlgebra,
         V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
     {
         let result: V = self.eval(V::Expression::ONE);
@@ -214,7 +214,7 @@ impl<C: Config> Builder<C> {
 
     /// Creates an ext from a slice of felts.
     pub fn ext_from_base_slice(&mut self, arr: &[Felt<C::F>]) -> Ext<C::F, C::EF> {
-        assert!(arr.len() <= <C::EF as AbstractExtensionField<C::F>>::D);
+        assert!(arr.len() <= <C::EF as FieldExtensionAlgebra<C::F>>::D);
         let mut res = SymbolicExt::from_f(C::EF::ZERO);
         for i in 0..arr.len() {
             res += arr[i] * SymbolicExt::from_f(C::EF::monomial(i));

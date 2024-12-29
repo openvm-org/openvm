@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
-    p3_field::{AbstractField, Field},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -149,7 +149,7 @@ fn test_is_less_than_tuple_chip_negative() {
     let mut trace = chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
 
-    trace.values[2] = AbstractField::from_canonical_u64(0);
+    trace.values[2] = FieldAlgebra::from_canonical_u64(0);
 
     disable_debug_builder();
     assert_eq!(

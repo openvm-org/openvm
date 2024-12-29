@@ -87,7 +87,7 @@ impl Hintable<C> for InnerFriProof {
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {
         let commit_phase_commits = Vec::<InnerDigest>::read(builder);
         let query_proofs = Vec::<InnerQueryProof>::read(builder);
-        let final_poly = builder.hint_ext();
+        let final_poly = builder.hint_exts();
         let pow_witness = builder.hint_felt();
         Self::HintVariable {
             commit_phase_commits,
@@ -108,7 +108,7 @@ impl Hintable<C> for InnerFriProof {
                 .collect(),
         ));
         stream.extend(Vec::<InnerQueryProof>::write(&self.query_proofs));
-        stream.extend(vec![self.final_poly].write());
+        stream.extend(self.final_poly.write());
         stream.push(vec![self.pow_witness]);
 
         stream

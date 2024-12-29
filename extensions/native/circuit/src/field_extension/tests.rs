@@ -10,7 +10,7 @@ use openvm_circuit::arch::testing::{
 use openvm_instructions::{instruction::Instruction, UsizeOpcode, VmOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
-    p3_field::{extension::BinomialExtensionField, AbstractExtensionField, AbstractField},
+    p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
     utils::disable_debug_builder,
     verifier::VerificationError,
     ChipUsageGetter,

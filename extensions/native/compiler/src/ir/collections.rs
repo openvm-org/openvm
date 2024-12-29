@@ -2,7 +2,7 @@ use alloc::rc::Rc;
 use std::cell::RefCell;
 
 use itertools::Itertools;
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use serde::{Deserialize, Serialize};
 
 use super::{

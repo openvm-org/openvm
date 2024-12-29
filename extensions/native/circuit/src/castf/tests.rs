@@ -4,7 +4,7 @@ use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
-    p3_field::AbstractField, utils::disable_debug_builder, verifier::VerificationError, Chip,
+    p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,

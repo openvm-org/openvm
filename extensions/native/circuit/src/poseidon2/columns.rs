@@ -4,7 +4,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBorrow;
 use openvm_poseidon2_air::Poseidon2SubCols;
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 
 use super::NATIVE_POSEIDON2_CHUNK_SIZE;
 
@@ -39,7 +39,7 @@ pub struct NativePoseidon2MemoryCols<T> {
     pub chunk_write_aux: [MemoryWriteAuxCols<T, NATIVE_POSEIDON2_CHUNK_SIZE>; 2],
 }
 
-impl<F: AbstractField + Copy> NativePoseidon2MemoryCols<F> {
+impl<F: FieldAlgebra + Copy> NativePoseidon2MemoryCols<F> {
     pub fn blank() -> Self {
         Self {
             from_state: ExecutionState::default(),

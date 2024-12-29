@@ -410,7 +410,7 @@ impl<F: PrimeField32> Memory<F> {
 
 #[cfg(test)]
 mod tests {
-    use openvm_stark_backend::p3_field::AbstractField;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{BlockData, Memory};

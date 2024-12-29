@@ -27,7 +27,7 @@ use openvm_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
     },
     engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{p3_field::AbstractField, Chip},
+    openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::transpiler::Transpiler;

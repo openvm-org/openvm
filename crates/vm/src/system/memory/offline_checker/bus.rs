@@ -2,7 +2,7 @@ use std::iter;
 
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
 };
 
 use crate::system::memory::MemoryAddress;
@@ -59,7 +59,7 @@ pub struct MemoryBusInteraction<T> {
     pub timestamp: T,
 }
 
-impl<T: AbstractField> MemoryBusInteraction<T> {
+impl<T: FieldAlgebra> MemoryBusInteraction<T> {
     /// Finalizes and sends/receives the memory operation with the specified count over the bus.
     ///
     /// A read corresponds to a receive, and a write corresponds to a send.

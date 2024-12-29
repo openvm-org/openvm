@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
 };
 
 /// Represents a bus for `(x, y, x ^ y)` identified by a unique bus index (`usize`).
@@ -53,7 +53,7 @@ pub struct XorBusInteraction<T> {
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> XorBusInteraction<T> {
+impl<T: FieldAlgebra> XorBusInteraction<T> {
     /// Finalizes and sends/receives over the Xor bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where

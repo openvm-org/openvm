@@ -23,7 +23,7 @@ use openvm_sdk::{
     prover::{AggStarkProver, AppProver, LeafProver},
     Sdk, StdIn,
 };
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{

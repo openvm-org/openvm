@@ -4,7 +4,7 @@ use openvm_native_compiler::{
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, AbstractField};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear};
 use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};

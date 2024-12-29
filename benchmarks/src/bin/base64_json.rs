@@ -14,7 +14,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{config::AppConfig, keygen::leaf_keygen, prover::AggStarkProver, StdIn};
-use openvm_stark_backend::{config::Com, p3_field::AbstractField};
+use openvm_stark_backend::{config::Com, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},

@@ -11,7 +11,7 @@ use openvm_native_recursion::{
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     openvm_stark_backend::{
-        keygen::types::MultiStarkVerifyingKey, p3_field::AbstractField, p3_util::log2_strict_usize,
+        keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra, p3_util::log2_strict_usize,
         prover::types::Proof,
     },
 };

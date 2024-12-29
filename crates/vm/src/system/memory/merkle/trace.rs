@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, cmp::Reverse, sync::Arc};
 
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,

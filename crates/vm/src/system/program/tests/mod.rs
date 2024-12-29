@@ -10,7 +10,7 @@ use openvm_native_compiler::{
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProofInput,
 };

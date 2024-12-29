@@ -4,7 +4,7 @@ use air::{DummyMemoryInteractionCols, MemoryDummyAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionType,
-    p3_field::{AbstractField, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     rap::AnyRap,

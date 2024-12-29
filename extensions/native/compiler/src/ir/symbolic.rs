@@ -11,9 +11,7 @@ use std::{
     ops::{AddAssign, DivAssign, MulAssign, SubAssign},
 };
 
-use openvm_stark_backend::p3_field::{
-    AbstractField, ExtensionField, Field, FieldArray, PrimeField,
-};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, FieldArray, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};
@@ -298,7 +296,7 @@ pub trait ExtensionOperand<F: Field, EF: ExtensionField<F>> {
     fn to_operand(self) -> ExtOperand<F, EF>;
 }
 
-impl<N: Field> AbstractField for SymbolicVar<N> {
+impl<N: Field> FieldAlgebra for SymbolicVar<N> {
     type F = N;
 
     const ZERO: Self = SymbolicVar::Const(N::ZERO, FieldArray([N::ZERO; 4]));
@@ -343,7 +341,7 @@ impl<N: Field> NotSymbolicVar for Var<N> {}
 impl<N: PrimeField> NotSymbolicVar for Usize<N> {}
 impl<N: Field> NotSymbolicVar for RVar<N> {}
 
-impl<F: Field> AbstractField for SymbolicFelt<F> {
+impl<F: Field> FieldAlgebra for SymbolicFelt<F> {
     type F = F;
 
     const ZERO: Self = SymbolicFelt::Const(F::ZERO, FieldArray([F::ZERO; 4]));
@@ -381,7 +379,7 @@ impl<F: Field> AbstractField for SymbolicFelt<F> {
     }
 }
 
-impl<F: Field, EF: ExtensionField<F>> AbstractField for SymbolicExt<F, EF> {
+impl<F: Field, EF: ExtensionField<F>> FieldAlgebra for SymbolicExt<F, EF> {
     type F = EF;
 
     const ZERO: Self = SymbolicExt::Const(EF::ZERO, FieldArray([EF::ZERO; 4]));

@@ -55,7 +55,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SB
         offset: usize,
     ) -> Self {
         let memory_bridge = memory_controller.borrow().memory_bridge();
-        let subchip = Poseidon2SubChip::new(poseidon2_config);
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
             air: Arc::new(NativePoseidon2Air::new(
                 ExecutionBridge::new(execution_bus, program_bus),

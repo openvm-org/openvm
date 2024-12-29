@@ -1,7 +1,7 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
     rap::AnyRap,
 };
 use openvm_stark_sdk::{
@@ -61,7 +61,7 @@ fn test_range_tuple_chip() {
                         range_checker.add_count(&v);
                         iter::once(1).chain(v)
                     })
-                    .map(AbstractField::from_wrapped_u32)
+                    .map(FieldAlgebra::from_wrapped_u32)
                     .collect(),
                 sizes.len() + 1,
             )
@@ -101,7 +101,7 @@ fn test_range_tuple_chip() {
 //                 v.reverse();
 //                 v.into_iter().chain(iter::once(0))
 //             })
-//             .map(AbstractField::from_wrapped_u32)
+//             .map(FieldAlgebra::from_wrapped_u32)
 //             .collect(),
 //         sizes.len() + 1,
 //     );

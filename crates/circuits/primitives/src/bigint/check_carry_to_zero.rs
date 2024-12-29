@@ -1,4 +1,4 @@
-use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::AbstractField};
+use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::FieldAlgebra};
 
 use super::{utils::range_check, OverflowInt};
 use crate::SubAir;

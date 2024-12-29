@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::AbstractField, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
     rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
@@ -59,7 +59,7 @@ fn test_xor_limbs_chip() {
                         let z = xor_chip.request(x, y);
                         iter::once(count).chain(fields).chain(iter::once(z))
                     })
-                    .map(AbstractField::from_wrapped_u32)
+                    .map(FieldAlgebra::from_wrapped_u32)
                     .collect(),
                 4,
             )
@@ -123,7 +123,7 @@ fn negative_test_xor_limbs_chip() {
                     iter::once(count).chain(fields).chain(iter::once(z))
                 }
             })
-            .map(AbstractField::from_wrapped_u32)
+            .map(FieldAlgebra::from_wrapped_u32)
             .collect(),
         4,
     );

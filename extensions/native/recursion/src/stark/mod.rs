@@ -13,7 +13,7 @@ use openvm_stark_backend::{
         verifier::GenericVerifierConstraintFolder,
     },
     p3_commit::LagrangeSelectors,
-    p3_field::{AbstractExtensionField, AbstractField, TwoAdicField},
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     prover::{opener::AdjacentOpenedValues, types::Proof},
 };

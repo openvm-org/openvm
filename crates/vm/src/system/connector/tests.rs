@@ -7,7 +7,7 @@ use openvm_instructions::{
     instruction::Instruction, program::Program, SystemOpcode::TERMINATE, VmOpcode,
 };
 use openvm_stark_backend::{
-    config::StarkGenericConfig, engine::StarkEngine, p3_field::AbstractField,
+    config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
     prover::types::AirProofInput, utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{

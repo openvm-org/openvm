@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use std::{cell::RefCell, collections::HashMap, hash::Hash};
 
 use openvm_stark_backend::p3_field::{
-    AbstractExtensionField, AbstractField, ExtensionField, Field, PrimeField,
+    ExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField,
 };
 use serde::{Deserialize, Serialize};
 

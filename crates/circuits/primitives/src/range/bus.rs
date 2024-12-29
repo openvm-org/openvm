@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, InteractionType},
-    p3_field::AbstractField,
+    p3_field::FieldAlgebra,
 };
 
 /// Represents a bus for `x` where `x` must lie in the range `[0, range_max)`.
@@ -64,7 +64,7 @@ pub struct RangeCheckBusInteraction<T> {
     pub interaction_type: InteractionType,
 }
 
-impl<T: AbstractField> RangeCheckBusInteraction<T> {
+impl<T: FieldAlgebra> RangeCheckBusInteraction<T> {
     /// Finalizes and sends/receives over the RangeCheck bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
@@ -74,7 +74,7 @@ impl<T: AbstractField> RangeCheckBusInteraction<T> {
     }
 }
 
-impl<T: AbstractField> BitsCheckBusInteraction<T> {
+impl<T: FieldAlgebra> BitsCheckBusInteraction<T> {
     /// Send interaction(s) to range check for max bits over the RangeCheck bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
