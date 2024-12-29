@@ -12,21 +12,9 @@ use core::mem::MaybeUninit;
 /// The sha256 cryptographic hash function.
 #[inline(always)]
 pub fn sha256(input: &[u8]) -> [u8; 32] {
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        use sha2::{Digest, Sha256};
-        let mut output = [0u8; 32];
-        let mut hasher = Sha256::new();
-        hasher.update(input);
-        output.copy_from_slice(hasher.finalize().as_ref());
-        output
-    }
-    #[cfg(target_os = "zkvm")]
-    {
-        let mut output = MaybeUninit::<[u8; 32]>::uninit();
-        zkvm_sha256_impl(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
-        unsafe { output.assume_init() }
-    }
+    let mut output = [0u8; 32];
+    set_sha256(input, &mut output);
+    output
 }
 
 /// zkvm native implementation of sha256
@@ -43,4 +31,19 @@ pub fn sha256(input: &[u8]) -> [u8; 32] {
 #[no_mangle]
 extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(OPCODE, SHA256_FUNCT3, SHA256_FUNCT7, output, bytes, len);
+}
+
+/// Sets `output` to the sha256 hash of `input`.
+pub fn set_sha256(input: &[u8], output: &mut [u8; 32]) {
+    #[cfg(not(target_os = "zkvm"))]
+    {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(input);
+        output.copy_from_slice(hasher.finalize().as_ref());
+    }
+    #[cfg(target_os = "zkvm")]
+    {
+        zkvm_sha256_impl(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
+    }
 }

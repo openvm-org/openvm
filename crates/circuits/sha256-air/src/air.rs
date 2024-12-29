@@ -19,6 +19,7 @@ use super::{
     SHA256_H, SHA256_HASH_WORDS, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROUND_WIDTH,
     SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
+use crate::constraint_word_addition;
 
 #[derive(Clone, Debug)]
 pub struct Sha256Air {
@@ -75,9 +76,9 @@ impl Sha256Air {
         let main = builder.main();
         let local = main.row_slice(0);
 
-        // Doesn't matter which column struct we use here
-        let local_cols: &Sha256RoundCols<AB::Var> =
-            local[start_col..start_col + SHA256_ROUND_WIDTH].borrow();
+        // Doesn't matter which column struct we use here as we are only interested in the common columns
+        let local_cols: &Sha256DigestCols<AB::Var> =
+            local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
         let flags = &local_cols.flags;
         builder.assert_bool(flags.is_round_row);
         builder.assert_bool(flags.is_first_4_rows);
@@ -117,46 +118,11 @@ impl Sha256Air {
         // Note: this has to be true for every row, even padding rows
         for i in 0..SHA256_ROUNDS_PER_ROW {
             for j in 0..SHA256_WORD_BITS {
-                builder.assert_bool(local_cols.work_vars.a[i][j]);
-                builder.assert_bool(local_cols.work_vars.e[i][j]);
+                builder.assert_bool(local_cols.hash.a[i][j]);
+                builder.assert_bool(local_cols.hash.e[i][j]);
             }
         }
-        self.eval_round_row(builder, local_cols);
-        let local_cols: &Sha256DigestCols<AB::Var> =
-            local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
         self.eval_digest_row(builder, local_cols);
-    }
-
-    /// Implement constraints for a conditional on it being a round row
-    fn eval_round_row<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        local: &Sha256RoundCols<AB::Var>,
-    ) {
-        for i in 0..SHA256_ROUNDS_PER_ROW {
-            // Constrain w being composed of bits
-            for j in 0..SHA256_WORD_BITS {
-                builder
-                    .when(local.flags.is_round_row)
-                    .assert_bool(local.message_schedule.w[i][j]);
-            }
-            for j in 0..SHA256_WORD_U16S {
-                // Although we need carry_a <= 6 and carry_e <= 5, constraining carry_a, carry_e in [0, 2^8) is enough
-                // to prevent overflow and ensure the soundness of the addition we want to check
-                self.bitwise_lookup_bus
-                    .send_range(local.work_vars.carry_a[i][j], local.work_vars.carry_e[i][j])
-                    .eval(builder, local.flags.is_round_row);
-
-                // When on rows 4..16 message schedule carries should be 0 or 1
-                let is_row_4_15 = local.flags.is_round_row - local.flags.is_first_4_rows;
-                builder
-                    .when(is_row_4_15.clone())
-                    .assert_bool(local.message_schedule.carry_or_buffer[i][j * 2]);
-                builder
-                    .when(is_row_4_15)
-                    .assert_bool(local.message_schedule.carry_or_buffer[i][j * 2 + 1]);
-            }
-        }
     }
 
     /// Implements constraints for a digest row that ensure proper state transitions between blocks
@@ -454,13 +420,6 @@ impl Sha256Air {
         // Constrain the message schedule additions for `next` row
         for i in 0..SHA256_ROUNDS_PER_ROW {
             // Note, here by w_{t} we mean the i_th word of the `next` row
-            // sig_1(w_{t-2})
-            let sig_w_2: [_; SHA256_WORD_U16S] = array::from_fn(|j| {
-                compose::<AB::Expr>(
-                    &small_sig1_field::<AB::Expr>(&w[i + 2])[j * 16..(j + 1) * 16],
-                    1,
-                )
-            });
             // w_{t-7}
             let w_7 = if i < 3 {
                 local.schedule_helper.w_3[i].map(|x| x.into())
@@ -470,25 +429,37 @@ impl Sha256Air {
             };
             // sig_0(w_{t-15}) + w_{t-16}
             let intermed_16 = local.schedule_helper.intermed_12[i].map(|x| x.into());
-            // w_t
-            let w_cur = w[i + 4].map(|x| x.into());
-            let w_cur: [_; SHA256_WORD_U16S] =
-                array::from_fn(|j| compose::<AB::Expr>(&w_cur[j * 16..(j + 1) * 16], 1));
+
+            let carries = array::from_fn(|j| {
+                next.message_schedule.carry_or_buffer[i][j * 2]
+                    + AB::Expr::TWO * next.message_schedule.carry_or_buffer[i][j * 2 + 1]
+            });
+
+            // Constrain `W_{idx} = sig_1(W_{idx-2}) + W_{idx-7} + sig_0(W_{idx-15}) + W_{idx-16}`
+            constraint_word_addition(
+                // Note: here we can't do a conditional check because the degree of sum is already 3
+                &mut builder.when_transition(),
+                &[&small_sig1_field::<AB::Expr>(&w[i + 2])],
+                &[&w_7, &intermed_16],
+                &w[i + 4],
+                &carries,
+            );
 
             for j in 0..SHA256_WORD_U16S {
-                let carry = next.message_schedule.carry_or_buffer[i][j * 2]
-                    + AB::Expr::TWO * next.message_schedule.carry_or_buffer[i][j * 2 + 1];
-                let sum = sig_w_2[j].clone() + w_7[j].clone() + intermed_16[j].clone()
-                    - carry * AB::Expr::from_canonical_u32(1 << 16)
-                    - w_cur[j].clone()
-                    + if j > 0 {
-                        next.message_schedule.carry_or_buffer[i][j * 2 - 2]
-                            + AB::Expr::TWO * next.message_schedule.carry_or_buffer[i][j * 2 - 1]
-                    } else {
-                        AB::Expr::ZERO
-                    };
-                // Note: here we can't do a conditional check because the degree of sum is already 3
-                builder.when_transition().assert_zero(sum);
+                // When on rows 4..16 message schedule carries should be 0 or 1
+                let is_row_4_15 = next.flags.is_round_row - next.flags.is_first_4_rows;
+                builder
+                    .when(is_row_4_15.clone())
+                    .assert_bool(next.message_schedule.carry_or_buffer[i][j * 2]);
+                builder
+                    .when(is_row_4_15)
+                    .assert_bool(next.message_schedule.carry_or_buffer[i][j * 2 + 1]);
+                // Constrain w being composed of bits
+                for j in 0..SHA256_WORD_BITS {
+                    builder
+                        .when(next.flags.is_round_row)
+                        .assert_bool(next.message_schedule.w[i][j]);
+                }
             }
         }
     }
@@ -504,23 +475,20 @@ impl Sha256Air {
         let a = [local.work_vars.a, next.work_vars.a].concat();
         let e = [local.work_vars.e, next.work_vars.e].concat();
         for i in 0..SHA256_ROUNDS_PER_ROW {
-            let new_a = a[i + 4].map(|x| x.into());
-            let sig_prev_aa = big_sig0_field::<AB::Expr>(&a[i + 3]);
-            let maj_prev_abc = maj_field::<AB::Expr>(&a[i + 3], &a[i + 2], &a[i + 1]);
-            let prev_d = a[i].map(|x| x.into());
-            let new_e = e[i + 4].map(|x| x.into());
-            let sig_prev_ee = big_sig1_field::<AB::Expr>(&e[i + 3]);
-            let ch_prev_efg = ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]);
-            let prev_h = e[i].map(|x| x.into());
-            let w = next.message_schedule.w[i].map(|x| x.into());
-
-            // k and w are not included in t1 here and are handled a bit differently
-            let t1 = [prev_h, sig_prev_ee, ch_prev_efg];
-            let t2 = [sig_prev_aa, maj_prev_abc];
             for j in 0..SHA256_WORD_U16S {
-                let w_limb =
-                    compose::<AB::Expr>(&w[j * 16..(j + 1) * 16], 1) * next.flags.is_round_row;
-                let k_limb = self.row_idx_encoder.flag_with_val::<AB>(
+                // Although we need carry_a <= 6 and carry_e <= 5, constraining carry_a, carry_e in [0, 2^8) is enough
+                // to prevent overflow and ensure the soundness of the addition we want to check
+                self.bitwise_lookup_bus
+                    .send_range(local.work_vars.carry_a[i][j], local.work_vars.carry_e[i][j])
+                    .eval(builder, local.flags.is_round_row);
+            }
+
+            let w_limbs = array::from_fn(|j| {
+                compose::<AB::Expr>(&next.message_schedule.w[i][j * 16..(j + 1) * 16], 1)
+                    * next.flags.is_round_row
+            });
+            let k_limbs = array::from_fn(|j| {
+                self.row_idx_encoder.flag_with_val::<AB>(
                     &next.flags.row_idx,
                     &(0..16)
                         .map(|rw_idx| {
@@ -532,44 +500,37 @@ impl Sha256Air {
                             )
                         })
                         .collect::<Vec<_>>(),
-                );
-                let t1_limb_sum = t1.iter().fold(AB::Expr::ZERO, |acc, x| {
-                    acc + compose::<AB::Expr>(&x[j * 16..(j + 1) * 16], 1)
-                }) + w_limb
-                    + k_limb;
-                let t2_limb_sum = t2.iter().fold(AB::Expr::ZERO, |acc, x| {
-                    acc + compose::<AB::Expr>(&x[j * 16..(j + 1) * 16], 1)
-                });
-                let prev_d_limb = compose::<AB::Expr>(&prev_d[j * 16..(j + 1) * 16], 1);
+                )
+            });
 
-                // Constrain `e`
-                let new_e_limb = compose::<AB::Expr>(&new_e[j * 16..(j + 1) * 16], 1);
-                builder.assert_eq(
-                    prev_d_limb
-                        + t1_limb_sum.clone()
-                        + if j == 0 {
-                            AB::Expr::ZERO
-                        } else {
-                            next.work_vars.carry_e[i][j - 1].into()
-                        },
-                    new_e_limb
-                        + next.work_vars.carry_e[i][j] * AB::Expr::from_canonical_u32(1 << 16),
-                );
+            // Constrain `a = h + sig_1(e) + ch(e, f, g) + K + W + sig_0(a) + Maj(a, b, c)`
+            constraint_word_addition(
+                builder,
+                &[
+                    &e[i].map(|x| x.into()),                                 // previous `h`
+                    &big_sig1_field::<AB::Expr>(&e[i + 3]), // sig_1 of previous `e`
+                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), // Ch of previous `e`, `f`, `g`
+                    &big_sig0_field::<AB::Expr>(&a[i + 3]),                 // sig_0 of previous `a`
+                    &maj_field::<AB::Expr>(&a[i + 3], &a[i + 2], &a[i + 1]), // Maj of previous a, b, c
+                ],
+                &[&w_limbs, &k_limbs],      // K and W
+                &a[i + 4],                  // new `a`
+                &next.work_vars.carry_a[i], // carries of addition
+            );
 
-                // Constrain `a`
-                let new_a_limb = compose::<AB::Expr>(&new_a[j * 16..(j + 1) * 16], 1);
-                builder.assert_eq(
-                    t1_limb_sum
-                        + t2_limb_sum
-                        + if j == 0 {
-                            AB::Expr::ZERO
-                        } else {
-                            next.work_vars.carry_a[i][j - 1].into()
-                        },
-                    new_a_limb
-                        + next.work_vars.carry_a[i][j] * AB::Expr::from_canonical_u32(1 << 16),
-                );
-            }
+            // Constrain `e = d + h + sig_1(e) + ch(e, f, g) + K + W`
+            constraint_word_addition(
+                builder,
+                &[
+                    &a[i].map(|x| x.into()),                                // previous `d`
+                    &e[i].map(|x| x.into()),                                // previous `h`
+                    &big_sig1_field::<AB::Expr>(&e[i + 3]),                 // sig_1 of previous `e`
+                    &ch_field::<AB::Expr>(&e[i + 3], &e[i + 2], &e[i + 1]), // Ch of previous `e`, `f`, `g`
+                ],
+                &[&w_limbs, &k_limbs],      // K and W
+                &e[i + 4],                  // new `e`
+                &next.work_vars.carry_e[i], // carries of addition
+            );
         }
     }
 }

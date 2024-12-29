@@ -246,21 +246,6 @@ where
                     .generate_missing_cells(chunk, width, SHA256VM_CONTROL_WIDTH);
             });
 
-        // // Fill in intermed_12
-        // for i in 0..height - 1 {
-        //     let rows = &mut values[i * width..(i + 2) * width];
-        //     let (local, next) = rows.split_at_mut(width);
-        //     let _local_cols: &mut Sha256VmRoundCols<Val<SC>> = local.borrow_mut();
-        //     let next_cols: &mut Sha256VmRoundCols<Val<SC>> = next.borrow_mut();
-        //     println!(
-        //         "schedule_helper: {:?}, {:?}, {:?}, {:?}",
-        //         next_cols.inner.schedule_helper,
-        //         next_cols.inner.work_vars.carry_a,
-        //         next_cols.inner.work_vars.carry_e,
-        //         i + 2,
-        //     );
-        // }
-
         AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![])
     }
 }
@@ -328,7 +313,7 @@ impl<F: PrimeField32> Sha256VmChip<F> {
             }
         });
 
-        let state = if let Some(prev_state) = prev_state {
+        if let Some(prev_state) = prev_state {
             Sha256State {
                 hash: Sha256Air::get_block_hash(&prev_state.hash, prev_state.block_padded_message),
                 local_block_idx,
@@ -348,7 +333,6 @@ impl<F: PrimeField32> Sha256VmChip<F> {
                 message_idx,
                 is_last_block,
             }
-        };
-        state
+        }
     }
 }

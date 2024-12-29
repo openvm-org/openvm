@@ -13,7 +13,7 @@ openvm::entry!(main);
 
 pub fn main() {
     let test_vectors = [
-        ("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"), // ShortMsgKAT_256 Len = 0
+        ("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
     ];
     for (input, expected_output) in test_vectors.iter() {
         let input = Vec::from_hex(input).unwrap();

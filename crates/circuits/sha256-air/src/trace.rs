@@ -258,7 +258,7 @@ impl Sha256Air {
                 for j in 0..SHA256_ROUNDS_PER_ROW {
                     next_cols.schedule_helper.intermed_8[j] =
                         local_cols.schedule_helper.intermed_4[j];
-                    if i >= 2 && i < SHA256_ROWS_PER_BLOCK - 3 {
+                    if (2..SHA256_ROWS_PER_BLOCK - 3).contains(&i) {
                         next_cols.schedule_helper.intermed_12[j] =
                             local_cols.schedule_helper.intermed_8[j];
                     }

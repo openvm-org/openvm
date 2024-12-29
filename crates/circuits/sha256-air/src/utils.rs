@@ -4,7 +4,7 @@ use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::p3_field::AbstractField;
+use openvm_stark_backend::{p3_air::AirBuilder, p3_field::AbstractField};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Sha256DigestCols, Sha256RoundCols};
@@ -235,13 +235,41 @@ pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
 
 /// Composes a list of limb values into a single field element
 #[inline]
-pub fn compose<F: AbstractField>(a: &[F], limb_size: usize) -> F {
+pub fn compose<F: AbstractField>(a: &[impl Into<F> + Clone], limb_size: usize) -> F {
     a.iter().enumerate().fold(F::ZERO, |acc, (i, x)| {
-        acc + x.clone() * F::from_canonical_usize(1 << (i * limb_size))
+        acc + x.clone().into() * F::from_canonical_usize(1 << (i * limb_size))
     })
 }
 
 /// Wrapper of `get_flag_pt` to get the flag pointer as an array
 pub fn get_flag_pt_array<const N: usize>(encoder: &Encoder, flag_idx: usize) -> [u32; N] {
     encoder.get_flag_pt(flag_idx).try_into().unwrap()
+}
+
+/// Constrain the addition of [SHA256_WORD_BITS] bit words in 16-bit limbs
+/// It takes in the terms some in bits some in 16-bit limbs,
+/// the expected sum in bits and the carries
+pub fn constraint_word_addition<AB: AirBuilder>(
+    builder: &mut AB,
+    terms_bits: &[&[impl Into<AB::Expr> + Clone; SHA256_WORD_BITS]],
+    terms_limb: &[&[impl Into<AB::Expr> + Clone; SHA256_WORD_U16S]],
+    expected_sum: &[impl Into<AB::Expr> + Clone; SHA256_WORD_BITS],
+    carries: &[impl Into<AB::Expr> + Clone; SHA256_WORD_U16S],
+) {
+    for i in 0..SHA256_WORD_U16S {
+        let mut limb_sum = if i == 0 {
+            AB::Expr::ZERO
+        } else {
+            carries[i - 1].clone().into()
+        };
+        for term in terms_bits {
+            limb_sum += compose::<AB::Expr>(&term[i * 16..(i + 1) * 16], 1);
+        }
+        for term in terms_limb {
+            limb_sum += term[i].clone().into();
+        }
+        let expected_sum_limb = compose::<AB::Expr>(&expected_sum[i * 16..(i + 1) * 16], 1)
+            + carries[i].clone().into() * AB::Expr::from_canonical_u32(1 << 16);
+        builder.assert_eq(limb_sum, expected_sum_limb);
+    }
 }

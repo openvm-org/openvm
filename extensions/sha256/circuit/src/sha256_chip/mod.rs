@@ -143,11 +143,10 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         let mut read_ptr = src;
         for _ in 0..num_blocks {
             let block_reads_records = array::from_fn(|i| {
-                let read_record = memory.read(
+                memory.read(
                     e,
                     F::from_canonical_u32(read_ptr + (i * SHA256_READ_SIZE) as u32),
-                );
-                read_record
+                )
             });
             let block_reads_bytes = array::from_fn(|i| {
                 // we add to the hasher only the bytes that are part of the message
