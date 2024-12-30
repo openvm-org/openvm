@@ -53,7 +53,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         program: Program<F>,
         init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
-        _fn_bounds: FnBounds,
+        #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
@@ -78,7 +78,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             air_names,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics {
-                fn_bounds: _fn_bounds,
+                fn_bounds,
                 ..Default::default()
             },
             since_last_segment_check: 0,
@@ -115,7 +115,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 self.chip_complex.program_chip_mut().get_instruction(pc)?;
             tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
-            let (_dsl_instr, trace) = debug_info.map_or(
+            #[allow(unused_variables)]
+            let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),
                 |DebugInfo {
                      dsl_instruction,
@@ -154,14 +155,14 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                         #[cfg(feature = "bench-metrics")]
                         self.metrics
                             .cycle_tracker
-                            .start(_dsl_instr.clone().unwrap_or("Default".to_string()))
+                            .start(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
                     Some(SysPhantom::CtEnd) =>
                     {
                         #[cfg(feature = "bench-metrics")]
                         self.metrics
                             .cycle_tracker
-                            .end(_dsl_instr.clone().unwrap_or("Default".to_string()))
+                            .end(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
                     _ => {}
                 }
@@ -182,7 +183,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             };
 
             #[cfg(feature = "bench-metrics")]
-            self.update_instruction_metrics(pc, opcode, _dsl_instr);
+            self.update_instruction_metrics(pc, opcode, dsl_instr);
 
             if self.should_segment() {
                 self.chip_complex
