@@ -147,7 +147,6 @@ where
                     .pc
             );
 
-            let cycle_tracker = mem::take(&mut segment.cycle_tracker);
             let final_memory = mem::take(&mut segment.final_memory)
                 .expect("final memory should be set in continuations segment");
             let streams = segment.chip_complex.take_streams();
@@ -164,7 +163,6 @@ where
             if let Some(overridden_heights) = self.overridden_heights.as_ref() {
                 segment.set_override_trace_heights(overridden_heights.clone());
             }
-            segment.cycle_tracker = cycle_tracker;
         }
         segments.push(segment);
         tracing::debug!("Number of continuation segments: {}", segments.len());

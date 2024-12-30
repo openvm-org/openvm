@@ -32,7 +32,7 @@ toml.workspace = true
 once_cell.workspace = true
 cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
-inferno = { workspace = true, optional = true }
+metrics-derive = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
 eyre.workspace = true
@@ -64,15 +64,15 @@ openvm-keccak256-circuit.workspace = true
 openvm-keccak256-transpiler.workspace = true
 
 [features]
-default = ["parallel", "mimalloc", "bench-metrics"]
+default = ["parallel", "mimalloc", "function-span"]
 parallel = ["openvm-stark-backend/parallel", "dep:rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = [
     "dep:metrics",
-    "dep:inferno",
+    "dep:metrics-derive",
     "openvm-stark-backend/bench-metrics",
 ]
-function-span = []
+function-span = ["bench-metrics"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
