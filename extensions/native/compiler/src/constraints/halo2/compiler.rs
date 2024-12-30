@@ -85,7 +85,7 @@ static POSEIDON2_PARAMS: LazyLock<Poseidon2Params<Fr, POSEIDON2_T>> = LazyLock::
 pub struct Halo2ConstraintCompiler<C: Config> {
     pub num_public_values: usize,
     #[allow(unused_variables)]
-    pub collect_metrics: bool,
+    pub profiling: bool,
     pub phantom: PhantomData<C>,
 }
 
@@ -118,12 +118,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     pub fn new(num_public_values: usize) -> Self {
         Self {
             num_public_values,
-            collect_metrics: false,
+            profiling: false,
             phantom: PhantomData,
         }
     }
-    pub fn with_collect_metrics(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn with_profiling(mut self) -> Self {
+        self.profiling = true;
         self
     }
     // Create halo2-lib constraints from a list of operations in the DSL.
@@ -152,7 +152,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
         let mut old_stats = stats_snapshot(ctx, range.clone());
         for (instruction, backtrace) in operations {
             #[cfg(feature = "bench-metrics")]
-            if self.collect_metrics {
+            if self.profiling {
                 old_stats = stats_snapshot(ctx, range.clone());
             }
             let res = catch_unwind(AssertUnwindSafe(|| {
@@ -436,7 +436,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                 res.unwrap();
             }
             #[cfg(feature = "bench-metrics")]
-            if self.collect_metrics {
+            if self.profiling {
                 let mut new_stats = stats_snapshot(ctx, range.clone());
                 new_stats.diff(&old_stats);
                 new_stats.increment(cell_tracker.get_full_name());

@@ -97,7 +97,7 @@ impl Halo2Prover {
         builder: BaseCircuitBuilder<Fr>,
         dsl_operations: DslOperations<C>,
         witness: Witness<C>,
-        #[allow(unused_variables)] collect_metrics: bool,
+        #[allow(unused_variables)] profiling: bool,
     ) -> BaseCircuitBuilder<Fr> {
         let mut state = Halo2State {
             builder,
@@ -107,8 +107,8 @@ impl Halo2Prover {
 
         let backend = Halo2ConstraintCompiler::<C>::new(dsl_operations.num_public_values);
         #[cfg(feature = "bench-metrics")]
-        let backend = if collect_metrics {
-            backend.with_collect_metrics()
+        let backend = if profiling {
+            backend.with_profiling()
         } else {
             backend
         };

@@ -92,7 +92,7 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    vm_config.system_mut().collect_metrics = true;
+    vm_config.system_mut().profiling = true;
     let vm = VmExecutor::new(vm_config);
     vm.execute_segments(exe, input).unwrap();
 }

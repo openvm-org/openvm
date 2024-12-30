@@ -180,7 +180,7 @@ impl AggStarkProver {
             #[cfg(feature = "bench-metrics")]
             if self.profile {
                 let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-                vm_config.system.collect_metrics = true;
+                vm_config.system.profiling = true;
                 let vm = SingleSegmentVmExecutor::new(vm_config);
                 let exe = self
                     .root_prover
@@ -249,7 +249,7 @@ fn single_segment_prove<E: StarkFriEngine<SC>>(
     #[cfg(feature = "bench-metrics")]
     if profile {
         let mut vm_config = prover.pk.vm_config.clone();
-        vm_config.system.collect_metrics = true;
+        vm_config.system.profiling = true;
         let vm = SingleSegmentVmExecutor::new(vm_config);
         vm.execute(prover.committed_exe.exe.clone(), input.clone())
             .unwrap();

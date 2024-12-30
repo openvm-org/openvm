@@ -57,7 +57,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
-        let program = if config.system().collect_metrics {
+        let program = if !config.system().profiling {
             program.strip_debug_infos()
         } else {
             program
