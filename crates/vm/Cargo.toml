@@ -64,7 +64,7 @@ openvm-keccak256-circuit.workspace = true
 openvm-keccak256-transpiler.workspace = true
 
 [features]
-default = ["parallel", "mimalloc", "function-span"]
+default = ["parallel", "mimalloc"]
 parallel = ["openvm-stark-backend/parallel", "dep:rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = [

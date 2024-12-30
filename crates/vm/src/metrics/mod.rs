@@ -24,6 +24,7 @@ pub struct VmMetrics {
     #[allow(dead_code)]
     pub(crate) fn_bounds: FnBounds,
     /// Cycle span by function if function start/end addresses are available
+    #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
     pub(crate) current_trace_cells: Vec<usize>,
 }
@@ -34,6 +35,7 @@ where
     VC: VmConfig<F>,
 {
     /// Update metrics that increment per instruction
+    #[allow(unused_variables)]
     pub fn update_instruction_metrics(
         &mut self,
         pc: u32,
@@ -94,6 +96,7 @@ impl VmMetrics {
         self.current_trace_cells = now_trace_cells;
     }
 
+    #[cfg(feature = "function-span")]
     fn update_current_fn(&mut self, pc: u32) {
         if !self.fn_bounds.is_empty() && (pc < self.current_fn.start || pc > self.current_fn.end) {
             self.current_fn = self
