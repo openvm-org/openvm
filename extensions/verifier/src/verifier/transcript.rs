@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
 };
 
-use halo2curves_axiom::{
+use halo2_proofs::halo2curves::{
     bn256::{Fq, Fr as Halo2Fr, G1Affine},
     Coordinates, CurveAffine,
 };
@@ -12,6 +12,7 @@ use openvm_ecc_guest::algebra::IntMod;
 use openvm_keccak256_guest::keccak256;
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
 use snark_verifier_sdk::snark_verifier::{
+    halo2_base::halo2_proofs::{self},
     util::transcript::{Transcript, TranscriptRead},
     Error,
 };

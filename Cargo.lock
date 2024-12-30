@@ -4245,7 +4245,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rng",
- "snark-verifier 0.1.7",
+ "snark-verifier-sdk",
  "subtle",
 ]
 
@@ -5978,24 +5978,6 @@ checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
 
 [[package]]
 name = "snark-verifier"
-version = "0.1.7"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.1.7-git#4b733e0ca8be017954b111f359bcf8622c5b7c66"
-dependencies = [
- "halo2-base",
- "halo2-ecc",
- "hex",
- "itertools 0.11.0",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-integer",
- "num-traits",
- "pairing 0.23.0",
- "rand 0.8.5",
- "serde",
-]
-
-[[package]]
-name = "snark-verifier"
 version = "0.1.8"
 source = "git+https://github.com/axiom-crypto/snark-verifier?branch=zkvm-v0.1#9b617fc0539a5f5e009f8d907cf74040f90d4f85"
 dependencies = [
@@ -6035,7 +6017,7 @@ dependencies = [
  "rand_chacha",
  "serde",
  "serde_json",
- "snark-verifier 0.1.8",
+ "snark-verifier",
 ]
 
 [[package]]

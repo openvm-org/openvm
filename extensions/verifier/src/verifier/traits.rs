@@ -4,7 +4,7 @@ use std::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use halo2curves_axiom::{
+use halo2_proofs::halo2curves::{
     bn256::{Fq as Halo2Fp, Fr as Halo2Fr, G1Affine},
     ff::PrimeField,
     CurveAffine,
@@ -12,6 +12,7 @@ use halo2curves_axiom::{
 use openvm_ecc_guest::algebra::{ExpBytes, Field, IntMod};
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
 use snark_verifier_sdk::snark_verifier::{
+    halo2_base::halo2_proofs,
     loader::{LoadedEcPoint, LoadedScalar},
     util::arithmetic::FieldOps,
 };

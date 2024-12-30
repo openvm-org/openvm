@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, marker::PhantomData};
 
-use halo2curves_axiom::bn256::{Bn256, Fq as Halo2Fp, Fr as Halo2Fr, G1Affine, G2Affine};
+use halo2_proofs::halo2curves::bn256::{Fq as Halo2Fp, Fr as Halo2Fr, G1Affine};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use openvm_ecc_guest::{
@@ -14,6 +14,10 @@ use openvm_pairing_guest::{
     pairing::PairingCheck,
 };
 use snark_verifier_sdk::snark_verifier::{
+    halo2_base::halo2_proofs::{
+        self,
+        halo2curves::bn256::{Bn256, G2Affine},
+    },
     loader::{EcPointLoader, Loader, ScalarLoader},
     pcs::{
         kzg::{KzgAccumulator, KzgAs, KzgDecidingKey, LimbsEncoding},
