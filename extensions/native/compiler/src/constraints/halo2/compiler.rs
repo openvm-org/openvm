@@ -7,6 +7,7 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
@@ -131,6 +132,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
+        #[cfg(feature = "bench-metrics")]
         let mut cell_tracker = CycleTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
         let f_chip = Arc::new(BabyBearChip::new(range.clone()));
@@ -412,11 +414,13 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         );
                         exts.insert(b.0, x);
                     }
-                    DslIr::CycleTrackerStart(name) => {
-                        cell_tracker.start(name);
+                    DslIr::CycleTrackerStart(_name) => {
+                        #[cfg(feature = "bench-metrics")]
+                        cell_tracker.start(_name);
                     }
-                    DslIr::CycleTrackerEnd(name) => {
-                        cell_tracker.end(name);
+                    DslIr::CycleTrackerEnd(_name) => {
+                        #[cfg(feature = "bench-metrics")]
+                        cell_tracker.end(_name);
                     }
                     DslIr::CircuitPublish(val, index) => {
                         public_values[index] = vars[&val.0];
