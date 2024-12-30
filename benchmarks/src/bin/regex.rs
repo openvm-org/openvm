@@ -44,10 +44,7 @@ fn main() -> Result<()> {
         app_vm_config: Keccak256Rv32Config::default(),
         leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
             .into(),
-        compiler_options: CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        },
+        compiler_options: CompilerOptions::default(),
     };
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         info_span!("Regex Program").in_scope(|| {

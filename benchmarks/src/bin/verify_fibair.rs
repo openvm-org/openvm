@@ -43,10 +43,7 @@ fn main() -> Result<()> {
             leaf_fri_params.max_constraint_degree().min(7),
         )
         .with_continuations();
-        let compiler_options = CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        };
+        let compiler_options = CompilerOptions::default();
         let app_config = AppConfig {
             app_fri_params: leaf_fri_params.into(),
             app_vm_config,
