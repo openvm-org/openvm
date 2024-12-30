@@ -58,7 +58,7 @@ where
     }
 
     pub fn finalize_metrics(&mut self) {
-        metrics::counter!("total_cells_used")
+        counter!("total_cells_used")
             .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
 
         if self.system_config().collect_metrics {

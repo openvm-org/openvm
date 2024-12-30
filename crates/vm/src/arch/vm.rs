@@ -8,10 +8,12 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, Proof, ProofInput},
+    utils::metrics_span,
     verifier::VerificationError,
     Chip,
 };
 use thiserror::Error;
+use tracing::info_span;
 
 use super::{ExecutionError, VmComplexTraceHeights, VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID};
 use crate::{
@@ -108,9 +110,6 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
     ) -> Result<Vec<ExecutionSegment<F, VC>>, ExecutionError> {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-
         let exe = exe.into();
         let streams = input.into();
         let mut segments = vec![];
@@ -127,8 +126,9 @@ where
         let mut pc = exe.pc_start;
 
         loop {
-            let state = tracing::info_span!("execute_segment", segment = segments.len())
-                .in_scope(|| segment.execute_from_pc(pc))?;
+            // Used to add `segment` label to metrics
+            let _span = info_span!("execute_segment", segment = segments.len()).entered();
+            let state = metrics_span("execute_time_ms", || segment.execute_from_pc(pc))?;
             pc = state.pc;
 
             if state.is_terminated {
@@ -166,10 +166,6 @@ where
         }
         segments.push(segment);
         tracing::debug!("Number of continuation segments: {}", segments.len());
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
-        #[cfg(feature = "bench-metrics")]
-        tracing::info!("execute_time [all segments]: {:?}", start.elapsed());
 
         Ok(segments)
     }
@@ -341,8 +337,6 @@ where
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
     ) -> Result<ExecutionSegment<F, VC>, ExecutionError> {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
         let pc_start = exe.pc_start;
         let mut segment = ExecutionSegment::new(
             &self.config,
@@ -354,13 +348,7 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        segment.execute_from_pc(pc_start)?;
-
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("execute_time_ms").set(start.elapsed().as_millis() as f64);
-        #[cfg(feature = "bench-metrics")]
-        tracing::info!("execute_time [single]: {:?}", start.elapsed());
-
+        metrics_span("execute_time_ms", || segment.execute_from_pc(pc_start))?;
         Ok(segment)
     }
 }
