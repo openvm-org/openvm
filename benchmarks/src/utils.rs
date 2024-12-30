@@ -65,7 +65,9 @@ pub fn build_bench_program(program_name: &str) -> Result<Elf> {
         std::process::exit(code);
     }
     // Assumes the package has a single target binary
-    let elf_path = guest_methods(&pkg, &target_dir, &[]).pop().unwrap();
+    let elf_path = guest_methods(&pkg, &target_dir, &guest_opts.features, &guest_opts.profile)
+        .pop()
+        .unwrap();
     let data = read(elf_path)?;
     Elf::decode(&data, MEM_SIZE as u32)
 }
