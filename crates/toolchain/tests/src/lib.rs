@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_build::{
     build_guest_package, get_dir_with_profile, get_package, GuestOptions, TargetFilter,
 };
@@ -75,11 +75,12 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
         .iter()
         .find(|target| target.name == example_name)
         .map(|target| {
-            get_dir_with_profile(target_dir, profile, true)
+            get_dir_with_profile(&target_dir, profile, true)
                 .join(&target.name)
                 .to_path_buf()
         })
         .expect("Could not find target binary");
-    let data = read(elf_path)?;
+    let data = read(&elf_path).with_context(|| format!("Path not found: {:?}", elf_path))?;
+    target_dir.close()?;
     Elf::decode(&data, MEM_SIZE as u32)
 }
