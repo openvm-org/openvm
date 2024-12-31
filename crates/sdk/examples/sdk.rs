@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ANCHOR: verification
     // 10. Verify your program
-    let app_vk = app_pk.get_vk();
+    let app_vk = app_pk.get_app_vk();
     sdk.verify_app_proof(&app_vk, &proof)?;
     // ANCHOR_END: verification
 

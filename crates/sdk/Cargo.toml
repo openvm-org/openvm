@@ -41,6 +41,7 @@ async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
+getset.workspace = true
 
 [features]
 default = ["parallel"]

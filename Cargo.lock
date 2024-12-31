@@ -4268,6 +4268,7 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "eyre",
+ "getset",
  "itertools 0.13.0",
  "metrics",
  "openvm",
