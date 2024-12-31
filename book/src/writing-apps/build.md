@@ -27,6 +27,18 @@ The following flags are available for the `cargo openvm build` command:
 
   This ensures the build command is executed in that directory.
 
+- `--target-dir <TARGET_DIR>`
+
+  **Description**: Specifies the directory where the guest binary will be built. If not specified, the default target directory is used.
+
+  **Default**: The `target` directory in the package root directory.
+
+  **Usage Example**: To build the guest binary in the `my_target` directory:
+
+  ```bash
+  cargo openvm build --target-dir my_target
+  ```
+
 - `--features <FEATURES>`
 
   **Description**: Passes a list of feature flags to the Cargo build process. These flags enable or disable conditional compilation features defined in your `Cargo.toml`.

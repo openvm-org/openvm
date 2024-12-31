@@ -32,13 +32,13 @@ jobs:
         run: cargo check
 
       - name: Build documentation
-        run: cargo doc --workspace
+        run: cargo doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
 
       # We only want the index page to display workspace crates, so we build
       # separately and copy over the index as a hack
       - name: Build index page
         run: |
-          cargo doc --workspace --no-deps --exclude "openvm-benchmarks" --target-dir target/doc-nodeps
+          cargo doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
           cp target/doc-nodeps/doc/index.html target/doc/
           cp target/doc-nodeps/doc/crates.js target/doc/
         env:

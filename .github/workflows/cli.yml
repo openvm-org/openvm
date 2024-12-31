@@ -10,6 +10,7 @@ on:
       - "crates/vm/**"
       - "crates/sdk/**"
       - "crates/cli/**"
+      - "examples/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -23,13 +24,12 @@ env:
 jobs:
   app-level-cli:
     runs-on:
-      - runs-on
-      - run-id=${{ github.run_id }}
-      - family=m7
+      - runs-on=${{ github.run_id }}
+      - runner=32cpu-linux-arm64
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -37,25 +37,26 @@ jobs:
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Install architecture specific tools
+      - name: Install tools
         run: |
-          arch=$(uname -m)
-          case $arch in
-            arm64|aarch64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-aarch64-unknown-linux-gnu
-              ;;
-            x86_64|amd64)
-              rustup component add rust-src --toolchain nightly-2024-10-30-x86_64-unknown-linux-gnu
-              ;;
-            *)
-              echo "Unsupported architecture: $arch"
-              exit 1
-              ;;
-          esac
+          rustup component add rust-src --toolchain nightly-2024-10-30
 
-      - name: Setup halo2
+      - name: Install cargo-openvm
+        working-directory: crates/cli
         run: |
-          bash ./extensions/native/recursion/trusted_setup_s3.sh
+          cargo install --force --locked --path .
+
+      - name: Build book examples
+        working-directory: examples
+        run: |
+          for dir in */; do
+            if [ -f "${dir}Cargo.toml" ]; then
+              echo "Building ${dir%/}"
+              cd "$dir"
+              cargo openvm build
+              cd ..
+            fi
+          done
 
       # TODO: CLI build, transpile, run, (keygen), prove, contract, verify
       - name: Run app-level CLI commands

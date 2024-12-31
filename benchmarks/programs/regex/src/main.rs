@@ -7,14 +7,14 @@ use regex::Regex;
 
 openvm::entry!(main);
 
-const pattern: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
+const PATTERN: &str = r"(?m)(\r\n|^)From:([^\r\n]+<)?(?P<email>[^<>]+)>?";
 
 pub fn main() {
     let data = openvm::io::read_vec();
     let data = core::str::from_utf8(&data).expect("Invalid UTF-8");
 
     // Compile the regex
-    let re = Regex::new(pattern).expect("Invalid regex");
+    let re = Regex::new(PATTERN).expect("Invalid regex");
 
     let caps = re.captures(data).expect("No match found.");
     let email = caps.name("email").expect("No email found.");

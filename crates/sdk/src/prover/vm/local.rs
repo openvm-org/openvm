@@ -28,10 +28,7 @@ pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     _marker: PhantomData<E>,
 }
 
-impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
-where
-    Val<SC>: PrimeField32,
-{
+impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E> {
     pub fn new(pk: Arc<VmProvingKey<SC, VC>>, committed_exe: Arc<VmCommittedExe<SC>>) -> Self {
         Self {
             pk,
@@ -56,6 +53,10 @@ where
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
         self.overridden_heights = Some(overridden_heights);
+    }
+
+    pub fn vm_config(&self) -> &VC {
+        &self.pk.vm_config
     }
 }
 

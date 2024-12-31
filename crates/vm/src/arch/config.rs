@@ -1,7 +1,7 @@
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use openvm_poseidon2_air::poseidon2::Poseidon2Config;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -25,8 +25,8 @@ const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
-pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<POSEIDON2_WIDTH, F> {
-    Poseidon2Config::<POSEIDON2_WIDTH, F>::new_p3_baby_bear_16()
+pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
+    Poseidon2Config::default()
 }
 
 pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
@@ -86,9 +86,9 @@ pub struct SystemConfig {
     pub num_public_values: usize,
     /// When continuations are enabled, a heuristic used to determine when to segment execution.
     pub max_segment_len: usize,
-    /// Whether to collect metrics.
+    /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
-    pub collect_metrics: bool,
+    pub profiling: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -109,7 +109,7 @@ impl SystemConfig {
             memory_config,
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-            collect_metrics: false,
+            profiling: false,
         }
     }
 
@@ -138,13 +138,13 @@ impl SystemConfig {
         self
     }
 
-    pub fn with_metric_collection(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn with_profiling(mut self) -> Self {
+        self.profiling = true;
         self
     }
 
-    pub fn without_metric_collection(mut self) -> Self {
-        self.collect_metrics = false;
+    pub fn without_profiling(mut self) -> Self {
+        self.profiling = false;
         self
     }
 

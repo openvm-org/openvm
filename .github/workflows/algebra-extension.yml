@@ -34,3 +34,9 @@ jobs:
         working-directory: extensions/algebra/circuit
         run: |
           cargo nextest run --cargo-profile=fast
+
+      - name: Run algebra integration tests
+        working-directory: extensions/algebra/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30
+          cargo nextest run --cargo-profile=fast

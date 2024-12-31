@@ -53,9 +53,6 @@ ctrlc = "3.4.2"
 toml = { workspace = true }
 num-bigint-dig = { workspace = true, features = ["serde"] }
 
-[dev-dependencies]
-openvm-cli-example-test = { path = "example" }
-
 [features]
 default = ["parallel", "mimalloc"]
 parallel = ["openvm-circuit/parallel"]

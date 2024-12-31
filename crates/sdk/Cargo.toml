@@ -41,9 +41,7 @@ async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
-
-[dev-dependencies]
-openvm-sdk-example-test = { path = "example" }
+getset.workspace = true
 
 [features]
 default = ["parallel"]

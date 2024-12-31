@@ -126,7 +126,7 @@ fn main() -> Result<()> {
         app_vm_config: Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
         leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(agg_log_blowup)
             .into(),
-        compiler_options: CompilerOptions::default().with_cycle_tracker(),
+        compiler_options: CompilerOptions::default(),
     };
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {

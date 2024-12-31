@@ -36,6 +36,9 @@ pub struct BuildArgs {
     )]
     pub manifest_dir: PathBuf,
 
+    #[arg(long, help = "Path to the target directory")]
+    pub target_dir: Option<PathBuf>,
+
     #[arg(long, value_delimiter = ',', help = "Feature flags passed to cargo")]
     pub features: Vec<String>,
 
@@ -67,13 +70,13 @@ pub struct BuildArgs {
     pub profile: String,
 }
 
-#[derive(Clone, clap::Args)]
+#[derive(Clone, Default, clap::Args)]
 #[group(required = false, multiple = false)]
 pub struct BinTypeFilter {
-    #[arg(long, help = "Specifies that the bin target to build")]
+    #[arg(long, help = "Specifies the bin target to build")]
     pub bin: Option<String>,
 
-    #[arg(long, help = "Specifies that the example target to build")]
+    #[arg(long, help = "Specifies the example target to build")]
     pub example: Option<String>,
 }
 
@@ -95,10 +98,10 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
                 kind: "example".to_string(),
             })
     };
-    let guest_options = GuestOptions {
-        features: build_args.features.clone(),
-        ..Default::default()
-    };
+    let mut guest_options = GuestOptions::default()
+        .with_features(build_args.features.clone())
+        .with_profile(build_args.profile.clone());
+    guest_options.target_dir = build_args.target_dir.clone();
 
     let pkg = get_package(&build_args.manifest_dir);
     // We support builds of libraries with 0 or >1 executables.
@@ -140,5 +143,38 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
     } else {
         println!("[openvm] Successfully built the package");
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use eyre::Result;
+    use openvm_build::RUSTC_TARGET;
+
+    use super::*;
+
+    #[test]
+    fn test_build_with_profile() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let target_dir = temp_dir.path();
+        let build_args = BuildArgs {
+            manifest_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example"),
+            features: vec![],
+            bin_type_filter: Default::default(),
+            no_transpile: true,
+            config: PathBuf::from(DEFAULT_APP_CONFIG_PATH),
+            exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
+            profile: "dev".to_string(),
+            target_dir: Some(target_dir.to_path_buf()),
+        };
+        build(&build_args)?;
+        assert!(
+            target_dir.join(RUSTC_TARGET).join("debug").exists(),
+            "did not build with dev profile"
+        );
+        temp_dir.close()?;
+        Ok(())
     }
 }

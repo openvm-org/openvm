@@ -34,3 +34,9 @@ jobs:
         working-directory: extensions/rv32im/circuit
         run: |
           cargo nextest run --cargo-profile=fast
+
+      - name: Run rv32im integration tests
+        working-directory: extensions/rv32im/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30
+          cargo nextest run --cargo-profile=fast

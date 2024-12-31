@@ -7,3 +7,4 @@ Code-level guides to the crates in the repository.
   - [VM Extensions](./vm-extensions.md)
 - `openvm-benchmarks`
   - [Running Benchmarks](./benchmarks.md)
+- [Metrics](./metrics.md)

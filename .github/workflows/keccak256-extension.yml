@@ -34,3 +34,9 @@ jobs:
         working-directory: extensions/keccak256/circuit
         run: |
           cargo nextest run --cargo-profile=fast
+
+      - name: Run keccak256 integration tests
+        working-directory: extensions/keccak256/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2024-10-30
+          cargo nextest run --cargo-profile=fast

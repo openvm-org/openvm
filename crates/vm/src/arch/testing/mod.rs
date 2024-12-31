@@ -41,7 +41,7 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2Chip};
+use crate::system::{memory::MemoryControllerRef, poseidon2::Poseidon2PeripheryChip};
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
@@ -202,7 +202,7 @@ impl VmChipTestBuilder<BabyBear> {
         self.memory
             .controller
             .borrow_mut()
-            .finalize(None::<&mut Poseidon2Chip<BabyBear>>);
+            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()

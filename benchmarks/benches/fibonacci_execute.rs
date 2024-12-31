@@ -5,9 +5,9 @@ use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sdk::StdIn;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use pprof::criterion::{Output, PProfProfiler};
 
 fn benchmark_function(c: &mut Criterion) {
     let elf = build_bench_program("fibonacci").unwrap();
@@ -26,16 +26,15 @@ fn benchmark_function(c: &mut Criterion) {
 
     group.bench_function("execute", |b| {
         b.iter(|| {
-            executor.execute(exe.clone(), vec![]).unwrap();
+            let n = 100_000u64;
+            let mut stdin = StdIn::default();
+            stdin.write(&n);
+            executor.execute(exe.clone(), stdin).unwrap();
         })
     });
 
     group.finish();
 }
 
-criterion_group! {
-    name = benches;
-    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
-    targets = benchmark_function
-}
+criterion_group!(benches, benchmark_function);
 criterion_main!(benches);

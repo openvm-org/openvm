@@ -37,11 +37,6 @@ impl<VC> StarkProver<VC> {
             agg_prover: AggStarkProver::new(agg_stark_pk, app_pk.leaf_committed_exe.clone()),
         }
     }
-    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
-        self.app_prover.set_profile(profile);
-        self.agg_prover.set_profile(profile);
-        self
-    }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.app_prover.set_program_name(program_name);
         self
