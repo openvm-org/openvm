@@ -159,6 +159,9 @@ fn main() -> Result<()> {
                 vm_config,
                 exe,
                 input_stream.into(),
+                #[cfg(feature = "aggregation")]
+                true,
+                #[cfg(not(feature = "aggregation"))]
                 false,
             )
         })?;
