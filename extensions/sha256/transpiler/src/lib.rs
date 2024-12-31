@@ -1,6 +1,6 @@
-use openvm_instructions::{instruction::Instruction, UsizeOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS, UsizeOpcode};
 use openvm_instructions_derive::UsizeOpcode;
-use openvm_keccak256_guest::{KECCAK256_FUNCT3, KECCAK256_FUNCT7, OPCODE};
+use openvm_sha256_guest::{OPCODE, SHA256_FUNCT3, SHA256_FUNCT7};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension};
 use rrs_lib::instruction_formats::RType;
@@ -9,16 +9,16 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, UsizeOpcode,
 )]
-#[opcode_offset = 0x310]
+#[opcode_offset = 0x320]
 #[repr(usize)]
-pub enum Rv32KeccakOpcode {
-    KECCAK256,
+pub enum Rv32Sha256Opcode {
+    SHA256,
 }
 
 #[derive(Default)]
-pub struct Keccak256TranspilerExtension;
+pub struct Sha256TranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
+impl<F: PrimeField32> TranspilerExtension<F> for Sha256TranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)> {
         if instruction_stream.is_empty() {
             return None;
@@ -27,16 +27,17 @@ impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
-        if (opcode, funct3) != (OPCODE, KECCAK256_FUNCT3) {
+        if (opcode, funct3) != (OPCODE, SHA256_FUNCT3) {
             return None;
         }
         let dec_insn = RType::new(instruction_u32);
-        if dec_insn.funct7 != KECCAK256_FUNCT7 as u32 {
+
+        if dec_insn.funct7 != SHA256_FUNCT7 as u32 {
             return None;
         }
         let instruction = from_r_type(
-            Rv32KeccakOpcode::KECCAK256.with_default_offset(),
-            2,
+            Rv32Sha256Opcode::SHA256.with_default_offset(),
+            RV32_MEMORY_AS as usize,
             &dec_insn,
         );
         Some((instruction, 1))

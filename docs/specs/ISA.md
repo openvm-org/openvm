@@ -274,6 +274,7 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 | Name           | Operands    | Description                                                                                                       |
 | -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
 | KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`. |
+| SHA256_RV32    | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
 
 ### 256-bit Integers
 
