@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-#[cfg(feature = "bench-metrics")]
-use openvm_circuit::arch::SingleSegmentVmExecutor;
-use openvm_circuit::arch::Streams;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     openvm_stark_backend::prover::types::Proof,
 };
 use tracing::info_span;
@@ -37,13 +34,10 @@ pub struct AggStarkProver {
 
     pub num_children_internal: usize,
     pub max_internal_wrapper_layers: usize,
-
-    pub profile: bool,
 }
 pub struct LeafProver {
     prover: VmLocalProver<SC, NativeConfig, BabyBearPoseidon2Engine>,
     pub num_children_leaf: usize,
-    pub profile: bool,
 }
 
 impl AggStarkProver {
@@ -63,7 +57,6 @@ impl AggStarkProver {
             root_prover,
             num_children_internal: DEFAULT_NUM_CHILDREN_INTERNAL,
             max_internal_wrapper_layers: DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS,
-            profile: false,
         }
     }
 
@@ -79,16 +72,6 @@ impl AggStarkProver {
 
     pub fn with_max_internal_wrapper_layers(mut self, max_internal_wrapper_layers: usize) -> Self {
         self.max_internal_wrapper_layers = max_internal_wrapper_layers;
-        self
-    }
-
-    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
-        self.profile = profile;
-        self.leaf_prover.profile = profile;
-        self
-    }
-    pub fn with_profiling(mut self) -> Self {
-        self.set_profile(true);
         self
     }
 
@@ -156,7 +139,7 @@ impl AggStarkProver {
                             hgt = internal_node_height
                         )
                         .in_scope(|| {
-                            single_segment_prove(&self.internal_prover, input.write(), self.profile)
+                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
                         })
                     })
                     .collect()
@@ -177,19 +160,6 @@ impl AggStarkProver {
                     .fri_params
                     .log_blowup as u64,
             );
-            #[cfg(feature = "bench-metrics")]
-            if self.profile {
-                let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-                vm_config.system.collect_metrics = true;
-                let vm = SingleSegmentVmExecutor::new(vm_config);
-                let exe = self
-                    .root_prover
-                    .root_verifier_pk
-                    .root_committed_exe
-                    .exe
-                    .clone();
-                vm.execute(exe, input.clone()).unwrap();
-            }
             SingleSegmentVmProver::prove(&self.root_prover, input)
         })
     }
@@ -207,15 +177,10 @@ impl LeafProver {
         Self {
             prover,
             num_children_leaf: DEFAULT_NUM_CHILDREN_LEAF,
-            profile: false,
         }
     }
     pub fn with_num_children_leaf(mut self, num_children_leaf: usize) -> Self {
         self.num_children_leaf = num_children_leaf;
-        self
-    }
-    pub fn with_profile(mut self) -> Self {
-        self.profile = true;
         self
     }
     pub fn generate_proof(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
@@ -232,29 +197,12 @@ impl LeafProver {
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
                     info_span!("leaf verifier proof", idx = leaf_node_idx).in_scope(|| {
-                        single_segment_prove(&self.prover, input.write_to_stream(), self.profile)
+                        SingleSegmentVmProver::prove(&self.prover, input.write_to_stream())
                     })
                 })
                 .collect::<Vec<_>>()
         })
     }
-}
-
-#[allow(unused)]
-fn single_segment_prove<E: StarkFriEngine<SC>>(
-    prover: &VmLocalProver<SC, NativeConfig, E>,
-    input: impl Into<Streams<F>> + Clone,
-    profile: bool,
-) -> Proof<SC> {
-    #[cfg(feature = "bench-metrics")]
-    if profile {
-        let mut vm_config = prover.pk.vm_config.clone();
-        vm_config.system.collect_metrics = true;
-        let vm = SingleSegmentVmExecutor::new(vm_config);
-        vm.execute(prover.committed_exe.exe.clone(), input.clone())
-            .unwrap();
-    }
-    SingleSegmentVmProver::prove(prover, input)
 }
 
 fn heights_le(a: &[usize], b: &[usize]) -> bool {

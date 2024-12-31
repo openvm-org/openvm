@@ -7,6 +7,7 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
@@ -84,7 +85,7 @@ static POSEIDON2_PARAMS: LazyLock<Poseidon2Params<Fr, POSEIDON2_T>> = LazyLock::
 pub struct Halo2ConstraintCompiler<C: Config> {
     pub num_public_values: usize,
     #[allow(unused_variables)]
-    pub collect_metrics: bool,
+    pub profiling: bool,
     pub phantom: PhantomData<C>,
 }
 
@@ -117,12 +118,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     pub fn new(num_public_values: usize) -> Self {
         Self {
             num_public_values,
-            collect_metrics: false,
+            profiling: false,
             phantom: PhantomData,
         }
     }
-    pub fn with_collect_metrics(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn with_profiling(mut self) -> Self {
+        self.profiling = true;
         self
     }
     // Create halo2-lib constraints from a list of operations in the DSL.
@@ -131,6 +132,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
+        #[cfg(feature = "bench-metrics")]
         let mut cell_tracker = CycleTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
         let f_chip = Arc::new(BabyBearChip::new(range.clone()));
@@ -150,7 +152,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
         let mut old_stats = stats_snapshot(ctx, range.clone());
         for (instruction, backtrace) in operations {
             #[cfg(feature = "bench-metrics")]
-            if self.collect_metrics {
+            if self.profiling {
                 old_stats = stats_snapshot(ctx, range.clone());
             }
             let res = catch_unwind(AssertUnwindSafe(|| {
@@ -412,11 +414,13 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         );
                         exts.insert(b.0, x);
                     }
-                    DslIr::CycleTrackerStart(name) => {
-                        cell_tracker.start(name);
+                    DslIr::CycleTrackerStart(_name) => {
+                        #[cfg(feature = "bench-metrics")]
+                        cell_tracker.start(_name);
                     }
-                    DslIr::CycleTrackerEnd(name) => {
-                        cell_tracker.end(name);
+                    DslIr::CycleTrackerEnd(_name) => {
+                        #[cfg(feature = "bench-metrics")]
+                        cell_tracker.end(_name);
                     }
                     DslIr::CircuitPublish(val, index) => {
                         public_values[index] = vars[&val.0];
@@ -432,7 +436,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                 res.unwrap();
             }
             #[cfg(feature = "bench-metrics")]
-            if self.collect_metrics {
+            if self.profiling {
                 let mut new_stats = stats_snapshot(ctx, range.clone());
                 new_stats.diff(&old_stats);
                 new_stats.increment(cell_tracker.get_full_name());

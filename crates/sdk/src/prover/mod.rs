@@ -54,18 +54,6 @@ impl<VC> ContinuationProver<VC> {
         }
     }
 
-    /// Flag for enabling/disabling profiling.
-    pub fn set_profile(&mut self, profile: bool) -> &mut Self {
-        self.stark_prover.set_profile(profile);
-        // halo2 profiling is set in CompilerConfig when creating Halo2ProvingKey
-        self
-    }
-
-    pub fn with_profiling(mut self) -> Self {
-        self.set_profile(true);
-        self
-    }
-
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.stark_prover.set_program_name(program_name);
         self

@@ -1,12 +1,11 @@
 use backtrace::Backtrace;
-#[cfg(feature = "function-span")]
-use openvm_instructions::exe::FnBound;
 use openvm_instructions::{exe::FnBounds, instruction::DebugInfo, program::Program};
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
+    utils::metrics_span,
     Chip,
 };
 
@@ -17,7 +16,6 @@ use super::{
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
-    metrics::cycle_tracker::CycleTracker,
     system::{
         memory::{Equipartition, CHUNK},
         poseidon2::Poseidon2PeripheryChip,
@@ -33,19 +31,14 @@ where
     VC: VmConfig<F>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-
     pub final_memory: Option<Equipartition<F, CHUNK>>,
-
-    /// Metric collection tools. Only collected when `config.collect_metrics` is true.
-    pub cycle_tracker: CycleTracker,
-    #[cfg(feature = "bench-metrics")]
-    pub(crate) collected_metrics: VmMetrics,
-
-    #[allow(dead_code)]
-    pub(crate) fn_bounds: FnBounds,
-
-    pub air_names: Vec<String>,
     pub since_last_segment_check: usize,
+
+    /// Air names for debug purposes only.
+    pub(crate) air_names: Vec<String>,
+    /// Metrics collected for this execution segment alone.
+    #[cfg(feature = "bench-metrics")]
+    pub(crate) metrics: VmMetrics,
 }
 
 pub struct ExecutionSegmentState {
@@ -60,11 +53,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         program: Program<F>,
         init_streams: Streams<F>,
         initial_memory: Option<Equipartition<F, CHUNK>>,
-        fn_bounds: FnBounds,
+        #[allow(unused_variables)] fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
         chip_complex.set_streams(init_streams);
-        let program = if config.system().collect_metrics {
+        let program = if !config.system().profiling {
             program.strip_debug_infos()
         } else {
             program
@@ -82,11 +75,12 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         Self {
             chip_complex,
             final_memory: None,
-            cycle_tracker: CycleTracker::new(),
-            #[cfg(feature = "bench-metrics")]
-            collected_metrics: Default::default(),
-            fn_bounds,
             air_names,
+            #[cfg(feature = "bench-metrics")]
+            metrics: VmMetrics {
+                fn_bounds,
+                ..Default::default()
+            },
             since_last_segment_check: 0,
         }
     }
@@ -108,15 +102,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
         let mut timestamp = self.chip_complex.memory_controller().borrow().timestamp();
-
-        #[cfg(feature = "bench-metrics")]
-        let collect_metrics = self.system_config().collect_metrics;
-        // The backtrace for the previous instruction, if any.
         let mut prev_backtrace: Option<Backtrace> = None;
-
-        // Cycle span by function if function start/end addresses are available
-        #[cfg(feature = "function-span")]
-        let mut current_fn = FnBound::default();
 
         self.chip_complex
             .connector_chip_mut()
@@ -129,6 +115,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                 self.chip_complex.program_chip_mut().get_instruction(pc)?;
             tracing::trace!("pc: {pc:#x} | time: {timestamp} | {:?}", instruction);
 
+            #[allow(unused_variables)]
             let (dsl_instr, trace) = debug_info.map_or(
                 (None, None),
                 |DebugInfo {
@@ -138,13 +125,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             );
 
             let opcode = instruction.opcode;
-            #[cfg(feature = "bench-metrics")]
-            let prev_trace_cells = if collect_metrics {
-                self.current_trace_cells()
-            } else {
-                vec![]
-            };
-
             if opcode == VmOpcode::with_default_offset(SystemOpcode::TERMINATE) {
                 did_terminate = true;
                 self.chip_complex.connector_chip_mut().end(
@@ -170,42 +150,25 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                         }
                         return Err(ExecutionError::Fail { pc });
                     }
-                    Some(SysPhantom::CtStart) => {
-                        // hack to remove "CT-" prefix
-                        #[cfg(not(feature = "function-span"))]
-                        self.cycle_tracker.start(
-                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
-                        )
+                    Some(SysPhantom::CtStart) =>
+                    {
+                        #[cfg(feature = "bench-metrics")]
+                        self.metrics
+                            .cycle_tracker
+                            .start(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
-                    Some(SysPhantom::CtEnd) => {
-                        // hack to remove "CT-" prefix
-                        #[cfg(not(feature = "function-span"))]
-                        self.cycle_tracker.end(
-                            dsl_instr.clone().unwrap_or("CT-Default".to_string())[3..].to_string(),
-                        )
+                    Some(SysPhantom::CtEnd) =>
+                    {
+                        #[cfg(feature = "bench-metrics")]
+                        self.metrics
+                            .cycle_tracker
+                            .end(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
                     _ => {}
                 }
             }
             prev_backtrace = trace;
 
-            #[cfg(feature = "function-span")]
-            if !self.fn_bounds.is_empty() && (pc < current_fn.start || pc > current_fn.end) {
-                current_fn = self
-                    .fn_bounds
-                    .range(..=pc)
-                    .next_back()
-                    .map(|(_, func)| (*func).clone())
-                    .unwrap();
-                if pc == current_fn.start {
-                    self.cycle_tracker.start(current_fn.name.clone());
-                } else {
-                    self.cycle_tracker.force_end();
-                }
-            };
-
-            #[cfg(feature = "bench-metrics")]
-            let mut opcode_name = None;
             if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
@@ -213,13 +176,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     ExecutionState::new(pc, timestamp),
                 )?;
                 assert!(next_state.timestamp > timestamp);
-                #[cfg(feature = "bench-metrics")]
-                {
-                    metrics::counter!("total_cycles").increment(1u64);
-                    if collect_metrics {
-                        opcode_name = Some(executor.get_opcode_name(opcode.as_usize()));
-                    }
-                }
                 pc = next_state.pc;
                 timestamp = next_state.timestamp;
             } else {
@@ -227,26 +183,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             };
 
             #[cfg(feature = "bench-metrics")]
-            if collect_metrics {
-                let now_trace_cells = self.current_trace_cells();
+            self.update_instruction_metrics(pc, opcode, dsl_instr);
 
-                let opcode_name = opcode_name.unwrap_or(opcode.to_string());
-                let key = (dsl_instr.clone(), opcode_name.clone());
-                self.cycle_tracker.increment_opcode(&key);
-                *self.collected_metrics.counts.entry(key).or_insert(0) += 1;
-
-                for (air_name, now_value, &prev_value) in
-                    itertools::izip!(&self.air_names, now_trace_cells, &prev_trace_cells)
-                {
-                    if prev_value != now_value {
-                        let key = (dsl_instr.clone(), opcode_name.clone(), air_name.to_owned());
-                        self.cycle_tracker
-                            .increment_cells_used(&key, now_value - prev_value);
-                        *self.collected_metrics.trace_cells.entry(key).or_insert(0) +=
-                            now_value - prev_value;
-                    }
-                }
-            }
             if self.should_segment() {
                 self.chip_complex
                     .connector_chip_mut()
@@ -277,14 +215,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
             };
         }
         #[cfg(feature = "bench-metrics")]
-        if collect_metrics {
-            self.collected_metrics.chip_heights =
-                itertools::izip!(self.air_names.clone(), self.current_trace_heights()).collect();
-
-            self.collected_metrics.emit();
-            metrics::counter!("total_cells_used")
-                .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-        }
+        self.finalize_metrics();
 
         Ok(ExecutionSegmentState {
             pc,
@@ -302,15 +233,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-
-        let proof_input = self.chip_complex.generate_proof_input(cached_program);
-
-        #[cfg(feature = "bench-metrics")]
-        metrics::gauge!("trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
-
-        proof_input
+        metrics_span("trace_gen_time_ms", || {
+            self.chip_complex.generate_proof_input(cached_program)
+        })
     }
 
     /// Returns bool of whether to switch to next segment or not. This is called every clock cycle inside of Core trace generation.

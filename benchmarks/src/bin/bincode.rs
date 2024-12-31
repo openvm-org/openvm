@@ -23,11 +23,7 @@ fn main() -> Result<()> {
     let leaf_fri_params = standard_fri_params_with_100_bits_conjectured_security(
         cli_args.agg_log_blowup.unwrap_or(2),
     );
-    let compiler_options = CompilerOptions {
-        // For metric collection
-        enable_cycle_tracker: true,
-        ..Default::default()
-    };
+    let compiler_options = CompilerOptions::default();
 
     let app_config = AppConfig {
         app_fri_params: app_fri_params.into(),

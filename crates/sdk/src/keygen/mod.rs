@@ -91,7 +91,6 @@ where
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
             );
-            assert!(config.app_vm_config.system().continuation_enabled);
             VmProvingKey {
                 fri_params: config.app_fri_params.fri_params,
                 vm_config: config.app_vm_config.clone(),
@@ -122,7 +121,7 @@ where
         self.app_vm_pk.vm_config.system().num_public_values
     }
 
-    pub fn get_vk(&self) -> AppVerifyingKey {
+    pub fn get_app_vk(&self) -> AppVerifyingKey {
         AppVerifyingKey {
             fri_params: self.app_vm_pk.fri_params,
             app_vm_vk: self.app_vm_pk.vm_pk.get_vk(),
