@@ -41,7 +41,7 @@ jobs:
       - name: Run fmt, clippy for guest
         run: |
           # Find all directories named "programs" and include additional static paths
-          for crate_path in $(find . -type d -name "programs" -exec find {} -mindepth 0 -maxdepth 0 -type d \;) benchmarks/programs/* examples/*; do
+          for crate_path in $(find . -type d -name "programs" -exec find {} -mindepth 0 -maxdepth 0 -type d \;) examples/*; do
             # Check if Cargo.toml exists in the directory
             if [ -f "$crate_path/Cargo.toml" ]; then
               echo "Running cargo fmt, clippy for $crate_path"
