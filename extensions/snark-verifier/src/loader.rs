@@ -1,6 +1,6 @@
 //! `Loader` implementation in native rust.
 
-use core::{fmt::Debug, marker::PhantomData};
+use core::fmt::Debug;
 
 use halo2_proofs::halo2curves::bn256::{Fq as Halo2Fp, Fr as Halo2Fr, G1Affine};
 use itertools::Itertools;
@@ -156,11 +156,6 @@ impl ScalarLoader<Halo2Fp> for OpenVmLoader {
 }
 
 impl Loader<G1Affine> for OpenVmLoader {}
-
-/// KZG accumulation scheme. The second generic `MOS` stands for different kind
-/// of multi-open scheme.
-#[derive(Clone, Debug)]
-pub struct OpenVmKzgAs<M, MOS>(PhantomData<(M, MOS)>);
 
 impl<MOS> AccumulationDecider<G1Affine, OpenVmLoader> for KzgAs<Bn256, MOS>
 where
