@@ -32,12 +32,12 @@ impl Sha256Air {
         new_hash
     }
 
-    /// This function takes the input_massage (should be already padded), the previous hash,
+    /// This function takes a 512-bit chunk of the input message (padding not handled), the previous hash,
     /// a flag indicating if it's the last block, the global block index, the local block index,
     /// and the buffer values that will be put in rows 0..4.
     /// Will populate the given `trace` with the trace of the block, where the width of the trace is `trace_width`
     /// and the starting column for the `Sha256Air` is `trace_start_col`.
-    /// Note that, some values cannot be correctly generated at this time, refer to [`generate_missing_cells`] for details
+    /// **Note**: this function only generates some of the required trace. Another pass is required, refer to [`generate_missing_cells`] for details.
     #[allow(clippy::too_many_arguments)]
     pub fn generate_block_trace<F: PrimeField32>(
         &self,
