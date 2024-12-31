@@ -19,3 +19,18 @@ For a single segment proof, the following metrics are collected:
 - `total_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 
 ## Scoping
+
+As mentioned above, different proofs must be scoped for metrics post-processing. We currently use labels which are added within a scoped span using the [`metrics_tracing_context`](https://docs.rs/metrics-tracing-context/latest/metrics_tracing_context/) crate. To make post-processing easier, we have the following conventions:
+
+- The `group` label should be the top level scope for all proofs which can be proven in parallel in an aggregation tree.
+
+The `openvm-sdk` crate applies the following additional labeling conventions:
+
+- For App proofs, the `group` label is set to `app_proof` or the `program_name: String` set in the `AppProver`.
+  - App proofs are distinguished by the `segment` label, which is set to the segment index.
+- The leaf aggregation layer has `group = leaf`.
+  - Leaf proofs (each without continuations) are distinguished by the `idx` label, which is set to the leaf node index.
+- The internal aggregation layers have `group = internal.{hgt}` where `hgt` is the height within the aggregation tree (`hgt = 0` is the furthest from the root).
+  - Internal proofs (each without continuations) are distinguished by the `idx` label, which is set to the internal node index. The internal node index is not reset across internal layers, but it is separate from the leaf node index.
+- The root aggregation layer has `group = root`.
+  - There is only a single root proof, but we add `idx = 0` for uniformity.
