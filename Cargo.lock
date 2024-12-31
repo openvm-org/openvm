@@ -3064,6 +3064,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2145869435ace5ea6ea3d35f59be559317ec9a0d04e1812d5f185a87b6d36f1a"
 
 [[package]]
+name = "metric_unify"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "num-format",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "metrics"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
