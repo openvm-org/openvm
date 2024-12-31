@@ -17,6 +17,8 @@ openvm-ecc-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
+openvm-sha256-circuit = { workspace = true }
+openvm-sha256-transpiler = { workspace = true }
 openvm-pairing-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-native-circuit = { workspace = true }
@@ -41,6 +43,7 @@ async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
+getset.workspace = true
 
 [features]
 default = ["parallel"]

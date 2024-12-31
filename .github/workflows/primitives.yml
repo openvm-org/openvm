@@ -8,6 +8,7 @@ on:
     paths:
       - "crates/circuits/primitives/**"
       - "crates/circuits/poseidon2-air/**"
+      - "crates/circuits/sha256-air/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -38,5 +39,10 @@ jobs:
 
       - name: Run tests for poseidon2-air
         working-directory: crates/circuits/poseidon2-air
+        run: |
+          cargo nextest run --cargo-profile fast --features parallel
+
+      - name: Run tests for sha256-air
+        working-directory: crates/circuits/sha256-air
         run: |
           cargo nextest run --cargo-profile fast --features parallel

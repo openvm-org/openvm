@@ -1571,20 +1571,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashmap"
-version = "6.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
 name = "debugid"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2787,11 +2773,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash",
- "clap",
- "crossbeam-channel",
- "crossbeam-utils",
- "dashmap",
- "env_logger",
  "indexmap 2.7.0",
  "is-terminal",
  "itoa",
@@ -3100,6 +3081,18 @@ checksum = "884adb57038347dfbaf2d5065887b6cf4312330dc8e94bc30a1a839bd79d3261"
 dependencies = [
  "ahash",
  "portable-atomic",
+]
+
+[[package]]
+name = "metrics-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3dbdd96ed57d565ec744cba02862d707acf373c5772d152abae6ec5c4e24f6c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -3637,29 +3630,22 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "getset",
- "halo2curves-axiom",
  "hex",
- "inferno",
  "itertools 0.13.0",
  "lazy_static",
  "metrics",
+ "metrics-derive",
  "once_cell",
- "openvm-algebra-circuit",
- "openvm-bigint-circuit",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
- "openvm-pairing-circuit",
  "openvm-poseidon2-air",
- "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -4292,6 +4278,7 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "eyre",
+ "getset",
  "itertools 0.13.0",
  "metrics",
  "openvm",
@@ -4312,6 +4299,8 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -4321,9 +4310,92 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-sha256-air"
+version = "0.1.0-alpha"
+dependencies = [
+ "hex",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand",
+ "sha2",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "openvm-sha256-circuit"
+version = "0.1.0-alpha"
+dependencies = [
+ "derive-new",
+ "derive_more 1.0.0",
+ "hex",
+ "lazy_static",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "openvm-sha256-air",
+ "openvm-sha256-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand",
+ "serde",
+ "sha2",
+ "strum",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "openvm-sha256-guest"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm",
+ "openvm-platform",
+ "sha2",
+]
+
+[[package]]
+name = "openvm-sha256-integration-tests"
+version = "0.1.0-alpha"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-platform",
+ "openvm-rv32im-transpiler",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+]
+
+[[package]]
+name = "openvm-sha256-transpiler"
+version = "0.1.0-alpha"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-sha256-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
 name = "openvm-stark-backend"
-version = "0.1.2-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.2-alpha#a97c6664ac29808662b5709f4e4462ce7fb53af0"
+version = "0.1.3-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.3-alpha#d36c660fb4b05b3697ab0672b2fc1e979d77ba84"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4349,8 +4421,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "0.1.2-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.2-alpha#a97c6664ac29808662b5709f4e4462ce7fb53af0"
+version = "0.1.3-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v0.1.3-alpha#d36c660fb4b05b3697ab0672b2fc1e979d77ba84"
 dependencies = [
  "derive_more 0.99.18",
  "ff 0.13.0",
@@ -4408,6 +4480,8 @@ dependencies = [
  "openvm-platform",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",

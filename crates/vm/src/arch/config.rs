@@ -86,9 +86,9 @@ pub struct SystemConfig {
     pub num_public_values: usize,
     /// When continuations are enabled, a heuristic used to determine when to segment execution.
     pub max_segment_len: usize,
-    /// Whether to collect metrics.
+    /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
-    pub collect_metrics: bool,
+    pub profiling: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -109,7 +109,7 @@ impl SystemConfig {
             memory_config,
             num_public_values,
             max_segment_len: DEFAULT_MAX_SEGMENT_LEN,
-            collect_metrics: false,
+            profiling: false,
         }
     }
 
@@ -138,13 +138,13 @@ impl SystemConfig {
         self
     }
 
-    pub fn with_metric_collection(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn with_profiling(mut self) -> Self {
+        self.profiling = true;
         self
     }
 
-    pub fn without_metric_collection(mut self) -> Self {
-        self.collect_metrics = false;
+    pub fn without_profiling(mut self) -> Self {
+        self.profiling = false;
         self
     }
 
