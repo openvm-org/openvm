@@ -1,14 +1,11 @@
-use std::{
-    io::{self, Read},
-    marker::PhantomData,
-};
+use std::{io::Read, marker::PhantomData};
 
 use halo2_proofs::halo2curves::{
-    bn256::{Fq, Fr as Halo2Fr, G1Affine},
-    Coordinates, CurveAffine,
+    bn256::{Fr as Halo2Fr, G1Affine},
+    CurveAffine,
 };
 use itertools::Itertools;
-use openvm_ecc_guest::algebra::IntMod;
+use openvm_ecc_guest::{algebra::IntMod, weierstrass::WeierstrassPoint};
 use openvm_keccak256_guest::keccak256;
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
 use snark_verifier_sdk::snark_verifier::{
@@ -63,41 +60,20 @@ impl<S> Transcript<G1Affine, OpenVmLoader> for OpenVmTranscript<G1Affine, S, Vec
         self.buf = hash.to_vec();
         let mut fr = Fr::from_be_bytes(&hash);
         fr.reduce();
-        OpenVmScalar(fr, PhantomData)
+        OpenVmScalar::new(fr)
     }
 
     fn common_ec_point(
         &mut self,
         ec_point: &OpenVmEcPoint<G1Affine, EcPoint>,
     ) -> Result<(), Error> {
-        let mut x = [0; 32];
-        let mut y = [0; 32];
-        x.copy_from_slice(ec_point.0.x.as_le_bytes());
-        y.copy_from_slice(ec_point.0.y.as_le_bytes());
-        let coordinates = Option::<Coordinates<G1Affine>>::from(
-            G1Affine {
-                x: Fq::from_bytes(&x).unwrap(),
-                y: Fq::from_bytes(&y).unwrap(),
-            }
-            .coordinates(),
-        )
-        .ok_or_else(|| {
-            Error::Transcript(
-                io::ErrorKind::Other,
-                "Invalid elliptic curve point".to_string(),
-            )
-        })?;
-
-        [coordinates.x(), coordinates.y()].map(|coordinate| {
-            self.buf.extend(coordinate.to_bytes().iter().rev());
-        });
-
+        self.buf.extend(ec_point.0.x().to_be_bytes());
+        self.buf.extend(ec_point.0.y().to_be_bytes());
         Ok(())
     }
 
     fn common_scalar(&mut self, scalar: &OpenVmScalar<Halo2Fr, Fr>) -> Result<(), Error> {
         self.buf.extend(scalar.0.to_be_bytes());
-
         Ok(())
     }
 }
@@ -111,8 +87,7 @@ where
         self.stream
             .read_exact(data.as_mut())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
-        let scalar = Fr::from_be_bytes(&data);
-        let scalar = OpenVmScalar(scalar, PhantomData);
+        let scalar = OpenVmScalar::new(Fr::from_be_bytes(&data));
         self.common_scalar(&scalar)?;
         Ok(scalar)
     }
@@ -126,7 +101,7 @@ where
         }
         let x = Fp::from_be_bytes(&x);
         let y = Fp::from_be_bytes(&y);
-        let ec_point = OpenVmEcPoint(EcPoint { x, y }, PhantomData);
+        let ec_point = OpenVmEcPoint::new(EcPoint::from_xy(x, y).unwrap());
         self.common_ec_point(&ec_point)?;
         Ok(ec_point)
     }

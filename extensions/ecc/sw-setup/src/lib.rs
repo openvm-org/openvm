@@ -89,8 +89,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
             pub struct #struct_name {
-                pub x: #intmod_type,
-                pub y: #intmod_type,
+                x: #intmod_type,
+                y: #intmod_type,
             }
 
             impl #struct_name {

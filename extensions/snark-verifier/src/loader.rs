@@ -7,7 +7,9 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use openvm_ecc_guest::{
     algebra::{field::FieldExtension, IntMod},
-    msm, AffinePoint,
+    msm,
+    weierstrass::WeierstrassPoint,
+    AffinePoint,
 };
 use openvm_pairing_guest::{
     bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
@@ -63,19 +65,19 @@ impl<const LIMBS: usize, const BITS: usize> AccumulatorEncoding<G1Affine, OpenVm
             .try_into()
             .unwrap();
         let accumulator = KzgAccumulator::new(
-            OpenVmEcPoint(
-                EcPoint {
-                    x: Fp::from_le_bytes(&lhs_x.to_bytes()),
-                    y: Fp::from_le_bytes(&lhs_y.to_bytes()),
-                },
-                PhantomData,
+            OpenVmEcPoint::new(
+                EcPoint::from_xy(
+                    Fp::from_le_bytes(&lhs_x.to_bytes()),
+                    Fp::from_le_bytes(&lhs_y.to_bytes()),
+                )
+                .unwrap(),
             ),
-            OpenVmEcPoint(
-                EcPoint {
-                    x: Fp::from_le_bytes(&rhs_x.to_bytes()),
-                    y: Fp::from_le_bytes(&rhs_y.to_bytes()),
-                },
-                PhantomData,
+            OpenVmEcPoint::new(
+                EcPoint::from_xy(
+                    Fp::from_le_bytes(&rhs_x.to_bytes()),
+                    Fp::from_le_bytes(&rhs_y.to_bytes()),
+                )
+                .unwrap(),
             ),
         );
         Ok(accumulator)
@@ -86,12 +88,13 @@ impl EcPointLoader<G1Affine> for OpenVmLoader {
     type LoadedEcPoint = OpenVmEcPoint<G1Affine, EcPoint>;
 
     fn ec_point_load_const(&self, value: &G1Affine) -> Self::LoadedEcPoint {
-        let point = EcPoint {
-            x: Fp::from_le_bytes(&value.x.to_bytes()),
-            y: Fp::from_le_bytes(&value.y.to_bytes()),
-        };
+        // unchecked because this is a constant point
+        let point = EcPoint::from_xy_unchecked(
+            Fp::from_le_bytes(&value.x.to_bytes()),
+            Fp::from_le_bytes(&value.y.to_bytes()),
+        );
         // new(value.x(), value.y());
-        OpenVmEcPoint(point, PhantomData)
+        OpenVmEcPoint::new(point)
     }
 
     fn ec_point_assert_eq(
@@ -117,7 +120,7 @@ impl EcPointLoader<G1Affine> for OpenVmLoader {
             scalars.push(scalar.0.clone());
             base.push(point.0.clone());
         }
-        OpenVmEcPoint(msm::<EcPoint, Fr>(&scalars, &base), PhantomData)
+        OpenVmEcPoint::new(msm::<EcPoint, Fr>(&scalars, &base))
     }
 }
 
@@ -126,7 +129,7 @@ impl ScalarLoader<Halo2Fr> for OpenVmLoader {
 
     fn load_const(&self, value: &Halo2Fr) -> Self::LoadedScalar {
         let value = Fr::from_le_bytes(&value.to_bytes());
-        OpenVmScalar(value, PhantomData)
+        OpenVmScalar::new(value)
     }
 
     fn assert_eq(&self, annotation: &str, lhs: &Self::LoadedScalar, rhs: &Self::LoadedScalar) {
@@ -141,7 +144,7 @@ impl ScalarLoader<Halo2Fp> for OpenVmLoader {
 
     fn load_const(&self, value: &Halo2Fp) -> Self::LoadedScalar {
         let value = Fp::from_le_bytes(&value.to_bytes());
-        OpenVmScalar(value, PhantomData)
+        OpenVmScalar::new(value)
     }
 
     fn assert_eq(&self, annotation: &str, lhs: &Self::LoadedScalar, rhs: &Self::LoadedScalar) {
@@ -175,7 +178,8 @@ where
         for t in terms {
             let x = t.1.x.to_bytes();
             let y = t.1.y.to_bytes();
-            let point = AffinePoint { x: t.0.x, y: t.0.y };
+            let (x0, y0) = t.0.into_coords();
+            let point = AffinePoint { x: x0, y: y0 };
             P.push(point);
             let point = AffinePoint {
                 x: Fp2::from_coeffs([Fp::from_le_bytes(&x[0..32]), Fp::from_le_bytes(&x[32..64])]),

@@ -21,11 +21,23 @@ use super::loader::{OpenVmLoader, LOADER};
 
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct OpenVmScalar<F: PrimeField, F2: Field>(pub F2, pub PhantomData<F>);
+pub struct OpenVmScalar<F, F2>(pub F2, PhantomData<F>);
+
+impl<F, F2> OpenVmScalar<F, F2> {
+    pub fn new(value: F2) -> Self {
+        Self(value, PhantomData)
+    }
+}
 
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct OpenVmEcPoint<CA: CurveAffine, C>(pub C, pub PhantomData<CA>);
+pub struct OpenVmEcPoint<CA, C>(pub C, PhantomData<CA>);
+
+impl<CA, C> OpenVmEcPoint<CA, C> {
+    pub fn new(point: C) -> Self {
+        Self(point, PhantomData)
+    }
+}
 
 impl<F: PrimeField, F2: Field> PartialEq for OpenVmScalar<F, F2> {
     fn eq(&self, other: &Self) -> bool {
@@ -159,7 +171,7 @@ impl<'b, F: PrimeField, F2: Field> MulAssign<&'b Self> for OpenVmScalar<F, F2> {
 
 impl<F: PrimeField, F2: Field> FieldOps for OpenVmScalar<F, F2> {
     fn invert(&self) -> Option<Self> {
-        self.0.inverse().map(|f| OpenVmScalar(f, PhantomData))
+        (self.0 != F2::ZERO).then(|| OpenVmScalar::new(self.0.invert()))
     }
 }
 
