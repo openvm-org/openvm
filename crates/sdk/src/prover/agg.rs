@@ -162,19 +162,6 @@ impl AggStarkProver {
                     .fri_params
                     .log_blowup as u64,
             );
-            #[cfg(feature = "bench-metrics")]
-            if self.profile {
-                let mut vm_config = self.root_prover.root_verifier_pk.vm_pk.vm_config.clone();
-                vm_config.system.profiling = true;
-                let vm = SingleSegmentVmExecutor::new(vm_config);
-                let exe = self
-                    .root_prover
-                    .root_verifier_pk
-                    .root_committed_exe
-                    .exe
-                    .clone();
-                vm.execute(exe, input.clone()).unwrap();
-            }
             SingleSegmentVmProver::prove(&self.root_prover, input)
         })
     }
