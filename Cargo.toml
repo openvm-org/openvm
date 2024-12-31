@@ -50,7 +50,7 @@ members = [
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
     "extensions/rv32-adapters",
-    "extensions/verifier",
+    "extensions/snark-verifier",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -137,7 +137,7 @@ openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = f
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
-openvm-snark-verifier = { path = "extensions/verifier", default-features = false }
+openvm-snark-verifier = { path = "extensions/snark-verifier", default-features = false }
 
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

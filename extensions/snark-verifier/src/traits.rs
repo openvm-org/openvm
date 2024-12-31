@@ -1,4 +1,4 @@
-use std::{
+use core::{
     fmt::{self, Debug},
     marker::PhantomData,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
@@ -20,9 +20,11 @@ use snark_verifier_sdk::snark_verifier::{
 use super::loader::{OpenVmLoader, LOADER};
 
 #[derive(Clone)]
+#[repr(transparent)]
 pub struct OpenVmScalar<F: PrimeField, F2: Field>(pub F2, pub PhantomData<F>);
 
 #[derive(Clone)]
+#[repr(transparent)]
 pub struct OpenVmEcPoint<CA: CurveAffine, C>(pub C, pub PhantomData<CA>);
 
 impl<F: PrimeField, F2: Field> PartialEq for OpenVmScalar<F, F2> {

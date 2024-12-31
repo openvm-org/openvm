@@ -1,6 +1,6 @@
 //! `Loader` implementation in native rust.
 
-use std::{fmt::Debug, marker::PhantomData};
+use core::{fmt::Debug, marker::PhantomData};
 
 use halo2_proofs::halo2curves::bn256::{Fq as Halo2Fp, Fr as Halo2Fr, G1Affine};
 use itertools::Itertools;

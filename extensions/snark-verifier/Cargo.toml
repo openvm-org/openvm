@@ -12,17 +12,21 @@ openvm-pairing-guest = { workspace = true, features = [
 ] }
 openvm-keccak256-guest = { workspace = true, default-features = false }
 openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
-snark-verifier-sdk = { workspace = true, default-features = false, features = ["halo2-axiom", "loader_evm"] }
+snark-verifier-sdk = { workspace = true, default-features = false, features = [
+    "halo2-axiom",
+    "loader_evm",
+] }
 ff = { workspace = true }
 halo2curves-axiom = { workspace = true }
 itertools.workspace = true
-rand_core = "0.6.4"
 num-bigint = { workspace = true, features = ["std"] }
 num-traits.workspace = true
 rand.workspace = true
 lazy_static.workspace = true
 group = "0.13.0"
+serde = { workspace = true, features = ["derive", "alloc"] }
 
 [dev-dependencies]
 rng = "0.1.0"
 subtle = "2.6.1"
+rand_core = "0.6.4"

@@ -1,11 +1,9 @@
-use std::marker::PhantomData;
-
 use halo2_proofs::{
-    circuit::{Layouter, SimpleFloorPlanner},
+    circuit::{Layouter, SimpleFloorPlanner, Value},
     dev::MockProver,
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::{
-        create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column,
+        create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Assigned, Circuit, Column,
         ConstraintSystem, Error, Fixed, Instance, ProvingKey,
     },
     poly::{
@@ -20,22 +18,19 @@ use halo2_proofs::{
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer},
 };
 use itertools::Itertools;
+use openvm_pairing_guest::bn254::Bn254Scalar;
+use openvm_snark_verifier::{loader::LOADER, traits::OpenVmScalar, transcript::OpenVmTranscript};
 use rand::{rngs::OsRng, RngCore};
-use snark_verifier::{
-    system::halo2::{compile, transcript::evm::EvmTranscript, Config},
-    verifier::SnarkVerifier,
-};
 use snark_verifier_sdk::{
     snark_verifier::{
-        self,
-        halo2_base::halo2_proofs::{self, circuit::Value, plonk::Assigned},
-        pcs::AccumulationDecider,
-        verifier::plonk::{PlonkSuccinctVerifier, PlonkVerifier},
+        halo2_base::halo2_proofs,
+        loader::ScalarLoader,
+        pcs::kzg::KzgDecidingKey,
+        system::halo2::{compile, transcript::evm::EvmTranscript, Config},
+        verifier::{plonk::PlonkVerifier, SnarkVerifier},
     },
     SHPLONK,
 };
-
-use crate::verifier::{loader::LOADER, traits::OpenVmScalar, transcript::OpenVmTranscript};
 
 #[derive(Clone, Copy)]
 struct StandardPlonkConfig {
@@ -218,7 +213,7 @@ fn gen_proof<C: Circuit<Fr>>(
 }
 
 #[test]
-fn verify_guest() {
+fn test_plonk() {
     let params = gen_srs(8);
 
     let circuit = StandardPlonk::rand(OsRng);
@@ -226,17 +221,10 @@ fn verify_guest() {
 
     let proof = gen_proof(&params, &pk, circuit.clone(), circuit.instances());
     let instances = circuit.instances();
-    let instances: Vec<Vec<OpenVmScalar<Fr, openvm_pairing_guest::bn254::Scalar>>> = instances
+    let loader = &*LOADER;
+    let instances: Vec<Vec<OpenVmScalar<Fr, Bn254Scalar>>> = instances
         .into_iter()
-        .map(|x| {
-            x.into_iter()
-                .map(|x| {
-                    use openvm_ecc_guest::algebra::IntMod;
-                    let value = openvm_pairing_guest::bn254::Scalar::from_le_bytes(&x.to_bytes());
-                    OpenVmScalar(value, PhantomData)
-                })
-                .collect()
-        })
+        .map(|x| x.iter().map(|x| loader.load_const(x)).collect())
         .collect::<Vec<_>>();
     let num_instance = StandardPlonk::num_instance();
     let protocol = compile(
@@ -244,25 +232,15 @@ fn verify_guest() {
         pk.get_vk(),
         Config::kzg().with_num_instance(num_instance.clone()),
     );
-    let loader = &*LOADER;
     let protocol = protocol.loaded(loader);
-    println!("protocol loaded");
-    let vk = &(params.get_g()[0], params.g2(), params.s_g2()).into();
+
+    let dk: &KzgDecidingKey<Bn256> = &(params.get_g()[0], params.g2(), params.s_g2()).into();
     let mut transcript = OpenVmTranscript::new(proof.as_slice());
     let loaded_proof =
-        PlonkVerifier::<SHPLONK>::read_proof(vk, &protocol, &instances[..], &mut transcript)
+        PlonkVerifier::<SHPLONK>::read_proof(dk, &protocol, &instances[..], &mut transcript)
             .unwrap();
+    // verify calls decide_all on accumulators
+    PlonkVerifier::<SHPLONK>::verify(dk, &protocol, &instances[..], &loaded_proof).unwrap();
 
-    println!("loaded_proof done");
-    let accumulators = PlonkSuccinctVerifier::<SHPLONK>::verify(
-        vk.as_ref(),
-        &protocol,
-        &instances[..],
-        &loaded_proof,
-    )
-    .unwrap();
-    println!("before pairing, pairing num {}", accumulators.len());
-
-    SHPLONK::decide_all(vk, accumulators).unwrap();
     // TODO: assert some parts of instances to be predefined consts (like program commitment)
 }
