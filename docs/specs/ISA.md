@@ -422,34 +422,33 @@ instruction format suggested by Max Gillet to enable easier compatibility with o
 
 ### Base
 
-In the instructions below, `d,e` may be any valid **non-zero** address space. Base kernel instructions enable memory movement between address spaces.
+In the instructions below, `d,e` may be any valid address space unless otherwise specified. In particular, the immediate address space `0` is allowed for non-vectorized reads but not allowed for writes. When using immediates, we interpret `[a]_0` as the immediate value `a`. Base kernel instructions enable memory movement between address spaces.
 
 In some instructions below, `W` is a generic parameter for the block size.
 
 | Name           | Operands        | Description                                                                                                                                                                                                                                                                                 |
 | -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`.                                                                                                                                                                                                                                                            |
-| STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                            |
+| LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
+| STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
 | LOAD2\<W\>     | `a,b,c,d,e,f,g` | Set `[a:W]_d = [[c]_d + [f]_d * g + b:W]_e`.                                                                                                                                                                                                                                                |
 | STORE2\<W\>    | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                |
-| JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                           |
+| JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                           |
 | BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
 | BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
-| HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`.                                                                                                                                                                                                                                   |
-| PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Both `d,e` cannot be zero. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                           |
-| CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. |
+| HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
+| PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                           |
+| CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Here `e` must be non-zero. |
 
 ### Native Field Arithmetic
 
-This instruction set does native field operations. Below, `d,e` may be any valid address space, and `d` is not
-allowed to be zero while `e` may be zero. When `e` is zero, `[c]_0` should be interpreted as `c`.
+This instruction set does native field operations. Below, `e,f` may be any valid address space, `d` may be any valid non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b` and `c`, respectively.
 
-| Name | Operands    | Description                                               |
-| ---- | ----------- | --------------------------------------------------------- |
-| ADDF | `a,b,c,d,e` | Set `[a]_d = [b]_d + [c]_e`.                              |
-| SUBF | `a,b,c,d,e` | Set `[a]_d = [b]_d - [c]_e`.                              |
-| MULF | `a,b,c,d,e` | Set `[a]_d = [b]_d * [c]_e`.                              |
-| DIVF | `a,b,c,d,e` | Set `[a]_d = [b]_d / [c]_e`. Division by zero is invalid. |
+| Name | Operands    | Description                                                 |
+| ---- | ----------- | ----------------------------------------------------------- |
+| ADDF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e + [c]_f`.                              |
+| SUBF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e - [c]_f`.                              |
+| MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
+| DIVF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e / [c]_f`. Division by zero is invalid. |
 
 ### Native Extension Field Arithmetic
 
@@ -459,7 +458,7 @@ This is only enabled when the native field is `BabyBear`. The quartic extension 
 All elements in the field extension can be represented as a vector `[a_0,a_1,a_2,a_3]` which represents the
 polynomial $a_0 + a_1x + a_2x^2 + a_3x^3$ over `BabyBear`.
 
-Below, `d,e` may be any valid address space, and `d,e` are both not allowed to be zero. The instructions do block access with block size `4`.
+Below, `d,e` may be any valid non-zero address space. The instructions do block access with block size `4`.
 
 | Name    | Operands  | Description                                                                                   |
 | ------- | --------- | --------------------------------------------------------------------------------------------- |
