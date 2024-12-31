@@ -1,10 +1,10 @@
-# OpenVM BigInt
+# Big Integers
 
 The OpenVM BigInt extension (aka `Int256`) provides two structs: `U256` and `I256`. These structs can be used to perform 256 bit arithmetic operations. The functional part is provided by the `openvm-bigint-guest` crate, which is a guest library that can be used in any OpenVM program.
 
 ## `U256`
 
-The `U256` struct is a 256-bit unsigned integer type. 
+The `U256` struct is a 256-bit unsigned integer type.
 
 ### Constants
 
@@ -162,7 +162,7 @@ To be able to import the `I256` struct, add the following to your `Cargo.toml` f
 openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
 ```
 
-## External Functions
+## External Linking
 
 The Bigint Guest extension provides another way to use the native implementation. It provides external functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for the 256 bit integer native implementations. Enabled only when the `target_os = "zkvm"`. All of the functions are defined as `unsafe extern "C" fn`. Also, note that you must enable the feature `export-intrinsics` to make them globally linkable.
 

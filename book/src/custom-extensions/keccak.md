@@ -1,6 +1,6 @@
-# OpenVM Keccak256
+# Keccak256
 
-The OpenVm Keccak256 extension provides tools for using the Keccak-256 hash function.
+The OpenVM Keccak256 extension provides tools for using the Keccak-256 hash function.
 The functional part is provided by the `openvm-keccak-guest` crate, which is a guest library that can be used in any OpenVM program.
 
 ## Functions for guest code
@@ -41,9 +41,9 @@ openvm-keccak256-guest = { git = "https://github.com/openvm-org/openvm.git" }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 ```
 
-## Native Keccak256
+## External Linking
 
-Keccak guest extension also provides another way to use the native Keccak-256 implementation. It provides a function that is meant to be linked to other external libraries. The external libraries can use this function as a hook for the Keccak-256 native implementation. Enabled only when the target is `zkvm`.
+The keccak guest extension also provides another way to use the keccak-256 intrinsic implementation. It provides a function that is meant to be linked to other external libraries. The external libraries can use this function as a hook for the keccak-256 intrinsic. This is enabled only when the target is `zkvm`.
 
 - `native_keccak256(input: *const u8, len: usize, output: *mut u8)`: This function has `C` ABI. It takes in a pointer to the input, the length of the input, and a pointer to the output buffer.
 
