@@ -12,7 +12,7 @@ use sha2::{compress256, digest::generic_array::GenericArray};
 use super::{
     air::Sha256Air, big_sig0_field, big_sig1_field, ch_field, columns::Sha256RoundCols, compose,
     get_flag_pt_array, maj_field, small_sig0_field, small_sig1_field, SHA256_BLOCK_WORDS,
-    SHA256_DIGEST_WIDTH, SHA256_HASH_WORDS, SHA256_ROUND_WIDTH, SHA256_WIDTH,
+    SHA256_DIGEST_WIDTH, SHA256_HASH_WORDS, SHA256_ROUND_WIDTH,
 };
 use crate::{
     big_sig0, big_sig1, ch, columns::Sha256DigestCols, limbs_into_u32, maj, small_sig0, small_sig1,
@@ -60,7 +60,7 @@ impl Sha256Air {
         #[cfg(debug_assertions)]
         {
             assert!(trace.len() == trace_width * SHA256_ROWS_PER_BLOCK);
-            assert!(trace_start_col + SHA256_WIDTH <= trace_width);
+            assert!(trace_start_col + super::SHA256_WIDTH <= trace_width);
             assert!(self.bitwise_lookup_bus == bitwise_lookup_chip.bus());
             if local_block_idx == 0 {
                 assert!(*prev_hash == SHA256_H);

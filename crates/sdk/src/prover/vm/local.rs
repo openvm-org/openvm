@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     prover::types::Proof,
     Chip,
 };
-use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_sdk::{config::FriParameters, engine::StarkFriEngine};
 
 use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
@@ -57,6 +57,10 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
 
     pub fn vm_config(&self) -> &VC {
         &self.pk.vm_config
+    }
+    #[allow(dead_code)]
+    pub(crate) fn fri_params(&self) -> &FriParameters {
+        &self.pk.fri_params
     }
 }
 

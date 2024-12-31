@@ -109,14 +109,14 @@ where
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
     let prover =
         AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name.to_string());
-    let app_proofs = prover.generate_app_proof(input_stream);
-    // 6. Verify STARK proofs.
-    vm.verify(&vk, app_proofs.per_segment.clone())
+    let app_proof = prover.generate_app_proof(input_stream);
+    // 6. Verify STARK proofs, including boundary conditions.
+    vm.verify(&vk, app_proof.per_segment.clone())
         .expect("Verification failed");
     if bench_leaf {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params);
         let leaf_prover = LeafProver::new(leaf_vm_pk, app_pk.leaf_committed_exe);
-        leaf_prover.generate_proof(&app_proofs);
+        leaf_prover.generate_proof(&app_proof);
     }
     Ok(())
 }
