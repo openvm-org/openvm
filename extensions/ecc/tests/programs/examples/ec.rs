@@ -1,13 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::hint::black_box;
-
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
     k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    msm, Group,
+    msm,
+    weierstrass::WeierstrassPoint,
+    Group,
 };
 
 openvm::entry!(main);
@@ -50,34 +50,31 @@ pub fn main() {
         "AC54ECC4254A4EDCAB10CC557A9811ED1EF7CB8AFDC64820C6803D2C5F481639"
     ));
 
-    let mut p1 = black_box(Secp256k1Point {
-        x: x1.clone(),
-        y: y1.clone(),
-    });
-    let mut p2 = black_box(Secp256k1Point { x: x2, y: y2 });
+    let mut p1 = Secp256k1Point::from_xy(x1.clone(), y1.clone()).unwrap();
+    let mut p2 = Secp256k1Point::from_xy(x2, y2).unwrap();
 
     // Generic add can handle equal or unequal points.
     let p3 = &p1 + &p2;
-    if p3.x != x3 || p3.y != y3 {
+    if p3.x() != &x3 || p3.y() != &y3 {
         panic!();
     }
     let p4 = &p2 + &p2;
-    if p4.x != x4 || p4.y != y4 {
+    if p4.x() != &x4 || p4.y() != &y4 {
         panic!();
     }
 
     // Add assign and double assign
     p1 += &p2;
-    if p1.x != x3 || p1.y != y3 {
+    if p1.x() != &x3 || p1.y() != &y3 {
         panic!();
     }
     p2.double_assign();
-    if p2.x != x4 || p2.y != y4 {
+    if p2.x() != &x4 || p2.y() != &y4 {
         panic!();
     }
 
     // Ec Mul
-    let p1 = black_box(Secp256k1Point { x: x1, y: y1 });
+    let p1 = Secp256k1Point::from_xy(x1, y1).unwrap();
     let scalar = Secp256k1Scalar::from_u32(12345678);
     // Calculated with https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#ec-multiply-tool
     let x5 = Secp256k1Coord::from_le_bytes(&hex!(
@@ -87,7 +84,7 @@ pub fn main() {
         "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
     ));
     let result = msm(&[scalar], &[p1]);
-    if result.x != x5 || result.y != y5 {
+    if result.x() != &x5 || result.y() != &y5 {
         panic!();
     }
 }

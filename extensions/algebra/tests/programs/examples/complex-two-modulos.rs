@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{DivUnsafe, IntMod};
+use openvm_algebra_guest::IntMod;
 
 openvm::entry!(main);
 
