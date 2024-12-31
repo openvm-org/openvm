@@ -68,7 +68,7 @@ impl MetricDb {
 
     // Custom sorting function that ensures 'group' comes first.
     // Other keys are sorted alphabetically.
-    fn custom_sort_label_keys(label_keys: &mut Vec<String>) {
+    fn custom_sort_label_keys(label_keys: &mut [String]) {
         // Prioritize 'group' by giving it the lowest possible sort value
         label_keys.sort_by_key(|key| {
             if key == "group" {

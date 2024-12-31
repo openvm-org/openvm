@@ -71,7 +71,7 @@ impl MetricDb {
         let decimal = (value.fract() * 100.0).abs().round() as i64;
 
         if decimal == 0 {
-            format!("{}", whole.to_formatted_string(&Locale::en))
+            whole.to_formatted_string(&Locale::en)
         } else {
             format!("{}.{:02}", whole.to_formatted_string(&Locale::en), decimal)
         }
