@@ -66,18 +66,52 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let air = self.air();
         let non_padded_height = self.current_trace_height();
         let height = next_power_of_two_or_zero(non_padded_height);
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
+
+        struct BlockContext {
+            prev_hash: [u32; 8],
+            local_block_idx: u32,
+            global_block_idx: u32,
+            input: [u8; SHA256_BLOCK_U8S],
+            is_last_block: bool,
+        }
+        let mut block_ctx: Vec<BlockContext> = Vec::with_capacity(self.records.len());
         let mut prev_hash = SHA256_H;
         let mut local_block_idx = 0;
         let mut global_block_idx = 1;
+        for (input, is_last_block) in self.records {
+            block_ctx.push(BlockContext {
+                prev_hash,
+                local_block_idx,
+                global_block_idx,
+                input,
+                is_last_block,
+            });
+            global_block_idx += 1;
+            if is_last_block {
+                local_block_idx = 0;
+                prev_hash = SHA256_H;
+            } else {
+                local_block_idx += 1;
+                prev_hash = Sha256Air::get_block_hash(&prev_hash, input);
+            }
+        }
+        // first pass
         values
-            .chunks_exact_mut(width * SHA256_ROWS_PER_BLOCK)
-            .zip(self.records.iter())
-            .for_each(|(block, record)| {
-                let (input, is_last_block) = record;
+            .par_chunks_exact_mut(width * SHA256_ROWS_PER_BLOCK)
+            .zip(block_ctx)
+            .for_each(|(block, ctx)| {
+                let BlockContext {
+                    prev_hash,
+                    local_block_idx,
+                    global_block_idx,
+                    input,
+                    is_last_block,
+                } = ctx;
                 let input_words = array::from_fn(|i| {
                     limbs_into_u32::<SHA256_WORD_U8S>(array::from_fn(|j| {
                         input[i * SHA256_WORD_U8S + j] as u32
@@ -90,26 +124,20 @@ where
                     &input_words,
                     self.bitwise_lookup_chip.as_ref(),
                     &prev_hash,
-                    *is_last_block,
+                    is_last_block,
                     global_block_idx,
                     local_block_idx,
                     &[[Val::<SC>::ZERO; 16]; 4],
                 );
-                global_block_idx += 1;
-                if *is_last_block {
-                    local_block_idx = 0;
-                    prev_hash = SHA256_H;
-                } else {
-                    local_block_idx += 1;
-                    prev_hash = Sha256Air::get_block_hash(&prev_hash, *input);
-                }
             });
+        // second pass: padding rows
         values[width * non_padded_height..]
             .par_chunks_mut(width)
             .for_each(|row| {
                 let cols: &mut Sha256RoundCols<Val<SC>> = row.borrow_mut();
                 self.air.sub_air.generate_default_row(cols);
             });
+        // second pass: non-padding rows
         values[width..]
             .par_chunks_mut(width * SHA256_ROWS_PER_BLOCK)
             .take(non_padded_height / SHA256_ROWS_PER_BLOCK)
@@ -117,7 +145,7 @@ where
                 self.air.sub_air.generate_missing_cells(chunk, width, 0);
             });
 
-        AirProofInput::simple(self.air(), RowMajorMatrix::new(values, width), vec![])
+        AirProofInput::simple(air, RowMajorMatrix::new(values, width), vec![])
     }
 }
 
