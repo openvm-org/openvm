@@ -11,6 +11,7 @@ repository.workspace = true
 openvm = { workspace = true }
 openvm-platform = { workspace = true }
 openvm-algebra-moduli-setup = { workspace = true }
+openvm-algebra-complex-macros = { workspace = true }
 serde = { workspace = true }
 serde-big-array = "0.5.1"
 strum_macros = { workspace = true }

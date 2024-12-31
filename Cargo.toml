@@ -25,6 +25,15 @@ members = [
     "crates/toolchain/platform",
     "crates/toolchain/tests",
     "crates/vm",
+    "extensions/rv32im/circuit",
+    "extensions/rv32im/transpiler",
+    "extensions/rv32im/guest",
+    "extensions/rv32im/tests",
+    "extensions/rv32-adapters",
+    "extensions/native/circuit",
+    "extensions/native/compiler",
+    "extensions/native/compiler/derive",
+    "extensions/native/recursion",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
@@ -38,14 +47,10 @@ members = [
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
     "extensions/keccak256/tests",
-    "extensions/native/circuit",
-    "extensions/native/compiler",
-    "extensions/native/compiler/derive",
-    "extensions/native/recursion",
-    "extensions/rv32im/circuit",
-    "extensions/rv32im/transpiler",
-    "extensions/rv32im/guest",
-    "extensions/rv32im/tests",
+    "extensions/sha256/circuit",
+    "extensions/sha256/transpiler",
+    "extensions/sha256/guest",
+    "extensions/sha256/tests",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
@@ -55,11 +60,7 @@ members = [
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
     "extensions/pairing/tests",
-    "extensions/rv32-adapters",
-    "extensions/sha256/circuit",
-    "extensions/sha256/transpiler",
-    "extensions/sha256/guest",
-    "extensions/sha256/tests",
+    "extensions/snark-verifier",
     "ci/scripts/metric_unify",
 ]
 exclude = ["crates/sdk/example"]
@@ -101,6 +102,10 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
+# Stark Backend
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.3-alpha", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.3-alpha", default-features = false }
+
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
@@ -118,39 +123,39 @@ openvm-platform = { path = "crates/toolchain/platform", default-features = false
 openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.3-alpha", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v0.1.3-alpha", default-features = false }
+openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
 
 # Extensions
+openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
+openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
+openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
+openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
+openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
+openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
+openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
+openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
+openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
+openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
+openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
+openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
+openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
+openvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
+openvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
+openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
 openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
 openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
 openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-setup = { path = "extensions/algebra/moduli-setup", default-features = false }
 openvm-algebra-complex-macros = { path = "extensions/algebra/guest/src/field/complex-macros", default-features = false }
-openvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
-openvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
-openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
 openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
 openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
 openvm-ecc-sw-setup = { path = "extensions/ecc/sw-setup", default-features = false }
-openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
-openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
-openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
-openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
-openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
-openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
-openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
-openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
-openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
-openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
-openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
-openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
-openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
+openvm-snark-verifier = { path = "extensions/snark-verifier", default-features = false }
 
 # Plonky3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "9b267c4" }

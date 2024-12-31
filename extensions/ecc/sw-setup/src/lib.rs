@@ -89,8 +89,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
             pub struct #struct_name {
-                pub x: #intmod_type,
-                pub y: #intmod_type,
+                x: #intmod_type,
+                y: #intmod_type,
             }
 
             impl #struct_name {
@@ -370,7 +370,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
-                openvm_platform::custom_insn_r!(
+                openvm::platform::custom_insn_r!(
                     OPCODE,
                     SW_FUNCT3 as usize,
                     SwBaseFunct7::SwAddNe as usize + #ec_idx
@@ -383,7 +383,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
-                openvm_platform::custom_insn_r!(
+                openvm::platform::custom_insn_r!(
                     OPCODE,
                     SW_FUNCT3 as usize,
                     SwBaseFunct7::SwDouble as usize + #ec_idx
@@ -425,7 +425,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                     let p2 = [one.as_ref(), one.as_ref()].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
-                    openvm_platform::custom_insn_r!(
+                    openvm::platform::custom_insn_r!(
                         ::openvm_ecc_guest::OPCODE,
                         ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
@@ -435,7 +435,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         p1.as_ptr(),
                         p2.as_ptr()
                     );
-                    openvm_platform::custom_insn_r!(
+                    openvm::platform::custom_insn_r!(
                         ::openvm_ecc_guest::OPCODE,
                         ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
