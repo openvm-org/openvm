@@ -53,7 +53,8 @@ fn main() -> Result<()> {
         let app_pk = sdk.app_keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;
-        let prover = AppProver::new(app_pk.app_vm_pk, committed_exe);
+        let prover =
+            AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name("verify_fibair");
         let proof = prover.generate_app_proof_without_continuations(input_stream.into());
         sdk.verify_app_proof_without_continuations(&app_vk, &proof)?;
         Ok(())

@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-#[cfg(feature = "bench-metrics")]
-use openvm_circuit::arch::SingleSegmentVmExecutor;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
