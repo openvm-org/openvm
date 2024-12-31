@@ -1,13 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// TODO[arayi]: Revisit this
+#[cfg(target_os = "zkvm")]
+use core::mem::MaybeUninit;
+
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;
 pub const SHA256_FUNCT3: u8 = 0b100;
-pub const SHA256_FUNCT7: u8 = 0b1;
-
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
+pub const SHA256_FUNCT7: u8 = 0x1;
 
 /// The sha256 cryptographic hash function.
 #[inline(always)]

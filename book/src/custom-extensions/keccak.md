@@ -1,7 +1,7 @@
 # OpenVM Keccak256
 
-The OpenVm Keccak256 extension provides tools for using the Keccak-256 hash function. 
-The functional part is provided by the `openvm-keccak-guest` crate, which is a guest library that can be used in any OpenVM program. 
+The OpenVm Keccak256 extension provides tools for using the Keccak-256 hash function.
+The functional part is provided by the `openvm-keccak-guest` crate, which is a guest library that can be used in any OpenVM program.
 
 ## Functions for guest code
 
@@ -13,6 +13,7 @@ The OpenVM Keccak256 Guest extension provides two functions for using in your gu
 See the full example [here](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/tests/programs/examples/keccak.rs).
 
 ### Example:
+
 ```rust
 use hex::FromHex;
 use openvm_keccak256_guest::keccak256;
@@ -54,8 +55,9 @@ extern "C" {
 }
 
 fn keccak256(input: &[u8]) -> [u8; 32] {
-    #[cfg(target_os = "zkvm")] {
-    let mut output = [0u8; 32];
+    #[cfg(target_os = "zkvm")]
+    {
+        let mut output = [0u8; 32];
         unsafe {
             native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
         }
