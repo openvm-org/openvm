@@ -18,18 +18,20 @@ use halo2_proofs::{
     transcript::{TranscriptReadBuffer, TranscriptWriterBuffer},
 };
 use itertools::Itertools;
-use openvm_pairing_guest::bn254::Bn254Scalar;
-use openvm_snark_verifier::{loader::LOADER, traits::OpenVmScalar, transcript::OpenVmTranscript};
+use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
+use openvm_build::{GuestOptions, TargetFilter};
+use openvm_circuit::utils::air_test_with_min_segments;
+use openvm_ecc_circuit::WeierstrassExtension;
+use openvm_pairing_circuit::{PairingCurve, PairingExtension};
+use openvm_pairing_guest::bn254::{Bn254Scalar, BN254_MODULUS, BN254_ORDER};
+use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
+use openvm_snark_verifier::{loader::LOADER, KzgAccumulationScheme, PlonkVerifierContext};
 use rand::{rngs::OsRng, RngCore};
-use snark_verifier_sdk::{
-    snark_verifier::{
-        halo2_base::halo2_proofs,
-        loader::ScalarLoader,
-        pcs::kzg::KzgDecidingKey,
-        system::halo2::{compile, transcript::evm::EvmTranscript, Config},
-        verifier::{plonk::PlonkVerifier, SnarkVerifier},
-    },
-    SHPLONK,
+use snark_verifier_sdk::snark_verifier::{
+    halo2_base::halo2_proofs,
+    loader::ScalarLoader,
+    pcs::kzg::KzgDecidingKey,
+    system::halo2::{compile, transcript::evm::EvmTranscript, Config},
 };
 
 #[derive(Clone, Copy)]
@@ -213,7 +215,7 @@ fn gen_proof<C: Circuit<Fr>>(
 }
 
 #[test]
-fn test_plonk() {
+fn test_plonk_zkvm() -> eyre::Result<()> {
     let params = gen_srs(8);
 
     let circuit = StandardPlonk::rand(OsRng);
@@ -222,9 +224,9 @@ fn test_plonk() {
     let proof = gen_proof(&params, &pk, circuit.clone(), circuit.instances());
     let instances = circuit.instances();
     let loader = &*LOADER;
-    let instances: Vec<Vec<OpenVmScalar<Fr, Bn254Scalar>>> = instances
+    let public_values: Vec<Vec<Bn254Scalar>> = instances
         .into_iter()
-        .map(|x| x.iter().map(|x| loader.load_const(x)).collect())
+        .map(|x| x.iter().map(|x| loader.load_const(x).0).collect())
         .collect::<Vec<_>>();
     let num_instance = StandardPlonk::num_instance();
     let protocol = compile(
@@ -234,13 +236,46 @@ fn test_plonk() {
     );
     let protocol = protocol.loaded(loader);
 
-    let dk: &KzgDecidingKey<Bn256> = &(params.get_g()[0], params.g2(), params.s_g2()).into();
-    let mut transcript = OpenVmTranscript::new(proof.as_slice());
-    let loaded_proof =
-        PlonkVerifier::<SHPLONK>::read_proof(dk, &protocol, &instances[..], &mut transcript)
-            .unwrap();
-    // verify calls decide_all on accumulators
-    PlonkVerifier::<SHPLONK>::verify(dk, &protocol, &instances[..], &loaded_proof).unwrap();
+    let dk: KzgDecidingKey<Bn256> = (params.get_g()[0], params.g2(), params.s_g2()).into();
 
+    let ctx = PlonkVerifierContext {
+        dk,
+        protocol,
+        proof,
+        public_values,
+        kzg_as: KzgAccumulationScheme::SHPLONK,
+    };
+    let mut stdin = StdIn::default();
+    stdin.write(&ctx);
+
+    let sdk = Sdk;
+    let filter = TargetFilter {
+        name: "verify".to_owned(),
+        kind: "bin".to_owned(),
+    };
+    let elf = sdk.build(
+        GuestOptions::default(),
+        env!("CARGO_MANIFEST_DIR"),
+        &Some(filter),
+    )?;
+    let config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .keccak(Default::default())
+        .modular(ModularExtension::new(vec![
+            BN254_MODULUS.clone(),
+            BN254_ORDER.clone(),
+        ]))
+        .ecc(WeierstrassExtension::new(vec![
+            PairingCurve::Bn254.curve_config()
+        ]))
+        .fp2(Fp2Extension::new(vec![BN254_MODULUS.clone()]))
+        .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
+        .build();
+    let exe = sdk.transpile(elf, config.transpiler())?;
     // TODO: assert some parts of instances to be predefined consts (like program commitment)
+    air_test_with_min_segments(config, exe, stdin, 1);
+    Ok(())
 }

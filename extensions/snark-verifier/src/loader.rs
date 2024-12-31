@@ -15,6 +15,7 @@ use openvm_pairing_guest::{
     bn254::{Bn254, Bn254Fp as Fp, Bn254G1Affine as EcPoint, Fp2, Scalar as Fr},
     pairing::PairingCheck,
 };
+use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::halo2_proofs::{
         self,
@@ -35,7 +36,7 @@ lazy_static! {
     pub static ref LOADER: OpenVmLoader = OpenVmLoader;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OpenVmLoader;
 
 impl<const LIMBS: usize, const BITS: usize> AccumulatorEncoding<G1Affine, OpenVmLoader>

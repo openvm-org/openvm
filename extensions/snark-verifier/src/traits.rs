@@ -11,6 +11,7 @@ use halo2_proofs::halo2curves::{
 };
 use openvm_ecc_guest::algebra::{ExpBytes, Field, IntMod};
 use openvm_pairing_guest::bn254::{Bn254G1Affine as EcPoint, Fp, Scalar as Fr};
+use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::halo2_proofs,
     loader::{LoadedEcPoint, LoadedScalar},
@@ -19,8 +20,9 @@ use snark_verifier_sdk::snark_verifier::{
 
 use super::loader::{OpenVmLoader, LOADER};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 #[repr(transparent)]
+#[serde(bound(serialize = "F2: Serialize", deserialize = "F2: Deserialize<'de>"))]
 pub struct OpenVmScalar<F, F2>(pub F2, PhantomData<F>);
 
 impl<F, F2> OpenVmScalar<F, F2> {
@@ -29,8 +31,9 @@ impl<F, F2> OpenVmScalar<F, F2> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 #[repr(transparent)]
+#[serde(bound(serialize = "C: Serialize", deserialize = "C: Deserialize<'de>"))]
 pub struct OpenVmEcPoint<CA, C>(pub C, PhantomData<CA>);
 
 impl<CA, C> OpenVmEcPoint<CA, C> {
