@@ -1,7 +1,12 @@
 use std::{array, borrow::BorrowMut, ops::Range};
 
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChip, utils::next_power_of_two_or_zero,
+};
+use openvm_stark_backend::{
+    p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+};
 use sha2::{compress256, digest::generic_array::GenericArray};
 
 use super::{
@@ -20,7 +25,7 @@ use crate::{
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through `get_default_row`
 /// The second pass should go through all the blocks and call `generate_missing_values`
 impl Sha256Air {
-    /// This function takes the input_massage (should be already padded), the previous hash,
+    /// This function takes the input_message (padding not handled), the previous hash,
     /// and returns the new hash after processing the block input
     pub fn get_block_hash(
         prev_hash: &[u32; SHA256_HASH_WORDS],
@@ -453,4 +458,90 @@ impl Sha256Air {
             }
         }
     }
+}
+
+/// `records` consists of pairs of `(input_block, is_last_block)`.
+pub fn generate_trace<F: PrimeField32>(
+    sub_air: &Sha256Air,
+    bitwise_lookup_chip: &BitwiseOperationLookupChip<8>,
+    records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
+) -> RowMajorMatrix<F> {
+    let non_padded_height = records.len() * SHA256_ROWS_PER_BLOCK;
+    let height = next_power_of_two_or_zero(non_padded_height);
+    let width = <Sha256Air as BaseAir<F>>::width(sub_air);
+    let mut values = F::zero_vec(height * width);
+
+    struct BlockContext {
+        prev_hash: [u32; 8],
+        local_block_idx: u32,
+        global_block_idx: u32,
+        input: [u8; SHA256_BLOCK_U8S],
+        is_last_block: bool,
+    }
+    let mut block_ctx: Vec<BlockContext> = Vec::with_capacity(records.len());
+    let mut prev_hash = SHA256_H;
+    let mut local_block_idx = 0;
+    let mut global_block_idx = 1;
+    for (input, is_last_block) in records {
+        block_ctx.push(BlockContext {
+            prev_hash,
+            local_block_idx,
+            global_block_idx,
+            input,
+            is_last_block,
+        });
+        global_block_idx += 1;
+        if is_last_block {
+            local_block_idx = 0;
+            prev_hash = SHA256_H;
+        } else {
+            local_block_idx += 1;
+            prev_hash = Sha256Air::get_block_hash(&prev_hash, input);
+        }
+    }
+    // first pass
+    values
+        .par_chunks_exact_mut(width * SHA256_ROWS_PER_BLOCK)
+        .zip(block_ctx)
+        .for_each(|(block, ctx)| {
+            let BlockContext {
+                prev_hash,
+                local_block_idx,
+                global_block_idx,
+                input,
+                is_last_block,
+            } = ctx;
+            let input_words = array::from_fn(|i| {
+                limbs_into_u32::<SHA256_WORD_U8S>(array::from_fn(|j| {
+                    input[i * SHA256_WORD_U8S + j] as u32
+                }))
+            });
+            sub_air.generate_block_trace(
+                block,
+                width,
+                0,
+                &input_words,
+                bitwise_lookup_chip,
+                &prev_hash,
+                is_last_block,
+                global_block_idx,
+                local_block_idx,
+                &[[F::ZERO; 16]; 4],
+            );
+        });
+    // second pass: padding rows
+    values[width * non_padded_height..]
+        .par_chunks_mut(width)
+        .for_each(|row| {
+            let cols: &mut Sha256RoundCols<F> = row.borrow_mut();
+            sub_air.generate_default_row(cols);
+        });
+    // second pass: non-padding rows
+    values[width..]
+        .par_chunks_mut(width * SHA256_ROWS_PER_BLOCK)
+        .take(non_padded_height / SHA256_ROWS_PER_BLOCK)
+        .for_each(|chunk| {
+            sub_air.generate_missing_cells(chunk, width, 0);
+        });
+    RowMajorMatrix::new(values, width)
 }
