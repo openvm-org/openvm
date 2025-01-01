@@ -320,13 +320,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
-            2,
+            AS::Native.to_field::<F>().as_canonical_u64() as u16,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
             PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
-            2,
+            AS::Native.to_field::<F>().as_canonical_u64() as u16,
         )],
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
             .map(|i| {
@@ -334,7 +334,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                     PhantomDiscriminant(NativePhantom::Print as u16),
                     i32_f(src + i * word_size_i32),
                     F::ZERO,
-                    2,
+                    AS::Native.to_field::<F>().as_canonical_u64() as u16,
                 )
             })
             .collect(),
