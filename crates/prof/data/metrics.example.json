@@ -1,0 +1,7060 @@
+{
+  "counter": [
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "9"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "6"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "40"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<64>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<64>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "14"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<64>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "449"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "411"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "456"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "422"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4571"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "321"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "223"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "25"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "188"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "156"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "126"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "94"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "17"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "15"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "88"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "25"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "38"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "26"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "19"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "15"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "20"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "22"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "10"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "41"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "13"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "25"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "33"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "18"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "38"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "17"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "90"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "39"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "17"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "43"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "19"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "286"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "fri.log_blowup",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "total_cycles",
+      "value": "290016"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "total_cells_used",
+      "value": "15230037"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "num_segments",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "16384"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "294912"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "10"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "32"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "131072"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "20"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PersistentBoundaryAir<8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "212992"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "32"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "MemoryMerkleAir<8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "20"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "256"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "8960"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "128"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "4736"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "13"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "32768"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1343488"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "17"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "16384"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "802816"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "25"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<16>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "8192"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "532480"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "41"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<32>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2048"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2807808"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "543"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "828"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "1024"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1502208"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "619"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "848"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "128"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "569856"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "3164"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "KeccakVmAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "1288"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "909312"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "166"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "56"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "9232"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "261"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularMulDivCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "316"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "3128"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "199"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, ModularAddSubCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "192"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "256"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "15872"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "26"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32HintStoreAdapterAir, Rv32HintStoreCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "36"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1288"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "57"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "104"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1112"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "39"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "100"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "454656"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "31"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "80"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "524288"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "4718592"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "RangeTupleCheckerAir<2>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "200704"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "21"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "28"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "8192"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "524288"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "28"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "36"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "253952"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "18"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "44"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "32768"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2883584"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "32"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "56"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "16384"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1212416"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "26"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "48"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "454656"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "35"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "76"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "131072"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "14680064"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "40"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "72"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "16384"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1720320"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "53"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "52"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2048"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "157696"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "37"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "40"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "131072"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "15204352"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "36"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "80"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "65536"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "655360"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "BitwiseOperationLookupAir<8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "64"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1152"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "6"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4096"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "1261568"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "300"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "Poseidon2PeripheryAir<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "262144"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2359296"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "total_cells",
+      "value": "55907135"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "5"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "302"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "31"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "59"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "35"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "15"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "15"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "6"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "7"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "31"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "19"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "3"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "quotient_deg",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "constraints",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "interactions",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "fri.log_blowup",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "num_children",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "total_cycles",
+      "value": "9780100"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "total_cells_used",
+      "value": "445651278"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "1048576"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "18874368"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "10"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "ProgramAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "4"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmConnectorAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "64"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2496"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2097152"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "39845888"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VolatileBoundaryAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "2097152"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "56623104"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "11"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<2>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "1048576"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "30408704"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "13"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<4>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "262144"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "8650752"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "17"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "AccessAdapterAir<8>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "16"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "131072"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "50331648"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "348"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "NativePoseidon2Air<BabyBearParameters>, 1>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "36"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "1048576"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "146800640"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "64"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "FriReducedOpeningAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "76"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "262144"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "15728640"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "40"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeVectorizedAdapterAir<4>, FieldExtensionCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "20"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4194304"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "209715200"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "30"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeAdapterAir<2, 1>, FieldArithmeticCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "20"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "131072"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2883584"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "10"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<JalNativeAdapterAir, JalCoreAir>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "12"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4194304"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "213909504"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "23"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "28"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "rows",
+      "value": "4194304"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "cells",
+      "value": "272629760"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "41"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VmAirWrapper<NativeLoadStoreAdapterAir<1>, NativeLoadStoreCoreAir<1>"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "24"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "32768"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "458752"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "0"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "6"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "PhantomAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "rows",
+      "value": "262144"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "cells",
+      "value": "2359296"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "prep_cols",
+      "value": "2"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "main_cols",
+      "value": "1"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ],
+        [
+          "air_name",
+          "VariableRangeCheckerAir"
+        ]
+      ],
+      "metric": "perm_cols",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "total_cells",
+      "value": "1069222360"
+    }
+  ],
+  "gauge": [
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "keygen_time_ms",
+      "value": "1188"
+    },
+    {
+      "labels": [
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "commit_exe_time_ms",
+      "value": "8"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "execute_time_ms",
+      "value": "493"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "trace_gen_time_ms",
+      "value": "79"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "main_trace_commit_time_ms",
+      "value": "417"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "generate_perm_trace_time_ms",
+      "value": "40"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "perm_trace_commit_time_ms",
+      "value": "537"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "quotient_poly_compute_time_ms",
+      "value": "278"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "quotient_poly_commit_time_ms",
+      "value": "306"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "pcs_opening_time_ms",
+      "value": "810"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "group",
+          "ecrecover_program"
+        ]
+      ],
+      "metric": "stark_prove_excluding_trace_time_ms",
+      "value": "2391"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "execute_time_ms",
+      "value": "12371"
+    },
+    {
+      "labels": [
+        [
+          "segment",
+          "0"
+        ],
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "trace_gen_time_ms",
+      "value": "2203"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "main_trace_commit_time_ms",
+      "value": "6309"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "generate_perm_trace_time_ms",
+      "value": "781"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "perm_trace_commit_time_ms",
+      "value": "6189"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "quotient_poly_compute_time_ms",
+      "value": "8058"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "quotient_poly_commit_time_ms",
+      "value": "5136"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "pcs_opening_time_ms",
+      "value": "8426"
+    },
+    {
+      "labels": [
+        [
+          "idx",
+          "0"
+        ],
+        [
+          "group",
+          "leaf"
+        ]
+      ],
+      "metric": "stark_prove_excluding_trace_time_ms",
+      "value": "34901"
+    }
+  ]
+}

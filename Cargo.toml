@@ -10,6 +10,7 @@ license = "MIT"
 [workspace]
 members = [
     "benchmarks",
+    "crates/prof",
     "crates/sdk",
     "crates/cli",
     "crates/circuits/mod-builder",
@@ -61,7 +62,6 @@ members = [
     "extensions/pairing/guest",
     "extensions/pairing/tests",
     "extensions/snark-verifier",
-    "ci/scripts/metric_unify",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
