@@ -2,7 +2,6 @@ use std::{fs::read, path::PathBuf};
 
 use clap::{command, Parser};
 use eyre::Result;
-use metrics::counter;
 use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions};
 use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmConfig};
 use openvm_sdk::{
@@ -21,6 +20,7 @@ use openvm_stark_sdk::{
 };
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
+use tracing::info_span;
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
@@ -92,23 +92,26 @@ where
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
 {
-    counter!("fri.log_blowup").absolute(app_config.app_fri_params.fri_params.log_blowup as u64);
+    let bench_name = bench_name.to_string();
     let engine = BabyBearPoseidon2Engine::new(app_config.app_fri_params.fri_params);
     let vm = VirtualMachine::new(engine, app_config.app_vm_config.clone());
     // 1. Generate proving key from config.
-    let app_pk = metrics_span("keygen_time_ms", || {
-        AppProvingKey::keygen(app_config.clone())
+    let app_pk = info_span!("keygen", group = &bench_name).in_scope(|| {
+        metrics_span("keygen_time_ms", || {
+            AppProvingKey::keygen(app_config.clone())
+        })
     });
     // 2. Commit to the exe by generating cached trace for program.
-    let committed_exe = metrics_span("commit_exe_time_ms", || {
-        commit_app_exe(app_config.app_fri_params.fri_params, exe)
+    let committed_exe = info_span!("commit_exe", group = &bench_name).in_scope(|| {
+        metrics_span("commit_exe_time_ms", || {
+            commit_app_exe(app_config.app_fri_params.fri_params, exe)
+        })
     });
     // 3. Executes runtime
     // 4. Generate trace
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with timer.
     let vk = app_pk.app_vm_pk.vm_pk.get_vk();
-    let prover =
-        AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name.to_string());
+    let prover = AppProver::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream);
     // 6. Verify STARK proofs, including boundary conditions.
     vm.verify(&vk, app_proof.per_segment.clone())

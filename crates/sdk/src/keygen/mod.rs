@@ -26,6 +26,7 @@ use openvm_stark_sdk::{
     p3_bn254_fr::Bn254Fr,
 };
 use serde::{Deserialize, Serialize};
+use tracing::info_span;
 
 use crate::{
     commit::babybear_digest_to_bn254,
@@ -329,7 +330,8 @@ pub fn leaf_keygen(fri_params: FriParameters) -> Arc<VmProvingKey<SC, NativeConf
     };
     let vm_config = agg_config.leaf_vm_config();
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
-    let leaf_vm_pk = VirtualMachine::new(leaf_engine, vm_config.clone()).keygen();
+    let leaf_vm_pk = info_span!("keygen", group = "leaf")
+        .in_scope(|| VirtualMachine::new(leaf_engine, vm_config.clone()).keygen());
     Arc::new(VmProvingKey {
         fri_params,
         vm_config,
