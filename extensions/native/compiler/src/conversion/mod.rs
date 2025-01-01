@@ -106,19 +106,18 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
-pub const NATIVE_AS: u32 = 5;
-
 #[derive(Clone, Copy)]
+#[repr(u8)]
 enum AS {
-    Immediate,
-    Native,
+    Immediate = 0,
+    Native = 5,
 }
 
 impl AS {
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
             AS::Immediate => F::ZERO,
-            AS::Native => F::from_canonical_u32(NATIVE_AS),
+            AS::Native => F::from_canonical_u8(AS::Native as u8),
         }
     }
 }
@@ -320,13 +319,13 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
-            AS::Native.to_field::<F>().as_canonical_u64() as u16,
+            AS::Native as u16,
         )],
         AsmInstruction::PrintF(src) => vec![Instruction::phantom(
             PhantomDiscriminant(NativePhantom::Print as u16),
             i32_f(src),
             F::ZERO,
-            AS::Native.to_field::<F>().as_canonical_u64() as u16,
+            AS::Native as u16,
         )],
         AsmInstruction::PrintE(src) => (0..EF::D as i32)
             .map(|i| {
@@ -334,7 +333,7 @@ fn convert_print_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                     PhantomDiscriminant(NativePhantom::Print as u16),
                     i32_f(src + i * word_size_i32),
                     F::ZERO,
-                    AS::Native.to_field::<F>().as_canonical_u64() as u16,
+                    AS::Native as u16,
                 )
             })
             .collect(),
@@ -536,7 +535,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintInput as u16), F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::HintBits(src, len) => vec![
-            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native.to_field::<F>().as_canonical_u64() as u16)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
         ],
         AsmInstruction::StoreHintWordI(val, offset) => vec![inst(
             options.opcode_with_offset(NativeLoadStoreOpcode::SHINTW),
