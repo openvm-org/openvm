@@ -106,6 +106,8 @@ fn inst_large<F: PrimeField64>(
     }
 }
 
+pub const NATIVE_AS: u32 = 5;
+
 #[derive(Clone, Copy)]
 enum AS {
     Immediate,
@@ -116,7 +118,7 @@ impl AS {
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
             AS::Immediate => F::ZERO,
-            AS::Native => F::from_canonical_u32(5u32),
+            AS::Native => F::from_canonical_u32(NATIVE_AS),
         }
     }
 }
