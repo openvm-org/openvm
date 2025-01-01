@@ -37,7 +37,7 @@ tempfile = "3.14.0"
 bitcode = { workspace = true }
 
 [features]
-default = ["parallel", "mimalloc", "static-verifier"]
+default = ["parallel", "mimalloc"]
 parallel = ["openvm-stark-backend/parallel"]
 static-verifier = [
     "openvm-native-compiler/halo2-compiler",

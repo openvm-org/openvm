@@ -10,7 +10,7 @@ on:
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
-      - "crates/extensions/**"
+      - "extensions/**"
       - "benchmarks/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
