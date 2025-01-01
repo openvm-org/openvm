@@ -125,8 +125,8 @@ impl<C: Config> Builder<C> {
             var_count: self.var_count,
             felt_count: self.felt_count,
             ext_count: self.ext_count,
-            // Witness counts are only used when the target is a gnark circuit.  And sub-builders are
-            // not used when the target is a gnark circuit, so it's fine to set the witness counts to 0.
+            // Witness counts are only used when the target is a circuit.  And sub-builders are
+            // not used when the target is a circuit, so it is fine to set the witness counts to 0.
             witness_var_count: 0,
             witness_felt_count: 0,
             witness_ext_count: 0,
