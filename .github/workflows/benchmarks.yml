@@ -168,11 +168,13 @@ jobs:
             .[] |
             "\(.id)-${{ env.CURRENT_SHA }}.json"')
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
+          echo $json_file_list
 
           prev_json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
             "main-\(.id).json"')
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
+          echo $prev_json_file_list
 
           (echo "$json_files"; echo "$prev_json_files") | while read json_file; do
             if [ -z "$json_file" ]; then

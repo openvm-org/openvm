@@ -47,12 +47,13 @@ impl GithubSummary {
             .zip_eq(md_paths.iter())
             .map(|((aggregated, prev_aggregated), md_path)| {
                 let md_filename = md_path.file_name().unwrap().to_str().unwrap();
-                let mut row = aggregated.get_summary_row(md_filename);
+                let mut row = aggregated.get_summary_row(md_filename).unwrap();
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
-                    let prev_row = prev_aggregated.get_summary_row(md_filename);
-                    if row.name == prev_row.name {
-                        row.metrics.set_diff(&prev_row.metrics);
+                    if let Some(prev_row) = prev_aggregated.get_summary_row(md_filename) {
+                        if row.name == prev_row.name {
+                            row.metrics.set_diff(&prev_row.metrics);
+                        }
                     }
                 }
                 row
@@ -153,14 +154,11 @@ impl AggregateMetrics {
         })
     }
 
-    pub fn get_summary_row(&self, md_filename: &str) -> SummaryRow {
+    /// Returns `None` if no group for app is found.
+    pub fn get_summary_row(&self, md_filename: &str) -> Option<SummaryRow> {
         // A hacky way to determine the app name
-        let app_name = self
-            .by_group
-            .keys()
-            .find(|k| group_weight(k) == 0)
-            .expect("cannot find app name");
-        let app = self.get_single_summary(app_name).unwrap();
+        let app_name = self.by_group.keys().find(|k| group_weight(k) == 0)?;
+        let app = self.get_single_summary(app_name)?;
         let leaf = self.get_single_summary("leaf");
         let mut internals = Vec::new();
         let mut hgt = 0;
@@ -169,7 +167,7 @@ impl AggregateMetrics {
             hgt += 1;
         }
         let root = self.get_single_summary("root");
-        SummaryRow {
+        Some(SummaryRow {
             name: app_name.to_string(),
             md_filename: md_filename.to_string(),
             metrics: BenchSummaryMetrics {
@@ -178,6 +176,6 @@ impl AggregateMetrics {
                 internals,
                 root,
             },
-        }
+        })
     }
 }
