@@ -166,15 +166,15 @@ jobs:
         run: |
           json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
-            "\(.id)-${{ env.CURRENT_SHA }}.json/")
+            "\(.id)-${{ env.CURRENT_SHA }}.json"')
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
 
           prev_json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
-            "main-\(.id).json/")
+            "main-\(.id).json"')
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
 
-          while read json_file; do
+          (echo "$json_files"; echo "$prev_json_files") | while read json_file; do
             if [ -z "$json_file" ]; then
               continue
             fi
@@ -183,9 +183,10 @@ jobs:
               echo "Warning: Failed to download ${json_file}, skipping..."
               continue
             fi
-          done <<< "$json_files,$prev_json_files"
+          done
 
           openvm-prof --json-paths "${json_file_list}" \
+            --prev-json-paths "${prev_json_file_list}" \
             summary \
             --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}" \
             --summary-md-path summary.md
