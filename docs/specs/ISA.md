@@ -23,8 +23,8 @@ Instructions of the VM may access (read or write) memory
 as single cells or as a contiguous list of cells. Such a contiguous list is called a _block_, and
 a memory access (read/write) to a block is a _block access_.
 The architecture distinguishes between block accesses of different sizes as this has significant performance implications.
-The number of cells in a block access is restricted to powers of two, of which the following are supported: 1, 2, 4, 8, 16, 32, 64. Block accesses must be
-aligned, meaning that in a block access of size $N$, the starting pointer must be divisible by $N$ (as an integer).
+The number of cells in a block access is restricted to powers of two, of which the following are supported: 1, 2, 4, 8, 16, 32, 64. Block accesses do not need to be
+aligned, i.e., a block access of size $N$ can start from a pointer with value not dividing $N$ (as an integer).
 
 We also leave open the possibility in the future that different address spaces (see below) can be dedicated to handling
 data with certain block sizes, effectively declaring a word-size for that address space, but this is not currently
@@ -271,9 +271,9 @@ We use the same notation for `r32{c}(b) := i32([b:4]_1) + sign_extend(decompose(
 
 ### Hashes
 
-| Name           | Operands    | Description                                                                                                       |
-| -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`. |
+| Name           | Operands    | Description                                                                                                                                                              |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| KECCAK256_RV32 | `a,b,c,1,e` | `[r32{0}(a):32]_e = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_e)`. Performs memory accesses with block size `4`.                                                        |
 | SHA256_RV32    | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
 
 ### 256-bit Integers
@@ -329,23 +329,23 @@ An element in the ring of integers modulo `N`is represented as an unsigned big i
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
 
-| Name             | Operands    | Description                                                                                                                                                          |
-| ---------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADDMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 + [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
-| SUBMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 - [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
-| SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2`  |
-| MULMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 * [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                    |
-| DIVMOD_RV32\<N\> | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 / [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([r32{0}(c): N::NUM_LIMBS]_2, N) != 1`. |
-| SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2`  |
+| Name                      | Operands    | Description                                                                                                                                                                                                |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADDMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 + [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| SUBMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 - [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
+| MULMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 * [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| DIVMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 / [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([r32{0}(c): N::NUM_LIMBS]_2, N) != 1`.                                       |
+| SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
 
 ### Modular Branching
 
 The configuration of `N` is the same as above. For each instruction, the input elements `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian format with each limb having `LIMB_BITS` bits.
 
-| Name              | Operands    | Description                                                                                                                                                                                                                                                                                         |
-| ----------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
-| SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`   
+| Name                    | Operands    | Description                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
+| SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
 
 ### Short Weierstrass Elliptic Curve Arithmetic
 
@@ -363,11 +363,11 @@ r32_ec_point(a) -> EcPoint {
 }
 ```
 
-| Name           | Operands    | Description                                                                                                                                                                                                                                                                          |
-| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SW_ADD_NE\<C\> | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field. |
-| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)` |
-| SW_DOUBLE\<C\> | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                           |
+| Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
+| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
 | SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 
 ### Complex Extension Field
@@ -388,13 +388,13 @@ r32_fp2(a) -> Fp2 {
 }
 ```
 
-| Name       | Operands    | Description                                |
-| ---------- | ----------- | ------------------------------------------ |
-| ADD\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)` |
-| SUB\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)` |
+| Name                | Operands    | Description                                                                                                                                                                  |
+| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                   |
+| SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                   |
 | SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
-| MUL\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)` |
-| DIV\<Fp2\> | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)` |
+| MUL\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                   |
+| DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
 | SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
 ### Optimal Ate Pairing
@@ -427,25 +427,25 @@ In the instructions below, `d,e` may be any valid address space unless otherwise
 
 In some instructions below, `W` is a generic parameter for the block size.
 
-| Name           | Operands        | Description                                                                                                                                                                                                                                                                                 |
-| -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name           | Operands        | Description                                                                                                                                                                                                                                                                                                               |
+| -------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LOAD\<W\>      | `a,b,c,d,e`     | Set `[a:W]_d = [[c]_d + b:W]_e`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
 | STORE\<W\>     | `a,b,c,d,e`     | Set `[[c]_d + b:W]_e = [a:W]_d`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                                            |
-| LOAD2\<W\>     | `a,b,c,d,e,f,g` | Set `[a:W]_d = [[c]_d + [f]_d * g + b:W]_e`.                                                                                                                                                                                                                                                |
-| STORE2\<W\>    | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                |
-| JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                           |
-| BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
-| BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                            |
+| LOAD2\<W\>     | `a,b,c,d,e,f,g` | Set `[a:W]_d = [[c]_d + [f]_d * g + b:W]_e`.                                                                                                                                                                                                                                                                              |
+| STORE2\<W\>    | `a,b,c,d,e,f,g` | Set `[[c]_d + [f]_d * g + b:W]_e = [a:W]_d`.                                                                                                                                                                                                                                                                              |
+| JAL            | `a,b,c,d`       | Jump to address and link: set `[a]_d = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`. Here `d` must be non-zero.                                                                                                                                                                                                              |
+| BEQ\<W\>       | `a,b,c,d,e`     | If `[a:W]_d == [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                                                          |
+| BNE\<W\>       | `a,b,c,d,e`     | If `[a:W]_d != [b:W]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                                                          |
 | HINTSTORE\<W\> | `_,b,c,d,e`     | Set `[[c]_d + b:W]_e = next W elements from hint stream`. Both `d, e` must be non-zero.                                                                                                                                                                                                                                   |
-| PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                           |
+| PUBLISH        | `a,b,_,d,e`     | Set the user public output at index `[a]_d` to equal `[b]_e`. Invalid if `[a]_d` is greater than or equal to the configured length of user public outputs. Only valid when continuations are disabled.                                                                                                                    |
 | CASTF          | `a,b,_,d,e`     | Cast a field element represented as `u32` into four bytes in little-endian: Set `[a:4]_d` to the unique array such that `sum_{i=0}^3 [a + i]_d * 2^{8i} = [b]_e` where `[a + i]_d < 2^8` for `i = 0..2` and `[a + 3]_d < 2^6`. This opcode constrains that `[b]_e` must be at most 30-bits. Both `d, e` must be non-zero. |
 
 ### Native Field Arithmetic
 
 This instruction set does native field operations. Below, `e,f` may be any valid address space, `d` may be any valid non-zero address space. When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b` and `c`, respectively.
 
-| Name | Operands    | Description                                                 |
-| ---- | ----------- | ----------------------------------------------------------- |
+| Name | Operands      | Description                                               |
+| ---- | ------------- | --------------------------------------------------------- |
 | ADDF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e + [c]_f`.                              |
 | SUBF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e - [c]_f`.                              |
 | MULF | `a,b,c,d,e,f` | Set `[a]_d = [b]_e * [c]_f`.                              |
