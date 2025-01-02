@@ -195,6 +195,9 @@ jobs:
 
           COMMIT_URL=https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}
           BENCHMARK_WORKFLOW_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TMP_DIR=/tmp/benchmark-results/${{ env.CURRENT_SHA }}
+          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
+          mkdir -p ${TMP_DIR}
 
           # add metadata to markdown files
           source ci/scripts/utils.sh
@@ -225,6 +228,7 @@ jobs:
                 "$COMMIT_URL" \
                 "$BENCHMARK_WORKFLOW_URL"
             fi
+            cp "$md_file" "${TMP_DIR}/"
           done <<< "$json_files"
 
           echo "" >> summary.md
@@ -232,10 +236,7 @@ jobs:
           echo "" >> summary.md
           echo "[Benchmark Workflow]($BENCHMARK_WORKFLOW_URL)" >> summary.md
 
-          TMP_DIR=/tmp/benchmark-results/${{ env.CURRENT_SHA }}
-          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
-          mkdir -p ${TMP_DIR}
-          cp *.md ${TMP_DIR}/
+          cp summary.md ${TMP_DIR}/
 
       ##########################################################################
       # Update benchmark-results branch with summary upon a PR event           #
