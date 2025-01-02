@@ -166,20 +166,24 @@ jobs:
         run: |
           json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
             .[] |
-            "\(.id)-"' |
-            sed "s/$/${{ env.CURRENT_SHA }}.json/" |
-            sort)
+            "\(.id)-${{ env.CURRENT_SHA }}.json/")
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
+
+          prev_json_files=$(echo '${{ needs.create-matrix.outputs.matrix }}' | jq -r '
+            .[] |
+            "main-\(.id).json/")
+          prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
 
           while read json_file; do
             if [ -z "$json_file" ]; then
               continue
             fi
             echo "Downloading metrics for benchmark: $json_file"
-            s5cmd cp "${{ env.S3_METRICS_PATH }}/${json_file}" "${json_file}"
-          done <<< "$json_files"
-
-          echo "Benchmarks: ${json_file_list}"
+            if ! s5cmd cp "${{ env.S3_METRICS_PATH }}/${json_file}" "${json_file}"; then
+              echo "Warning: Failed to download ${json_file}, skipping..."
+              continue
+            fi
+          done <<< "$json_files,$prev_json_files"
 
           openvm-prof --json-paths "${json_file_list}" \
             summary \
@@ -278,7 +282,7 @@ jobs:
         with:
           script: |
             const fs = require('fs')
-            const newBenchmark = fs.readFileSync('${TMP_DIR}/summary.md', { encoding: 'utf8', flag: 'r' })
+            const newBenchmark = fs.readFileSync('${{ env.TMP_DIR }}/summary.md', { encoding: 'utf8', flag: 'r' })
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,

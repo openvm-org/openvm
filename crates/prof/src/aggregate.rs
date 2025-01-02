@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write};
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Labels, MetricDb};
+use crate::types::{Labels, MdTableCell, MetricDb};
 
 type MetricName = String;
 type MetricsByName = HashMap<MetricName, Vec<(f64, Labels)>>;
@@ -24,10 +24,10 @@ pub struct AggregateMetrics {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Stats {
-    pub sum: f64,
-    pub max: f64,
-    pub min: f64,
-    pub avg: f64,
+    pub sum: MdTableCell,
+    pub max: MdTableCell,
+    pub min: MdTableCell,
+    pub avg: MdTableCell,
     pub count: usize,
 }
 
@@ -40,27 +40,34 @@ impl Default for Stats {
 impl Stats {
     pub fn new() -> Self {
         Self {
-            sum: 0.0,
-            max: 0.0,
-            min: f64::MAX,
-            avg: 0.0,
+            sum: MdTableCell::default(),
+            max: MdTableCell::default(),
+            min: MdTableCell::new(f64::MAX, None),
+            avg: MdTableCell::default(),
             count: 0,
         }
     }
     pub fn push(&mut self, value: f64) {
-        self.sum += value;
+        self.sum.val += value;
         self.count += 1;
-        if value > self.max {
-            self.max = value;
+        if value > self.max.val {
+            self.max.val = value;
         }
-        if value < self.min {
-            self.min = value;
+        if value < self.min.val {
+            self.min.val = value;
         }
     }
 
     pub fn finalize(&mut self) {
         assert!(self.count != 0);
-        self.avg = self.sum / self.count as f64;
+        self.avg.val = self.sum.val / self.count as f64;
+    }
+
+    pub fn set_diff(&mut self, prev: &Self) {
+        self.sum.diff = Some(self.sum.val - prev.sum.val);
+        self.max.diff = Some(self.max.val - prev.max.val);
+        self.min.diff = Some(self.min.val - prev.min.val);
+        self.avg.diff = Some(self.avg.val - prev.avg.val);
     }
 }
 
@@ -132,6 +139,18 @@ pub(crate) fn group_weight(name: &str) -> usize {
 }
 
 impl AggregateMetrics {
+    pub fn set_diff(&mut self, prev: &Self) {
+        for (group_name, metrics) in self.by_group.iter_mut() {
+            if let Some(prev_metrics) = prev.by_group.get(group_name) {
+                for (metric_name, stats) in metrics.iter_mut() {
+                    if let Some(prev_stats) = prev_metrics.get(metric_name) {
+                        stats.set_diff(prev_stats);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn to_vec(&self) -> Vec<(String, HashMap<MetricName, Stats>)> {
         let mut group_names: Vec<_> = self.by_group.keys().collect();
         group_names.sort_by(|a, b| {
@@ -167,12 +186,10 @@ impl AggregateMetrics {
             for metric_name in names {
                 let summary = summaries.get(metric_name);
                 if let Some(summary) = summary {
-                    let [avg, sum, max, min] = [summary.avg, summary.sum, summary.max, summary.min]
-                        .map(MetricDb::format_number);
                     writeln!(
                         writer,
                         "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                        metric_name, avg, sum, max, min,
+                        metric_name, summary.avg, summary.sum, summary.max, summary.min,
                     )?;
                 }
             }

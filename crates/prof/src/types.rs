@@ -18,7 +18,7 @@ impl Metric {
 #[derive(Debug, Clone, Eq)]
 pub struct Labels(pub Vec<(String, String)>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct MdTableCell {
     pub val: f64,
     pub diff: Option<f64>,
@@ -96,7 +96,11 @@ impl std::fmt::Display for MdTableCell {
             let original_val = self.val - diff;
             let diff_percent = diff / original_val;
             let span = format!("{:+.0} [{:+.1}%]", diff, diff_percent * 100.0);
-            write!(f, "{}", format_cell(&div, Some(&span), Some(color)))
+            if diff_percent.abs() < 0.001 {
+                write!(f, "{}", format_cell(&div, None, None))
+            } else {
+                write!(f, "{}", format_cell(&div, Some(&span), Some(color)))
+            }
         } else {
             write!(f, "{}", format_cell(&div, None, None))
         }
@@ -109,7 +113,7 @@ fn format_cell(div: &str, span: Option<&str>, span_color: Option<&str>) -> Strin
             ret.push_str(&format!("<span style='color: {}'>({})</span>", color, span));
         }
     }
-    ret.push_str(&format!("<div style='text-align: right'> {} </div> ", div));
+    ret.push_str(&format!(" {div}"));
     ret
 }
 

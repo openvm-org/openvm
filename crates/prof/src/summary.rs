@@ -38,16 +38,24 @@ pub struct SingleSummaryMetrics {
 
 impl GithubSummary {
     pub fn new(
-        aggregated_metrics: &[AggregateMetrics],
+        aggregated_metrics: &[(AggregateMetrics, Option<AggregateMetrics>)],
         md_paths: &[PathBuf],
         benchmark_results_link: &str,
     ) -> Self {
         let rows = aggregated_metrics
             .iter()
             .zip_eq(md_paths.iter())
-            .map(|(aggregated, md_path)| {
+            .map(|((aggregated, prev_aggregated), md_path)| {
                 let md_filename = md_path.file_name().unwrap().to_str().unwrap();
-                aggregated.get_summary_row(md_filename)
+                let mut row = aggregated.get_summary_row(md_filename);
+                if let Some(prev_aggregated) = prev_aggregated {
+                    // md_filename doesn't matter
+                    let prev_row = prev_aggregated.get_summary_row(md_filename);
+                    if row.name == prev_row.name {
+                        row.metrics.set_diff(&prev_row.metrics);
+                    }
+                }
+                row
             })
             .collect();
 
@@ -68,7 +76,7 @@ impl GithubSummary {
         for row in self.rows.iter() {
             write!(
                 writer,
-                "| [{}]({}/individual/{}) |",
+                "| [{}]({}/{}) |",
                 row.name, self.benchmark_results_link, row.md_filename
             )?;
             row.metrics.write_partial_md_row(writer)?;
@@ -100,6 +108,19 @@ impl BenchSummaryMetrics {
 
         Ok(())
     }
+
+    pub fn set_diff(&mut self, prev: &Self) {
+        self.app.set_diff(&prev.app);
+        if let (Some(leaf), Some(prev_leaf)) = (&mut self.leaf, &prev.leaf) {
+            leaf.set_diff(prev_leaf);
+        }
+        for (internal, prev_internal) in self.internals.iter_mut().zip(prev.internals.iter()) {
+            internal.set_diff(prev_internal);
+        }
+        if let (Some(root), Some(prev_root)) = (&mut self.root, &prev.root) {
+            root.set_diff(prev_root);
+        }
+    }
 }
 
 impl SingleSummaryMetrics {
@@ -111,14 +132,20 @@ impl SingleSummaryMetrics {
         )?;
         Ok(())
     }
+
+    pub fn set_diff(&mut self, prev: &Self) {
+        self.cells_used.diff = Some(self.cells_used.val - prev.cells_used.val);
+        self.cycles.diff = Some(self.cycles.val - prev.cycles.val);
+        self.proof_time_ms.diff = Some(self.proof_time_ms.val - prev.proof_time_ms.val);
+    }
 }
 
 impl AggregateMetrics {
     pub fn get_single_summary(&self, name: &str) -> Option<SingleSummaryMetrics> {
         let stats = self.by_group.get(name)?;
-        let cells_used = MdTableCell::new(stats.get(CELLS_USED_LABEL)?.sum, None);
-        let cycles = MdTableCell::new(stats.get(CYCLES_LABEL)?.sum, None);
-        let proof_time_ms = MdTableCell::new(stats.get(PROOF_TIME_LABEL)?.sum, None);
+        let cells_used = stats.get(CELLS_USED_LABEL)?.sum;
+        let cycles = stats.get(CYCLES_LABEL)?.sum;
+        let proof_time_ms = stats.get(PROOF_TIME_LABEL)?.sum;
         Some(SingleSummaryMetrics {
             cells_used,
             cycles,
