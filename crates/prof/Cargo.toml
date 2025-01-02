@@ -12,5 +12,7 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-clap = { version = "4.0", features = ["derive"] }
+clap = { workspace = true, features = ["derive"] }
+eyre.workspace = true
+itertools.workspace = true
 num-format = "0.4"

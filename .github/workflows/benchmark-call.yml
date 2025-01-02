@@ -4,16 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       benchmark_name:
-        type: choice
+        type: string
         required: true
         description: The name of the benchmark to run
-        options:
-          - verify_fibair
-          - fibonacci
-          - revm_transfer
-          - regex
-          - base64_json
-          - fib_e2e
       instance_type:
         type: string
         required: false
@@ -104,9 +97,7 @@ on:
         description: Whether to run the e2e benchmark
 
 env:
-  S3_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  PUBLIC_S3_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
   FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
   CMD_ARGS: ""
   INPUT_ARGS: ""
@@ -128,7 +119,6 @@ jobs:
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -211,7 +201,7 @@ jobs:
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $CMD_ARGS $INPUT_ARGS
 
       ##########################################################################
-      # Generate result .md files and flamegraphs, store them in S3            #
+      # Store metric json file to S3                                           #
       ##########################################################################
       - name: Upload metric json and compute diff with previous to generate markdown
         run: |
@@ -220,9 +210,6 @@ jobs:
           echo "current_sha=${current_sha}" >> $GITHUB_ENV
 
           s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
-
-          source ci/scripts/utils.sh
-          generate_markdown $METRIC_PATH $METRIC_NAME ${{ env.S3_METRICS_PATH }} "."
 
       # - name: Install inferno-flamegraph
       #   run: cargo install inferno
@@ -235,82 +222,10 @@ jobs:
       #       echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
       #     fi
 
-      - name: Add benchmark metadata and upload markdown
-        id: add_metadata
-        run: |
-          source ci/scripts/utils.sh
-          add_metadata results.md ${{ inputs.max_segment_length }} ${{ inputs.instance_type }} ${{ inputs.memory_allocator }} ${{ github.repository }} ${{ github.run_id }}
-          s3_md_file="${METRIC_NAME}-${current_sha}.md"
-          s5cmd cp results.md "${{ env.S3_PATH }}/${s3_md_file}"
-
       ##########################################################################
-      # Update S3 with individual results upon a push event                    #
+      # Update s3 for latest main metrics upon a push event                    #
       ##########################################################################
       - name: Update latest main result in s3
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          s5cmd cp "${{ env.S3_PATH }}/${METRIC_NAME}-${{ env.current_sha }}.md" "${{ env.S3_PATH }}/main-${METRIC_NAME}.md"
-          if [[ -f $METRIC_PATH ]]; then
-            s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
-          fi
-
-      ##########################################################################
-      # Update benchmark-results with individual results                       #
-      ##########################################################################
-      - uses: actions/checkout@v4
-        with:
-          ref: benchmark-results
-
-      - name: Set up git
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      - name: Set github pages path for dispatch
-        run: |
-          BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
-          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
-
-      - name: Set github pages path for PR
-        if: github.event_name == 'pull_request'
-        run: |
-          BENCHMARK_RESULTS_PATH="benchmarks-pr/${{ github.event.pull_request.number }}/individual"
-          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
-
-      - name: Set github pages path for push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          BENCHMARK_RESULTS_PATH="benchmarks/individual"
-          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
-
-      - name: Update PR github pages with new bench results
-        if: github.event.pull_request.head.repo.fork == false # forks do not have write access
-        run: |
-          mkdir -p ${BENCHMARK_RESULTS_PATH}
-          s3_md_file="${METRIC_NAME}-${current_sha}.md"
-          s5cmd cp "${{ env.S3_PATH }}/${s3_md_file}" ${BENCHMARK_RESULTS_PATH}/${s3_md_file}
-          git add ${BENCHMARK_RESULTS_PATH}/${s3_md_file}
-          git commit --allow-empty -m "Update benchmark result at ${BENCHMARK_RESULTS_PATH}/${s3_md_file}"
-
-          MAX_RETRIES=10
-          RETRY_DELAY=5
-          ATTEMPT=0
-          SUCCESS=false
-
-          while [ $ATTEMPT -lt $MAX_RETRIES ]; do
-              echo "Attempt $((ATTEMPT + 1)) to push of $MAX_RETRIES..."
-              git fetch origin benchmark-results
-              git merge origin/benchmark-results --no-edit
-              if git push origin benchmark-results; then
-                  SUCCESS=true
-                  break
-              else
-                  echo "Push failed. Retrying in $RETRY_DELAY seconds..."
-                  sleep $RETRY_DELAY
-                  ATTEMPT=$((ATTEMPT + 1))
-              fi
-          done
-          if [ "$SUCCESS" = false ]; then
-              echo "PUSH_FAILED"
-              exit 1
-          fi
+          s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
