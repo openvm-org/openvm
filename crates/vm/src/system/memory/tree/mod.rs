@@ -1,14 +1,12 @@
 pub mod public_values;
 
 use std::{collections::BTreeMap, sync::Arc};
-use std::collections::btree_map::Entry;
 use openvm_stark_backend::p3_field::PrimeField32;
 use MemoryNode::*;
 
 use super::manager::dimensions::MemoryDimensions;
 use crate::{
     arch::hasher::{Hasher, HasherChip},
-    system::memory::Equipartition,
 };
 use crate::system::memory::MemoryImage;
 

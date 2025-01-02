@@ -32,7 +32,7 @@ use crate::system::{
     memory::{
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::MemoryBus,
-        Equipartition, MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET, CHUNK,
+        MemoryController, MemoryControllerRef, BOUNDARY_AIR_OFFSET,
         MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,

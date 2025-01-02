@@ -65,7 +65,7 @@ impl AppExecutionCommit<F> {
 
         let init_memory_commit = MemoryNode::tree_from_memory(
             memory_dimensions,
-            &memory_image_to_memory(app_exe.exe.init_memory.clone()),
+            &app_exe.exe.init_memory.clone().into_iter().collect(),
             &hasher,
         )
         .hash();

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::hasher::Hasher,
-    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Equipartition},
+    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode},
 };
 use crate::system::memory::manager::memory::Address;
 use crate::system::memory::MemoryImage;
@@ -150,7 +150,7 @@ mod tests {
             hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
             SystemConfig,
         },
-        system::memory::{memory_image_to_memory, tree::MemoryNode, CHUNK},
+        system::memory::{tree::MemoryNode, CHUNK},
     };
 
     type F = BabyBear;

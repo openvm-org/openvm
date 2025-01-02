@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::VmChipWrapper,
-    system::memory::{MemoryControllerRef, OfflineMemory},
+    system::memory::{OfflineMemory},
 };
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;

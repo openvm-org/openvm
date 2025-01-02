@@ -18,11 +18,10 @@ use crate::{
     arch::{instructions::*, ExecutionState, InstructionExecutor},
     metrics::cycle_tracker::CycleTracker,
     system::{
-        memory::{Equipartition, CHUNK},
         poseidon2::Poseidon2PeripheryChip,
     },
 };
-use crate::system::memory::{Memory, MemoryImage};
+use crate::system::memory::MemoryImage;
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;

@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::system::memory::{MemoryWriteRecord, RecordId};
+use openvm_circuit::system::memory::{RecordId};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},

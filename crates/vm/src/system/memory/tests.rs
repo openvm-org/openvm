@@ -1,4 +1,3 @@
-use crate::system::memory::CHUNK;
 use crate::system::memory::MemoryImage;
 use crate::system::memory::{OfflineMemory, RecordId};
 use std::{
@@ -7,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::system::memory::memory::MemoryRecord;
 use itertools::Itertools;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -31,8 +29,7 @@ use rand::{
 };
 
 use super::{
-    merkle::DirectCompressionBus, Equipartition, MemoryAuxColsFactory, MemoryController,
-    MemoryReadRecord,
+    merkle::DirectCompressionBus, MemoryController,
 };
 use crate::{
     arch::{
@@ -43,7 +40,7 @@ use crate::{
         memory::{
             merkle::MemoryMerkleBus,
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryWriteRecord,
+            MemoryAddress,
         },
         poseidon2::Poseidon2PeripheryChip,
     },
@@ -173,14 +170,14 @@ fn generate_trace<F: PrimeField32>(
 
         match (record.data.len(), &record.prev_data) {
             (1, &None) => {
-                row.write_1_aux = aux_factory.make_write_aux_cols(&record);
-                row.data_1 = record.data.try_into().unwrap();
-                row.is_write_1 = F::ONE;
-            }
-            (1, &Some(_)) => {
                 row.read_1_aux = aux_factory.make_read_aux_cols(&record);
                 row.data_1 = record.data.try_into().unwrap();
                 row.is_read_1 = F::ONE;
+            }
+            (1, &Some(_)) => {
+                row.write_1_aux = aux_factory.make_write_aux_cols(&record);
+                row.data_1 = record.data.try_into().unwrap();
+                row.is_write_1 = F::ONE;
             }
             (4, &None) => {
                 row.read_4_aux = aux_factory.make_read_aux_cols(&record);
@@ -222,10 +219,14 @@ fn test_memory_controller() {
     let memory_requester_air = Arc::new(MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
     });
-    let offline_memory = memory_controller.offline_memory();
-    let memory_requester_trace = generate_trace(records, &offline_memory.lock().unwrap());
 
     memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+
+    let memory_requester_trace = {
+        let offline_memory = memory_controller.offline_memory();
+        let trace = generate_trace(records, &offline_memory.lock().unwrap());
+        trace
+    };
 
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
@@ -257,8 +258,6 @@ fn test_memory_controller_persistent() {
 
     let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_controller, &mut rng);
-    let offline_memory = memory_controller.offline_memory();
-    let memory_requester_trace = generate_trace(records, &offline_memory.lock().unwrap());
 
     let memory_requester_air = MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),
@@ -268,6 +267,13 @@ fn test_memory_controller_persistent() {
         Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
 
     memory_controller.finalize(Some(&mut poseidon_chip));
+
+    let memory_requester_trace = {
+        let offline_memory = memory_controller.offline_memory();
+        let trace = generate_trace(records, &offline_memory.lock().unwrap());
+        trace
+    };
+
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     air_proof_inputs.push(AirProofInput::simple_no_pis(
         Arc::new(memory_requester_air),

@@ -24,7 +24,6 @@ use openvm_rv32im_circuit::{
     Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::*;

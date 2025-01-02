@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use branch_native_adapter::BranchNativeAdapterChip;
 use derive_more::derive::From;
@@ -24,7 +23,6 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

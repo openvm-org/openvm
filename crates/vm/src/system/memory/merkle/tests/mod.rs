@@ -2,7 +2,7 @@ use crate::system::memory::MemoryImage;
 use std::{
     array,
     borrow::BorrowMut,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet},
     sync::Arc,
 };
 
@@ -49,10 +49,11 @@ fn test<const CHUNK: usize>(
     let merkle_bus = MemoryMerkleBus(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
-    for (&(address_space, label), value) in final_memory {
+    for (&(address_space, pointer), value) in final_memory {
+        let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
         assert!(label < (1 << address_height));
-        if initial_memory.get(&(address_space, label)) != Some(value) {
+        if initial_memory.get(&(address_space, pointer)) != Some(value) {
             assert!(touched_labels.contains(&(address_space, label)));
         }
     }
@@ -60,7 +61,7 @@ fn test<const CHUNK: usize>(
         assert!(final_memory.contains_key(key));
     }
     for &(address_space, label) in touched_labels.iter() {
-        assert!(final_memory.contains_key(&(address_space, label)));
+        assert!(final_memory.contains_key(&(address_space, label * CHUNK as u32)));
     }
 
     let mut hash_test_chip = HashTestChip::new();
@@ -114,7 +115,7 @@ fn test<const CHUNK: usize>(
     };
 
     for (address_space, address_label) in touched_labels {
-        let initial_values = array::from_fn(|i| initial_memory.get(&(address_space, i as u32)).copied().unwrap_or_default());
+        let initial_values = array::from_fn(|i| initial_memory.get(&(address_space, address_label * CHUNK as u32 + i as u32)).copied().unwrap_or_default());
         let as_label = address_space - as_offset;
         interaction(
             InteractionType::Send,
@@ -188,12 +189,14 @@ fn random_test<const CHUNK: usize>(
             let is_touched = next_u32() & 1 == 0;
             let value_changes = next_u32() & 1 == 0;
 
+            let base_ptr = label * CHUNK as u32;
+
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
                 for i in 0..CHUNK {
                     let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                    initial_memory.insert((address_space, label + i as u32), value);
-                    final_memory.insert((address_space, label + i as u32), value);
+                    initial_memory.insert((address_space, base_ptr + i as u32), value);
+                    final_memory.insert((address_space, base_ptr + i as u32), value);
                 }
             }
             if is_touched && num_touched_addresses != 0 {
@@ -202,7 +205,7 @@ fn random_test<const CHUNK: usize>(
                 if value_changes || !is_initial {
                     for i in 0..CHUNK {
                         let value = BabyBear::from_canonical_u32(next_u32() % max_value);
-                        final_memory.insert((address_space, label + i as u32), value);
+                        final_memory.insert((address_space, base_ptr + i as u32), value);
                     }
                 }
             }
@@ -223,7 +226,7 @@ fn random_test<const CHUNK: usize>(
 
 #[test]
 fn expand_test_0() {
-    random_test::<DEFAULT_CHUNK>(2, 3000, 2, 3);
+    random_test::<DEFAULT_CHUNK>(3, 3000, 2, 3);
 }
 
 #[test]

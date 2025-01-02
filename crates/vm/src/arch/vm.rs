@@ -18,11 +18,11 @@ use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_memory, merkle::MemoryMerklePvs, Equipartition, CHUNK},
+        memory::{merkle::MemoryMerklePvs, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
-use crate::system::memory::{Memory, MemoryImage};
+use crate::system::memory::MemoryImage;
 
 /// VM memory state for continuations.
 pub type VmMemoryState<F> = MemoryImage<F>;

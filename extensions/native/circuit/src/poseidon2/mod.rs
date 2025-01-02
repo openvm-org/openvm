@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
-        memory::{MemoryController, MemoryControllerRef, OfflineMemory},
+        memory::{MemoryController, OfflineMemory},
         program::ProgramBus,
     },
 };

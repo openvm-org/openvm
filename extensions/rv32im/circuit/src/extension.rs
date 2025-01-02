@@ -21,7 +21,6 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 

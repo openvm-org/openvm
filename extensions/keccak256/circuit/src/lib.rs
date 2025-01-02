@@ -24,7 +24,7 @@ use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
     system::{
         memory::{
-            MemoryController, MemoryControllerRef, MemoryWriteRecord, OfflineMemory, RecordId,
+            MemoryController, MemoryControllerRef, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },

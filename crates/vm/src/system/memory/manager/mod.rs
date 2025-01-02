@@ -2,7 +2,6 @@ use std::{array, cell::RefCell, collections::BTreeMap, iter, marker::PhantomData
 use std::sync::Mutex;
 use getset::Getters;
 use memory::MemoryRecord;
-pub use memory::{MemoryReadRecord, MemoryWriteRecord, RecordId};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
     is_zero::IsZeroSubAir,
@@ -20,7 +19,6 @@ use openvm_stark_backend::{
     rap::AnyRap,
     Chip, ChipUsageGetter,
 };
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
@@ -32,14 +30,6 @@ use crate::{
         MemoryWriteAuxCols, AUX_LEN,
     },
 };
-
-pub mod dimensions;
-mod interface;
-pub(super) mod memory;
-pub use memory::MemoryImage;
-
-pub(crate) use crate::system::memory::manager::memory::Memory;
-pub use crate::system::memory::manager::memory::OfflineMemory;
 use crate::system::memory::{
     adapter::AccessAdapterInventory,
     dimensions::MemoryDimensions,
@@ -48,8 +38,15 @@ use crate::system::memory::{
     persistent::PersistentBoundaryChip,
     tree::MemoryNode,
 };
-use crate::system::memory::adapter::AccessAdapterRecord;
 use crate::system::memory::manager::memory::{MemoryLogEntry};
+
+pub mod dimensions;
+mod interface;
+pub(super) mod memory;
+pub(crate) use crate::system::memory::manager::memory::Memory;
+pub use memory::MemoryImage;
+pub use memory::OfflineMemory;
+pub use memory::{MemoryReadRecord, MemoryWriteRecord, RecordId};
 
 pub const CHUNK: usize = 8;
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -227,6 +224,7 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: Arc<VariableRangeCheckerChip>,
     ) -> Self {
         let range_checker_bus = range_checker.bus();
+        let initial_memory = MemoryImage::default();
         Self {
             memory_bus,
             mem_config,
@@ -239,7 +237,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: Memory::new(),
-            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(FxHashMap::default(), 1, memory_bus, range_checker.clone(), mem_config.clk_max_bits))),
+            offline_memory: Arc::new(Mutex::new(OfflineMemory::new(initial_memory, 1, memory_bus, range_checker.clone(), mem_config.clk_max_bits))),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -260,6 +258,7 @@ impl<F: PrimeField32> MemoryController<F> {
         compression_bus: DirectCompressionBus,
         initial_memory: MemoryImage<F>,
     ) -> Self {
+        // TODO[zach]: Avoid cloning initial_memory.
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
@@ -329,6 +328,9 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
+        let mut offline_memory = self.offline_memory.lock().unwrap();
+        offline_memory.set_initial_memory(memory.clone());
+        
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 if !memory.is_empty() {
@@ -365,11 +367,6 @@ impl<F: PrimeField32> MemoryController<F> {
 
         let (record_id, values) =
             self.memory.read::<N>(address_space_u32, ptr_u32);
-
-        for i in 0..N as u32 {
-            self.interface_chip
-                .touch_address(address_space_u32, ptr_u32 + i);
-        }
 
         (record_id, values)
     }
@@ -415,11 +412,6 @@ impl<F: PrimeField32> MemoryController<F> {
         );
 
         self.memory.write(address_space_u32, ptr_u32, data)
-
-        // for i in 0..N as u32 {
-        //     self.interface_chip
-        //         .touch_address(address_space_u32, ptr_u32 + i);
-        // }
     }
 
     pub fn aux_cols_factory(&self) -> MemoryAuxColsFactory<F> {
@@ -432,7 +424,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn increment_timestamp(&mut self) {
-        self.memory.increment_timestamp();
+        self.memory.increment_timestamp_by(1);
     }
 
     pub fn increment_timestamp_by(&mut self, change: u32) {
@@ -440,24 +432,51 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn increase_timestamp_to(&mut self, timestamp: u32) {
-        self.memory
-            .increment_timestamp_by(timestamp - self.memory.timestamp());
+        self.memory.increase_timestamp_to(timestamp);
     }
 
     pub fn timestamp(&self) -> u32 {
         self.memory.timestamp()
     }
 
-    fn build_offline_memory(&self) -> OfflineMemory<F> {
-        // let mut offline_memory = OfflineMemory::new(self.initial_memory);
-        for entry in &self.memory.log {
+    fn replay_access_log(&mut self) {
+        let mut offline_memory = self.offline_memory.lock().unwrap();
+        let log = mem::take(&mut self.memory.log);
+        for entry in log {
             match entry {
-                MemoryLogEntry::Read { .. } => {}
-                MemoryLogEntry::Write { .. } => {}
-            }
-            // self.access_adapters.add_record(record);
+                MemoryLogEntry::Read {
+                    address_space, pointer, len
+                } => {
+                    if address_space != 0 {
+                        for i in 0..len as u32 {
+                            self.interface_chip
+                                .touch_address(address_space, pointer + i);
+                        }
+                    }
+                    let adapter_records = offline_memory.read(address_space, pointer, len);
+                    for record in adapter_records {
+                        self.access_adapters.add_record(record);
+                    }
+                },
+                MemoryLogEntry::Write {
+                    address_space,
+                    pointer,
+                    data,
+                } => {
+                    if address_space != 0 {
+                        for i in 0..data.len() as u32 {
+                            self.interface_chip
+                                .touch_address(address_space, pointer + i);
+                        }
+                    }
+                    let adapter_records = offline_memory.write(address_space, pointer, data);
+                    for record in adapter_records {
+                        self.access_adapters.add_record(record);
+                    }
+                },
+                MemoryLogEntry::IncrementTimestampBy(amount) => offline_memory.increment_timestamp_by(amount),
+            };
         }
-        todo!()
     }
 
     /// Returns the final memory state if persistent.
@@ -469,11 +488,15 @@ impl<F: PrimeField32> MemoryController<F> {
             panic!("Cannot finalize more than once");
         }
 
-        let mut offline_memory = self.build_offline_memory();
+        self.replay_access_log();
+        let mut offline_memory = self.offline_memory.lock().unwrap();
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = offline_memory.finalize::<1>();
+                for record in records {
+                    self.access_adapters.add_record(record);
+                }
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
                 // None
@@ -486,6 +509,9 @@ impl<F: PrimeField32> MemoryController<F> {
                 let hasher = hasher.unwrap();
 
                 let (final_partition, records) = offline_memory.finalize::<CHUNK>();
+                for record in records {
+                    self.access_adapters.add_record(record);
+                }
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
@@ -694,8 +720,9 @@ impl<F: PrimeField32> MemoryAuxColsFactory<F> {
         &self,
         write: &MemoryRecord<F>,
     ) -> MemoryWriteAuxCols<F, N> {
+        let prev_data = write.prev_data.clone().unwrap();
         MemoryWriteAuxCols::new(
-            write.prev_data.clone().unwrap().try_into().unwrap(),
+            prev_data.try_into().unwrap(),
             F::from_canonical_u32(write.prev_timestamp),
             self.generate_timestamp_lt_cols(write.prev_timestamp, write.timestamp),
         )

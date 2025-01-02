@@ -1,20 +1,20 @@
 use std::{array, cmp::max, fmt::Debug};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::{FxHashMap, FxHashSet};
 use openvm_circuit_primitives::assert_less_than::AssertLtSubAir;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerChip};
-use crate::system::memory::{adapter::{AccessAdapterRecord, AccessAdapterRecordKind}, Equipartition, MemoryAuxColsFactory, TimestampedEquipartition, TimestampedValues};
+use crate::system::memory::{adapter::{AccessAdapterRecord, AccessAdapterRecordKind}, MemoryAuxColsFactory, TimestampedEquipartition, TimestampedValues};
 use crate::system::memory::offline_checker::{MemoryBridge, MemoryBus};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemoryRecord<T> {
     pub address_space: T,
     pub pointer: T,
     pub timestamp: u32,
     pub prev_timestamp: u32,
     pub data: Vec<T>,
+    /// None if a read.
     pub prev_data: Option<Vec<T>>,
 }
 
@@ -40,6 +40,7 @@ pub enum MemoryLogEntry<T> {
         pointer: u32,
         data: Vec<T>,
     },
+    IncrementTimestampBy(u32),
 }
 
 /// Represents a single or batch memory write operation.
@@ -103,14 +104,14 @@ pub struct OfflineMemory<F> {
     memory_bus: MemoryBus,
     range_checker: Arc<VariableRangeCheckerChip>,
 
-    log: Vec<MemoryRecord<F>>,
+    log: Vec<Option<MemoryRecord<F>>>,
 }
 
 impl<F: PrimeField32> OfflineMemory<F> {
     /// Creates a new partition with the given initial block size.
     ///
     /// Panics if the initial block size is not a power of two.
-    pub fn new(initial_memory: FxHashMap<(u32, u32), F>, initial_block_size: usize, memory_bus: MemoryBus, range_checker: Arc<VariableRangeCheckerChip>, timestamp_max_bits: usize) -> Self {
+    pub fn new(initial_memory: MemoryImage<F>, initial_block_size: usize, memory_bus: MemoryBus, range_checker: Arc<VariableRangeCheckerChip>, timestamp_max_bits: usize) -> Self {
         assert!(initial_block_size.is_power_of_two());
 
         Self {
@@ -123,6 +124,11 @@ impl<F: PrimeField32> OfflineMemory<F> {
             range_checker,
             log: vec![],
         }
+    }
+
+    pub fn set_initial_memory(&mut self, initial_memory: MemoryImage<F>) {
+        assert_eq!(self.timestamp, INITIAL_TIMESTAMP + 1);
+        self.data = initial_memory;
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -144,81 +150,91 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
     /// Increments the current timestamp by a specified delta and returns the new value.
     pub fn increment_timestamp_by(&mut self, delta: u32) {
+        self.log.push(None);
         self.timestamp += delta;
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
-    pub fn write<const N: usize>(
+    pub fn write(
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: [F; N],
-    ) -> (MemoryWriteRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
-        assert!(N.is_power_of_two());
+        values: Vec<F>,
+    ) -> Vec<AccessAdapterRecord<F>> {
+        let len = values.len();
+        assert!(len.is_power_of_two());
+        assert_ne!(address_space, 0);
 
         let mut adapter_records = vec![];
         let prev_timestamp =
-            self.access_updating_timestamp(address_space, pointer, N, &mut adapter_records);
+            self.access_updating_timestamp(address_space, pointer, len, &mut adapter_records);
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let prev_data = array::from_fn(|i| {
+        let prev_data = (0..len).map(|i| {
             self.data
                 .insert((address_space, pointer + i as u32), values[i])
                 .unwrap_or(F::ZERO)
-        });
+        }).collect();
 
-        let record = MemoryWriteRecord {
+        let record = MemoryRecord {
             address_space: F::from_canonical_u32(address_space),
             pointer: F::from_canonical_u32(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
             data: values,
-            prev_data,
+            prev_data: Some(prev_data),
         };
-
-        // self.log.push(MemoryLog::Write(MemoryRecord {
-        //     address_space: F::from_canonical_u32(address_space),
-        //     pointer: F::from_canonical_u32(pointer),
-        //     timestamp: self.timestamp,
-        //     prev_timestamp,
-        //     data: values.to_vec(),
-        // }));
-
+        self.log.push(Some(record));
         self.timestamp += 1;
-        (record, adapter_records)
+        adapter_records
     }
 
     /// Reads an array of values from the memory at the specified address space and start index.
-    pub fn read<const N: usize>(
+    pub fn read(
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> (MemoryReadRecord<F, N>, Vec<AccessAdapterRecord<F>>) {
-        assert!(N.is_power_of_two());
+        len: usize,
+    ) -> Vec<AccessAdapterRecord<F>> {
+        assert!(len.is_power_of_two());
+
+        if address_space == 0 {
+            let pointer = F::from_canonical_u32(pointer);
+            self.log.push(Some(MemoryRecord {
+                address_space: F::ZERO,
+                pointer,
+                timestamp: self.timestamp,
+                prev_timestamp: 0,
+                data: vec![pointer],
+                prev_data: None,
+            }));
+            self.timestamp += 1;
+            return vec![];
+        }
 
         let mut adapter_records = vec![];
         let prev_timestamp =
-            self.access_updating_timestamp(address_space, pointer, N, &mut adapter_records);
+            self.access_updating_timestamp(address_space, pointer, len, &mut adapter_records);
 
         debug_assert!(prev_timestamp < self.timestamp);
 
-        let values = self.range_array::<N>(address_space, pointer);
+        let values = self.range_vec(address_space, pointer, len);
 
-        let record = MemoryReadRecord {
+        self.log.push(Some(MemoryRecord {
             address_space: F::from_canonical_u32(address_space),
             pointer: F::from_canonical_u32(pointer),
             timestamp: self.timestamp,
             prev_timestamp,
             data: values,
-        };
-
+            prev_data: None,
+        }));
         self.timestamp += 1;
-        (record, adapter_records)
+        adapter_records
     }
 
     pub fn record_by_id(&self, id: RecordId) -> &MemoryRecord<F> {
-        &self.log[id.0]
+        self.log[id.0].as_ref().unwrap()
     }
 
     pub fn finalize<const N: usize>(
@@ -476,9 +492,8 @@ pub type MemoryImage<F> = FxHashMap<Address, F>;
 #[derive(Debug, Clone)]
 pub struct Memory<F> {
     pub(super) data: FxHashMap<Address, F>,
-    timestamp: u32,
-
     pub(super) log: Vec<MemoryLogEntry<F>>,
+    timestamp: u32,
 }
 
 impl<F: PrimeField32> Memory<F> {
@@ -499,26 +514,8 @@ impl<F: PrimeField32> Memory<F> {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.log.is_empty()
-    }
-
-    pub fn timestamp(&self) -> u32 {
-        self.timestamp
-    }
-
     fn last_record_id(&self) -> RecordId {
         RecordId(self.log.len() - 1)
-    }
-
-    /// Increments the current timestamp by one and returns the new value.
-    pub fn increment_timestamp(&mut self) {
-        self.increment_timestamp_by(1)
-    }
-
-    /// Increments the current timestamp by a specified delta and returns the new value.
-    pub fn increment_timestamp_by(&mut self, delta: u32) {
-        self.timestamp += delta;
     }
 
     /// Writes an array of values to the memory at the specified address space and start index.
@@ -543,15 +540,6 @@ impl<F: PrimeField32> Memory<F> {
             pointer,
             data: values.to_vec(),
         });
-
-        // self.log.push(MemoryLog::Write(MemoryRecord {
-        //     address_space: F::from_canonical_u32(address_space),
-        //     pointer: F::from_canonical_u32(pointer),
-        //     timestamp: self.timestamp,
-        //     prev_timestamp,
-        //     data: values.to_vec(),
-        // }));
-
         self.timestamp += 1;
 
         (self.last_record_id(), prev_data)
@@ -571,15 +559,31 @@ impl<F: PrimeField32> Memory<F> {
             len: N,
         });
 
-        self.timestamp += 1;
-
         let values = if address_space == 0 {
             assert_eq!(N, 1, "cannot batch read from address space 0");
             [F::from_canonical_u32(pointer); N]
         } else {
             self.range_array::<N>(address_space, pointer)
         };
+        self.timestamp += 1;
         (self.last_record_id(), values)
+    }
+
+    pub fn increment_timestamp_by(&mut self, amount: u32) {
+        self.timestamp += amount;
+        self.log.push(MemoryLogEntry::IncrementTimestampBy(amount))
+    }
+
+    pub fn increase_timestamp_to(&mut self, amount: u32) {
+        if amount == self.timestamp {
+            return
+        }
+        assert!(amount > self.timestamp);
+        self.increment_timestamp_by(amount - self.timestamp);
+    }
+
+    pub fn timestamp(&self) -> u32 {
+        self.timestamp
     }
 
     pub fn get(&self, address_space: u32, pointer: u32) -> F {
@@ -599,18 +603,17 @@ impl<F: PrimeField32> Memory<F> {
 
 #[cfg(test)]
 mod tests {
+    use crate::system::memory::manager::MemoryRecord;
     use std::sync::Arc;
     use crate::system::memory::offline_checker::MemoryBus;
-    use openvm_stark_backend::air_builders::symbolic::dag::SymbolicExpressionNode::Variable;
     use crate::system::memory::{MemoryImage, OfflineMemory};
     use openvm_stark_backend::p3_field::AbstractField;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use test_log::env_logger::init;
     use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use super::{BlockData, Memory};
     use crate::system::memory::{
         adapter::{AccessAdapterRecord, AccessAdapterRecordKind},
-        Equipartition, MemoryReadRecord, MemoryWriteRecord, TimestampedValues,
+        TimestampedValues,
     };
 
     macro_rules! bb {
@@ -636,7 +639,7 @@ mod tests {
         type F = BabyBear;
 
         let initial_memory = MemoryImage::default();
-        let mut partition = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
+        let mut partition = OfflineMemory::<F>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
         assert_eq!(
             partition.block_containing(0, 13),
             BlockData {
@@ -691,29 +694,12 @@ mod tests {
     }
 
     #[test]
-    fn test_write_read_initial_block_len_8() {
-        let initial_memory = MemoryImage::default();
-        let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
-        let address_space = 1;
-
-        memory.write(address_space, 0, bba![1, 2, 3, 4]);
-
-        let (record, _) = memory.read::<2>(address_space, 0);
-        assert_eq!(record.data, bba![1, 2]);
-
-        memory.write(address_space, 2, bba![100]);
-
-        let (record, _) = memory.read::<4>(address_space, 0);
-        assert_eq!(record.data, bba![1, 2, 100, 4]);
-    }
-
-    #[test]
     fn test_records_initial_block_len_1() {
         let initial_memory = MemoryImage::default();
         // TODO: Ideally we don't need to instantiate all this stuff since we are just testing the data structure.
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 1, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
 
-        let (write_record, adapter_records) = memory.write(1, 0, bba![1, 2, 3, 4]);
+        let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
 
         // Above write first causes merge of [0:1] and [1:2] into [0:2].
         assert_eq!(
@@ -758,35 +744,39 @@ mod tests {
             }
         );
         // At time 1 we write [0:4].
+        let write_record = &memory.log[memory.log.len() - 1];
         assert_eq!(
             write_record,
-            MemoryWriteRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 1,
                 prev_timestamp: 0,
-                data: bba![1, 2, 3, 4],
-                prev_data: bba![0, 0, 0, 0],
+                data: bbvec![1, 2, 3, 4],
+                prev_data: Some(bbvec![0, 0, 0, 0]),
             }
         );
         assert_eq!(memory.timestamp(), 2);
 
-        let (read_record, adapter_records) = memory.read::<4>(1, 0);
+        let adapter_records = memory.read(1, 0, 4);
+        let read_record = &memory.log[memory.log.len() - 1];
         // At time 2 we read [0:4].
         assert_eq!(adapter_records.len(), 0);
         assert_eq!(
             read_record,
-            MemoryReadRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 2,
                 prev_timestamp: 1,
-                data: bba![1, 2, 3, 4],
+                data: bbvec![1, 2, 3, 4],
+                prev_data: None,
             }
         );
         assert_eq!(memory.timestamp(), 3);
 
-        let (read_record, adapter_records) = memory.write::<2>(1, 0, bba![10, 11]);
+        let adapter_records = memory.write(1, 0, bbvec![10, 11]);
+        let write_record = &memory.log[memory.log.len() - 1];
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
@@ -802,18 +792,19 @@ mod tests {
 
         // At time 3 we write [10, 11] into [0, 2].
         assert_eq!(
-            read_record,
-            MemoryWriteRecord {
+            write_record,
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 3,
                 prev_timestamp: 2,
-                data: bba![10, 11],
-                prev_data: bba![1, 2],
+                data: bbvec![10, 11],
+                prev_data: Some(bbvec![1, 2]),
             }
         );
 
-        let (read_record, adapter_records) = memory.read::<4>(1, 0);
+        let adapter_records = memory.read(1, 0, 4);
+        let read_record = &memory.log[memory.log.len() - 1];
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
             adapter_records[0],
@@ -831,12 +822,13 @@ mod tests {
         // At time 9 we read [0:4].
         assert_eq!(
             read_record,
-            MemoryReadRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 4,
                 prev_timestamp: 3,
-                data: bba![10, 11, 3, 4],
+                data: bbvec![10, 11, 3, 4],
+                prev_data: None,
             }
         );
     }
@@ -846,7 +838,8 @@ mod tests {
         let initial_memory = MemoryImage::default();
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
 
-        let (write_record, adapter_records) = memory.write(1, 0, bba![1, 2, 3, 4]);
+        let adapter_records = memory.write(1, 0, bbvec![1, 2, 3, 4]);
+        let write_record = memory.log.last().unwrap();
 
         // Above write first causes split of [0:8] into [0:4] and [4:8].
         assert_eq!(adapter_records.len(), 1);
@@ -863,33 +856,36 @@ mod tests {
         // At time 1 we write [0:4].
         assert_eq!(
             write_record,
-            MemoryWriteRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 1,
                 prev_timestamp: 0,
-                data: bba![1, 2, 3, 4],
-                prev_data: bba![0, 0, 0, 0],
+                data: bbvec![1, 2, 3, 4],
+                prev_data: Some(bbvec![0, 0, 0, 0]),
             }
         );
         assert_eq!(memory.timestamp(), 2);
 
-        let (read_record, adapter_records) = memory.read::<4>(1, 0);
+        let adapter_records = memory.read(1, 0, 4);
+        let read_record = memory.log.last().unwrap();
         // At time 2 we read [0:4].
         assert_eq!(adapter_records.len(), 0);
         assert_eq!(
             read_record,
-            MemoryReadRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 2,
                 prev_timestamp: 1,
-                data: bba![1, 2, 3, 4],
+                data: bbvec![1, 2, 3, 4],
+                prev_data: None,
             }
         );
         assert_eq!(memory.timestamp(), 3);
 
-        let (read_record, adapter_records) = memory.write::<2>(1, 0, bba![10, 11]);
+        let adapter_records = memory.write(1, 0, bbvec![10, 11]);
+        let write_record = memory.log.last().unwrap();
         // write causes split [0:4] into [0:2] and [2:4] (to prepare for write to [0:2]).
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
@@ -905,18 +901,19 @@ mod tests {
 
         // At time 3 we write [10, 11] into [0, 2].
         assert_eq!(
-            read_record,
-            MemoryWriteRecord {
+            write_record,
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 3,
                 prev_timestamp: 2,
-                data: bba![10, 11],
-                prev_data: bba![1, 2],
+                data: bbvec![10, 11],
+                prev_data: Some(bbvec![1, 2]),
             }
         );
 
-        let (read_record, adapter_records) = memory.read::<4>(1, 0);
+        let adapter_records = memory.read(1, 0, 4);
+        let read_record = memory.log.last().unwrap();
         assert_eq!(adapter_records.len(), 1);
         assert_eq!(
             adapter_records[0],
@@ -934,12 +931,13 @@ mod tests {
         // At time 9 we read [0:4].
         assert_eq!(
             read_record,
-            MemoryReadRecord {
+            &MemoryRecord {
                 address_space: bb!(1),
                 pointer: bb!(0),
                 timestamp: 4,
                 prev_timestamp: 3,
-                data: bba![10, 11, 3, 4],
+                data: bbvec![10, 11, 3, 4],
+                prev_data: None,
             }
         );
     }
@@ -949,7 +947,7 @@ mod tests {
         let initial_memory = MemoryImage::default();
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 1, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
 
-        memory.write(1, 0, bba![4, 3, 2, 1]);
+        memory.write(1, 0, bbvec![4, 3, 2, 1]);
 
         assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
         assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
@@ -965,7 +963,7 @@ mod tests {
         let initial_memory = MemoryImage::default();
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
 
-        memory.write(1, 0, bba![4, 3, 2, 1]);
+        memory.write(1, 0, bbvec![4, 3, 2, 1]);
 
         assert_eq!(memory.get(1, 0), BabyBear::from_canonical_u32(4));
         assert_eq!(memory.get(1, 1), BabyBear::from_canonical_u32(3));
@@ -991,13 +989,13 @@ mod tests {
         let initial_memory = MemoryImage::default();
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
         // Make block 0:4 in address space 1 active.
-        memory.write(1, 0, bba![1, 2, 3, 4]);
+        memory.write(1, 0, bbvec![1, 2, 3, 4]);
 
         // Make block 16:32 in address space 1 active.
-        memory.write(1, 16, bba![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+        memory.write(1, 16, bbvec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
 
         // Make block 64:72 in address space 2 active.
-        memory.write(2, 64, bba![8, 7, 6, 5, 4, 3, 2, 1]);
+        memory.write(2, 64, bbvec![8, 7, 6, 5, 4, 3, 2, 1]);
 
         // Finalize to a partition of size 8.
         let (final_memory, records) = memory.finalize::<8>();
@@ -1044,7 +1042,7 @@ mod tests {
 
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = MemoryImage::default();
-        for i in 1..9 {
+        for i in 0..8 {
             initial_memory.insert((1, i), F::from_canonical_u32(i + 1));
             initial_memory.insert((1, 16 + i), F::from_canonical_u32(i + 1));
         }
@@ -1052,44 +1050,54 @@ mod tests {
         let mut memory = OfflineMemory::<BabyBear>::new(initial_memory, 8, MemoryBus(0), Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29))), 29);
 
         // Verify initial state of block 0 (pointers 0–8)
-        let (initial_read_record_0, _) = memory.read::<8>(1, 0);
-        assert_eq!(initial_read_record_0.data, bba![1, 2, 3, 4, 5, 6, 7, 8]);
+        memory.read(1, 0, 8);
+        let initial_read_record_0 = memory.log.last().unwrap();
+        assert_eq!(initial_read_record_0.data, bbvec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         // Verify initial state of block 2 (pointers 16–24)
-        let (initial_read_record_2, _) = memory.read::<8>(1, 16);
-        assert_eq!(initial_read_record_2.data, bba![1, 2, 3, 4, 5, 6, 7, 8]);
+        memory.read(1, 16, 8);
+        let initial_read_record_2 = memory.log.last().unwrap();
+        assert_eq!(initial_read_record_2.data, bbvec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         // Test: Write a partial block to block 0 (pointer 0) and read back partially and fully
-        memory.write(1, 0, bba![9, 9, 9, 9]);
-        let (partial_read_record, _) = memory.read::<2>(1, 0);
-        assert_eq!(partial_read_record.data, bba![9, 9]);
+        memory.write(1, 0, bbvec![9, 9, 9, 9]);
+        memory.read(1, 0, 2);
+        let partial_read_record = memory.log.last().unwrap();
+        assert_eq!(partial_read_record.data, bbvec![9, 9]);
 
-        let (full_read_record_0, _) = memory.read::<8>(1, 0);
-        assert_eq!(full_read_record_0.data, bba![9, 9, 9, 9, 5, 6, 7, 8]);
+        memory.read(1, 0, 8);
+        let full_read_record_0 = memory.log.last().unwrap();
+        assert_eq!(full_read_record_0.data, bbvec![9, 9, 9, 9, 5, 6, 7, 8]);
 
         // Test: Write a single element to pointer 2 and verify read in different lengths
-        memory.write(1, 2, bba![100]);
-        let (read_record_4, _) = memory.read::<4>(1, 1);
-        assert_eq!(read_record_4.data, bba![9, 100, 9, 5]);
+        memory.write(1, 2, bbvec![100]);
+        memory.read(1, 1, 4);
+        let read_record_4 = memory.log.last().unwrap();
+        assert_eq!(read_record_4.data, bbvec![9, 100, 9, 5]);
 
-        let (full_read_record_2, _) = memory.read::<8>(1, 2);
+        memory.read(1, 2, 8);
+        let full_read_record_2 = memory.log.last().unwrap();
         assert_eq!(full_read_record_2.data, bba![100, 9, 5, 6, 7, 8, 0, 0]);
 
         // Test: Write and read at the last pointer in block 2 (pointer 23, part of key (1, 2))
-        memory.write(1, 23, bba![77]);
-        let (boundary_read_record, _) = memory.read::<2>(1, 23);
+        memory.write(1, 23, bbvec![77]);
+        memory.read(1, 23, 2);
+        let boundary_read_record = memory.log.last().unwrap();
         assert_eq!(boundary_read_record.data, bba![77, 0]); // Last byte modified, ensuring boundary check
 
         // Test: Reading from an uninitialized block (should default to 0)
-        let (default_read_record, _) = memory.read::<4>(1, 10);
+        memory.read(1, 10, 4);
+        let default_read_record = memory.log.last().unwrap();
         assert_eq!(default_read_record.data, bba![0, 0, 0, 0]);
 
-        let (default_read_record, _) = memory.read::<4>(1, 100);
+        memory.read(1, 100, 4);
+        let default_read_record = memory.log.last().unwrap();
         assert_eq!(default_read_record.data, bba![0, 0, 0, 0]);
 
         // Test: Overwrite entire memory pointer 16–24 and verify
-        memory.write(1, 16, bba![50, 50, 50, 50, 50, 50, 50, 50]);
-        let (overwrite_read_record, _) = memory.read::<8>(1, 16);
+        memory.write(1, 16, bbvec![50, 50, 50, 50, 50, 50, 50, 50]);
+        memory.read(1, 16, 8);
+        let overwrite_read_record = memory.log.last().unwrap();
         assert_eq!(
             overwrite_read_record.data,
             bba![50, 50, 50, 50, 50, 50, 50, 50]

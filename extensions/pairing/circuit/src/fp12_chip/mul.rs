@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 use openvm_circuit::{
     arch::VmChipWrapper,
-    system::memory::{MemoryControllerRef, OfflineMemory},
+    system::memory::{OfflineMemory},
 };
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
@@ -31,7 +31,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,

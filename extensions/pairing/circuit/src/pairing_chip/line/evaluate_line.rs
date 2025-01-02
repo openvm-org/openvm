@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{
     arch::VmChipWrapper,
-    system::memory::{MemoryControllerRef, OfflineMemory},
+    system::memory::{OfflineMemory},
 };
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
@@ -57,7 +57,6 @@ impl<
             BLOCK_SIZE,
             BLOCK_SIZE,
         >,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,

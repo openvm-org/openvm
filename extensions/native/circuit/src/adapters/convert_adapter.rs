@@ -3,7 +3,6 @@ use std::{
     cell::RefCell,
     marker::PhantomData,
 };
-use std::ptr::write;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
@@ -14,7 +13,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryWriteRecord, OfflineMemory, RecordId,
+            OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },

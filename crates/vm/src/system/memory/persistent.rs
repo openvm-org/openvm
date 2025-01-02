@@ -21,7 +21,7 @@ use crate::{
     arch::hasher::HasherChip,
     system::memory::{
         dimensions::MemoryDimensions, manager::memory::INITIAL_TIMESTAMP, merkle::MemoryMerkleBus,
-        offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
+        offline_checker::MemoryBus, MemoryAddress, TimestampedEquipartition,
     },
 };
 use crate::system::memory::MemoryImage;

@@ -22,7 +22,6 @@ use openvm_pairing_guest::{
 use openvm_pairing_transpiler::{Fp12Opcode, PairingOpcode, PairingPhantom};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip};
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, FromRepr};
 
@@ -173,7 +172,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),
@@ -210,7 +208,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         curve.xi(),
                         pairing_class_offset,
@@ -229,7 +226,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         curve.xi(),
                         fp12_class_offset,
@@ -292,7 +288,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),
@@ -348,7 +343,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         curve.xi(),
                         fp12_class_offset,

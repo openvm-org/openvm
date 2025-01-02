@@ -17,7 +17,7 @@ use openvm_circuit::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryWriteRecord, OfflineMemory, RecordId,
+            OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
