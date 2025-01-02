@@ -259,7 +259,7 @@ jobs:
           cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
           git add ${BENCHMARK_RESULTS_PATH}
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            cp /tmp/benchmark-results/summary.md index.md
+            cp ${TMP_DIR}/summary.md index.md
             git add index.md
           fi
           git commit --allow-empty -m "Update benchmark results at ${{ env.CURRENT_SHA }}"
