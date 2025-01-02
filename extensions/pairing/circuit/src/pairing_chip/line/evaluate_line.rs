@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 // Input: UnevaluatedLine<Fp2>, (Fp, Fp)
 // Output: EvaluatedLine<Fp2>
@@ -62,20 +62,20 @@ impl<
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr = evaluate_line_expr(config, memory_controller.borrow().range_checker.bus());
+        let range_checker = offline_memory.lock().unwrap().range_checker();
+        let expr = evaluate_line_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::EVALUATE_LINE as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "EvaluateLine",
             false,
         );
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }

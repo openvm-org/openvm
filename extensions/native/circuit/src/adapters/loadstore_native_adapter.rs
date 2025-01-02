@@ -97,7 +97,7 @@ pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
 #[derive(Clone, Debug)]
 pub struct NativeLoadStoreWriteRecord<F: Field, const NUM_CELLS: usize> {
     pub from_state: ExecutionState<F>,
-    pub write: MemoryWriteRecord<F, NUM_CELLS>,
+    pub write_id: RecordId,
 }
 
 #[repr(C)]
@@ -347,7 +347,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
         output: AdapterRuntimeContext<F, Self::Interface>,
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let write =
+        let (write_id, _) =
             memory.write::<NUM_CELLS>(read_record.write_as, read_record.write_ptr, output.writes);
         Ok((
             ExecutionState {
@@ -356,7 +356,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             },
             Self::WriteRecord {
                 from_state: from_state.map(F::from_canonical_u32),
-                write,
+                write_id,
             },
         ))
     }
@@ -388,8 +388,9 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             cols.data_read_aux_cols = MemoryReadOrImmediateAuxCols::disabled();
         }
 
-        cols.data_write_as = write_record.write.address_space;
-        cols.data_write_pointer = write_record.write.pointer;
+        let write = memory.record_by_id(write_record.write_id);
+        cols.data_write_as = write.address_space;
+        cols.data_write_pointer = write.pointer;
 
         cols.pointer_read_aux_cols[0] = aux_cols_factory
             .make_read_or_immediate_aux_cols(memory.record_by_id(read_record.pointer1_read));
@@ -398,7 +399,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> VmAdapterChip<F>
             .map_or_else(MemoryReadOrImmediateAuxCols::disabled, |read| {
                 aux_cols_factory.make_read_or_immediate_aux_cols(memory.record_by_id(read))
             });
-        cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write_record.write);
+        cols.data_write_aux_cols = aux_cols_factory.make_write_aux_cols(write);
     }
 
     fn air(&self) -> &Self::Air {

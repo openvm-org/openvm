@@ -1,5 +1,4 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
-
 use openvm_circuit::{
     arch::VmChipWrapper,
     system::memory::{MemoryControllerRef, OfflineMemory},
@@ -13,7 +12,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::Fp12Opcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use crate::Fp12;
 // Input: Fp12 * 2
@@ -38,20 +37,20 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let expr = fp12_mul_expr(config, memory_controller.borrow().range_checker.bus(), xi);
+        let range_checker = offline_memory.lock().unwrap().range_checker();
+        let expr = fp12_mul_expr(config, range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![Fp12Opcode::MUL as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "Fp12Mul",
             false,
         );
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }

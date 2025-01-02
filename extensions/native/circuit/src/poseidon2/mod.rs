@@ -23,7 +23,7 @@ mod chip;
 pub use chip::*;
 mod columns;
 pub use columns::*;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 mod trace;
 
 #[cfg(test)]
@@ -41,7 +41,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         max_constraint_degree: usize,
@@ -51,7 +50,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
             Self::Register0(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
                 poseidon2_config,
                 offset,
                 offline_memory,
@@ -60,7 +58,6 @@ impl<F: PrimeField32> NativePoseidon2Chip<F> {
             Self::Register1(NativePoseidon2BaseChip::new(
                 execution_bus,
                 program_bus,
-                memory_controller,
                 poseidon2_config,
                 offset,
                 offline_memory,

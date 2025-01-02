@@ -151,7 +151,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     VmAdapterChip<F> for Rv32HeapAdapterChip<F, NUM_READS, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = Rv32VecHeapReadRecord<F, NUM_READS, 1, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapWriteRecord<F, 1, WRITE_SIZE>;
+    type WriteRecord = Rv32VecHeapWriteRecord<1, WRITE_SIZE>;
     type Air = Rv32HeapAdapterAir<NUM_READS, READ_SIZE, WRITE_SIZE>;
     type Interface =
         BasicAdapterInterface<F, MinimalInstruction<F>, NUM_READS, 1, READ_SIZE, WRITE_SIZE>;
@@ -203,7 +203,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let e = instruction.e;
-        let writes = [memory.write(e, read_record.rd_val, output.writes[0])];
+        let writes = [memory.write(e, read_record.rd_val, output.writes[0]).0];
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(

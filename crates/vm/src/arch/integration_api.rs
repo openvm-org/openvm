@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow, cell::RefCell, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -16,11 +16,11 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use super::{ExecutionState, InstructionExecutor, Result};
 use crate::system::memory::{
-    MemoryAuxColsFactory, MemoryController, MemoryControllerRef, OfflineMemory,
+    MemoryAuxColsFactory, MemoryController, OfflineMemory,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -188,7 +188,6 @@ pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>>
     pub adapter: A,
     pub core: C,
     pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    memory: MemoryControllerRef<F>,
     offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
 
@@ -200,14 +199,12 @@ where
     pub fn new(
         adapter: A,
         core: C,
-        memory: MemoryControllerRef<F>,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
         Self {
             adapter,
             core,
             records: vec![],
-            memory,
             offline_memory,
         }
     }
@@ -288,7 +285,9 @@ where
         let width = core_width + adapter_width;
         let mut values = Val::<SC>::zero_vec(height * width);
 
-        let memory_aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
+        let memory = self.offline_memory.lock().unwrap();
+
+        let memory_aux_cols_factory = memory.aux_cols_factory();
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
         values
@@ -301,7 +300,7 @@ where
                     record.0,
                     record.1,
                     &memory_aux_cols_factory,
-                    &self.offline_memory.lock(),
+                    &memory,
                 );
                 self.core.generate_trace_row(core_row, record.2);
             });

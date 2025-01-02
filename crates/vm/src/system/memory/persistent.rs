@@ -1,8 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    iter,
-    sync::Arc,
-};
+use std::{array, borrow::{Borrow, BorrowMut}, iter, sync::Arc};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 #[allow(unused_imports)]
@@ -28,6 +24,7 @@ use crate::{
         offline_checker::MemoryBus, Equipartition, MemoryAddress, TimestampedEquipartition,
     },
 };
+use crate::system::memory::MemoryImage;
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
@@ -197,7 +194,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     pub fn finalize(
         &mut self,
-        initial_memory: &Equipartition<F, CHUNK>,
+        initial_memory: &MemoryImage<F>,
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {
@@ -206,24 +203,18 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
                 // TODO: parallelize this.
                 let final_touched_labels = touched_labels
                     .iter()
-                    .map(|touched_label| {
-                        let (init_exists, initial_hash, init_values) =
-                            match initial_memory.get(touched_label) {
-                                Some(values) => (true, hasher.hash_and_record(values), *values),
-                                None => (
-                                    true,
-                                    hasher.hash_and_record(&[F::ZERO; CHUNK]),
-                                    [F::ZERO; CHUNK],
-                                ),
-                            };
-                        let timestamped_values = final_memory.get(touched_label).unwrap();
+                    .map(|&(address_space, label)| {
+                        let pointer = label * CHUNK as u32;
+                        let init_values = array::from_fn(|i| *initial_memory.get(&(address_space, pointer + i as u32)).unwrap_or(&F::ZERO));
+                        let initial_hash = hasher.hash_and_record(&init_values);
+                        let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
                         let final_hash = hasher.hash_and_record(&timestamped_values.values);
                         FinalTouchedLabel {
-                            address_space: touched_label.0,
-                            label: touched_label.1,
+                            address_space,
+                            label,
                             init_values,
                             final_values: timestamped_values.values,
-                            init_exists,
+                            init_exists: true,
                             init_hash: initial_hash,
                             final_hash,
                             final_timestamp: timestamped_values.timestamp,

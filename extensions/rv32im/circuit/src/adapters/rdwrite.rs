@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{AbstractField, Field, PrimeField32},
 };
-
+use openvm_circuit::system::memory::RecordId;
 use super::RV32_REGISTER_NUM_LIMBS;
 
 /// This adapter doesn't read anything, and writes to [a:4]_d, where d == 1
@@ -76,9 +76,9 @@ impl<F: PrimeField32> Rv32CondRdWriteAdapterChip<F> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32RdWriteWriteRecord<F: Field> {
+pub struct Rv32RdWriteWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>>,
+    pub rd_id: Option<RecordId>,
 }
 
 #[repr(C)]
@@ -243,7 +243,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
     type ReadRecord = ();
-    type WriteRecord = Rv32RdWriteWriteRecord<F>;
+    type WriteRecord = Rv32RdWriteWriteRecord;
     type Air = Rv32RdWriteAdapterAir;
     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
 
@@ -270,7 +270,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, output.writes[0]);
 
         Ok((
             ExecutionState {
@@ -279,7 +279,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
             },
             Self::WriteRecord {
                 from_state,
-                rd: Some(rd),
+                rd_id: Some(rd_id),
             },
         ))
     }
@@ -290,11 +290,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
-        _memory: &OfflineMemory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32RdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rd = write_record.rd.unwrap();
+        let rd = memory.record_by_id(write_record.rd_id.unwrap());
         adapter_cols.rd_ptr = rd.pointer;
         adapter_cols.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
     }
@@ -306,7 +306,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32RdWriteAdapterChip<F> {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
     type ReadRecord = ();
-    type WriteRecord = Rv32RdWriteWriteRecord<F>;
+    type WriteRecord = Rv32RdWriteWriteRecord;
     type Air = Rv32CondRdWriteAdapterAir;
     type Interface = BasicAdapterInterface<F, ImmInstruction<F>, 0, 1, 0, RV32_REGISTER_NUM_LIMBS>;
 
@@ -330,8 +330,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = if instruction.f != F::ZERO {
-            Some(memory.write(d, a, output.writes[0]))
+        let rd_id = if instruction.f != F::ZERO {
+            let (rd_id, _) = memory.write(d, a, output.writes[0]);
+            Some(rd_id)
         } else {
             memory.increment_timestamp();
             None
@@ -342,7 +343,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
                 pc: output.to_pc.unwrap_or(from_state.pc + 4),
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -353,11 +354,12 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32CondRdWriteAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
-        _memory: &OfflineMemory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = row_slice.borrow_mut();
         adapter_cols.inner.from_state = write_record.from_state.map(F::from_canonical_u32);
-        if let Some(rd) = write_record.rd {
+        if let Some(rd_id) = write_record.rd_id {
+            let rd = memory.record_by_id(rd_id);
             adapter_cols.inner.rd_ptr = rd.pointer;
             adapter_cols.inner.rd_aux_cols = aux_cols_factory.make_write_aux_cols(rd);
             adapter_cols.needs_write = F::ONE;

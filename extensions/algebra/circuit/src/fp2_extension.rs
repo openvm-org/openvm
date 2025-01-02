@@ -72,7 +72,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
 
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize);
@@ -108,7 +108,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             if bytes <= 32 {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_32.clone(),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
                     offline_memory.clone(),
@@ -121,7 +120,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_32.clone(),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
                     offline_memory.clone(),
@@ -135,7 +133,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
                     adapter_chip_48.clone(),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
                     offline_memory.clone(),
@@ -148,7 +145,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
                     adapter_chip_48.clone(),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
                     offline_memory.clone(),

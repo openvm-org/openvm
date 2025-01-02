@@ -78,9 +78,9 @@ pub struct Rv32HintStoreReadRecord<F: Field> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32HintStoreWriteRecord<F: Field> {
+pub struct Rv32HintStoreWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub record_id: RecordId,
 }
 
 #[repr(C)]
@@ -228,7 +228,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32HintStoreAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
     type ReadRecord = Rv32HintStoreReadRecord<F>;
-    type WriteRecord = Rv32HintStoreWriteRecord<F>;
+    type WriteRecord = Rv32HintStoreWriteRecord;
     type Air = Rv32HintStoreAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -291,7 +291,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let ptr = read_record.mem_ptr_limbs[0]
             + read_record.mem_ptr_limbs[1] * F::from_canonical_u32(1 << (RV32_CELL_BITS * 2));
-        let write_record = memory.write(instruction.e, ptr, output.writes[0]);
+        let (write_record_id, _) = memory.write(instruction.e, ptr, output.writes[0]);
 
         Ok((
             ExecutionState {
@@ -300,7 +300,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
             },
             Self::WriteRecord {
                 from_state,
-                write: write_record,
+                record_id: write_record_id,
             },
         ))
     }
@@ -322,7 +322,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32HintStoreAdapterChip<F> {
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
-        adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(write_record.write);
+
+        let rd = memory.record_by_id(write_record.record_id);
+        adapter_cols.write_aux = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {

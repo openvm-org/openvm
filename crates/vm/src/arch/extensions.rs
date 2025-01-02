@@ -23,7 +23,6 @@ use openvm_stark_backend::{
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-
 use super::{
     vm_poseidon2_config, ExecutionBus, InstructionExecutor, PhantomSubExecutor, Streams,
     SystemConfig, SystemTraceHeights,
@@ -42,6 +41,7 @@ use crate::system::{
     program::{ProgramBus, ProgramChip},
     public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
+use crate::system::memory::MemoryImage;
 
 /// Global AIR ID in the VM circuit verifying key.
 pub const PROGRAM_AIR_ID: usize = 0;
@@ -508,7 +508,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                 range_checker.clone(),
                 MemoryMerkleBus(bus_idx_max - 2),
                 DirectCompressionBus(bus_idx_max - 1),
-                Equipartition::<F, CHUNK>::new(),
+                MemoryImage::<F>::default(),
             )
         } else {
             MemoryController::with_volatile_memory(
@@ -522,8 +522,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
         let mut inventory = VmInventory::new();
-        let mem = memory_controller.borrow().offline_memory();
-        let offline_memory_mutex = Arc::new(Mutex::new(mem));
+        let offline_memory = memory_controller.borrow().offline_memory();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
@@ -534,8 +533,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                     PublishOpcode::default_offset(),
                     config.max_constraint_degree as u32 - 1,
                 ),
-                memory_controller.clone(),
-                offline_memory_mutex.clone(),
+                offline_memory,
             );
             inventory
                 .add_executor(

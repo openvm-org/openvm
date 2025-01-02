@@ -4,7 +4,7 @@ use std::{array::from_fn, cmp::min, sync::Arc};
 
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 use tiny_keccak::{Hasher, Keccak};
 use utils::num_keccak_f;
 
@@ -86,7 +86,7 @@ pub struct KeccakRecord<F> {
     pub src_read: RecordId,
     pub len_read: RecordId,
     pub input_blocks: Vec<KeccakInputBlock>,
-    pub digest_writes: [MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [RecordId; KECCAK_DIGEST_WRITES],
 }
 
 #[derive(Clone, Debug)]
@@ -229,7 +229,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 e,
                 F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
                 from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
-            )
+            ).0
         });
         tracing::trace!("[runtime] keccak256 output: {:?}", output);
 

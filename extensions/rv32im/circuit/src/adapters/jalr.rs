@@ -60,9 +60,9 @@ pub struct Rv32JalrReadRecord {
 }
 
 #[derive(Debug, Clone)]
-pub struct Rv32JalrWriteRecord<F: Field> {
+pub struct Rv32JalrWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub rd: Option<MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>>,
+    pub rd_id: Option<RecordId>,
 }
 
 #[repr(C)]
@@ -177,7 +177,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
     type ReadRecord = Rv32JalrReadRecord;
-    type WriteRecord = Rv32JalrWriteRecord<F>;
+    type WriteRecord = Rv32JalrWriteRecord;
     type Air = Rv32JalrAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -214,8 +214,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         let Instruction {
             a, d, f: enabled, ..
         } = *instruction;
-        let rd = if enabled != F::ZERO {
-            Some(memory.write(d, a, output.writes[0]))
+        let rd_id = if enabled != F::ZERO {
+            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            Some(record_id)
         } else {
             memory.increment_timestamp();
             None
@@ -226,7 +227,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
                 pc: output.to_pc.unwrap_or(from_state.pc + 4),
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -247,8 +248,11 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
             adapter_cols.rd_ptr,
             adapter_cols.rd_aux_cols,
             adapter_cols.needs_write,
-        ) = match write_record.rd {
-            Some(rd) => (rd.pointer, aux_cols_factory.make_write_aux_cols(rd), F::ONE),
+        ) = match write_record.rd_id {
+            Some(id) => {
+                let rd = memory.record_by_id(id);
+                (rd.pointer, aux_cols_factory.make_write_aux_cols(rd), F::ONE)
+            },
             None => (F::ZERO, MemoryWriteAuxCols::disabled(), F::ZERO),
         };
     }

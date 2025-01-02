@@ -141,7 +141,7 @@ pub struct Rv32LoadStoreReadRecord<F: Field> {
 pub struct Rv32LoadStoreWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// This will be a write to a register in case of Load and a write to RISC-V memory in case of Stores
-    pub write: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub write_id: RecordId,
     pub rd_rs2_ptr: F,
 }
 
@@ -430,7 +430,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let write_record = match local_opcode {
+        let (write_id, _) = match local_opcode {
             STOREW | STOREH | STOREB => {
                 let ptr = read_record.mem_ptr_limbs[0]
                     + read_record.mem_ptr_limbs[1]
@@ -451,7 +451,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
             },
             Self::WriteRecord {
                 from_state,
-                write: write_record,
+                write_id,
                 rd_rs2_ptr: a,
             },
         ))
@@ -477,8 +477,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         adapter_cols.imm = read_record.imm;
         adapter_cols.imm_sign = F::from_bool(read_record.imm_sign);
         adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs;
+        let write = memory.record_by_id(write_record.write_id);
         adapter_cols.write_base_aux = aux_cols_factory
-            .make_write_aux_cols(write_record.write)
+            .make_write_aux_cols::<RV32_REGISTER_NUM_LIMBS>(write)
             .get_base();
         adapter_cols.mem_as = read_record.mem_as;
     }

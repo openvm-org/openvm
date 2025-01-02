@@ -117,11 +117,11 @@ pub struct Rv32VecHeapReadRecord<
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32VecHeapWriteRecord<F: Field, const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize>
+pub struct Rv32VecHeapWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize>
 {
     pub from_state: ExecutionState<u32>,
 
-    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes: [RecordId; BLOCKS_PER_WRITE],
 }
 
 #[repr(C)]
@@ -358,7 +358,7 @@ impl<
     >
 {
     type ReadRecord = Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>;
+    type WriteRecord = Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>;
     type Air =
         Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>;
     type Interface = VecHeapAdapterInterface<
@@ -426,13 +426,13 @@ impl<
         let e = instruction.e;
         let mut i = 0;
         let writes = output.writes.map(|write| {
-            let record = memory.write(
+            let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
                 write,
             );
             i += 1;
-            record
+            record_id
         });
 
         Ok((
@@ -478,7 +478,7 @@ pub(super) fn vec_heap_generate_trace_row_impl<
 >(
     row_slice: &mut [F],
     read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
-    write_record: &Rv32VecHeapWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>,
+    write_record: &Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
     aux_cols_factory: &MemoryAuxColsFactory<F>,
     bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
@@ -507,14 +507,14 @@ pub(super) fn vec_heap_generate_trace_row_impl<
     row_slice.rd_val = array::from_fn(|i| rd.data[i]);
     row_slice.rs_val = array::from_fn(|j| array::from_fn(|i| rs[j].data[i]));
 
-    row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i].clone()));
-    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd.clone());
+    row_slice.rs_read_aux = array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
+    row_slice.rd_read_aux = aux_cols_factory.make_read_aux_cols(rd);
     row_slice.reads_aux = read_record
         .reads
         .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
     row_slice.writes_aux = write_record
         .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(w));
+        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
 
     // Range checks:
     let need_range_check: Vec<u32> = rs

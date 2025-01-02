@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12 field elements
@@ -41,26 +41,25 @@ impl<
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
+        let range_checker = offline_memory.lock().unwrap().range_checker();
         let expr =
-            miller_double_and_add_step_expr(config, memory_controller.borrow().range_checker.bus());
+            miller_double_and_add_step_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker,
             "MillerDoubleAndAddStep",
             false,
         );
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }

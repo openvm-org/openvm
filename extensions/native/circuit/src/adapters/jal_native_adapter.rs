@@ -167,14 +167,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
-        _memory: &OfflineMemory<F>,
+        memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut JalNativeAdapterCols<_> = row_slice.borrow_mut();
 
+        let write = memory.record_by_id(write_record.writes[0].0);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_pointer = write_record.writes[0].pointer;
-        row_slice.a_as = write_record.writes[0].address_space;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.writes[0]);
+        row_slice.a_pointer = write.pointer;
+        row_slice.a_as = write.address_space;
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write);
     }
 
     fn air(&self) -> &Self::Air {

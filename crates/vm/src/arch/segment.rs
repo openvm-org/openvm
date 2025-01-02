@@ -9,7 +9,6 @@ use openvm_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     Chip,
 };
-
 use super::{
     AnyEnum, ExecutionError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
@@ -23,6 +22,7 @@ use crate::{
         poseidon2::Poseidon2PeripheryChip,
     },
 };
+use crate::system::memory::{Memory, MemoryImage};
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
@@ -34,7 +34,7 @@ where
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
 
-    pub final_memory: Option<Equipartition<F, CHUNK>>,
+    pub final_memory: Option<MemoryImage<F>>,
 
     /// Metric collection tools. Only collected when `config.collect_metrics` is true.
     pub cycle_tracker: CycleTracker,
@@ -59,7 +59,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         config: &VC,
         program: Program<F>,
         init_streams: Streams<F>,
-        initial_memory: Option<Equipartition<F, CHUNK>>,
+        initial_memory: Option<MemoryImage<F>>,
         fn_bounds: FnBounds,
     ) -> Self {
         let mut chip_complex = config.create_chip_complex().unwrap();
@@ -260,7 +260,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         {
             // Need some partial borrows, so code is ugly:
             let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
-            self.final_memory = if self.system_config().continuation_enabled {
+            self.final_memory = Some(memory_controller.memory_image().clone());
+
+            if self.system_config().continuation_enabled {
                 let chip = self
                     .chip_complex
                     .inventory

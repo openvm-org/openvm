@@ -16,7 +16,7 @@ use openvm_instructions::{
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use super::{
     NativePoseidon2Air, NativePoseidon2MemoryCols, NATIVE_POSEIDON2_CHUNK_SIZE,
@@ -27,7 +27,6 @@ use super::{
 pub struct NativePoseidon2BaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub air: Arc<NativePoseidon2Air<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub memory_controller: MemoryControllerRef<F>,
     pub records: Vec<Option<NativePoseidon2ChipRecord<F>>>,
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
 }
@@ -45,20 +44,19 @@ pub struct NativePoseidon2ChipRecord<F> {
     pub read1: RecordId,
     pub read2: RecordId,
 
-    pub write1: MemoryWriteRecord<F, NATIVE_POSEIDON2_CHUNK_SIZE>,
-    pub write2: Option<MemoryWriteRecord<F, NATIVE_POSEIDON2_CHUNK_SIZE>>,
+    pub write1: RecordId,
+    pub write2: Option<RecordId>,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SBOX_REGISTERS> {
     pub fn new(
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        memory_controller: MemoryControllerRef<F>,
         poseidon2_config: Poseidon2Config<F>,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
-        let memory_bridge = memory_controller.borrow().memory_bridge();
+        let memory_bridge = offline_memory.lock().unwrap().memory_bridge();
         let subchip = Poseidon2SubChip::new(poseidon2_config);
         Self {
             air: Arc::new(NativePoseidon2Air::new(
@@ -68,7 +66,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2BaseChip<F, SB
                 offset,
             )),
             subchip,
-            memory_controller,
             records: vec![],
             offline_memory,
         }
@@ -124,13 +121,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         let output2: [F; NATIVE_POSEIDON2_CHUNK_SIZE] =
             from_fn(|i| output_state[NATIVE_POSEIDON2_CHUNK_SIZE + i]);
 
-        let write1 = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1[0], output1);
+        let (write1, _) = memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(e, rd.1[0], output1);
         let write2 = match local_opcode {
             Poseidon2Opcode::PERM_POS2 => Some(memory.write::<NATIVE_POSEIDON2_CHUNK_SIZE>(
                 e,
                 rd.1[0] + F::from_canonical_usize(NATIVE_POSEIDON2_CHUNK_SIZE),
                 output2,
-            )),
+            ).0),
             Poseidon2Opcode::COMP_POS2 => {
                 memory.increment_timestamp();
                 None
@@ -169,12 +166,12 @@ impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
     pub fn to_memory_cols(
         &self,
         aux_cols_factory: &MemoryAuxColsFactory<F>,
-        offline_memory: &OfflineMemory<F>,
+        memory: &OfflineMemory<F>,
     ) -> NativePoseidon2MemoryCols<F> {
-        let rs1 = offline_memory.record_by_id(self.rs1);
+        let rs1 = memory.record_by_id(self.rs1);
         let (rs2_ptr, rs2_val, rs2_read_aux) = match self.rs2 {
             Some(rs2) => {
-                let rs2 = offline_memory.record_by_id(rs2);
+                let rs2 = memory.record_by_id(rs2);
                 (
                     rs2.pointer,
                     rs2.data[0],
@@ -187,9 +184,9 @@ impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
                 MemoryReadAuxCols::disabled(),
             ),
         };
-        let rd = offline_memory.record_by_id(self.rd);
-        let read1 = offline_memory.record_by_id(self.read1);
-        let read2 = offline_memory.record_by_id(self.read2);
+        let rd = memory.record_by_id(self.rd);
+        let read1 = memory.record_by_id(self.read1);
+        let read2 = memory.record_by_id(self.read2);
         NativePoseidon2MemoryCols {
             from_state: self.from_state.map(F::from_canonical_u32),
             opcode_flag: match self.opcode {
@@ -210,9 +207,9 @@ impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
                 aux_cols_factory.make_read_aux_cols(read2),
             ],
             chunk_write_aux: [
-                aux_cols_factory.make_write_aux_cols(self.write1),
+                aux_cols_factory.make_write_aux_cols(memory.record_by_id(self.write1)),
                 self.write2.map_or(MemoryWriteAuxCols::disabled(), |w| {
-                    aux_cols_factory.make_write_aux_cols(w)
+                    aux_cols_factory.make_write_aux_cols(memory.record_by_id(w))
                 }),
             ],
         }

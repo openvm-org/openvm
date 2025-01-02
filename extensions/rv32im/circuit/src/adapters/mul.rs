@@ -62,10 +62,10 @@ pub struct Rv32MultReadRecord {
 }
 
 #[derive(Debug)]
-pub struct Rv32MultWriteRecord<F: Field> {
+pub struct Rv32MultWriteRecord {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd_id: RecordId,
 }
 
 #[repr(C)]
@@ -167,7 +167,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 
 impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
     type ReadRecord = Rv32MultReadRecord;
-    type WriteRecord = Rv32MultWriteRecord<F>;
+    type WriteRecord = Rv32MultWriteRecord;
     type Air = Rv32MultAdapterAir;
     type Interface = BasicAdapterInterface<
         F,
@@ -211,7 +211,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, output.writes[0]);
 
         let timestamp_delta = memory.timestamp() - from_state.timestamp;
         debug_assert!(
@@ -225,7 +225,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
                 pc: from_state.pc + 4,
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -239,7 +239,8 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
     ) {
         let row_slice: &mut Rv32MultAdapterCols<_> = row_slice.borrow_mut();
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rd_ptr = write_record.rd.pointer;
+        let rd = memory.record_by_id(write_record.rd_id);
+        row_slice.rd_ptr = rd.pointer;
         let rs1 = memory.record_by_id(read_record.rs1);
         let rs2 = memory.record_by_id(read_record.rs2);
         row_slice.rs1_ptr = rs1.pointer;
@@ -248,7 +249,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
             aux_cols_factory.make_read_aux_cols(rs1),
             aux_cols_factory.make_read_aux_cols(rs2),
         ];
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {

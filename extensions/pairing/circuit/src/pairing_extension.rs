@@ -116,7 +116,7 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
         for curve in self.supported_curves.iter() {
             let pairing_idx = *curve as usize;
             let pairing_class_offset =
@@ -136,7 +136,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),
@@ -154,7 +153,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bn_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),
@@ -257,7 +255,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),
@@ -275,7 +272,6 @@ impl<F: PrimeField32> VmExtension<F> for PairingExtension {
                             memory_controller.clone(),
                             bitwise_lu_chip.clone(),
                         ),
-                        memory_controller.clone(),
                         bls_config.clone(),
                         pairing_class_offset,
                         offline_memory.clone(),

@@ -99,10 +99,9 @@ pub struct NativeVecHeapReadRecord<
 }
 
 #[derive(Clone, Debug)]
-pub struct NativeVecHeapWriteRecord<F: Field, const NUM_WRITES: usize, const WRITE_SIZE: usize> {
+pub struct NativeVecHeapWriteRecord<const NUM_WRITES: usize, const WRITE_SIZE: usize> {
     pub from_state: ExecutionState<u32>,
-
-    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; NUM_WRITES],
+    pub writes: [RecordId; NUM_WRITES],
 }
 
 #[repr(C)]
@@ -279,7 +278,7 @@ impl<
     for NativeVecHeapAdapterChip<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>
 {
     type ReadRecord = NativeVecHeapReadRecord<F, R, NUM_READS, READ_SIZE>;
-    type WriteRecord = NativeVecHeapWriteRecord<F, NUM_WRITES, WRITE_SIZE>;
+    type WriteRecord = NativeVecHeapWriteRecord<NUM_WRITES, WRITE_SIZE>;
     type Air = NativeVecHeapAdapterAir<R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
     type Interface = VecHeapAdapterInterface<F, R, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>;
 
@@ -333,13 +332,13 @@ impl<
         let e = instruction.e;
         let mut i = 0;
         let writes = output.writes.map(|write| {
-            let record = memory.write(
+            let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
                 write,
             );
             i += 1;
-            record
+            record_id
         });
 
         Ok((
@@ -387,7 +386,7 @@ impl<
             .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
         row_slice.writes_aux = write_record
             .writes
-            .map(|w| aux_cols_factory.make_write_aux_cols(w));
+            .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
     }
 
     fn air(&self) -> &Self::Air {

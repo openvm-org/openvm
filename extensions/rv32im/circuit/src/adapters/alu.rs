@@ -76,7 +76,7 @@ pub struct Rv32BaseAluReadRecord<F: Field> {
 pub struct Rv32BaseAluWriteRecord<F: Field> {
     pub from_state: ExecutionState<u32>,
     /// Write to destination register
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd: (RecordId, [F; 4]),
 }
 
 #[repr(C)]
@@ -290,11 +290,15 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
         memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut Rv32BaseAluAdapterCols<_> = row_slice.borrow_mut();
+
+        let rd = memory.record_by_id(write_record.rd.0);
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.rd_ptr = write_record.rd.pointer;
+        row_slice.rd_ptr = rd.pointer;
+
         let rs1 = memory.record_by_id(read_record.rs1);
         let rs2 = read_record.rs2.map(|rs2| memory.record_by_id(rs2));
         row_slice.rs1_ptr = rs1.pointer;
+
         if let Some(rs2) = rs2 {
             row_slice.rs2 = rs2.pointer;
             row_slice.rs2_as = rs2.address_space;
@@ -310,7 +314,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BaseAluAdapterChip<F> {
                 MemoryReadAuxCols::<F, RV32_REGISTER_NUM_LIMBS>::disabled(),
             ];
         }
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
     }
 
     fn air(&self) -> &Self::Air {

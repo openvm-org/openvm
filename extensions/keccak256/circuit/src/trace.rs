@@ -40,7 +40,7 @@ where
         let mut instruction_blocks = Vec::with_capacity(total_num_blocks);
 
         #[derive(Clone)]
-        struct StateDiff<F> {
+        struct StateDiff {
             /// hi-byte of pre-state
             pre_hi: [u8; KECCAK_RATE_U16S],
             /// hi-byte of post-state
@@ -48,10 +48,10 @@ where
             /// if first block
             register_reads: Option<[RecordId; KECCAK_REGISTER_READS]>,
             /// if last block
-            digest_writes: Option<[MemoryWriteRecord<F, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES]>,
+            digest_writes: Option<[RecordId; KECCAK_DIGEST_WRITES]>,
         }
 
-        impl<F> Default for StateDiff<F> {
+        impl Default for StateDiff {
             fn default() -> Self {
                 Self {
                     pre_hi: [0; KECCAK_RATE_U16S],
@@ -65,9 +65,12 @@ where
         // prepare the states
         let mut state: [u64; 25];
         for record in records {
-            let dst_read = self.offline_memory.lock().record_by_id(record.dst_read);
-            let src_read = self.offline_memory.lock().record_by_id(record.src_read);
-            let len_read = self.offline_memory.lock().record_by_id(record.len_read);
+            let memory = self.offline_memory.lock().unwrap();
+            let dst_read = memory.record_by_id(record.dst_read);
+            let src_read = memory.record_by_id(record.src_read);
+            let len_read = memory.record_by_id(record.len_read);
+
+            let digest_writes = record.digest_writes.map(|id| memory.record_by_id(id));
 
             state = [0u64; 25];
             let src_limbs: [_; RV32_REGISTER_NUM_LIMBS - 1] = from_fn(|i| src_read.data[i + 1]);
@@ -80,8 +83,8 @@ where
                 dst_ptr: dst_read.pointer,
                 src_ptr: src_read.pointer,
                 len_ptr: len_read.pointer,
-                e: record.digest_writes[0].address_space,
-                dst: dst_read.data.try_into().unwrap(),
+                e: digest_writes[0].address_space,
+                dst: dst_read.data.clone().try_into().unwrap(),
                 src_limbs,
                 src: Val::<SC>::from_canonical_usize(record.input_blocks[0].src),
                 len_limbs,
@@ -149,6 +152,8 @@ where
             RowMajorMatrix::new(Val::<SC>::zero_vec(num_rows * trace_width), trace_width);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.ptr_max_bits;
 
+        let memory = self.offline_memory.lock().unwrap();
+
         trace
             .values
             .par_chunks_mut(trace_width * NUM_ROUNDS)
@@ -161,10 +166,10 @@ where
             .for_each(|((rows, p3_keccak_mat), (instruction, diff, block))| {
                 let height = rows.len() / trace_width;
                 let partial_read_data = if let Some(partial_read_idx) = block.partial_read_idx {
-                    self.offline_memory
-                        .lock()
+                    memory
                         .record_by_id(block.reads[partial_read_idx])
                         .data
+                        .clone()
                         .try_into()
                         .unwrap()
                 } else {
@@ -202,8 +207,7 @@ where
                         &register_reads[2],
                     ]
                     .map(|r| {
-                        self.offline_memory
-                            .lock()
+                        memory
                             .record_by_id(*r)
                             .data
                             .last()
@@ -219,13 +223,13 @@ where
                     for (i, id) in register_reads.into_iter().enumerate() {
                         // TODO[jpw] make_read_aux_cols should directly write into slice
                         first_row.mem_oc.register_aux[i] = aux_cols_factory
-                            .make_read_aux_cols(self.offline_memory.lock().record_by_id(id));
+                            .make_read_aux_cols(memory.record_by_id(id));
                     }
                 }
                 for (i, id) in block.reads.into_iter().enumerate() {
                     // TODO[jpw] make_read_aux_cols should directly write into slice
                     first_row.mem_oc.absorb_reads[i] = aux_cols_factory
-                        .make_read_aux_cols(self.offline_memory.lock().record_by_id(id));
+                        .make_read_aux_cols(memory.record_by_id(id));
                 }
 
                 let last_row: &mut KeccakVmCols<Val<SC>> =
@@ -234,8 +238,9 @@ where
                 last_row.inner.export = instruction.is_enabled
                     * Val::<SC>::from_bool(block.remaining_len < KECCAK_RATE_BYTES);
                 if let Some(digest_writes) = diff.digest_writes {
-                    for (i, record) in digest_writes.into_iter().enumerate() {
+                    for (i, record_id) in digest_writes.into_iter().enumerate() {
                         // TODO: these aux columns are only used for the last row - can we share them with aux reads in first row?
+                        let record = memory.record_by_id(record_id);
                         last_row.mem_oc.digest_writes[i] =
                             aux_cols_factory.make_write_aux_cols(record);
                     }

@@ -7,7 +7,7 @@ use openvm_circuit::{
         VmConfig,
     },
     system::{
-        memory::{memory_image_to_equipartition, tree::MemoryNode},
+        memory::{memory_image_to_memory, tree::MemoryNode},
         program::trace::VmCommittedExe,
     },
 };
@@ -65,7 +65,7 @@ impl AppExecutionCommit<F> {
 
         let init_memory_commit = MemoryNode::tree_from_memory(
             memory_dimensions,
-            &memory_image_to_equipartition(app_exe.exe.init_memory.clone()),
+            &memory_image_to_memory(app_exe.exe.init_memory.clone()),
             &hasher,
         )
         .hash();

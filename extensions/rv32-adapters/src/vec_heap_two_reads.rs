@@ -131,13 +131,12 @@ pub struct Rv32VecHeapTwoReadsReadRecord<
 
 #[derive(Clone, Debug)]
 pub struct Rv32VecHeapTwoReadsWriteRecord<
-    F: Field,
     const BLOCKS_PER_WRITE: usize,
     const WRITE_SIZE: usize,
 > {
     pub from_state: ExecutionState<u32>,
 
-    pub writes: [MemoryWriteRecord<F, WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes: [RecordId; BLOCKS_PER_WRITE],
 }
 
 #[repr(C)]
@@ -390,7 +389,7 @@ impl<
 {
     type ReadRecord =
         Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapTwoReadsWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>;
+    type WriteRecord = Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>;
     type Air = Rv32VecHeapTwoReadsAdapterAir<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,
@@ -459,13 +458,13 @@ impl<
         let e = instruction.e;
         let mut i = 0;
         let writes = output.writes.map(|write| {
-            let record = memory.write(
+            let (record_id, _) = memory.write(
                 e,
                 read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
                 write,
             );
             i += 1;
-            record
+            record_id
         });
 
         Ok((
@@ -511,7 +510,7 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
 >(
     row_slice: &mut [F],
     read_record: &Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>,
-    write_record: &Rv32VecHeapTwoReadsWriteRecord<F, BLOCKS_PER_WRITE, WRITE_SIZE>,
+    write_record: &Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
     aux_cols_factory: &MemoryAuxColsFactory<F>,
     bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
@@ -550,7 +549,7 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
         .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));
     row_slice.writes_aux = write_record
         .writes
-        .map(|w| aux_cols_factory.make_write_aux_cols(w));
+        .map(|w| aux_cols_factory.make_write_aux_cols(memory.record_by_id(w)));
 
     // Range checks:
     let need_range_check = [

@@ -21,7 +21,7 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -221,7 +221,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             program_bus,
             memory_controller,
         } = builder.system_port();
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -238,7 +238,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let base_alu_chip = Rv32BaseAluChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -249,7 +248,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let lt_chip = Rv32LessThanChip::new(
             Rv32BaseAluAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -264,7 +262,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 ShiftOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -281,7 +278,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32LoadStoreOpcode::default_offset(),
             ),
             LoadStoreCoreChip::new(Rv32LoadStoreOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -303,7 +299,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 Rv32LoadStoreOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -315,7 +310,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let beq_chip = Rv32BranchEqualChip::new(
             Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             BranchEqualCoreChip::new(BranchEqualOpcode::default_offset(), DEFAULT_PC_STEP),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -329,7 +323,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 BranchLessThanOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -340,7 +333,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let jal_lui_chip = Rv32JalLuiChip::new(
             Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone(), Rv32JalLuiOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -355,7 +347,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 Rv32JalrOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -366,7 +357,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         let auipc_chip = Rv32AuipcChip::new(
             Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             Rv32AuipcCoreChip::new(bitwise_lu_chip.clone(), Rv32AuipcOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -402,7 +392,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             program_bus,
             memory_controller,
         } = builder.system_port();
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
 
         let bitwise_lu_chip = if let Some(chip) = builder
             .find_chip::<Arc<BitwiseOperationLookupChip<8>>>()
@@ -435,7 +425,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
         let mul_chip = Rv32MultiplicationChip::new(
             Rv32MultAdapterChip::new(execution_bus, program_bus, memory_controller.clone()),
             MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::default_offset()),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -450,7 +439,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 MulHOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -465,7 +453,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 DivRemOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         inventory.add_executor(
@@ -491,7 +478,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             program_bus,
             memory_controller,
         } = builder.system_port();
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
 
         let range_checker = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(chip) = builder
@@ -517,7 +504,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
                 bitwise_lu_chip.clone(),
                 Rv32HintStoreOpcode::default_offset(),
             ),
-            memory_controller.clone(),
             offline_memory.clone(),
         );
         hintstore_chip.core.set_streams(builder.streams().clone());

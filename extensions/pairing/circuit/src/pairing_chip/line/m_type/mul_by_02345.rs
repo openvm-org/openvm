@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use crate::Fp12;
 
@@ -86,7 +86,6 @@ impl<
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }

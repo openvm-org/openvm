@@ -85,7 +85,7 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
 
         let keccak_chip = KeccakVmChip::new(
             execution_bus,

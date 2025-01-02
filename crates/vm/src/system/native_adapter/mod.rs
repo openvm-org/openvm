@@ -14,7 +14,6 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
             MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryWriteRecord,
         },
         program::ProgramBus,
     },
@@ -74,12 +73,12 @@ impl<F: Field, const R: usize> NativeReadRecord<F, R> {
 #[derive(Debug)]
 pub struct NativeWriteRecord<F: Field, const W: usize> {
     pub from_state: ExecutionState<u32>,
-    pub writes: [MemoryWriteRecord<F, 1>; W],
+    pub writes: [(RecordId, [F; 1]); W],
 }
 
 impl<F: Field, const W: usize> NativeWriteRecord<F, W> {
-    pub fn a(&self) -> &MemoryWriteRecord<F, 1> {
-        &self.writes[0]
+    pub fn a(&self) -> &[F; 1] {
+        &self.writes[0].1
     }
 }
 
@@ -250,7 +249,8 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         let Instruction { a, d, .. } = *instruction;
         let mut writes = Vec::with_capacity(W);
         if W >= 1 {
-            writes.push(memory.write(d, a, output.writes[0]));
+            let (record_id, _) = memory.write(d, a, output.writes[0]);
+            writes.push((record_id, output.writes[0]));
         }
 
         Ok((
@@ -277,19 +277,20 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
 
         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        row_slice.reads_aux = read_record.reads.map(|x| {
-            let record = memory.record_by_id(x.0);
+        row_slice.reads_aux = read_record.reads.map(|(id, _)| {
+            let record = memory.record_by_id(id);
             let address = MemoryAddress::new(record.address_space, record.pointer);
             NativeAdapterReadCols {
                 address,
                 read_aux: aux_cols_factory.make_read_or_immediate_aux_cols(record),
             }
         });
-        row_slice.writes_aux = write_record.writes.map(|x| {
-            let address = MemoryAddress::new(x.address_space, x.pointer);
+        row_slice.writes_aux = write_record.writes.map(|(id, _)| {
+            let record = memory.record_by_id(id);
+            let address = MemoryAddress::new(record.address_space, record.pointer);
             NativeAdapterWriteCols {
                 address,
-                write_aux: aux_cols_factory.make_write_aux_cols(x),
+                write_aux: aux_cols_factory.make_write_aux_cols(record),
             }
         });
     }

@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::exe::{VmExe};
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -18,13 +18,14 @@ use crate::{
     arch::segment::ExecutionSegment,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
-        memory::{memory_image_to_equipartition, merkle::MemoryMerklePvs, Equipartition, CHUNK},
+        memory::{memory_image_to_memory, merkle::MemoryMerklePvs, Equipartition, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
+use crate::system::memory::{Memory, MemoryImage};
 
 /// VM memory state for continuations.
-pub type VmMemoryState<F> = Equipartition<F, CHUNK>;
+pub type VmMemoryState<F> = MemoryImage<F>;
 
 #[derive(Clone, Default, Debug)]
 pub struct Streams<F> {
@@ -118,7 +119,7 @@ where
             &self.config,
             exe.program.clone(),
             streams,
-            Some(memory_image_to_equipartition(exe.init_memory)),
+            Some(exe.init_memory.into_iter().collect()),
             exe.fn_bounds.clone(),
         );
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {

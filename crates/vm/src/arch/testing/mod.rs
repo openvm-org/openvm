@@ -1,4 +1,5 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Mutex;
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::instruction::Instruction;
@@ -20,7 +21,6 @@ use openvm_stark_sdk::{
     engine::StarkEngine,
     p3_baby_bear::BabyBear,
 };
-use parking_lot::Mutex;
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

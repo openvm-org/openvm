@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     sync::Arc,
 };
 
@@ -12,8 +11,8 @@ use openvm_circuit::{
             offline_checker::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols,
             },
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, MemoryControllerRef,
-            MemoryWriteRecord, OfflineMemory, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController,
+            OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -37,7 +36,7 @@ use openvm_stark_backend::{
     rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use super::field_extension::{FieldExtension, EXT_DEG};
 
@@ -307,12 +306,12 @@ pub struct FriReducedOpeningRecord<F: Field> {
     pub b_ptr_read: RecordId,
     pub a_reads: Vec<RecordId>,
     pub b_reads: Vec<RecordId>,
-    pub alpha_pow_write: MemoryWriteRecord<F, EXT_DEG>,
-    pub result_write: MemoryWriteRecord<F, EXT_DEG>,
+    pub alpha_pow_original: [F; EXT_DEG],
+    pub alpha_pow_write: RecordId,
+    pub result_write: RecordId,
 }
 
 pub struct FriReducedOpeningChip<F: Field> {
-    memory: MemoryControllerRef<F>,
     air: FriReducedOpeningAir,
     records: Vec<FriReducedOpeningRecord<F>>,
     height: usize,
@@ -321,19 +320,18 @@ pub struct FriReducedOpeningChip<F: Field> {
 
 impl<F: PrimeField32> FriReducedOpeningChip<F> {
     pub fn new(
-        memory: MemoryControllerRef<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
+        let memory_bridge = offline_memory.lock().unwrap().memory_bridge();
         let air = FriReducedOpeningAir {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-            memory_bridge: RefCell::borrow(&memory).memory_bridge(),
+            memory_bridge,
             offset,
         };
         Self {
-            memory,
             records: vec![],
             air,
             height: 0,
@@ -398,9 +396,9 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             alpha_pow = FieldExtension::multiply(alpha, alpha_pow);
         }
 
-        let alpha_pow_write = memory.write(addr_space, alpha_pow_ptr, alpha_pow);
-        debug_assert_eq!(alpha_pow_write.prev_data, alpha_pow_original);
-        let result_write = memory.write(addr_space, result_ptr, result);
+        let (alpha_pow_write, prev_data) = memory.write(addr_space, alpha_pow_ptr, alpha_pow);
+        debug_assert_eq!(prev_data, alpha_pow_original);
+        let (result_write, _) = memory.write(addr_space, result_ptr, result);
 
         self.records.push(FriReducedOpeningRecord {
             pc: F::from_canonical_u32(from_state.pc),
@@ -412,6 +410,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
             b_ptr_read: b_ptr_read.0,
             a_reads: a_reads.into_iter().map(|r| r.0).collect(),
             b_reads: b_reads.into_iter().map(|r| r.0).collect(),
+            alpha_pow_original,
             alpha_pow_write,
             result_write,
         });
@@ -464,18 +463,19 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
             ..
         } = record.instruction;
 
-        let length_read = memory.lock().record_by_id(record.length_read);
-        let alpha_read = memory.lock().record_by_id(record.alpha_read);
-        let a_ptr_read = memory.lock().record_by_id(record.a_ptr_read);
-        let b_ptr_read = memory.lock().record_by_id(record.b_ptr_read);
+        let memory = memory.lock().unwrap();
 
-        let alpha_pow_original = record.alpha_pow_write.prev_data;
+        let length_read = memory.record_by_id(record.length_read);
+        let alpha_read = memory.record_by_id(record.alpha_read);
+        let a_ptr_read = memory.record_by_id(record.a_ptr_read);
+        let b_ptr_read = memory.record_by_id(record.b_ptr_read);
+
         let length = length_read.data[0].as_canonical_u32() as usize;
         let alpha: [F; EXT_DEG] = array::from_fn(|i| alpha_read.data[i]);
         let a_ptr = a_ptr_read.data[0];
         let b_ptr = b_ptr_read.data[0];
 
-        let mut alpha_pow_current = alpha_pow_original;
+        let mut alpha_pow_current = record.alpha_pow_original;
         let mut current = [F::ZERO; EXT_DEG];
 
         let alpha_aux = aux_cols_factory.make_read_aux_cols(alpha_read);
@@ -484,13 +484,13 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
 
         let alpha_pow_aux = aux_cols_factory
-            .make_write_aux_cols(record.alpha_pow_write)
+            .make_write_aux_cols::<EXT_DEG>(memory.record_by_id(record.alpha_pow_write))
             .get_base();
-        let result_aux = aux_cols_factory.make_write_aux_cols(record.result_write);
+        let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
 
         for i in 0..length {
-            let a_read = memory.lock().record_by_id(record.a_reads[i]);
-            let b_read = memory.lock().record_by_id(record.b_reads[i]);
+            let a_read = memory.record_by_id(record.a_reads[i]);
+            let b_read = memory.record_by_id(record.b_reads[i]);
             let a = a_read.data[0];
             let b: [F; EXT_DEG] = array::from_fn(|i| b_read.data[i]);
             current = FieldExtension::add(
@@ -533,7 +533,7 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
                 a,
                 b,
                 alpha,
-                alpha_pow_original,
+                alpha_pow_original: record.alpha_pow_original,
                 alpha_pow_current,
                 idx,
                 idx_is_zero,
@@ -549,7 +549,10 @@ impl<F: PrimeField32> FriReducedOpeningChip<F> {
         let width = self.trace_width();
         let height = next_power_of_two_or_zero(self.height);
         let mut flat_trace = F::zero_vec(width * height);
-        let aux_cols_factory = RefCell::borrow(&self.memory).aux_cols_factory();
+
+        let memory = self.offline_memory.lock().unwrap();
+
+        let aux_cols_factory = memory.aux_cols_factory();
 
         let mut idx = 0;
         for record in self.records {

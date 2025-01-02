@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_transpiler::PairingOpcode;
 use openvm_rv32_adapters::Rv32VecHeapTwoReadsAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use crate::Fp12;
 
@@ -65,6 +65,7 @@ impl<
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
+        let range_checker = offline_memory.lock().unwrap().range_checker();
         assert!(
             xi[0].unsigned_abs() < 1 << config.limb_bits,
             "expect xi to be small"
@@ -73,20 +74,19 @@ impl<
             xi[1].unsigned_abs() < 1 << config.limb_bits,
             "expect xi to be small"
         );
-        let expr = mul_by_01234_expr(config, memory_controller.borrow().range_checker.bus(), xi);
+        let expr = mul_by_01234_expr(config, range_checker.bus(), xi);
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
             vec![PairingOpcode::MUL_BY_01234 as usize],
             vec![],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker.clone(),
             "MulBy01234",
             false,
         );
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }

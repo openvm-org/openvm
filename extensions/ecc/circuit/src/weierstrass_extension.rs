@@ -96,7 +96,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = Arc::new(Mutex::new(memory_controller.borrow().offline_memory()));
+        let offline_memory = memory_controller.borrow().offline_memory();
         let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
         let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
@@ -125,7 +125,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         memory_controller.clone(),
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
                     config32.clone(),
                     class_offset,
                     offline_memory.clone(),
@@ -163,7 +162,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         memory_controller.clone(),
                         bitwise_lu_chip.clone(),
                     ),
-                    memory_controller.clone(),
                     config48.clone(),
                     class_offset,
                     offline_memory.clone(),

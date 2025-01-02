@@ -287,9 +287,9 @@ pub struct Rv32IsEqualModReadRecord<
 }
 
 #[derive(Clone, Debug)]
-pub struct Rv32IsEqualModWriteRecord<F: Field> {
+pub struct Rv32IsEqualModWriteRecord {
     pub from_state: ExecutionState<u32>,
-    pub rd: MemoryWriteRecord<F, RV32_REGISTER_NUM_LIMBS>,
+    pub rd_id: RecordId,
 }
 
 impl<
@@ -302,7 +302,7 @@ impl<
     for Rv32IsEqualModAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     type ReadRecord = Rv32IsEqualModReadRecord<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
-    type WriteRecord = Rv32IsEqualModWriteRecord<F>;
+    type WriteRecord = Rv32IsEqualModWriteRecord;
     type Air = Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>;
     type Interface = BasicAdapterInterface<
         F,
@@ -364,7 +364,7 @@ impl<
         _read_record: &Self::ReadRecord,
     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
         let Instruction { a, d, .. } = *instruction;
-        let rd = memory.write(d, a, output.writes[0]);
+        let (rd_id, _) = memory.write(d, a, output.writes[0]);
 
         debug_assert!(
             memory.timestamp() - from_state.timestamp
@@ -379,7 +379,7 @@ impl<
                 pc: from_state.pc + 4,
                 timestamp: memory.timestamp(),
             },
-            Self::WriteRecord { from_state, rd },
+            Self::WriteRecord { from_state, rd_id },
         ))
     }
 
@@ -399,13 +399,14 @@ impl<
         row_slice.rs_ptr = array::from_fn(|i| rs[i].pointer);
         row_slice.rs_val = array::from_fn(|i| rs[i].data.clone().try_into().unwrap());
         row_slice.rs_read_aux =
-            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i].clone()));
+            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs[i]));
         row_slice.heap_read_aux = read_record
             .reads
             .map(|r| r.map(|x| aux_cols_factory.make_read_aux_cols(memory.record_by_id(x))));
 
-        row_slice.rd_ptr = write_record.rd.pointer;
-        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(write_record.rd);
+        let rd = memory.record_by_id(write_record.rd_id);
+        row_slice.rd_ptr = rd.pointer;
+        row_slice.writes_aux = aux_cols_factory.make_write_aux_cols(rd);
 
         // Range checks
         let need_range_check: [u32; 2] = from_fn(|i| {

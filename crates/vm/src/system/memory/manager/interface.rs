@@ -1,11 +1,11 @@
 use openvm_stark_backend::p3_field::PrimeField32;
-
 use crate::system::memory::{
     merkle::{DirectCompressionBus, MemoryMerkleChip},
     persistent::PersistentBoundaryChip,
     volatile::VolatileBoundaryChip,
-    Equipartition, CHUNK,
+    CHUNK,
 };
+use crate::system::memory::manager::memory::MemoryImage;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
-        initial_memory: Equipartition<F, CHUNK>,
+        initial_memory: MemoryImage<F>,
     },
 }
 

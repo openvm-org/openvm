@@ -289,7 +289,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> VmAdapterC
         row_slice.rs_ptr = array::from_fn(|i| rs_reads[i].pointer);
         row_slice.rs_val = array::from_fn(|i| rs_reads[i].data.clone().try_into().unwrap());
         row_slice.rs_read_aux =
-            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs_reads[i].clone()));
+            array::from_fn(|i| aux_cols_factory.make_read_aux_cols(rs_reads[i]));
         row_slice.heap_read_aux = read_record
             .heap_reads
             .map(|r| aux_cols_factory.make_read_aux_cols(memory.record_by_id(r)));

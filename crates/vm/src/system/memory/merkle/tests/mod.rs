@@ -1,3 +1,4 @@
+use crate::system::memory::MemoryImage;
 use std::{
     array,
     borrow::BorrowMut,
@@ -36,9 +37,9 @@ const COMPRESSION_BUS: DirectCompressionBus = DirectCompressionBus(POSEIDON2_DIR
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
-    initial_memory: &Equipartition<BabyBear, CHUNK>,
+    initial_memory: &MemoryImage<BabyBear>,
     touched_labels: BTreeSet<(u32, u32)>,
-    final_memory: &Equipartition<BabyBear, CHUNK>,
+    final_memory: &MemoryImage<BabyBear>,
 ) {
     let MemoryDimensions {
         as_height,
@@ -77,8 +78,9 @@ fn test<const CHUNK: usize>(
         }
     }
 
+    let final_partition = memory_to_partition(&final_memory);
     println!("trace height = {}", chip.current_trace_height());
-    chip.finalize(&initial_tree, final_memory, &mut hash_test_chip);
+    chip.finalize(&initial_tree, &final_partition, &mut hash_test_chip);
     assert_eq!(
         chip.final_state.as_ref().unwrap().final_root,
         final_tree_check.hash()
@@ -112,9 +114,7 @@ fn test<const CHUNK: usize>(
     };
 
     for (address_space, address_label) in touched_labels {
-        let initial_values = *initial_memory
-            .get(&(address_space, address_label))
-            .unwrap_or(&[BabyBear::ZERO; CHUNK]);
+        let initial_values = array::from_fn(|i| initial_memory.get(&(address_space, i as u32)).copied().unwrap_or_default());
         let as_label = address_space - as_offset;
         interaction(
             InteractionType::Send,
@@ -124,7 +124,7 @@ fn test<const CHUNK: usize>(
             address_label,
             initial_values,
         );
-        let final_values = *final_memory.get(&(address_space, address_label)).unwrap();
+        let final_values = *final_partition.get(&(address_space, address_label)).unwrap();
         interaction(
             InteractionType::Send,
             true,
@@ -155,6 +155,16 @@ fn test<const CHUNK: usize>(
     .expect("Verification failed");
 }
 
+fn memory_to_partition<F: Default + Copy, const N: usize>(memory: &MemoryImage<F>) -> Equipartition<F, N> {
+    let mut memory_partition = Equipartition::new();
+    for (&(address_space, pointer), value) in memory {
+        let label = (address_space, pointer / N as u32);
+        let chunk = memory_partition.entry(label).or_insert_with(|| [F::default(); N]);
+        chunk[(pointer % N as u32) as usize] = *value;
+    }
+    memory_partition
+}
+
 fn random_test<const CHUNK: usize>(
     height: usize,
     max_value: u32,
@@ -164,8 +174,8 @@ fn random_test<const CHUNK: usize>(
     let mut rng = create_seeded_rng();
     let mut next_u32 = || rng.next_u64() as u32;
 
-    let mut initial_memory = Equipartition::new();
-    let mut final_memory = Equipartition::new();
+    let mut initial_memory = MemoryImage::default();
+    let mut final_memory = MemoryImage::default();
     let mut seen_labels = HashSet::new();
     let mut touched_labels = BTreeSet::new();
 
@@ -175,23 +185,25 @@ fn random_test<const CHUNK: usize>(
 
         if seen_labels.insert(label) {
             let is_initial = next_u32() & 1 == 0;
-            let initial_values =
-                array::from_fn(|_| BabyBear::from_canonical_u32(next_u32() % max_value));
             let is_touched = next_u32() & 1 == 0;
             let value_changes = next_u32() & 1 == 0;
 
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
-                initial_memory.insert((address_space, label), initial_values);
-                final_memory.insert((address_space, label), initial_values);
+                for i in 0..CHUNK {
+                    let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                    initial_memory.insert((address_space, label + i as u32), value);
+                    final_memory.insert((address_space, label + i as u32), value);
+                }
             }
             if is_touched && num_touched_addresses != 0 {
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
-                    let changed_values =
-                        array::from_fn(|_| BabyBear::from_canonical_u32(next_u32() % max_value));
-                    final_memory.insert((address_space, label), changed_values);
+                    for i in 0..CHUNK {
+                        let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                        final_memory.insert((address_space, label + i as u32), value);
+                    }
                 }
             }
         }
@@ -233,7 +245,7 @@ fn expand_test_no_accesses() {
     };
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = BTreeMap::new();
+    let memory = MemoryImage::default();
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
@@ -246,7 +258,8 @@ fn expand_test_no_accesses() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&tree, &memory, &mut hash_test_chip);
+    let partition = memory_to_partition(&memory);
+    chip.finalize(&tree, &partition, &mut hash_test_chip);
     BabyBearPoseidon2Engine::run_test_fast(vec![
         chip.generate_air_proof_input(),
         hash_test_chip.generate_air_proof_input(),
@@ -265,7 +278,7 @@ fn expand_test_negative() {
 
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = Equipartition::new();
+    let memory = MemoryImage::default();
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
@@ -278,7 +291,8 @@ fn expand_test_negative() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&tree, &memory, &mut hash_test_chip);
+    let partition = memory_to_partition(&memory);
+    chip.finalize(&tree, &partition, &mut hash_test_chip);
     let mut chip_api = chip.generate_air_proof_input();
     {
         let trace = chip_api.raw.common_main.as_mut().unwrap();

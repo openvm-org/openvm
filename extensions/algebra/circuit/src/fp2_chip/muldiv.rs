@@ -13,7 +13,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use parking_lot::Mutex;
+use std::sync::Mutex;
 
 use crate::Fp2;
 
@@ -33,13 +33,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
 {
     pub fn new(
         adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        memory_controller: MemoryControllerRef<F>,
         config: ExprBuilderConfig,
         offset: usize,
         offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     ) -> Self {
+        let range_checker = offline_memory.lock().unwrap().range_checker();
         let (expr, is_mul_flag, is_div_flag) =
-            fp2_muldiv_expr(config, memory_controller.borrow().range_checker.bus());
+            fp2_muldiv_expr(config, range_checker.bus());
         let core = FieldExpressionCoreChip::new(
             expr,
             offset,
@@ -49,14 +49,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
                 Fp2Opcode::SETUP_MULDIV as usize,
             ],
             vec![is_mul_flag, is_div_flag],
-            memory_controller.borrow().range_checker.clone(),
+            range_checker.clone(),
             "Fp2MulDiv",
             false,
         );
         Self(VmChipWrapper::new(
             adapter,
             core,
-            memory_controller,
             offline_memory,
         ))
     }
