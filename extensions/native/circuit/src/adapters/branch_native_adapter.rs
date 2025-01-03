@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory,
+            MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::NativeReadRecord,
         program::ProgramBus,
@@ -181,10 +181,10 @@ impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
         memory: &OfflineMemory<F>,
     ) {
         let row_slice: &mut BranchNativeAdapterCols<_> = row_slice.borrow_mut();
+        let aux_cols_factory = memory.aux_cols_factory();
 
         row_slice.from_state = write_record.map(F::from_canonical_u32);
         row_slice.reads_aux = read_record.reads.map(|x| {

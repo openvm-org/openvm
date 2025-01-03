@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 };
 
 use super::{ExecutionState, InstructionExecutor, Result};
-use crate::system::memory::{MemoryAuxColsFactory, MemoryController, OfflineMemory};
+use crate::system::memory::{MemoryController, OfflineMemory};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -85,7 +85,6 @@ pub trait VmAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
         memory: &OfflineMemory<F>,
     );
 
@@ -285,7 +284,6 @@ where
 
         let memory = self.offline_memory.lock().unwrap();
 
-        let memory_aux_cols_factory = memory.aux_cols_factory();
         // This zip only goes through records.
         // The padding rows between records.len()..height are filled with zeros.
         values
@@ -293,13 +291,8 @@ where
             .zip(self.records.into_par_iter())
             .for_each(|(row_slice, record)| {
                 let (adapter_row, core_row) = row_slice.split_at_mut(adapter_width);
-                self.adapter.generate_trace_row(
-                    adapter_row,
-                    record.0,
-                    record.1,
-                    &memory_aux_cols_factory,
-                    &memory,
-                );
+                self.adapter
+                    .generate_trace_row(adapter_row, record.0, record.1, &memory);
                 self.core.generate_trace_row(core_row, record.2);
             });
 

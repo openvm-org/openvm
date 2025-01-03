@@ -15,7 +15,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
+            MemoryAddress, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -474,14 +474,12 @@ impl<
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
         memory: &OfflineMemory<F>,
     ) {
         vec_heap_two_reads_generate_trace_row_impl(
             row_slice,
             &read_record,
             &write_record,
-            aux_cols_factory,
             &self.bitwise_lookup_chip,
             self.air.address_bits,
             memory,
@@ -504,11 +502,11 @@ pub(super) fn vec_heap_two_reads_generate_trace_row_impl<
     row_slice: &mut [F],
     read_record: &Rv32VecHeapTwoReadsReadRecord<F, BLOCKS_PER_READ1, BLOCKS_PER_READ2, READ_SIZE>,
     write_record: &Rv32VecHeapTwoReadsWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
-    aux_cols_factory: &MemoryAuxColsFactory<F>,
     bitwise_lookup_chip: &BitwiseOperationLookupChip<RV32_CELL_BITS>,
     address_bits: usize,
     memory: &OfflineMemory<F>,
 ) {
+    let aux_cols_factory = memory.aux_cols_factory();
     let row_slice: &mut Rv32VecHeapTwoReadsAdapterCols<
         F,
         BLOCKS_PER_READ1,

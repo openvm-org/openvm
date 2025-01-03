@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory,
+            MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::NativeWriteRecord,
         program::ProgramBus,
@@ -162,9 +162,9 @@ impl<F: PrimeField32> VmAdapterChip<F> for JalNativeAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
         memory: &OfflineMemory<F>,
     ) {
+        let aux_cols_factory = memory.aux_cols_factory();
         let row_slice: &mut JalNativeAdapterCols<_> = row_slice.borrow_mut();
 
         let write = memory.record_by_id(write_record.writes[0].0);

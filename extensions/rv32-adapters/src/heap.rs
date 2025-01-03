@@ -12,9 +12,7 @@ use openvm_circuit::{
         VmAdapterInterface,
     },
     system::{
-        memory::{
-            offline_checker::MemoryBridge, MemoryAuxColsFactory, MemoryController, OfflineMemory,
-        },
+        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory},
         program::ProgramBus,
     },
 };
@@ -222,14 +220,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
         memory: &OfflineMemory<F>,
     ) {
         vec_heap_generate_trace_row_impl(
             row_slice,
             &read_record,
             &write_record,
-            aux_cols_factory,
             &self.bitwise_lookup_chip,
             self.air.address_bits,
             memory,

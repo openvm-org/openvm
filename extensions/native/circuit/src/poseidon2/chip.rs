@@ -8,7 +8,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
+            MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
     },
@@ -168,11 +168,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
 }
 
 impl<F: PrimeField32 + Sync> NativePoseidon2ChipRecord<F> {
-    pub fn to_memory_cols(
-        &self,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
-        memory: &OfflineMemory<F>,
-    ) -> NativePoseidon2MemoryCols<F> {
+    pub fn to_memory_cols(&self, memory: &OfflineMemory<F>) -> NativePoseidon2MemoryCols<F> {
+        let aux_cols_factory = memory.aux_cols_factory();
         let rs1 = memory.record_by_id(self.rs1);
         let (rs2_ptr, rs2_val, rs2_read_aux) = match self.rs2 {
             Some(rs2) => {
