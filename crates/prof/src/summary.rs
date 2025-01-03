@@ -27,11 +27,15 @@ pub struct BenchSummaryMetrics {
     pub leaf: Option<SingleSummaryMetrics>,
     pub internals: Vec<SingleSummaryMetrics>,
     pub root: Option<SingleSummaryMetrics>,
+    pub halo2_outer: Option<SingleSummaryMetrics>,
+    pub halo2_wrapper: Option<SingleSummaryMetrics>,
 }
 
 #[derive(Clone, Debug)]
 pub struct SingleSummaryMetrics {
     pub proof_time_ms: MdTableCell,
+    /// Parallel proof time is approximated as the max of proof times within a group
+    pub par_proof_time_ms: MdTableCell,
     pub cells_used: MdTableCell,
     pub cycles: MdTableCell,
 }
@@ -144,13 +148,19 @@ impl SingleSummaryMetrics {
 impl AggregateMetrics {
     pub fn get_single_summary(&self, name: &str) -> Option<SingleSummaryMetrics> {
         let stats = self.by_group.get(name)?;
-        let cells_used = stats.get(CELLS_USED_LABEL)?.sum;
-        let cycles = stats.get(CYCLES_LABEL)?.sum;
+        // Any group must have proof_time, but may not have cells_used or cycles (e.g., halo2)
         let proof_time_ms = stats.get(PROOF_TIME_LABEL)?.sum;
+        let par_proof_time_ms = stats.get(PROOF_TIME_LABEL)?.max;
+        let cells_used = stats
+            .get(CELLS_USED_LABEL)
+            .map(|s| s.sum)
+            .unwrap_or_default();
+        let cycles = stats.get(CYCLES_LABEL).map(|s| s.sum).unwrap_or_default();
         Some(SingleSummaryMetrics {
             cells_used,
             cycles,
             proof_time_ms,
+            par_proof_time_ms,
         })
     }
 
@@ -167,6 +177,8 @@ impl AggregateMetrics {
             hgt += 1;
         }
         let root = self.get_single_summary("root");
+        let halo2_outer = self.get_single_summary("halo2_outer");
+        let halo2_wrapper = self.get_single_summary("halo2_wrapper");
         Some(SummaryRow {
             name: app_name.to_string(),
             md_filename: md_filename.to_string(),
@@ -175,6 +187,8 @@ impl AggregateMetrics {
                 leaf,
                 internals,
                 root,
+                halo2_outer,
+                halo2_wrapper,
             },
         })
     }
