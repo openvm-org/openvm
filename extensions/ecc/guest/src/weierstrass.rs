@@ -7,6 +7,8 @@ use super::group::Group;
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Sized {
+    /// The `a` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
+    const CURVE_A: Self::Coordinate;
     /// The `b` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_B: Self::Coordinate;
     const IDENTITY: Self;
@@ -57,7 +59,7 @@ pub trait WeierstrassPoint: Sized {
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
     {
         let lhs = &y * &y;
-        let rhs = &x * &x * &x + &Self::CURVE_B;
+        let rhs = &x * &x * &x + &Self::CURVE_A * &x + &Self::CURVE_B;
         if lhs != rhs {
             return None;
         }
@@ -242,6 +244,7 @@ macro_rules! impl_sw_affine {
         pub struct $struct_name(AffinePoint<$field>);
 
         impl WeierstrassPoint for $struct_name {
+            const CURVE_A: $field = <$field>::ZERO;
             const CURVE_B: $field = $b;
             const IDENTITY: Self = Self(AffinePoint::new(<$field>::ZERO, <$field>::ZERO));
 
@@ -408,7 +411,7 @@ macro_rules! impl_sw_group_ops {
                 } else if p2.is_identity() {
                     self.clone()
                 } else if self.x() == p2.x() {
-                    if self.y() + p2.y() == <$field as Field>::ZERO {
+                    if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
                         self.double_nonidentity()
@@ -426,7 +429,7 @@ macro_rules! impl_sw_group_ops {
                 } else if p2.is_identity() {
                     // do nothing
                 } else if self.x() == p2.x() {
-                    if self.y() + p2.y() == <$field as Field>::ZERO {
+                    if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         *self = <$struct_name as WeierstrassPoint>::IDENTITY;
                     } else {
                         self.double_assign_nonidentity();

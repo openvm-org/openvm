@@ -4,6 +4,7 @@ use derive_more::derive::From;
 use num_bigint_dig::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
+use openvm_algebra_guest::IntMod;
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
@@ -13,7 +14,10 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_ecc_guest::{
+    k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
+    p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
+};
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{PhantomDiscriminant, UsizeOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -47,6 +51,13 @@ pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
     scalar: SECP256K1_ORDER.clone(),
     a: BigUint::zero(),
     b: BigUint::from_u8(7u8).unwrap(),
+});
+
+pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
+    modulus: P256_MODULUS.clone(),
+    scalar: P256_ORDER.clone(),
+    a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
+    b: BigUint::from_bytes_le(P256_B.as_le_bytes()),
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
