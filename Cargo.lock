@@ -3068,6 +3068,7 @@ name = "metric_unify"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "itertools 0.13.0",
  "num-format",
  "serde",
  "serde_json",

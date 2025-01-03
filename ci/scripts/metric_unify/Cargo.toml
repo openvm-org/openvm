@@ -8,3 +8,4 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 clap = { version = "4.0", features = ["derive"] }
 num-format = "0.4"
+itertools = { workspace = true }
