@@ -1,11 +1,9 @@
 use std::{
     array,
-    cell::RefCell,
     collections::BTreeMap,
     iter,
     marker::PhantomData,
     mem,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -66,8 +64,6 @@ pub struct TimestampedValues<T, const N: usize> {
     pub timestamp: u32,
     pub values: [T; N],
 }
-
-pub type MemoryControllerRef<F> = Rc<RefCell<MemoryController<F>>>;
 
 /// An equipartition of memory, with timestamps and values.
 ///

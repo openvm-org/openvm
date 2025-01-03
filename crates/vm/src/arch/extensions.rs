@@ -2,7 +2,6 @@ use std::{
     any::Any,
     cell::RefCell,
     iter::once,
-    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -38,8 +37,7 @@ use crate::system::{
     memory::{
         merkle::{DirectCompressionBus, MemoryMerkleBus},
         offline_checker::{MemoryBridge, MemoryBus},
-        MemoryController, MemoryControllerRef, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET,
-        MERKLE_AIR_OFFSET,
+        MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
     },
     native_adapter::NativeAdapterChip,
     phantom::PhantomChip,
@@ -438,7 +436,7 @@ pub type SystemComplex<F> = VmChipComplex<F, SystemExecutor<F>, SystemPeriphery<
 pub struct SystemBase<F> {
     // RangeCheckerChip **must** be the last chip to have trace generation called on
     pub range_checker_chip: Arc<VariableRangeCheckerChip>,
-    pub memory_controller: MemoryControllerRef<F>,
+    pub memory_controller: MemoryController<F>,
     pub connector_chip: VmConnectorChip<F>,
     pub program_chip: ProgramChip<F>,
 
@@ -459,11 +457,11 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
-        self.memory_controller.borrow().memory_bridge()
+        self.memory_controller.memory_bridge()
     }
 
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.borrow().offline_memory().clone()
+        self.memory_controller.offline_memory().clone()
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {
@@ -474,7 +472,7 @@ impl<F: PrimeField32> SystemBase<F> {
     /// regular users.
     pub fn get_system_trace_heights(&self) -> SystemTraceHeights {
         SystemTraceHeights {
-            memory: self.memory_controller.borrow().get_memory_trace_heights(),
+            memory: self.memory_controller.get_memory_trace_heights(),
         }
     }
 
@@ -482,10 +480,7 @@ impl<F: PrimeField32> SystemBase<F> {
     /// dummy proof and not useful for regular users.
     pub fn get_dummy_system_trace_heights(&self) -> SystemTraceHeights {
         SystemTraceHeights {
-            memory: self
-                .memory_controller
-                .borrow()
-                .get_dummy_memory_trace_heights(),
+            memory: self.memory_controller.get_dummy_memory_trace_heights(),
         }
     }
 }
@@ -527,12 +522,11 @@ impl<F: PrimeField32> SystemComplex<F> {
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
-        let memory_controller = Rc::new(RefCell::new(memory_controller));
+        let offline_memory = memory_controller.offline_memory();
         let program_chip = ProgramChip::new(PROGRAM_BUS);
         let connector_chip = VmConnectorChip::new(EXECUTION_BUS, PROGRAM_BUS);
 
         let mut inventory = VmInventory::new();
-        let offline_memory = memory_controller.borrow().offline_memory();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
@@ -559,7 +553,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
             // special handling when that happens
             let direct_bus_idx = memory_controller
-                .borrow()
                 .interface_chip
                 .compression_bus()
                 .unwrap()
@@ -683,7 +676,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         &mut self.base.connector_chip
     }
 
-    pub fn memory_controller(&self) -> &MemoryControllerRef<F> {
+    pub fn memory_controller(&self) -> &MemoryController<F> {
         &self.base.memory_controller
     }
 
@@ -725,6 +718,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.base.program_chip.set_program(program);
     }
 
+    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+        self.base.memory_controller.set_initial_memory(memory);
+    }
+
     /// Warning: this sets the stream in all chips which have a shared mutable reference to the streams.
     pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
         *self.streams.lock().unwrap() = streams;
@@ -737,7 +734,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     // This is O(1).
     pub fn num_airs(&self) -> usize {
-        3 + self.memory_controller().borrow().num_airs() + self.inventory.num_airs()
+        3 + self.memory_controller().num_airs() + self.inventory.num_airs()
     }
 
     // we always need to special case it because we need to fix the air id.
@@ -778,7 +775,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         once(self.program_chip().air_name())
             .chain([self.connector_chip().air_name()])
             .chain(self._public_values_chip().map(|c| c.air_name()))
-            .chain(self.memory_controller().borrow().air_names())
+            .chain(self.memory_controller().air_names())
             .chain(self.chips_excluding_pv_chip().map(|c| c.air_name()))
             .chain([self.range_checker_chip().air_name()])
             .collect()
@@ -792,7 +789,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         once(self.program_chip().current_trace_height())
             .chain([self.connector_chip().current_trace_height()])
             .chain(self._public_values_chip().map(|c| c.current_trace_height()))
-            .chain(self.memory_controller().borrow().current_trace_heights())
+            .chain(self.memory_controller().current_trace_heights())
             .chain(
                 self.chips_excluding_pv_chip()
                     .map(|c| c.current_trace_height()),
@@ -846,7 +843,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         &mut self,
         overridden_system_heights: SystemTraceHeights,
     ) {
-        let mut memory_controller = self.base.memory_controller.borrow_mut();
+        let memory_controller = &mut self.base.memory_controller;
         memory_controller.set_override_trace_heights(overridden_system_heights.memory);
     }
 
@@ -863,7 +860,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         [0, 0]
             .into_iter()
             .chain(self._public_values_chip().map(|c| c.current_trace_height()))
-            .chain(self.memory_controller().borrow().current_trace_heights())
+            .chain(self.memory_controller().current_trace_heights())
             .chain(self.chips_excluding_pv_chip().map(|c| match c {
                 // executor should never be constant height
                 Either::Executor(c) => c.current_trace_height(),
@@ -887,7 +884,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         once(self.program_chip().current_trace_cells())
             .chain([self.connector_chip().current_trace_cells()])
             .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
-            .chain(self.memory_controller().borrow().current_trace_cells())
+            .chain(self.memory_controller().current_trace_cells())
             .chain(
                 self.chips_excluding_pv_chip()
                     .map(|c| c.current_trace_cells()),
@@ -908,7 +905,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         [program_rap, connector_rap]
             .into_iter()
             .chain(self._public_values_chip().map(|chip| chip.air()))
-            .chain(self.memory_controller().borrow().airs())
+            .chain(self.memory_controller().airs())
             .chain(self.chips_excluding_pv_chip().map(|chip| match chip {
                 Either::Executor(chip) => chip.air(),
                 Either::Periphery(chip) => chip.air(),
@@ -981,10 +978,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // System: Memory Controller
         {
             // memory
-            let memory_controller = Rc::try_unwrap(memory_controller)
-                .expect("other chips still hold a reference to memory chip")
-                .into_inner();
-
             let air_proof_inputs = memory_controller.generate_air_proof_inputs();
             for air_proof_input in air_proof_inputs {
                 builder.add_air_proof_input(air_proof_input);

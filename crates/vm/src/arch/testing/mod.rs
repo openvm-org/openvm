@@ -45,10 +45,7 @@ pub use memory::MemoryTester;
 pub use test_adapter::TestAdapterChip;
 
 use super::{ExecutionBus, InstructionExecutor};
-use crate::system::{
-    memory::{offline_checker::MemoryBridge, MemoryControllerRef},
-    poseidon2::Poseidon2PeripheryChip,
-};
+use crate::system::{memory::offline_checker::MemoryBridge, poseidon2::Poseidon2PeripheryChip};
 
 pub const EXECUTION_BUS: usize = 0;
 pub const MEMORY_BUS: usize = 1;
@@ -73,7 +70,7 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_controller: MemoryControllerRef<F>,
+        memory_controller: Rc<RefCell<MemoryController<F>>>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
@@ -167,7 +164,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.bus
     }
 
-    pub fn memory_controller(&self) -> MemoryControllerRef<F> {
+    pub fn memory_controller(&self) -> Rc<RefCell<MemoryController<F>>> {
         self.memory.controller.clone()
     }
 

@@ -69,10 +69,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         chip_complex.set_program(program);
 
         if let Some(initial_memory) = initial_memory {
-            chip_complex
-                .memory_controller()
-                .borrow_mut()
-                .set_initial_memory(initial_memory);
+            chip_complex.set_initial_memory(initial_memory);
         }
         let air_names = chip_complex.air_names();
 
@@ -104,7 +101,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         &mut self,
         mut pc: u32,
     ) -> Result<ExecutionSegmentState, ExecutionError> {
-        let mut timestamp = self.chip_complex.memory_controller().borrow().timestamp();
+        let mut timestamp = self.chip_complex.memory_controller().timestamp();
 
         #[cfg(feature = "bench-metrics")]
         let collect_metrics = self.system_config().collect_metrics;
@@ -203,11 +200,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
             #[cfg(feature = "bench-metrics")]
             let mut opcode_name = None;
-            let memory_controller = &self.chip_complex.base.memory_controller;
+            let memory_controller = &mut self.chip_complex.base.memory_controller;
             if let Some(executor) = self.chip_complex.inventory.get_mut_executor(&opcode) {
                 let next_state = InstructionExecutor::execute(
                     executor,
-                    &mut *memory_controller.borrow_mut(),
+                    memory_controller,
                     instruction,
                     ExecutionState::new(pc, timestamp),
                 )?;
@@ -256,8 +253,13 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
         // Finalize memory.
         {
             // Need some partial borrows, so code is ugly:
-            let mut memory_controller = self.chip_complex.base.memory_controller.borrow_mut();
-            self.final_memory = Some(memory_controller.memory_image().clone());
+            self.final_memory = Some(
+                self.chip_complex
+                    .base
+                    .memory_controller
+                    .memory_image()
+                    .clone(),
+            );
 
             if self.system_config().continuation_enabled {
                 let chip = self
@@ -272,9 +274,15 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     .as_any_kind_mut()
                     .downcast_mut()
                     .expect("Poseidon2 chip required for persistent memory");
-                memory_controller.finalize(Some(hasher))
+                self.chip_complex
+                    .base
+                    .memory_controller
+                    .finalize(Some(hasher))
             } else {
-                memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+                self.chip_complex
+                    .base
+                    .memory_controller
+                    .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
             };
         }
         #[cfg(feature = "bench-metrics")]

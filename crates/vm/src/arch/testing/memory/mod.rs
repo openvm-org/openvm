@@ -1,6 +1,7 @@
-use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, sync::Arc};
+use std::{array::from_fn, borrow::BorrowMut as _, cell::RefCell, mem::size_of, rc::Rc, sync::Arc};
 
 use air::{DummyMemoryInteractionCols, MemoryDummyAir};
+use openvm_circuit::system::memory::MemoryController;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{AbstractField, PrimeField32},
@@ -11,9 +12,7 @@ use openvm_stark_backend::{
 };
 use rand::{seq::SliceRandom, Rng};
 
-use crate::system::memory::{
-    offline_checker::MemoryBus, MemoryAddress, MemoryControllerRef, RecordId,
-};
+use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress, RecordId};
 
 pub mod air;
 
@@ -26,13 +25,13 @@ const WORD_SIZE: usize = 1;
 #[derive(Debug)]
 pub struct MemoryTester<F> {
     pub bus: MemoryBus,
-    pub controller: MemoryControllerRef<F>,
+    pub controller: Rc<RefCell<MemoryController<F>>>,
     /// Log of record ids
     pub records: Vec<RecordId>,
 }
 
 impl<F: PrimeField32> MemoryTester<F> {
-    pub fn new(controller: MemoryControllerRef<F>) -> Self {
+    pub fn new(controller: Rc<RefCell<MemoryController<F>>>) -> Self {
         let bus = controller.borrow().memory_bus;
         Self {
             bus,
