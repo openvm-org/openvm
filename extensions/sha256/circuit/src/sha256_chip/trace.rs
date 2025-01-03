@@ -61,10 +61,8 @@ where
             let len_read = offline_memory.record_by_id(record.len_read);
 
             self.bitwise_lookup_chip.request_range(
-                dst_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-                    * mem_ptr_shift,
-                src_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-                    * mem_ptr_shift,
+                dst_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
+                src_read.data[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() * mem_ptr_shift,
             );
             let len = compose(len_read.data.clone().try_into().unwrap());
             let mut state = &None;
@@ -135,8 +133,9 @@ where
                         &buffer,
                     );
 
-                    let block_reads =
-                        records[state.message_idx].input_records[state.local_block_idx].map(|record_id| offline_memory.record_by_id(record_id));
+                    let block_reads = records[state.message_idx].input_records
+                        [state.local_block_idx]
+                        .map(|record_id| offline_memory.record_by_id(record_id));
 
                     let mut read_ptr = block_reads[0].pointer;
                     let mut cur_timestamp = Val::<SC>::from_canonical_u32(block_reads[0].timestamp);
@@ -161,7 +160,7 @@ where
                                         &self.air.padding_encoder,
                                         PaddingFlags::NotPadding as usize,
                                     )
-                                        .map(Val::<SC>::from_canonical_u32);
+                                    .map(Val::<SC>::from_canonical_u32);
                                 } else if !has_padding_occurred {
                                     has_padding_occurred = true;
                                     let len = message_left - row * SHA256_READ_SIZE;
@@ -174,7 +173,7 @@ where
                                         } as usize
                                             + len,
                                     )
-                                        .map(Val::<SC>::from_canonical_u32);
+                                    .map(Val::<SC>::from_canonical_u32);
                                 } else {
                                     cols.control.pad_flags = get_flag_pt_array(
                                         &self.air.padding_encoder,
@@ -184,14 +183,14 @@ where
                                             PaddingFlags::EntirePadding
                                         } as usize,
                                     )
-                                        .map(Val::<SC>::from_canonical_u32);
+                                    .map(Val::<SC>::from_canonical_u32);
                                 }
                             } else {
                                 cols.control.pad_flags = get_flag_pt_array(
                                     &self.air.padding_encoder,
                                     PaddingFlags::NotConsidered as usize,
                                 )
-                                    .map(Val::<SC>::from_canonical_u32);
+                                .map(Val::<SC>::from_canonical_u32);
                             }
                             cols.control.padding_occurred =
                                 Val::<SC>::from_bool(has_padding_occurred);
@@ -208,7 +207,7 @@ where
                                 &self.air.padding_encoder,
                                 PaddingFlags::NotConsidered as usize,
                             )
-                                .map(Val::<SC>::from_canonical_u32);
+                            .map(Val::<SC>::from_canonical_u32);
                             if is_last_block {
                                 let record = &records[state.message_idx];
                                 let dst_read = offline_memory.record_by_id(record.dst_read);
@@ -227,8 +226,8 @@ where
                                     memory_aux_cols_factory.make_read_aux_cols(src_read),
                                     memory_aux_cols_factory.make_read_aux_cols(len_read),
                                 ];
-                                cols.writes_aux = memory_aux_cols_factory
-                                    .make_write_aux_cols(digest_write);
+                                cols.writes_aux =
+                                    memory_aux_cols_factory.make_write_aux_cols(digest_write);
                             }
                             cols.control.padding_occurred =
                                 Val::<SC>::from_bool(has_padding_occurred);

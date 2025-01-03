@@ -38,10 +38,10 @@ fn set_and_execute(
 
     let max_mem_ptr: u32 = 1
         << tester
-        .memory_controller()
-        .borrow()
-        .mem_config()
-        .pointer_max_bits;
+            .memory_controller()
+            .borrow()
+            .mem_config()
+            .pointer_max_bits;
     let dst_ptr = rng.gen_range(0..max_mem_ptr);
     let dst_ptr = dst_ptr ^ (dst_ptr & 3);
     tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));

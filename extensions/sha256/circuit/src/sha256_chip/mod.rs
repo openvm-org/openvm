@@ -3,11 +3,11 @@
 use std::{
     array,
     cmp::{max, min},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
-use std::sync::Mutex;
-use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort},
+
+use openvm_circuit::arch::{
+    ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort,
 };
 use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupChip, encoder::Encoder};
 use openvm_instructions::{
@@ -194,16 +194,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         "SHA256".to_string()
     }
 }
-
-// impl<F: Copy> Sha256Record<F> {
-//     pub fn digest_addr_space(&self) -> F {
-//         self.digest_write.address_space
-//     }
-// 
-//     pub fn start_timestamp(&self) -> u32 {
-//         self.dst_read.timestamp
-//     }
-// }
 
 pub fn sha256_solve(input_message: &[u8]) -> [u8; SHA256_WRITE_SIZE] {
     let mut hasher = Sha256::new();

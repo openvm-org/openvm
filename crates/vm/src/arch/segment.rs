@@ -146,18 +146,18 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                         return Err(ExecutionError::Fail { pc });
                     }
                     Some(SysPhantom::CtStart) =>
-                        {
-                            #[cfg(feature = "bench-metrics")]
-                            self.metrics
-                                .cycle_tracker
-                                .start(dsl_instr.clone().unwrap_or("Default".to_string()))
+                    {
+                        #[cfg(feature = "bench-metrics")]
+                        self.metrics
+                            .cycle_tracker
+                            .start(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
                     Some(SysPhantom::CtEnd) =>
-                        {
-                            #[cfg(feature = "bench-metrics")]
-                            self.metrics
-                                .cycle_tracker
-                                .end(dsl_instr.clone().unwrap_or("Default".to_string()))
+                    {
+                        #[cfg(feature = "bench-metrics")]
+                        self.metrics
+                            .cycle_tracker
+                            .end(dsl_instr.clone().unwrap_or("Default".to_string()))
                     }
                     _ => {}
                 }
