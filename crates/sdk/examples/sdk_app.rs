@@ -4,9 +4,8 @@ use std::{fs, sync::Arc};
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_build::GuestOptions;
-use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
-    config::{AggConfig, AppConfig, SdkVmConfig},
+    config::{AppConfig, SdkVmConfig},
     prover::AppProver,
     Sdk, StdIn,
 };
@@ -101,30 +100,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_vk = app_pk.get_app_vk();
     sdk.verify_app_proof(&app_vk, &proof)?;
     // ANCHOR_END: verification
-
-    // ANCHOR: evm_verification
-    // 11. Generate the aggregation proving key
-    const DEFAULT_PARAMS_DIR: &str = concat!(env!("HOME"), "/.openvm/params/");
-    let halo2_params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
-    let agg_config = AggConfig::default();
-    let agg_pk = sdk.agg_keygen(agg_config, &halo2_params_reader)?;
-
-    // 12. Generate the SNARK verifier contract
-    let verifier = sdk.generate_snark_verifier_contract(&halo2_params_reader, &agg_pk)?;
-
-    // 13. Generate an EVM proof
-    let proof = sdk.generate_evm_proof(
-        &halo2_params_reader,
-        app_pk,
-        app_committed_exe,
-        agg_pk,
-        stdin,
-    )?;
-
-    // 14. Verify the EVM proof
-    let success = sdk.verify_evm_proof(&verifier, &proof);
-    assert!(success);
-    // ANCHOR_END: evm_verification
 
     Ok(())
 }
