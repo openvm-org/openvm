@@ -70,12 +70,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
     ));
 
     // doing 1xNUM_LIMBS reads and writes
-    let address_bits = tester.address_bits();
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
-        address_bits,
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
@@ -200,12 +199,11 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         bitwise_bus,
     ));
     // doing 1xNUM_LIMBS reads and writes
-    let address_bits = tester.address_bits();
     let adapter = Rv32VecHeapAdapterChip::<F, 2, 1, 1, BLOCK_SIZE, BLOCK_SIZE>::new(
         tester.execution_bus(),
         tester.program_bus(),
         tester.memory_bridge(),
-        address_bits,
+        tester.address_bits(),
         bitwise_chip.clone(),
     );
     let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
@@ -310,13 +308,12 @@ fn test_is_equal<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIM
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
-    let address_bits = tester.address_bits();
     let mut chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
         Rv32IsEqualModAdapterChip::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
-            address_bits,
+            tester.address_bits(),
             bitwise_chip.clone(),
         ),
         ModularIsEqualCoreChip::new(modulus.clone(), bitwise_chip.clone(), opcode_offset),

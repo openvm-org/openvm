@@ -50,7 +50,7 @@ pub mod dimensions;
 mod interface;
 pub(super) mod memory;
 pub use memory::{MemoryImage, MemoryReadRecord, MemoryWriteRecord, OfflineMemory, RecordId};
-
+use crate::system::memory::adapter::AccessAdapterRecord;
 pub(crate) use crate::system::memory::manager::memory::Memory;
 
 pub const CHUNK: usize = 8;
@@ -454,43 +454,37 @@ impl<F: PrimeField32> MemoryController<F> {
     fn replay_access_log(&mut self) {
         let mut offline_memory = self.offline_memory.lock().unwrap();
         let log = mem::take(&mut self.memory.log);
+
         for entry in log {
-            let records = match entry {
-                MemoryLogEntry::Read {
-                    address_space,
-                    pointer,
-                    len,
-                } => {
-                    if address_space != 0 {
-                        for i in 0..len as u32 {
-                            self.interface_chip
-                                .touch_address(address_space, pointer + i);
-                        }
-                    }
-                    offline_memory.read(address_space, pointer, len)
-                }
-                MemoryLogEntry::Write {
-                    address_space,
-                    pointer,
-                    data,
-                } => {
-                    if address_space != 0 {
-                        for i in 0..data.len() as u32 {
-                            self.interface_chip
-                                .touch_address(address_space, pointer + i);
-                        }
-                    }
-                    offline_memory.write(address_space, pointer, data)
-                }
-                MemoryLogEntry::IncrementTimestampBy(amount) => {
-                    offline_memory.increment_timestamp_by(amount);
-                    vec![]
-                }
-            };
-            for record in records {
-                self.access_adapters.add_record(record);
-            }
+            Self::replay_access(entry, &mut offline_memory, &mut self.interface_chip, &mut self.access_adapters);
         }
+    }
+
+    fn replay_access(
+        entry: MemoryLogEntry<F>,
+        offline_memory: &mut OfflineMemory<F>,
+        interface_chip: &mut MemoryInterface<F>,
+        access_adapters: &mut AccessAdapterInventory<F>,
+    ) {
+        let records = match entry {
+            MemoryLogEntry::Read { address_space, pointer, len } => {
+                if address_space != 0 {
+                    interface_chip.touch_range(address_space, pointer, len as u32);
+                }
+                offline_memory.read(address_space, pointer, len)
+            }
+            MemoryLogEntry::Write { address_space, pointer, data } => {
+                if address_space != 0 {
+                    interface_chip.touch_range(address_space, pointer, data.len() as u32);
+                }
+                offline_memory.write(address_space, pointer, data)
+            }
+            MemoryLogEntry::IncrementTimestampBy(amount) => {
+                offline_memory.increment_timestamp_by(amount);
+                Vec::new()
+            }
+        };
+        access_adapters.extend_records(records);
     }
 
     /// Returns the final memory state if persistent.
@@ -502,12 +496,13 @@ impl<F: PrimeField32> MemoryController<F> {
         self.replay_access_log();
         let mut offline_memory = self.offline_memory.lock().unwrap();
 
-        let records = match &mut self.interface_chip {
+        match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let (final_memory, records) = offline_memory.finalize::<1>();
+                self.access_adapters.extend_records(records);
+
                 boundary_chip.finalize(final_memory);
                 self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
-                records
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -517,6 +512,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 let hasher = hasher.unwrap();
 
                 let (final_partition, records) = offline_memory.finalize::<CHUNK>();
+                self.access_adapters.extend_records(records);
+
                 boundary_chip.finalize(initial_memory, &final_partition, hasher);
                 let final_memory_values = final_partition
                     .into_par_iter()
@@ -531,12 +528,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
                 }));
-                records
             }
         };
-        for record in records {
-            self.access_adapters.add_record(record);
-        }
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

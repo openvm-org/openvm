@@ -162,12 +162,11 @@ mod tests {
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
             bitwise_bus,
         ));
-        let address_bits = tester.address_bits();
         let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, NUM_LIMBS, NUM_LIMBS>::new(
             tester.execution_bus(),
             tester.program_bus(),
             tester.memory_bridge(),
-            address_bits,
+            tester.address_bits(),
             bitwise_chip.clone(),
         );
         let mut chip = Fp2MulDivChip::new(

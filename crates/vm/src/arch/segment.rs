@@ -260,30 +260,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
                     .memory_image()
                     .clone(),
             );
-
-            if self.system_config().continuation_enabled {
-                let chip = self
-                    .chip_complex
-                    .inventory
-                    .periphery
-                    .get_mut(
-                        VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
-                    )
-                    .expect("Poseidon2 chip required for persistent memory");
-                let hasher: &mut Poseidon2PeripheryChip<F> = chip
-                    .as_any_kind_mut()
-                    .downcast_mut()
-                    .expect("Poseidon2 chip required for persistent memory");
-                self.chip_complex
-                    .base
-                    .memory_controller
-                    .finalize(Some(hasher))
-            } else {
-                self.chip_complex
-                    .base
-                    .memory_controller
-                    .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
-            };
         }
         #[cfg(feature = "bench-metrics")]
         if collect_metrics {
@@ -303,7 +279,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
-        self,
+        mut self,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> ProofInput<SC>
     where
@@ -313,6 +289,30 @@ impl<F: PrimeField32, VC: VmConfig<F>> ExecutionSegment<F, VC> {
     {
         #[cfg(feature = "bench-metrics")]
         let start = std::time::Instant::now();
+
+        if self.system_config().continuation_enabled {
+            let chip = self
+                .chip_complex
+                .inventory
+                .periphery
+                .get_mut(
+                    VmChipComplex::<F, VC::Executor, VC::Periphery>::POSEIDON2_PERIPHERY_IDX,
+                )
+                .expect("Poseidon2 chip required for persistent memory");
+            let hasher: &mut Poseidon2PeripheryChip<F> = chip
+                .as_any_kind_mut()
+                .downcast_mut()
+                .expect("Poseidon2 chip required for persistent memory");
+            self.chip_complex
+                .base
+                .memory_controller
+                .finalize(Some(hasher))
+        } else {
+            self.chip_complex
+                .base
+                .memory_controller
+                .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+        };
 
         let proof_input = self.chip_complex.generate_proof_input(cached_program);
 

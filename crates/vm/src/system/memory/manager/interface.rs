@@ -38,6 +38,26 @@ impl<F: PrimeField32> MemoryInterface<F> {
         }
     }
 
+    pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
+        match self {
+            MemoryInterface::Volatile { boundary_chip } => {
+                for offset in 0..len {
+                    boundary_chip.touch_address(addr_space, pointer + offset);
+                }
+            }
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => {
+                for offset in 0..len {
+                    boundary_chip.touch_address(addr_space, pointer + offset);
+                    merkle_chip.touch_address(addr_space, pointer + offset);
+                }
+            }
+        }
+    }
+
     pub fn compression_bus(&self) -> Option<DirectCompressionBus> {
         match self {
             MemoryInterface::Volatile { .. } => None,
